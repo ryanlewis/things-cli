@@ -1,7 +1,3 @@
--- Minimal Things3 schema — only columns referenced by internal/db queries.
--- Derived from live Things3 DB schema on macOS (TMTask, TMArea, TMTag,
--- TMTaskTag, TMChecklistItem, TMSettings). Extra columns have been trimmed.
-
 CREATE TABLE TMTask (
     uuid                            TEXT PRIMARY KEY,
     title                           TEXT,

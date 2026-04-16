@@ -1,16 +1,13 @@
 package main
 
 import (
-	"database/sql"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/alecthomas/kong"
-	_ "modernc.org/sqlite"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -100,9 +97,7 @@ func TestKongJSONFlag(t *testing.T) {
 }
 
 func TestCacheTaskUUIDs(t *testing.T) {
-	orig := cache.Dir
-	cache.Dir = t.TempDir()
-	t.Cleanup(func() { cache.Dir = orig })
+	t.Setenv("HOME", t.TempDir())
 
 	tasks := []model.Task{
 		{UUID: "u1"}, {UUID: "u2"}, {UUID: "u3"},
@@ -118,48 +113,24 @@ func TestCacheTaskUUIDs(t *testing.T) {
 	}
 }
 
-// openTestDB creates a real sqlite file seeded with the internal/db testdata
-// schema and one task, then opens it via db.Open. Used by the resolveTask
-// test to exercise the cache-index branch that is unique to main.go.
-func openTestDB(t *testing.T) *db.DB {
+func seedResolveTaskDB(t *testing.T) *db.DB {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "t.sqlite")
-
-	sqlDB, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	schema, err := os.ReadFile(filepath.Join("internal", "db", "testdata", "schema.sql"))
-	if err != nil {
-		t.Fatalf("read schema: %v", err)
-	}
-	if _, err := sqlDB.Exec(string(schema)); err != nil {
-		t.Fatalf("apply schema: %v", err)
-	}
+	sqlDB := dbtest.NewSQL(t)
 	if _, err := sqlDB.Exec(
 		`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('abc-123', 'Cached task', 0, 0, 0)`,
 	); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_ = sqlDB.Close()
-
-	database, err := db.Open(path)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = database.Close() })
-	return database
+	return db.NewFromSQL(sqlDB)
 }
 
 func TestResolveTaskNumericFromCache(t *testing.T) {
-	orig := cache.Dir
-	cache.Dir = t.TempDir()
-	t.Cleanup(func() { cache.Dir = orig })
+	t.Setenv("HOME", t.TempDir())
 
 	if err := cache.WriteLastList([]string{"abc-123", "other"}); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
-	database := openTestDB(t)
+	database := seedResolveTaskDB(t)
 
 	got, err := resolveTask("1", database)
 	if err != nil {
@@ -171,14 +142,12 @@ func TestResolveTaskNumericFromCache(t *testing.T) {
 }
 
 func TestResolveTaskStaleCacheIndex(t *testing.T) {
-	orig := cache.Dir
-	cache.Dir = t.TempDir()
-	t.Cleanup(func() { cache.Dir = orig })
+	t.Setenv("HOME", t.TempDir())
 
 	if err := cache.WriteLastList([]string{"missing-uuid"}); err != nil {
 		t.Fatal(err)
 	}
-	database := openTestDB(t)
+	database := seedResolveTaskDB(t)
 
 	_, err := resolveTask("1", database)
 	if err == nil {

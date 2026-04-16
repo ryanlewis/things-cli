@@ -52,3 +52,8 @@ func Open(path string) (*DB, error) {
 func (d *DB) Close() error {
 	return d.db.Close()
 }
+
+// NewFromSQL wraps an existing *sql.DB. Test-only; production code uses Open.
+func NewFromSQL(sqlDB *sql.DB) *DB {
+	return &DB{db: sqlDB}
+}
