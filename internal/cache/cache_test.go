@@ -7,15 +7,8 @@ import (
 	"testing"
 )
 
-func withTempDir(t *testing.T) {
-	t.Helper()
-	orig := Dir
-	Dir = t.TempDir()
-	t.Cleanup(func() { Dir = orig })
-}
-
 func TestRoundTrip(t *testing.T) {
-	withTempDir(t)
+	t.Setenv("HOME", t.TempDir())
 
 	uuids := []string{"a", "b", "c"}
 	if err := WriteLastList(uuids); err != nil {
@@ -31,7 +24,7 @@ func TestRoundTrip(t *testing.T) {
 }
 
 func TestWriteOverwrites(t *testing.T) {
-	withTempDir(t)
+	t.Setenv("HOME", t.TempDir())
 
 	if err := WriteLastList([]string{"a", "b"}); err != nil {
 		t.Fatal(err)
@@ -49,7 +42,7 @@ func TestWriteOverwrites(t *testing.T) {
 }
 
 func TestReadMissingReturnsError(t *testing.T) {
-	withTempDir(t)
+	t.Setenv("HOME", t.TempDir())
 
 	_, err := ReadLastList()
 	if !os.IsNotExist(err) {
@@ -58,12 +51,14 @@ func TestReadMissingReturnsError(t *testing.T) {
 }
 
 func TestReadEmptyFile(t *testing.T) {
-	withTempDir(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 
-	if err := os.MkdirAll(Dir, 0o755); err != nil {
+	d := dir()
+	if err := os.MkdirAll(d, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(Dir, "last-list"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(d, "last-list"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ReadLastList()
@@ -76,7 +71,7 @@ func TestReadEmptyFile(t *testing.T) {
 }
 
 func TestWriteEmptyList(t *testing.T) {
-	withTempDir(t)
+	t.Setenv("HOME", t.TempDir())
 
 	if err := WriteLastList(nil); err != nil {
 		t.Fatal(err)
