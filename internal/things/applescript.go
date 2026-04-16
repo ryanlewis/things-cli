@@ -5,7 +5,6 @@ import (
 	"os/exec"
 )
 
-// execCommand is a seam for tests to mock exec.Command.
 var execCommand = exec.Command
 
 func runAppleScript(script string, context string) error {

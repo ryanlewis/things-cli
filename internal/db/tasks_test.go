@@ -89,26 +89,18 @@ func TestListTasksViews(t *testing.T) {
 
 	cases := []struct {
 		view string
-		want []string // UUIDs expected, any order unless noted
+		want []string
 	}{
 		{"today", []string{"t-today"}},
 		{"inbox", []string{"t-inbox", "t-in-proj"}},
 		{"upcoming", []string{"t-upcoming"}},
-		{"anytime", []string{"t-anytime", "t-deadline", "t-in-proj"}},
+		// "anytime" filters start=1 AND startBucket=0, which matches t-today too.
+		{"anytime", []string{"t-today", "t-anytime", "t-deadline"}},
 		{"someday", []string{"t-someday"}},
 		{"logbook", []string{"t-done"}},
 		{"trash", []string{"t-trashed"}},
 		{"deadlines", []string{"t-deadline"}},
 	}
-	// Note: "anytime" has start=1 AND startBucket=0. t-anytime and t-deadline
-	// and t-in-proj do not match — let me recheck. Actually:
-	//   anytime filter: start=1 AND startBucket=0 AND status=0 AND trashed=0 AND type=0
-	// So t-in-proj (start=0) does NOT match.
-	// Let me recompute per-seed: t-anytime (start=1,bucket=0), t-deadline (start=1,bucket=0).
-	// But t-today also has start=1,bucket=0,startDate=today — it MATCHES anytime too.
-	// So the expected set for anytime is: t-today, t-anytime, t-deadline.
-	// Adjusting:
-	cases[3].want = []string{"t-today", "t-anytime", "t-deadline"}
 
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
