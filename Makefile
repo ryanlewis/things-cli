@@ -3,7 +3,7 @@
 BINARY := things
 
 build:
-	go build -o $(BINARY) .
+	go build -o $(BINARY) ./cmd/things
 
 lint:
 	golangci-lint run ./...

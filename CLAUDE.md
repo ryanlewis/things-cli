@@ -7,7 +7,7 @@ CLI for Things3 on macOS. Reads from the Things3 SQLite database (read-only) and
 Canonical entry points — CI runs the same targets.
 
 ```
-make build   # go build -o things .
+make build   # go build -o things ./cmd/things
 make test    # go test -race ./...
 make cover   # go test -race -coverprofile=coverage.out ./... + summary
 make lint    # golangci-lint run ./... (v2 config in .golangci.yml)
@@ -22,7 +22,7 @@ make fmt     # gofmt -w . && goimports -w .
 - `internal/things/` — write operations: URL scheme (`things:///add`) for task creation, AppleScript for complete/cancel
 - `internal/output/` — JSON and plain text rendering. `Print`/`PrintTaskWithChecklist` take an `io.Writer` so tests can capture into `bytes.Buffer`.
 - `internal/cache/` — last-list cache in `$HOME/Library/Caches/things-cli`. Tests override with `t.Setenv("HOME", t.TempDir())`.
-- `main.go` — CLI wiring with `alecthomas/kong`
+- `cmd/things/` — `main` package with CLI wiring via `alecthomas/kong`. Lives under `cmd/things/` so `go install ./cmd/things` (or `go install github.com/ryanlewis/things-cli/cmd/things@latest`) produces a binary named `things` rather than `things-cli`.
 
 ## Conventions
 
