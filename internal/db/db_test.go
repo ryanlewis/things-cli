@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 )
 
 func TestFindDBPathNoMatch(t *testing.T) {
@@ -62,6 +64,17 @@ func TestOpenReadOnly(t *testing.T) {
 	}
 	if err := d.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestNewFromSQL(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	d := NewFromSQL(sqlDB)
+	if d == nil || d.db == nil {
+		t.Fatal("NewFromSQL returned empty DB")
+	}
+	if _, err := d.db.Exec(`INSERT INTO TMArea (uuid, title, visible) VALUES ('x', 'y', 1)`); err != nil {
+		t.Fatalf("exec: %v", err)
 	}
 }
 
