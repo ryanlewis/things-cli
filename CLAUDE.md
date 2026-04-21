@@ -8,6 +8,7 @@ Canonical entry points — CI runs the same targets.
 
 ```
 make build   # go build -o things ./cmd/things
+make install # go install ./cmd/things (into $GOBIN)
 make test    # go test -race ./...
 make cover   # go test -race -coverprofile=coverage.out ./... + summary
 make lint    # golangci-lint run ./... (v2 config in .golangci.yml)

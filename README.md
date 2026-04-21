@@ -68,10 +68,18 @@ date).
 
 ## Install
 
-Build from source:
+Install the latest release with `go install`:
 
 ```sh
-go build -o things .
+go install github.com/ryanlewis/things-cli/cmd/things@latest
+```
+
+Or build from source:
+
+```sh
+make build          # produces ./things
+# or
+go build -o things ./cmd/things
 ```
 
 Requires macOS with Things3 installed. Go 1.26 or later.
@@ -79,7 +87,7 @@ Requires macOS with Things3 installed. Go 1.26 or later.
 ## Project structure
 
 ```
-main.go                 CLI wiring (alecthomas/kong)
+cmd/things/             CLI entry point (alecthomas/kong)
 internal/model/         Shared types + date codecs (ThingsDate, Core Data time)
 internal/db/            SQLite queries, read-only
 internal/things/        URL scheme + AppleScript writers

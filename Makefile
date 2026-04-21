@@ -1,9 +1,12 @@
-.PHONY: build lint test cover fmt tidy clean
+.PHONY: build install lint test cover fmt tidy clean
 
 BINARY := things
 
 build:
 	go build -o $(BINARY) ./cmd/things
+
+install:
+	go install ./cmd/things
 
 lint:
 	golangci-lint run ./...
