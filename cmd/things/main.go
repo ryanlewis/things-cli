@@ -30,7 +30,7 @@ type CLI struct {
 	Complete CompleteCmd `cmd:"" help:"Mark a task as completed."`
 	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
-	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (File → Log Completed Now)."`
+	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (Items → Log Completed)."`
 }
 
 type ListCmd struct {
