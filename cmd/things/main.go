@@ -26,7 +26,7 @@ var (
 type CLI struct {
 	JSON    bool             `help:"Output as JSON." short:"j" default:"false"`
 	DB      string           `help:"Override database path." type:"existingfile"`
-	Version kong.VersionFlag `help:"Print version and exit." short:"V"`
+	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
