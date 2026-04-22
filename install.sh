@@ -6,7 +6,7 @@
 #
 # Environment:
 #   INSTALL_DIR   target directory for the binary (default: /usr/local/bin)
-#   VERSION       version tag to install (default: latest release)
+#   VERSION       version tag to install, e.g. v0.1.0 (default: latest release)
 
 set -eu
 
@@ -29,49 +29,48 @@ case "$ARCH" in
 	*)             err "unsupported architecture: $ARCH" ;;
 esac
 
-command -v curl >/dev/null 2>&1 || err "curl is required"
-command -v tar  >/dev/null 2>&1 || err "tar is required"
-command -v shasum >/dev/null 2>&1 || err "shasum is required"
-
-# Resolve VERSION by following the /releases/latest redirect to /releases/tag/vX.Y.Z.
-# Avoids JSON parsing and works without an auth token.
+# Resolve VERSION by following the /releases/latest redirect.
+# Normalize to a leading "v" so VERSION=1.2.3 also works.
 VERSION="${VERSION:-}"
 if [ -z "$VERSION" ]; then
 	VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
 		"https://github.com/${REPO}/releases/latest" \
 		| sed 's|.*/tag/||')
-	[ -n "$VERSION" ] || err "failed to detect latest version"
 fi
+case "$VERSION" in
+	v[0-9]*)   ;;
+	[0-9]*)    VERSION="v$VERSION" ;;
+	*)         err "could not determine version (got: '${VERSION}')" ;;
+esac
 
-VERSION_NUM="${VERSION#v}"
-TARBALL="things_${VERSION_NUM}_${OS}_${ARCH}.tar.gz"
+TARBALL="things_${VERSION#v}_${OS}_${ARCH}.tar.gz"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT INT TERM
+trap 'rm -rf "$TMP"' EXIT INT TERM HUP
 
 printf 'Downloading %s %s (%s/%s)...\n' "$BIN" "$VERSION" "$OS" "$ARCH"
 curl -fsSL -o "$TMP/$TARBALL"      "$BASE_URL/$TARBALL"
 curl -fsSL -o "$TMP/checksums.txt" "$BASE_URL/checksums.txt"
 
 printf 'Verifying checksum...\n'
-(cd "$TMP" && grep "  ${TARBALL}\$" checksums.txt | shasum -a 256 -c -) >/dev/null \
-	|| err "checksum verification failed"
+EXPECTED=$(awk -v f="$TARBALL" '$2 == f {print $1}' "$TMP/checksums.txt")
+[ -n "$EXPECTED" ] || err "no checksum entry for $TARBALL in checksums.txt"
+ACTUAL=$(shasum -a 256 "$TMP/$TARBALL" | awk '{print $1}')
+[ "$EXPECTED" = "$ACTUAL" ] || err "checksum mismatch (expected $EXPECTED, got $ACTUAL)"
 
 tar -xzf "$TMP/$TARBALL" -C "$TMP"
 [ -f "$TMP/$BIN" ] || err "archive did not contain expected binary: $BIN"
 
-TARGET="$INSTALL_DIR/$BIN"
-if [ -w "$INSTALL_DIR" ] || { [ ! -e "$INSTALL_DIR" ] && [ -w "$(dirname "$INSTALL_DIR")" ]; }; then
-	mkdir -p "$INSTALL_DIR"
-	mv "$TMP/$BIN" "$TARGET"
-else
+SUDO=""
+if [ ! -w "$INSTALL_DIR" ] && { [ -e "$INSTALL_DIR" ] || [ ! -w "$(dirname "$INSTALL_DIR")" ]; }; then
+	SUDO="sudo"
 	printf 'Installing to %s (sudo required)...\n' "$INSTALL_DIR"
-	sudo mkdir -p "$INSTALL_DIR"
-	sudo mv "$TMP/$BIN" "$TARGET"
 fi
-chmod +x "$TARGET" 2>/dev/null || sudo chmod +x "$TARGET"
+$SUDO mkdir -p "$INSTALL_DIR"
+$SUDO install -m 0755 "$TMP/$BIN" "$INSTALL_DIR/$BIN"
 
+TARGET="$INSTALL_DIR/$BIN"
 printf '\nInstalled: %s\n' "$("$TARGET" version)"
 printf 'Location:  %s\n' "$TARGET"
 
