@@ -116,6 +116,41 @@ func TestListTasksViews(t *testing.T) {
 	}
 }
 
+// Recently-completed items scheduled for today should show in the Today view
+// until a Log-Completed action bumps TMSettings.manualLogDate past their stopDate.
+func TestListTasksTodayIncludesRecentlyCompletedUntilLogged(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stop := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
+		VALUES ('t-just-done', 'Just done', 0, 3, 0, 1, 0, ?, ?, 20)`, today, stop)
+
+	// No manualLogDate yet — should appear in Today.
+	got, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks today: %v", err)
+	}
+	if !sameSet([]string{"t-today", "t-just-done"}, uuidsOf(got)) {
+		t.Fatalf("pre-log: expected {t-today, t-just-done}, got %v", uuidsOf(got))
+	}
+
+	// Simulate "Log Completed Now": bump manualLogDate past the stopDate.
+	future := model.TimeToCoreData(time.Now().Add(1 * time.Minute))
+	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
+
+	got, err = d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks today: %v", err)
+	}
+	if !sameSet([]string{"t-today"}, uuidsOf(got)) {
+		t.Fatalf("post-log: expected {t-today}, got %v", uuidsOf(got))
+	}
+}
+
 func TestListTasksProjectFilter(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)

@@ -30,6 +30,7 @@ type CLI struct {
 	Complete CompleteCmd `cmd:"" help:"Mark a task as completed."`
 	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
+	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (File → Log Completed Now)."`
 }
 
 type ListCmd struct {
@@ -75,6 +76,8 @@ type CancelCmd struct {
 type SearchCmd struct {
 	Query string `arg:"" required:"" help:"Search query."`
 }
+
+type LogCmd struct{}
 
 func main() {
 	var cli CLI
@@ -128,6 +131,8 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 		return runCancel(cli, database)
 	case "search <query>":
 		return runSearch(cli, database)
+	case "log":
+		return things.LogCompleted()
 	default:
 		return fmt.Errorf("unknown command: %s", ctx.Command())
 	}

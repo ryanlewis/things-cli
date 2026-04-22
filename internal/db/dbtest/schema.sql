@@ -52,5 +52,6 @@ CREATE TABLE TMChecklistItem (
 
 CREATE TABLE TMSettings (
     uuid                         TEXT PRIMARY KEY,
-    uriSchemeAuthenticationToken TEXT
+    uriSchemeAuthenticationToken TEXT,
+    manualLogDate                REAL
 );

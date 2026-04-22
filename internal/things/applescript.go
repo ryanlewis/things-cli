@@ -29,6 +29,12 @@ set status of theProject to completed
 end tell`, uuid), "completing project")
 }
 
+func LogCompleted() error {
+	return runAppleScript(`tell application "Things3"
+log completed now
+end tell`, "logging completed items")
+}
+
 func CancelTask(uuid string) error {
 	return runAppleScript(fmt.Sprintf(`tell application "Things3"
 set theToDo to to do id "%s"

@@ -80,6 +80,23 @@ func TestCancelTaskScript(t *testing.T) {
 	}
 }
 
+func TestLogCompletedScript(t *testing.T) {
+	script := applescriptStub(t, "")
+
+	if err := LogCompleted(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`tell application "Things3"`,
+		`log completed now`,
+		`end tell`,
+	} {
+		if !strings.Contains(*script, want) {
+			t.Errorf("script missing %q:\n%s", want, *script)
+		}
+	}
+}
+
 func TestAppleScriptErrorIncludesOutput(t *testing.T) {
 	applescriptStub(t, "script failure output")
 
