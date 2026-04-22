@@ -5,8 +5,9 @@
 #   curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
 #
 # Environment:
-#   INSTALL_DIR   target directory for the binary (default: /usr/local/bin)
-#   VERSION       version tag to install, e.g. v0.1.0 (default: latest release)
+#   INSTALL_DIR        target directory for the binary (default: /usr/local/bin)
+#   VERSION            version tag to install, e.g. v0.1.0 (default: latest release)
+#   RELEASE_BASE_URL   override the asset download base URL (for mirrors / testing)
 
 set -eu
 
@@ -44,7 +45,7 @@ case "$VERSION" in
 esac
 
 TARBALL="things_${VERSION#v}_${OS}_${ARCH}.tar.gz"
-BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
+BASE_URL="${RELEASE_BASE_URL:-https://github.com/${REPO}/releases/download/${VERSION}}"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM HUP
