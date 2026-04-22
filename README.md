@@ -71,11 +71,23 @@ date).
 
 ## Install
 
-Download a prebuilt binary from the
-[latest release](https://github.com/ryanlewis/things-cli/releases/latest).
-Pick the tarball matching your Mac (`darwin_arm64` for Apple Silicon,
-`darwin_amd64` for Intel), extract it, and put `things` somewhere on your
-`PATH`:
+One-line install (downloads the latest release, verifies checksums,
+installs to `/usr/local/bin`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
+```
+
+Override the destination with `INSTALL_DIR` or pin a version with `VERSION`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh \
+  | INSTALL_DIR="$HOME/bin" VERSION=v0.1.0 sh
+```
+
+Or download a prebuilt binary manually from the
+[latest release](https://github.com/ryanlewis/things-cli/releases/latest)
+(`darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel):
 
 ```sh
 tar -xzf things_*_darwin_arm64.tar.gz
