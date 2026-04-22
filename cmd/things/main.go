@@ -17,9 +17,16 @@ import (
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 type CLI struct {
-	JSON bool   `help:"Output as JSON." short:"j" default:"false"`
-	DB   string `help:"Override database path." type:"existingfile"`
+	JSON    bool             `help:"Output as JSON." short:"j" default:"false"`
+	DB      string           `help:"Override database path." type:"existingfile"`
+	Version kong.VersionFlag `help:"Print version and exit." short:"V"`
 
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
@@ -31,7 +38,10 @@ type CLI struct {
 	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
 	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (Items → Log Completed)."`
+	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 }
+
+type VersionCmd struct{}
 
 type ListCmd struct {
 	Args    []string `arg:"" optional:"" help:"View or project name. Views: today,inbox,upcoming,anytime,someday,logbook,trash,deadlines."`
@@ -85,7 +95,13 @@ func main() {
 		kong.Name("things"),
 		kong.Description("CLI for Things3"),
 		kong.UsageOnError(),
+		kong.Vars{"version": fmt.Sprintf("things %s (commit %s, built %s)", version, commit, date)},
 	)
+
+	if ctx.Command() == "version" {
+		fmt.Printf("things %s (commit %s, built %s)\n", version, commit, date)
+		return
+	}
 
 	dbPath := cli.DB
 	if dbPath == "" {
@@ -133,6 +149,8 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 		return runSearch(cli, database)
 	case "log":
 		return things.LogCompleted()
+	case "version":
+		return nil
 	default:
 		return fmt.Errorf("unknown command: %s", ctx.Command())
 	}

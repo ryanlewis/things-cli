@@ -33,6 +33,9 @@ things add "Ship v2" --project "Launch" --deadline 2026-04-30
 things complete 3
 things cancel "Old idea"
 things search migrate
+
+things log                        # move today's done/cancelled items to Logbook
+things version                    # print version
 ```
 
 By default output is plain text formatted for humans. Pass `-j` / `--json` for
@@ -68,7 +71,19 @@ date).
 
 ## Install
 
-Install the latest release with `go install`:
+Download a prebuilt binary from the
+[latest release](https://github.com/ryanlewis/things-cli/releases/latest).
+Pick the tarball matching your Mac (`darwin_arm64` for Apple Silicon,
+`darwin_amd64` for Intel), extract it, and put `things` somewhere on your
+`PATH`:
+
+```sh
+tar -xzf things_*_darwin_arm64.tar.gz
+mv things /usr/local/bin/   # or ~/bin, etc.
+things version
+```
+
+Or install with `go install`:
 
 ```sh
 go install github.com/ryanlewis/things-cli/cmd/things@latest
@@ -82,7 +97,8 @@ make build          # produces ./things
 go build -o things ./cmd/things
 ```
 
-Requires macOS with Things3 installed. Go 1.26 or later.
+Requires macOS with Things3 installed. Go 1.26 or later when building from
+source.
 
 ## Project structure
 
@@ -97,4 +113,4 @@ internal/cache/         Last-list UUID cache for numeric references
 
 ## License
 
-MIT
+[MIT](LICENSE)
