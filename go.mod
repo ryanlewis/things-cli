@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/alecthomas/kong v1.15.0
-	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-isatty v0.0.21
 	modernc.org/sqlite v1.48.2
 )
 
