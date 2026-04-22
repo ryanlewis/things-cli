@@ -1,4 +1,4 @@
-.PHONY: build install lint test cover fmt tidy clean release-snapshot release-check
+.PHONY: build install lint test cover fmt tidy clean release-snapshot release-check test-install
 
 BINARY := things
 
@@ -34,3 +34,6 @@ release-check:
 
 release-snapshot:
 	goreleaser release --snapshot --clean --skip=publish
+
+test-install:
+	./scripts/test-install.sh
