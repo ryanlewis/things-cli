@@ -1,4 +1,7 @@
 changelog:
+  exclude:
+    labels:
+      - ignore-for-release
   categories:
     - title: 🚀 Features
       labels:
@@ -19,11 +22,6 @@ changelog:
         - refactor
         - test
         - docs
-    - title: Other changes
+    - title: Other Changes
       labels:
         - "*"
-  exclude:
-    labels:
-      - ignore-for-release
-    authors:
-      - dependabot
