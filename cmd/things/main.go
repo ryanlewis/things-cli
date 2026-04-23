@@ -40,6 +40,7 @@ type CLI struct {
 	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
 	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (Items → Log Completed)."`
+	Open     OpenCmd     `cmd:"" help:"Reveal a task, project, area, tag, or built-in list in Things3."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 }
 
@@ -135,13 +136,26 @@ type SearchCmd struct {
 
 type LogCmd struct{}
 
+type OpenCmd struct {
+	Ref        string `arg:"" optional:"" help:"Task/project UUID, numeric list index, title, or built-in list name (${builtin_lists})."`
+	Project    string `help:"Open project by name or UUID." short:"p"`
+	Area       string `help:"Open area by name or UUID." short:"a"`
+	Tag        string `help:"Open tag by name or UUID." short:"t"`
+	Query      string `help:"App-side quick find." short:"q"`
+	Filter     string `help:"Tag filter on the shown list (comma-separated)."`
+	Background bool   `help:"Don't bring Things to the foreground."`
+}
+
 func main() {
 	var cli CLI
 	ctx := kong.Parse(&cli,
 		kong.Name("things"),
 		kong.Description("CLI for Things3"),
 		kong.UsageOnError(),
-		kong.Vars{"version": fmt.Sprintf("things %s (commit %s, built %s)", version, commit, date)},
+		kong.Vars{
+			"version":       fmt.Sprintf("things %s (commit %s, built %s)", version, commit, date),
+			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
+		},
 	)
 
 	if ctx.Command() == "version" {
@@ -199,6 +213,8 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 		return runSearch(cli, database)
 	case "log":
 		return things.LogCompleted()
+	case "open", "open <ref>":
+		return runOpen(cli, database)
 	case "version":
 		return nil
 	default:
@@ -444,6 +460,64 @@ func confirmAction(msg string) bool {
 	}
 	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
 	return answer == "y" || answer == "yes"
+}
+
+func runOpen(cli *CLI, database *db.DB) error {
+	cmd := &cli.Open
+
+	flags := 0
+	for _, s := range []string{cmd.Ref, cmd.Project, cmd.Area, cmd.Tag, cmd.Query} {
+		if s != "" {
+			flags++
+		}
+	}
+	if flags == 0 {
+		return fmt.Errorf("open: pass a reference, --project, --area, --tag, or --query")
+	}
+	if flags > 1 {
+		return fmt.Errorf("open: pass only one of <ref>, --project, --area, --tag, --query")
+	}
+
+	params := things.ShowParams{Filter: cmd.Filter, Background: cmd.Background}
+
+	switch {
+	case cmd.Query != "":
+		params.Query = cmd.Query
+	case cmd.Area != "":
+		uuid, err := database.FindAreaUUID(cmd.Area)
+		if err != nil {
+			return err
+		}
+		if uuid == "" {
+			return fmt.Errorf("area not found: %s", cmd.Area)
+		}
+		params.ID = uuid
+	case cmd.Tag != "":
+		uuid, err := database.FindTagUUID(cmd.Tag)
+		if err != nil {
+			return err
+		}
+		if uuid == "" {
+			return fmt.Errorf("tag not found: %s", cmd.Tag)
+		}
+		params.ID = uuid
+	case cmd.Project != "":
+		task, err := resolveTask(cmd.Project, database)
+		if err != nil {
+			return err
+		}
+		params.ID = task.UUID
+	case things.IsBuiltinList(cmd.Ref):
+		params.ID = cmd.Ref
+	default:
+		task, err := resolveTask(cmd.Ref, database)
+		if err != nil {
+			return err
+		}
+		params.ID = task.UUID
+	}
+
+	return things.Show(params)
 }
 
 func runSearch(cli *CLI, database *db.DB) error {

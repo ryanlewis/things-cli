@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/alecthomas/kong"
@@ -9,12 +10,15 @@ import (
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 func parse(t *testing.T, args ...string) (*CLI, *kong.Context) {
 	t.Helper()
 	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("things"))
+	parser, err := kong.New(&cli, kong.Name("things"),
+		kong.Vars{"builtin_lists": strings.Join(things.BuiltinLists, ", ")},
+	)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}

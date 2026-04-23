@@ -28,6 +28,29 @@ func TestListAreasOrdered(t *testing.T) {
 	}
 }
 
+func TestFindAreaUUID(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('a1', 'Work', 1, 0)`)
+
+	for _, ref := range []string{"Work", "a1"} {
+		got, err := d.FindAreaUUID(ref)
+		if err != nil {
+			t.Fatalf("FindAreaUUID(%q): %v", ref, err)
+		}
+		if got != "a1" {
+			t.Errorf("FindAreaUUID(%q) = %q, want a1", ref, got)
+		}
+	}
+
+	got, err := d.FindAreaUUID("missing")
+	if err != nil {
+		t.Fatalf("FindAreaUUID(missing): %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty string for missing area, got %q", got)
+	}
+}
+
 func TestListAreasEmpty(t *testing.T) {
 	d := newTestDB(t)
 	areas, err := d.ListAreas()

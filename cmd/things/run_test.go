@@ -13,6 +13,7 @@ import (
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // withSilentStdout replaces os.Stdout for the duration of fn with a pipe that
@@ -104,7 +105,9 @@ func runWith(t *testing.T, database *db.DB, args ...string) error {
 	t.Setenv("HOME", t.TempDir())
 
 	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("things"))
+	parser, err := kong.New(&cli, kong.Name("things"),
+		kong.Vars{"builtin_lists": strings.Join(things.BuiltinLists, ", ")},
+	)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}
@@ -202,6 +205,38 @@ func TestResolveTaskNumericWithoutCache(t *testing.T) {
 	_, err := resolveTask("1", database)
 	if err == nil {
 		t.Fatal("expected not-found when no cache and no title match")
+	}
+}
+
+func TestRunOpenRequiresArg(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "open")
+	if err == nil || !strings.Contains(err.Error(), "pass a reference") {
+		t.Fatalf("expected missing-arg error, got: %v", err)
+	}
+}
+
+func TestRunOpenConflictingArgs(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "open", "today", "--query", "milk")
+	if err == nil || !strings.Contains(err.Error(), "only one of") {
+		t.Fatalf("expected conflict error, got: %v", err)
+	}
+}
+
+func TestRunOpenAreaNotFound(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "open", "--area", "Nope")
+	if err == nil || !strings.Contains(err.Error(), "area not found") {
+		t.Fatalf("expected area-not-found, got: %v", err)
+	}
+}
+
+func TestRunOpenTagNotFound(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "open", "--tag", "nope")
+	if err == nil || !strings.Contains(err.Error(), "tag not found") {
+		t.Fatalf("expected tag-not-found, got: %v", err)
 	}
 }
 
