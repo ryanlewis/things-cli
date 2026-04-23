@@ -7,7 +7,7 @@ CLI for Things3 on macOS. Reads from the Things3 SQLite database (read-only) and
 - **IMPORTANT: NEVER edit, write, or stage anything while on `main`.** First action every task: `git branch --show-current`. If `main`, **STOP**.
 - **DO** create a worktree: `git worktree add .worktrees/<topic> -b <topic>`, then work there. Fallback: `git switch -c <topic>`.
 - On `main` with uncommitted changes? **DO** `git switch -c <topic>` immediately — it carries the working tree over.
-- **IMPORTANT:** A PreToolUse hook blocks `git add`/`commit`/`merge` on `main`. If it fires, your workflow is wrong — fix it, don't route around it.
+- **IMPORTANT:** A PreToolUse hook (`.claude/settings.json`) blocks `git add`/`commit`/`merge` on `main`. If it fires, your workflow is wrong — fix it, don't route around it.
 - **NEVER** `git push` to `main`. It only moves via PR merge or release tag (`/release`).
 - **DO** use Conventional Commits.
 
