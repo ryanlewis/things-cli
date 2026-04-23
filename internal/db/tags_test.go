@@ -28,6 +28,29 @@ func TestListTagsOrdered(t *testing.T) {
 	}
 }
 
+func TestFindTagUUID(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('t1', 'urgent', 0)`)
+
+	for _, ref := range []string{"urgent", "t1"} {
+		got, err := d.FindTagUUID(ref)
+		if err != nil {
+			t.Fatalf("FindTagUUID(%q): %v", ref, err)
+		}
+		if got != "t1" {
+			t.Errorf("FindTagUUID(%q) = %q, want t1", ref, got)
+		}
+	}
+
+	got, err := d.FindTagUUID("missing")
+	if err != nil {
+		t.Fatalf("FindTagUUID(missing): %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty string for missing tag, got %q", got)
+	}
+}
+
 func TestListTagsEmpty(t *testing.T) {
 	d := newTestDB(t)
 	tags, err := d.ListTags()

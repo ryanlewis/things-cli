@@ -1,10 +1,28 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
+
+// FindTagUUID resolves a tag reference (UUID or title) to its UUID,
+// returning "" when no row matches.
+func (d *DB) FindTagUUID(ref string) (string, error) {
+	var uuid string
+	err := d.db.QueryRow(
+		`SELECT uuid FROM TMTag WHERE uuid = ? OR title = ? LIMIT 1`,
+		ref, ref,
+	).Scan(&uuid)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("finding tag: %w", err)
+	}
+	return uuid, nil
+}
 
 func (d *DB) ListTags() ([]model.Tag, error) {
 	query := `

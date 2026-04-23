@@ -37,6 +37,11 @@ things complete 3
 things cancel "Old idea"
 things search migrate
 
+things open today                 # reveal a built-in list in the app
+things open "Pay rent"            # reveal a task by title
+things open --project "Launch"    # reveal a project
+things open --query staging       # app-side quick find
+
 things log                        # move today's done/cancelled items to Logbook
 things version                    # print version
 ```

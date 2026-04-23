@@ -3,6 +3,7 @@ package things
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -28,14 +29,67 @@ type AddProjectParams struct {
 	Todos    string
 }
 
-// openThingsURL builds a things:/// URL for the given command and runs it via
-// `open -g`. url.Values.Encode uses + for spaces, but Things expects %20.
+// openThingsURL hands a things:/// URL to `open -g` so writes don't steal
+// focus. url.Values.Encode uses + for spaces, but Things expects %20.
 func openThingsURL(command string, v url.Values) error {
-	u := "things:///" + command + "?" + strings.ReplaceAll(v.Encode(), "+", "%20")
-	if err := execCommand("open", "-g", u).Run(); err != nil {
+	return runOpen("-g", buildThingsURL(command, v))
+}
+
+func buildThingsURL(command string, v url.Values) string {
+	return "things:///" + command + "?" + strings.ReplaceAll(v.Encode(), "+", "%20")
+}
+
+func runOpen(args ...string) error {
+	if err := execCommand("open", args...).Run(); err != nil {
 		return fmt.Errorf("opening URL scheme: %w", err)
 	}
 	return nil
+}
+
+// BuiltinLists are the navigable list IDs the Things URL scheme accepts
+// verbatim as `id=…`. Some (e.g. repeating, all-projects) have no direct
+// DB equivalent — they're app-side views only.
+var BuiltinLists = []string{
+	"inbox", "today", "anytime", "upcoming", "someday", "logbook",
+	"tomorrow", "deadlines", "repeating", "all-projects", "logged-projects",
+}
+
+func IsBuiltinList(name string) bool {
+	return slices.Contains(BuiltinLists, name)
+}
+
+type ShowParams struct {
+	// ID is a UUID or built-in list name (inbox, today, upcoming, …).
+	ID string
+	// Query triggers app-side quick find instead of a direct show.
+	Query string
+	// Filter is a comma-separated tag list that scopes the shown view.
+	Filter string
+	// Background uses `open -g` to avoid bringing Things to the foreground.
+	Background bool
+}
+
+// Show navigates Things to a task, project, area, tag, built-in list, or
+// query result via `things:///show`.
+func Show(params ShowParams) error {
+	if params.ID == "" && params.Query == "" {
+		return fmt.Errorf("show: id or query is required")
+	}
+	v := url.Values{}
+	if params.ID != "" {
+		v.Set("id", params.ID)
+	}
+	if params.Query != "" {
+		v.Set("query", params.Query)
+	}
+	if params.Filter != "" {
+		v.Set("filter", params.Filter)
+	}
+	u := buildThingsURL("show", v)
+	if params.Background {
+		return runOpen("-g", u)
+	}
+	return runOpen(u)
 }
 
 func AddProject(params AddProjectParams) error {

@@ -368,6 +368,98 @@ func TestUpdateTaskCommandFails(t *testing.T) {
 	}
 }
 
+func TestShowByID(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := Show(ShowParams{ID: "task-uuid"}); err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+	if len(*captured) != 2 {
+		t.Fatalf("expected 2 args (open <url>), got: %v", *captured)
+	}
+	if (*captured)[0] != "open" {
+		t.Fatalf("unexpected command: %v", *captured)
+	}
+	u := (*captured)[1]
+	if !strings.HasPrefix(u, "things:///show?") {
+		t.Fatalf("expected show URL, got %q", u)
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	if got := parsed.Query().Get("id"); got != "task-uuid" {
+		t.Errorf("id = %q", got)
+	}
+}
+
+func TestShowBuiltinList(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := Show(ShowParams{ID: "today"}); err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := url.Parse((*captured)[1])
+	if got := parsed.Query().Get("id"); got != "today" {
+		t.Errorf("id = %q, want today", got)
+	}
+}
+
+func TestShowQueryAndFilter(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := Show(ShowParams{Query: "staging", Filter: "urgent,work"}); err != nil {
+		t.Fatal(err)
+	}
+	u := (*captured)[1]
+	if strings.Contains(u, "+") {
+		t.Errorf("URL should use %%20 not +: %q", u)
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	q := parsed.Query()
+	if q.Get("query") != "staging" {
+		t.Errorf("query = %q", q.Get("query"))
+	}
+	if q.Get("filter") != "urgent,work" {
+		t.Errorf("filter = %q", q.Get("filter"))
+	}
+	if _, ok := q["id"]; ok {
+		t.Errorf("id should be absent when only query is set")
+	}
+}
+
+func TestShowBackgroundUsesDashG(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := Show(ShowParams{ID: "inbox", Background: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(*captured) != 3 || (*captured)[1] != "-g" {
+		t.Fatalf("expected open -g <url>, got: %v", *captured)
+	}
+}
+
+func TestShowRequiresIDOrQuery(t *testing.T) {
+	stubRunner(t, false)
+	if err := Show(ShowParams{}); err == nil {
+		t.Fatal("expected error when id and query are both empty")
+	}
+}
+
+func TestShowCommandFails(t *testing.T) {
+	stubRunner(t, true)
+	err := Show(ShowParams{ID: "today"})
+	if err == nil {
+		t.Fatal("expected error from failing command")
+	}
+	if !strings.Contains(err.Error(), "opening URL scheme") {
+		t.Errorf("error should mention URL scheme: %v", err)
+	}
+}
+
 func TestAddTaskCommandFails(t *testing.T) {
 	stubRunner(t, true)
 
