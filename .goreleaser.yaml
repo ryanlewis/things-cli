@@ -46,3 +46,6 @@ release:
   draft: false
   prerelease: auto
   mode: replace
+  header: |
+    {{ readFile (printf ".github/releases/%s.md" .Tag) }}
+    ---
