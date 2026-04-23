@@ -35,6 +35,7 @@ type CLI struct {
 	Show     ShowCmd     `cmd:"" help:"Show task detail."`
 	Add      AddCmd      `cmd:"" help:"Create a new task."`
 	Project  ProjectCmd  `cmd:"" help:"Manage projects."`
+	Edit     EditCmd     `cmd:"" help:"Edit a task via the Things URL scheme."`
 	Complete CompleteCmd `cmd:"" help:"Mark a task as completed."`
 	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
@@ -88,6 +89,36 @@ type ProjectAddCmd struct {
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial to-dos."`
+}
+
+type EditCmd struct {
+	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
+
+	Title *string `help:"Replace title."`
+
+	Notes        *string `help:"Replace notes."`
+	PrependNotes *string `help:"Prepend text to notes." name:"prepend-notes"`
+	AppendNotes  *string `help:"Append text to notes." name:"append-notes"`
+
+	When     *string `help:"When to schedule (date, today, tomorrow, evening, someday, anytime, or an ISO date)."`
+	Deadline *string `help:"Deadline date (YYYY-MM-DD) or empty to clear."`
+
+	Tags    *string `help:"Replace all tags (comma-separated)."`
+	AddTags *string `help:"Add tags (comma-separated)." name:"add-tags"`
+
+	Checklist        *string `help:"Replace checklist items (newline-separated)."`
+	PrependChecklist *string `help:"Prepend checklist items (newline-separated)." name:"prepend-checklist"`
+	AppendChecklist  *string `help:"Append checklist items (newline-separated)." name:"append-checklist"`
+
+	List      *string `help:"Move to list/project by name."`
+	ListID    *string `help:"Move to list/project by UUID." name:"list-id"`
+	Heading   *string `help:"Set heading within project by name."`
+	HeadingID *string `help:"Set heading by UUID." name:"heading-id"`
+
+	Complete  bool `help:"Mark the task as completed."`
+	Cancel    bool `help:"Mark the task as canceled."`
+	Duplicate bool `help:"Duplicate the task before applying edits."`
+	Reveal    bool `help:"Reveal the task in Things after editing."`
 }
 
 type CompleteCmd struct {
@@ -158,6 +189,8 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 		return runAdd(cli, database)
 	case "project add <title>":
 		return runProjectAdd(cli)
+	case "edit <task>":
+		return runEdit(cli, database)
 	case "complete <task>":
 		return runComplete(cli, database)
 	case "cancel <task>":
@@ -278,6 +311,46 @@ func runProjectAdd(cli *CLI) error {
 // (e.g. --todos "Draft\nShip"). Actual newlines in the input are preserved.
 func expandNewlines(s string) string {
 	return strings.ReplaceAll(s, `\n`, "\n")
+}
+
+func runEdit(cli *CLI, database *db.DB) error {
+	task, err := resolveTask(cli.Edit.Task, database)
+	if err != nil {
+		return err
+	}
+
+	token, _ := database.GetAuthToken()
+	return things.UpdateTask(things.UpdateParams{
+		ID:               task.UUID,
+		AuthToken:        token,
+		Title:            cli.Edit.Title,
+		Notes:            cli.Edit.Notes,
+		PrependNotes:     cli.Edit.PrependNotes,
+		AppendNotes:      cli.Edit.AppendNotes,
+		When:             cli.Edit.When,
+		Deadline:         cli.Edit.Deadline,
+		Tags:             cli.Edit.Tags,
+		AddTags:          cli.Edit.AddTags,
+		Checklist:        expandNewlinesPtr(cli.Edit.Checklist),
+		PrependChecklist: expandNewlinesPtr(cli.Edit.PrependChecklist),
+		AppendChecklist:  expandNewlinesPtr(cli.Edit.AppendChecklist),
+		List:             cli.Edit.List,
+		ListID:           cli.Edit.ListID,
+		Heading:          cli.Edit.Heading,
+		HeadingID:        cli.Edit.HeadingID,
+		Completed:        cli.Edit.Complete,
+		Canceled:         cli.Edit.Cancel,
+		Duplicate:        cli.Edit.Duplicate,
+		Reveal:           cli.Edit.Reveal,
+	})
+}
+
+func expandNewlinesPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	v := expandNewlines(*p)
+	return &v
 }
 
 func runComplete(cli *CLI, database *db.DB) error {

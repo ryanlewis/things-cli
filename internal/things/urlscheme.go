@@ -62,6 +62,77 @@ func AddProject(params AddProjectParams) error {
 	return openThingsURL("add-project", v)
 }
 
+type UpdateParams struct {
+	ID        string
+	AuthToken string
+
+	Title            *string
+	Notes            *string
+	PrependNotes     *string
+	AppendNotes      *string
+	When             *string
+	Deadline         *string
+	Tags             *string
+	AddTags          *string
+	Checklist        *string
+	PrependChecklist *string
+	AppendChecklist  *string
+	List             *string
+	ListID           *string
+	Heading          *string
+	HeadingID        *string
+	Completed        bool
+	Canceled         bool
+	Duplicate        bool
+	Reveal           bool
+}
+
+func UpdateTask(params UpdateParams) error {
+	if params.ID == "" {
+		return fmt.Errorf("update: task id is required")
+	}
+	if params.AuthToken == "" {
+		return fmt.Errorf("update: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once")
+	}
+
+	v := url.Values{}
+	v.Set("id", params.ID)
+	v.Set("auth-token", params.AuthToken)
+
+	setStr := func(key string, p *string) {
+		if p != nil {
+			v.Set(key, *p)
+		}
+	}
+	setBool := func(key string, b bool) {
+		if b {
+			v.Set(key, "true")
+		}
+	}
+
+	setStr("title", params.Title)
+	setStr("notes", params.Notes)
+	setStr("prepend-notes", params.PrependNotes)
+	setStr("append-notes", params.AppendNotes)
+	setStr("when", params.When)
+	setStr("deadline", params.Deadline)
+	setStr("tags", params.Tags)
+	setStr("add-tags", params.AddTags)
+	setStr("checklist-items", params.Checklist)
+	setStr("prepend-checklist-items", params.PrependChecklist)
+	setStr("append-checklist-items", params.AppendChecklist)
+	setStr("list", params.List)
+	setStr("list-id", params.ListID)
+	setStr("heading", params.Heading)
+	setStr("heading-id", params.HeadingID)
+	setBool("completed", params.Completed)
+	setBool("canceled", params.Canceled)
+	setBool("duplicate", params.Duplicate)
+	setBool("reveal", params.Reveal)
+
+	return openThingsURL("update", v)
+}
+
 func AddTask(params AddParams) error {
 	v := url.Values{}
 	v.Set("title", params.Title)
