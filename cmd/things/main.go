@@ -182,7 +182,7 @@ func main() {
 		kong.Vars{
 			"version":       fmt.Sprintf("things %s (commit %s, built %s)", version, commit, date),
 			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skillAgentNames(),
+			"skill_agents":  skill.AgentNames(),
 		},
 	)
 
@@ -565,13 +565,11 @@ func runSearch(cli *CLI, database *db.DB) error {
 	return output.Print(os.Stdout, tasks, cli.JSON)
 }
 
-func skillAgentNames() string {
-	agents := skill.Agents()
-	names := make([]string, len(agents))
-	for i, a := range agents {
-		names[i] = a.Name()
+func resolveSkillDir(agent skill.Agent, override string) (string, error) {
+	if override != "" {
+		return override, nil
 	}
-	return strings.Join(names, ", ")
+	return agent.DefaultDir()
 }
 
 func runSkill(ctx *kong.Context, cli *CLI) error {
@@ -594,12 +592,9 @@ func runSkillInstall(cli *CLI) error {
 	if err != nil {
 		return err
 	}
-	dir := cli.Skill.Install.Path
-	if dir == "" {
-		dir, err = agent.DefaultDir()
-		if err != nil {
-			return err
-		}
+	dir, err := resolveSkillDir(agent, cli.Skill.Install.Path)
+	if err != nil {
+		return err
 	}
 	if skill.Exists(agent, dir) && !cli.Skill.Install.Yes {
 		if !isInteractive() {
@@ -621,12 +616,9 @@ func runSkillUninstall(cli *CLI) error {
 	if err != nil {
 		return err
 	}
-	dir := cli.Skill.Uninstall.Path
-	if dir == "" {
-		dir, err = agent.DefaultDir()
-		if err != nil {
-			return err
-		}
+	dir, err := resolveSkillDir(agent, cli.Skill.Uninstall.Path)
+	if err != nil {
+		return err
 	}
 	present := skill.InstalledFiles(agent, dir)
 	if len(present) == 0 {
