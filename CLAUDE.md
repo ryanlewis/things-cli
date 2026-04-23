@@ -4,7 +4,7 @@ CLI for Things3 on macOS. Reads from the Things3 SQLite database (read-only) and
 
 ## Workflow
 
-- Never commit to `main`. Work on a branch, ideally a worktree (`git worktree add ../things-cli-<topic> -b <topic>`). If you find yourself on `main` with changes, `git switch -c <topic>` before committing.
+- Never commit to `main`. Work on a branch, ideally a worktree (`git worktree add .worktrees/<topic> -b <topic>`). If you find yourself on `main` with changes, `git switch -c <topic>` before committing.
 - `main` only moves via PR merges and release tags (see `/release`).
 - Use Conventional Commits.
 
