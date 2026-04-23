@@ -30,6 +30,7 @@ things show "Pay rent"            # show by title (interactive disambig)
 
 things add "Buy milk" --when today --tags errand,shopping
 things add "Ship v2" --project "Launch" --deadline 2026-04-30
+things project add "Launch site" --area Work --deadline 2026-05-01
 things complete 3
 things cancel "Old idea"
 things search migrate
@@ -57,6 +58,9 @@ cache the resulting UUIDs so you can refer to tasks by their index (`1`, `2`,
 `--project`, `--heading` and `--list`. `--when` takes the same values Things
 itself accepts (`today`, `tomorrow`, `evening`, `anytime`, `someday`, or a
 date).
+
+`project add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--area`
+and `--todos` (newline-separated initial to-dos).
 
 ## How it works
 

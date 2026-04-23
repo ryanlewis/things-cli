@@ -34,6 +34,7 @@ type CLI struct {
 	Tags     TagsCmd     `cmd:"" help:"List tags."`
 	Show     ShowCmd     `cmd:"" help:"Show task detail."`
 	Add      AddCmd      `cmd:"" help:"Create a new task."`
+	Project  ProjectCmd  `cmd:"" help:"Project mutations."`
 	Complete CompleteCmd `cmd:"" help:"Mark a task as completed."`
 	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
@@ -73,6 +74,20 @@ type AddCmd struct {
 	Project   string `help:"Project name or UUID."`
 	Heading   string `help:"Heading within project."`
 	List      string `help:"List (project or area) name."`
+}
+
+type ProjectCmd struct {
+	Add ProjectAddCmd `cmd:"" help:"Create a new project."`
+}
+
+type ProjectAddCmd struct {
+	Title    string `arg:"" required:"" help:"Project title."`
+	Notes    string `help:"Notes for the project."`
+	When     string `help:"When to schedule (date, today, tomorrow, evening, etc.)."`
+	Deadline string `help:"Deadline date."`
+	Tags     string `help:"Comma-separated tags."`
+	Area     string `help:"Area name or UUID."`
+	Todos    string `help:"Newline-separated initial to-dos."`
 }
 
 type CompleteCmd struct {
@@ -141,6 +156,8 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 		return runShow(cli, database)
 	case "add <title>":
 		return runAdd(cli, database)
+	case "project add <title>":
+		return runProjectAdd(cli)
 	case "complete <task>":
 		return runComplete(cli, database)
 	case "cancel <task>":
@@ -241,6 +258,18 @@ func runAdd(cli *CLI, database *db.DB) error {
 		Heading:   cli.Add.Heading,
 		List:      list,
 		AuthToken: token,
+	})
+}
+
+func runProjectAdd(cli *CLI) error {
+	return things.AddProject(things.AddProjectParams{
+		Title:    cli.Project.Add.Title,
+		Notes:    cli.Project.Add.Notes,
+		When:     cli.Project.Add.When,
+		Deadline: cli.Project.Add.Deadline,
+		Tags:     cli.Project.Add.Tags,
+		Area:     cli.Project.Add.Area,
+		Todos:    cli.Project.Add.Todos,
 	})
 }
 
