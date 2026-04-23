@@ -31,6 +31,8 @@ things show "Pay rent"            # show by title (interactive disambig)
 things add "Buy milk" --when today --tags errand,shopping
 things add "Ship v2" --project "Launch" --deadline 2026-04-30
 things project add "Launch site" --area Work --deadline 2026-05-01
+things edit 3 --title "New title" --when tomorrow
+things edit "Buy milk" --add-tags urgent --deadline 2026-05-01
 things complete 3
 things cancel "Old idea"
 things search migrate
@@ -62,13 +64,24 @@ date).
 `project add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--area`
 and `--todos` (newline-separated initial to-dos).
 
+`edit` updates an existing task via the `things:///update` URL scheme. Only
+flags you pass are sent, so unset fields stay untouched. Supported flags:
+`--title`, `--notes`, `--prepend-notes`, `--append-notes`, `--when`,
+`--deadline`, `--tags` (replace), `--add-tags`, `--checklist`,
+`--prepend-checklist`, `--append-checklist`, `--list` / `--list-id`,
+`--heading` / `--heading-id`, `--complete`, `--cancel`, `--duplicate`,
+`--reveal`. An empty value clears the field (e.g. `--deadline ""`). Requires
+the Things auth token — enable *Things → Settings → General → Enable Things
+URLs*.
+
 ## How it works
 
 - **Reads** go through `modernc.org/sqlite` (pure Go, no cgo) with
   `PRAGMA query_only = ON`, so the CLI cannot mutate the Things database.
-- **Writes** go through the official `things:///add` URL scheme for creating
-  tasks and through AppleScript for completing and cancelling them. This is
-  the same interface Things exposes to Shortcuts and automation tools.
+- **Writes** go through the official `things:///add` and `things:///update`
+  URL schemes for creating and editing tasks, and through AppleScript for
+  completing and cancelling them. This is the same interface Things exposes
+  to Shortcuts and automation tools.
 - **Task resolution** accepts a UUID, a title (with interactive
   disambiguation when multiple tasks match) or a numeric index into the last
   listing.

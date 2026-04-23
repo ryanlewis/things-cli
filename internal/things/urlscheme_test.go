@@ -192,6 +192,182 @@ func TestAddProjectCommandFails(t *testing.T) {
 	}
 }
 
+func strPtr(s string) *string { return &s }
+
+func TestUpdateTaskMinimal(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	err := UpdateTask(UpdateParams{
+		ID:        "abc-123",
+		AuthToken: "tok",
+		Title:     strPtr("New Title"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateTask: %v", err)
+	}
+	u := (*captured)[2]
+	if !strings.HasPrefix(u, "things:///update?") {
+		t.Fatalf("expected update URL, got %q", u)
+	}
+	if strings.Contains(u, "+") {
+		t.Errorf("URL should use %%20 not +: %q", u)
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	q := parsed.Query()
+	if q.Get("id") != "abc-123" {
+		t.Errorf("id = %q", q.Get("id"))
+	}
+	if q.Get("auth-token") != "tok" {
+		t.Errorf("auth-token = %q", q.Get("auth-token"))
+	}
+	if q.Get("title") != "New Title" {
+		t.Errorf("title = %q", q.Get("title"))
+	}
+}
+
+func TestUpdateTaskAllFields(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	err := UpdateTask(UpdateParams{
+		ID:               "id-1",
+		AuthToken:        "tok",
+		Title:            strPtr("T"),
+		Notes:            strPtr("n"),
+		PrependNotes:     strPtr("pre"),
+		AppendNotes:      strPtr("post"),
+		When:             strPtr("today"),
+		Deadline:         strPtr("2026-05-01"),
+		Tags:             strPtr("a,b"),
+		AddTags:          strPtr("c"),
+		Checklist:        strPtr("x\ny"),
+		PrependChecklist: strPtr("pc"),
+		AppendChecklist:  strPtr("ac"),
+		List:             strPtr("Inbox"),
+		ListID:           strPtr("list-uuid"),
+		Heading:          strPtr("H"),
+		HeadingID:        strPtr("heading-uuid"),
+		Completed:        true,
+		Canceled:         true,
+		Duplicate:        true,
+		Reveal:           true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parsed, err := url.Parse((*captured)[2])
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	q := parsed.Query()
+
+	cases := map[string]string{
+		"id":                      "id-1",
+		"auth-token":              "tok",
+		"title":                   "T",
+		"notes":                   "n",
+		"prepend-notes":           "pre",
+		"append-notes":            "post",
+		"when":                    "today",
+		"deadline":                "2026-05-01",
+		"tags":                    "a,b",
+		"add-tags":                "c",
+		"checklist-items":         "x\ny",
+		"prepend-checklist-items": "pc",
+		"append-checklist-items":  "ac",
+		"list":                    "Inbox",
+		"list-id":                 "list-uuid",
+		"heading":                 "H",
+		"heading-id":              "heading-uuid",
+		"completed":               "true",
+		"canceled":                "true",
+		"duplicate":               "true",
+		"reveal":                  "true",
+	}
+	for k, want := range cases {
+		if got := q.Get(k); got != want {
+			t.Errorf("query[%q] = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestUpdateTaskOmitsUnsetFlags(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := UpdateTask(UpdateParams{
+		ID:        "id",
+		AuthToken: "tok",
+		Title:     strPtr("only"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	u := (*captured)[2]
+	omitted := []string{
+		"notes=", "prepend-notes=", "append-notes=",
+		"when=", "deadline=", "tags=", "add-tags=",
+		"checklist-items=", "prepend-checklist-items=", "append-checklist-items=",
+		"list=", "list-id=", "heading=", "heading-id=",
+		"completed=", "canceled=", "duplicate=", "reveal=",
+	}
+	for _, k := range omitted {
+		if strings.Contains(u, k) {
+			t.Errorf("URL should not contain %q: %s", k, u)
+		}
+	}
+}
+
+func TestUpdateTaskEmptyStringClearsField(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := UpdateTask(UpdateParams{
+		ID:        "id",
+		AuthToken: "tok",
+		Notes:     strPtr(""),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse((*captured)[2])
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	if _, ok := parsed.Query()["notes"]; !ok {
+		t.Errorf("expected notes= param to be present (clear field)")
+	}
+}
+
+func TestUpdateTaskRequiresID(t *testing.T) {
+	stubRunner(t, false)
+	err := UpdateTask(UpdateParams{AuthToken: "tok", Title: strPtr("x")})
+	if err == nil {
+		t.Fatal("expected error for missing id")
+	}
+}
+
+func TestUpdateTaskRequiresAuthToken(t *testing.T) {
+	stubRunner(t, false)
+	err := UpdateTask(UpdateParams{ID: "id", Title: strPtr("x")})
+	if err == nil {
+		t.Fatal("expected error for missing auth token")
+	}
+	if !strings.Contains(err.Error(), "auth token") {
+		t.Errorf("error should mention auth token: %v", err)
+	}
+}
+
+func TestUpdateTaskCommandFails(t *testing.T) {
+	stubRunner(t, true)
+	err := UpdateTask(UpdateParams{ID: "id", AuthToken: "tok", Title: strPtr("x")})
+	if err == nil {
+		t.Fatal("expected error from failing command")
+	}
+	if !strings.Contains(err.Error(), "opening URL scheme") {
+		t.Errorf("error should mention URL scheme: %v", err)
+	}
+}
+
 func TestAddTaskCommandFails(t *testing.T) {
 	stubRunner(t, true)
 
