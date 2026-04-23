@@ -10,6 +10,7 @@ import (
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/skill"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -19,7 +20,7 @@ func parse(t *testing.T, args ...string) (*CLI, *kong.Context) {
 	parser, err := kong.New(&cli, kong.Name("things"),
 		kong.Vars{
 			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skillAgentNames(),
+			"skill_agents":  skill.AgentNames(),
 		},
 	)
 	if err != nil {
