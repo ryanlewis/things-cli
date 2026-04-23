@@ -4,6 +4,7 @@
     "config:best-practices",
     "group:allNonMajor"
   ],
+  "labels": ["dependencies"],
   "minimumReleaseAge": "5 days",
   "vulnerabilityAlerts": {
     "minimumReleaseAge": "0 days"

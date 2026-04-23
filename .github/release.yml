@@ -1,0 +1,29 @@
+changelog:
+  categories:
+    - title: 🚀 Features
+      labels:
+        - enhancement
+        - feature
+        - feat
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: 📦 Dependencies
+      labels:
+        - dependencies
+    - title: 🧰 Maintenance
+      labels:
+        - chore
+        - ci
+        - refactor
+        - test
+        - docs
+    - title: Other changes
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
