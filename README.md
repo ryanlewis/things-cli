@@ -79,6 +79,26 @@ flags you pass are sent, so unset fields stay untouched. Supported flags:
 the Things auth token — enable *Things → Settings → General → Enable Things
 URLs*.
 
+## Claude Code skill
+
+`things-cli` bundles an agent skill that teaches Claude Code (and other
+compatible agents) how to drive the CLI. Install it once and Claude will
+know when to reach for `things` instead of guessing.
+
+```sh
+things skill list               # show supported agents and install status
+things skill install claude     # install for Claude Code (~/.claude/skills/things-cli)
+things skill install claude -y  # overwrite without prompting
+things skill show               # print the neutral skill source
+things skill show claude        # print the files that would be installed
+things skill uninstall claude   # remove the installed skill
+```
+
+Pass `--path DIR` to install or uninstall under a custom directory (e.g. a
+project-local `.claude/skills/`). The skill body is embedded in the binary,
+so a plain `things` upgrade refreshes it — re-run `skill install` to pick up
+the new version.
+
 ## How it works
 
 - **Reads** go through `modernc.org/sqlite` (pure Go, no cgo) with
