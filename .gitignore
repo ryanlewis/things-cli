@@ -1,5 +1,6 @@
 /things
 /coverage.out
-/.claude/
+/.claude/*
+!/.claude/settings.json
 /dist/
 /.worktrees/
