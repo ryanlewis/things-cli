@@ -4,8 +4,11 @@ CLI for Things3 on macOS. Reads from the Things3 SQLite database (read-only) and
 
 ## Workflow
 
-- Never commit to `main`. Work on a branch, ideally a worktree (`git worktree add .worktrees/<topic> -b <topic>`). If you find yourself on `main` with changes, `git switch -c <topic>` before committing.
-- `main` only moves via PR merges and release tags (see `/release`).
+- **Before making any changes**, check the current branch (`git branch --show-current`). If it's `main`, create a topic branch first — don't edit files, don't run write commands, don't stage anything while on `main`. This applies to all changes (code, tests, docs, `.claude/` config, everything), not just commits.
+- Prefer a worktree: `git worktree add .worktrees/<topic> -b <topic>` and work from there. Otherwise `git switch -c <topic>` on the current clone.
+- If you realize mid-task that you're on `main` with uncommitted changes, `git switch -c <topic>` immediately — this carries the working tree to the new branch — then continue.
+- A PreToolUse hook (`.claude/settings.local.json`) blocks `git add`/`commit`/`merge` while on `main` as a safety net. Treat the block as a bug in your workflow, not an obstacle to route around.
+- `main` only moves via PR merges and release tags (see `/release`). Never `git push` directly to `main`.
 - Use Conventional Commits.
 
 ## Commands
