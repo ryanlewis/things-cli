@@ -254,7 +254,7 @@ func runAdd(cli *CLI, database *db.DB) error {
 		When:      cli.Add.When,
 		Deadline:  cli.Add.Deadline,
 		Tags:      cli.Add.Tags,
-		Checklist: cli.Add.Checklist,
+		Checklist: expandNewlines(cli.Add.Checklist),
 		Heading:   cli.Add.Heading,
 		List:      list,
 		AuthToken: token,
@@ -269,8 +269,15 @@ func runProjectAdd(cli *CLI) error {
 		Deadline: cli.Project.Add.Deadline,
 		Tags:     cli.Project.Add.Tags,
 		Area:     cli.Project.Add.Area,
-		Todos:    cli.Project.Add.Todos,
+		Todos:    expandNewlines(cli.Project.Add.Todos),
 	})
+}
+
+// expandNewlines converts the literal two-character sequence `\n` into real
+// newlines so users can pass multi-line values in a single shell-quoted flag
+// (e.g. --todos "Draft\nShip"). Actual newlines in the input are preserved.
+func expandNewlines(s string) string {
+	return strings.ReplaceAll(s, `\n`, "\n")
 }
 
 func runComplete(cli *CLI, database *db.DB) error {
