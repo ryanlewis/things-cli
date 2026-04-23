@@ -1,24 +1,16 @@
 # things-cli — Things3 CLI for macOS
 
 Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox,
-today, upcoming, projects, or areas on macOS. The binary reads the local
-Things3 SQLite database and writes via the `things:///` URL scheme /
-AppleScript.
+today, upcoming, projects, or areas on macOS.
 
-## Safety model
+## Safety
 
-- **Read operations hit SQLite read-only** (`PRAGMA query_only = ON`). These
-  are safe and fast: `list`, `show`, `projects`, `areas`, `tags`, `search`.
-- **Write operations go through Things3**: `add`, `project add`, `edit`,
-  `complete`, `cancel`, `log`, `open`. These launch URL schemes or AppleScript
-  and affect the user's real data — confirm before running destructive writes
-  (`complete`, `cancel`, bulk `edit`).
+- Reads (`list`, `show`, `projects`, `areas`, `tags`, `search`) are safe — use freely.
+- Writes (`add`, `project add`, `edit`, `complete`, `cancel`, `log`, `open`) modify the user's real data. Confirm before destructive ones (`complete`, `cancel`, bulk `edit`).
 
 ## Output
 
-Most commands accept `--json` / `-j` for machine-readable output. Default
-output is a human-friendly plain text table. Prefer `--json` when piping into
-another tool or parsing in an agent context.
+Most commands accept `--json` / `-j`. Prefer it when parsing output.
 
 ## Core commands
 
@@ -27,7 +19,7 @@ things list [view] [--project P] [--area A] [--tag T]
     # views: today, inbox, upcoming, anytime, someday, logbook, trash, deadlines
     # shortcut: `things today`, `things inbox`, etc.
 
-things show <task>              # task detail (title/UUID/numeric index from last list)
+things show <task>              # task detail
 things projects [--area A] [--completed]
 things areas
 things tags
@@ -46,13 +38,13 @@ things open <ref|list>          # reveal task/project/area/tag/built-in list in 
 
 `<task>` accepts:
 
-- UUID (e.g. `A1B2C3D4-...`)
+- UUID
 - Numeric index from the last list (1-based) — `things list today; things complete 2`
-- Title substring — interactive prompt disambiguates multiple matches; non-TTY context errors with the match list.
+- Title substring — interactive prompt disambiguates; non-TTY errors with the match list.
 
 ### Multi-line values
 
-Newline-separated fields (`--checklist`, `--todos`, `--checklist`/`--prepend-checklist`/`--append-checklist` on edit) accept the literal two-character escape `\n` to pack multi-line values into a single shell-quoted argument:
+Newline-separated fields (`--checklist`, `--todos`, `--prepend-checklist`, `--append-checklist`) accept the literal two-character escape `\n` to pack multi-line values into one shell-quoted argument:
 
 ```
 things add "Groceries" --checklist "Milk\nBread\nEggs"
@@ -74,7 +66,7 @@ things add "Ship release" --project "things-cli" --tags "oss" \
   --checklist "Cut tag\nWait on CI\nAnnounce"
 ```
 
-Edit a task: reschedule + add a tag:
+Reschedule and tag an existing task:
 
 ```
 things edit "Ship release" --when tomorrow --add-tags "priority"
@@ -86,9 +78,8 @@ Pipe JSON to another tool:
 things --json list today | jq '.[] | .title'
 ```
 
-## Tips for agents
+## Tips
 
-- Prefer `--json` in scripted contexts; parse rather than screen-scrape.
-- After listing, the task order is cached — numeric indices stay valid until the next `list`/`search`.
-- `things open` is the right command when the user wants to *see* something in the Things3 app rather than read data.
-- Writes are not transactional: if a URL-scheme write fails, the DB is unchanged but the agent should re-check state with `show`.
+- Prefer `--json` in scripted contexts.
+- After a `list`/`search`, numeric indices stay valid until the next one.
+- Use `things open` when the user wants to *see* something in the app rather than read data back.
