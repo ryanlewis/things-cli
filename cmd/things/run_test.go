@@ -106,7 +106,10 @@ func runWith(t *testing.T, database *db.DB, args ...string) error {
 
 	var cli CLI
 	parser, err := kong.New(&cli, kong.Name("things"),
-		kong.Vars{"builtin_lists": strings.Join(things.BuiltinLists, ", ")},
+		kong.Vars{
+			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
+			"skill_agents":  skillAgentNames(),
+		},
 	)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
