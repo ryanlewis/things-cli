@@ -17,7 +17,10 @@ func parse(t *testing.T, args ...string) (*CLI, *kong.Context) {
 	t.Helper()
 	var cli CLI
 	parser, err := kong.New(&cli, kong.Name("things"),
-		kong.Vars{"builtin_lists": strings.Join(things.BuiltinLists, ", ")},
+		kong.Vars{
+			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
+			"skill_agents":  skillAgentNames(),
+		},
 	)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
@@ -90,6 +93,31 @@ func TestKongSearch(t *testing.T) {
 	cli, ctx := parse(t, "search", "foo bar")
 	if ctx.Command() != "search <query>" || cli.Search.Query != "foo bar" {
 		t.Errorf("search parse: cmd=%q query=%q", ctx.Command(), cli.Search.Query)
+	}
+}
+
+func TestKongSkillCommands(t *testing.T) {
+	cases := []struct {
+		args    []string
+		command string
+		check   func(*CLI) bool
+	}{
+		{[]string{"skill", "list"}, "skill list", func(*CLI) bool { return true }},
+		{[]string{"skill", "show"}, "skill show", func(c *CLI) bool { return c.Skill.Show.Agent == "" }},
+		{[]string{"skill", "show", "claude"}, "skill show <agent>", func(c *CLI) bool { return c.Skill.Show.Agent == "claude" }},
+		{[]string{"skill", "install", "claude"}, "skill install <agent>", func(c *CLI) bool { return c.Skill.Install.Agent == "claude" && !c.Skill.Install.Yes }},
+		{[]string{"skill", "install", "claude", "-y"}, "skill install <agent>", func(c *CLI) bool { return c.Skill.Install.Yes }},
+		{[]string{"skill", "install", "claude", "--path", "/tmp/x"}, "skill install <agent>", func(c *CLI) bool { return c.Skill.Install.Path == "/tmp/x" }},
+		{[]string{"skill", "uninstall", "claude", "-y"}, "skill uninstall <agent>", func(c *CLI) bool { return c.Skill.Uninstall.Yes }},
+	}
+	for _, tc := range cases {
+		cli, ctx := parse(t, tc.args...)
+		if ctx.Command() != tc.command {
+			t.Errorf("%v: Command = %q, want %q", tc.args, ctx.Command(), tc.command)
+		}
+		if !tc.check(cli) {
+			t.Errorf("%v: check failed, CLI = %+v", tc.args, cli.Skill)
+		}
 	}
 }
 

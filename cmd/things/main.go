@@ -14,6 +14,7 @@ import (
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
+	"github.com/ryanlewis/things-cli/internal/skill"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -41,6 +42,7 @@ type CLI struct {
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
 	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (Items → Log Completed)."`
 	Open     OpenCmd     `cmd:"" help:"Reveal a task, project, area, tag, or built-in list in Things3."`
+	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 }
 
@@ -136,6 +138,31 @@ type SearchCmd struct {
 
 type LogCmd struct{}
 
+type SkillCmd struct {
+	Install   SkillInstallCmd   `cmd:"" help:"Install the bundled skill for an AI coding agent."`
+	Uninstall SkillUninstallCmd `cmd:"" help:"Remove the bundled skill for an AI coding agent."`
+	Show      SkillShowCmd      `cmd:"" help:"Print the skill source (neutral, or rendered for an agent)."`
+	List      SkillListCmd      `cmd:"" help:"List supported agents."`
+}
+
+type SkillInstallCmd struct {
+	Agent string `arg:"" required:"" help:"Target agent (${skill_agents})."`
+	Path  string `help:"Override destination directory."`
+	Yes   bool   `help:"Assume yes — overwrite without prompting." short:"y"`
+}
+
+type SkillUninstallCmd struct {
+	Agent string `arg:"" required:"" help:"Target agent (${skill_agents})."`
+	Path  string `help:"Override directory to uninstall from."`
+	Yes   bool   `help:"Assume yes — uninstall without prompting." short:"y"`
+}
+
+type SkillShowCmd struct {
+	Agent string `arg:"" optional:"" help:"Render for a specific agent (${skill_agents}); default is the neutral source."`
+}
+
+type SkillListCmd struct{}
+
 type OpenCmd struct {
 	Ref        string `arg:"" optional:"" help:"Task/project UUID, numeric list index, title, or built-in list name (${builtin_lists})."`
 	Project    string `help:"Open project by name or UUID." short:"p"`
@@ -155,11 +182,20 @@ func main() {
 		kong.Vars{
 			"version":       fmt.Sprintf("things %s (commit %s, built %s)", version, commit, date),
 			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
+			"skill_agents":  skillAgentNames(),
 		},
 	)
 
 	if ctx.Command() == "version" {
 		fmt.Printf("things %s (commit %s, built %s)\n", version, commit, date)
+		return
+	}
+
+	if strings.HasPrefix(ctx.Command(), "skill ") {
+		if err := runSkill(ctx, &cli); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -527,6 +563,123 @@ func runSearch(cli *CLI, database *db.DB) error {
 	}
 	cacheTaskUUIDs(tasks)
 	return output.Print(os.Stdout, tasks, cli.JSON)
+}
+
+func skillAgentNames() string {
+	agents := skill.Agents()
+	names := make([]string, len(agents))
+	for i, a := range agents {
+		names[i] = a.Name()
+	}
+	return strings.Join(names, ", ")
+}
+
+func runSkill(ctx *kong.Context, cli *CLI) error {
+	switch ctx.Command() {
+	case "skill install <agent>":
+		return runSkillInstall(cli)
+	case "skill uninstall <agent>":
+		return runSkillUninstall(cli)
+	case "skill show", "skill show <agent>":
+		return runSkillShow(cli)
+	case "skill list":
+		return runSkillList()
+	default:
+		return fmt.Errorf("unknown skill command: %s", ctx.Command())
+	}
+}
+
+func runSkillInstall(cli *CLI) error {
+	agent, err := skill.Lookup(cli.Skill.Install.Agent)
+	if err != nil {
+		return err
+	}
+	dir := cli.Skill.Install.Path
+	if dir == "" {
+		dir, err = agent.DefaultDir()
+		if err != nil {
+			return err
+		}
+	}
+	if skill.Exists(agent, dir) && !cli.Skill.Install.Yes {
+		if !isInteractive() {
+			return fmt.Errorf("skill already installed at %s — pass -y to overwrite", dir)
+		}
+		if !confirmAction(fmt.Sprintf("Skill already installed at %s. Overwrite?", dir)) {
+			return fmt.Errorf("cancelled")
+		}
+	}
+	if err := skill.Install(agent, dir); err != nil {
+		return err
+	}
+	fmt.Printf("Installed %s skill to %s\n", agent.Name(), dir)
+	return nil
+}
+
+func runSkillUninstall(cli *CLI) error {
+	agent, err := skill.Lookup(cli.Skill.Uninstall.Agent)
+	if err != nil {
+		return err
+	}
+	dir := cli.Skill.Uninstall.Path
+	if dir == "" {
+		dir, err = agent.DefaultDir()
+		if err != nil {
+			return err
+		}
+	}
+	present := skill.InstalledFiles(agent, dir)
+	if len(present) == 0 {
+		return fmt.Errorf("no %s skill installed at %s", agent.Name(), dir)
+	}
+	fmt.Fprintf(os.Stderr, "Will remove %d file(s) from %s:\n", len(present), dir)
+	for _, f := range present {
+		fmt.Fprintf(os.Stderr, "  - %s\n", f)
+	}
+	if !cli.Skill.Uninstall.Yes {
+		if !isInteractive() {
+			return fmt.Errorf("refusing to uninstall non-interactively — pass -y to confirm")
+		}
+		if !confirmAction(fmt.Sprintf("Remove %s skill at %s?", agent.Name(), dir)) {
+			return fmt.Errorf("cancelled")
+		}
+	}
+	if err := skill.Uninstall(agent, dir); err != nil {
+		return err
+	}
+	fmt.Printf("Removed %s skill from %s\n", agent.Name(), dir)
+	return nil
+}
+
+func runSkillShow(cli *CLI) error {
+	name := cli.Skill.Show.Agent
+	if name == "" {
+		fmt.Print(skill.Body())
+		return nil
+	}
+	agent, err := skill.Lookup(name)
+	if err != nil {
+		return err
+	}
+	for fname, content := range agent.Files() {
+		fmt.Printf("# %s\n%s", fname, content)
+	}
+	return nil
+}
+
+func runSkillList() error {
+	for _, a := range skill.Agents() {
+		dir, err := a.DefaultDir()
+		if err != nil {
+			dir = "(unknown)"
+		}
+		status := "not installed"
+		if skill.Exists(a, dir) {
+			status = "installed"
+		}
+		fmt.Printf("%-10s %s  (%s)\n", a.Name(), dir, status)
+	}
+	return nil
 }
 
 func cacheTaskUUIDs(tasks []model.Task) {
