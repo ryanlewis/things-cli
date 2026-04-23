@@ -9,7 +9,7 @@ func init() { register(claudeAgent{}) }
 
 const claudeFrontmatter = `---
 name: things-cli
-description: Use when the user mentions Things3, tasks, todos, inbox, today, upcoming, projects, areas, or to-do lists on macOS. Provides the ` + "`things`" + ` CLI for reading the local Things3 SQLite database and writing via the things:/// URL scheme.
+description: Use when the user mentions Things3, tasks, todos, inbox, today, upcoming, projects, areas, or to-do lists on macOS. Provides the ` + "`things`" + ` CLI for listing, creating, editing, completing, and searching tasks.
 ---
 
 `
