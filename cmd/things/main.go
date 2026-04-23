@@ -34,7 +34,7 @@ type CLI struct {
 	Tags     TagsCmd     `cmd:"" help:"List tags."`
 	Show     ShowCmd     `cmd:"" help:"Show task detail."`
 	Add      AddCmd      `cmd:"" help:"Create a new task."`
-	Project  ProjectCmd  `cmd:"" help:"Manage projects (add)."`
+	Project  ProjectCmd  `cmd:"" help:"Manage projects."`
 	Complete CompleteCmd `cmd:"" help:"Mark a task as completed."`
 	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
