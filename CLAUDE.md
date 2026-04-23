@@ -4,12 +4,12 @@ CLI for Things3 on macOS. Reads from the Things3 SQLite database (read-only) and
 
 ## Workflow
 
-- **Before making any changes**, check the current branch (`git branch --show-current`). If it's `main`, create a topic branch first — don't edit files, don't run write commands, don't stage anything while on `main`. This applies to all changes (code, tests, docs, `.claude/` config, everything), not just commits.
-- Prefer a worktree: `git worktree add .worktrees/<topic> -b <topic>` and work from there. Otherwise `git switch -c <topic>` on the current clone.
-- If you realize mid-task that you're on `main` with uncommitted changes, `git switch -c <topic>` immediately — this carries the working tree to the new branch — then continue.
-- A PreToolUse hook (`.claude/settings.local.json`) blocks `git add`/`commit`/`merge` while on `main` as a safety net. Treat the block as a bug in your workflow, not an obstacle to route around.
-- `main` only moves via PR merges and release tags (see `/release`). Never `git push` directly to `main`.
-- Use Conventional Commits.
+- **IMPORTANT: NEVER edit, write, or stage anything while on `main`.** First action every task: `git branch --show-current`. If `main`, **STOP**.
+- **DO** create a worktree: `git worktree add .worktrees/<topic> -b <topic>`, then work there. Fallback: `git switch -c <topic>`.
+- On `main` with uncommitted changes? **DO** `git switch -c <topic>` immediately — it carries the working tree over.
+- **IMPORTANT:** A PreToolUse hook blocks `git add`/`commit`/`merge` on `main`. If it fires, your workflow is wrong — fix it, don't route around it.
+- **NEVER** `git push` to `main`. It only moves via PR merge or release tag (`/release`).
+- **DO** use Conventional Commits.
 
 ## Commands
 
