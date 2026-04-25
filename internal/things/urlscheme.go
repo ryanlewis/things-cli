@@ -45,6 +45,24 @@ func runOpen(args ...string) error {
 	return nil
 }
 
+func setStr(v url.Values, key string, p *string) {
+	if p != nil {
+		v.Set(key, *p)
+	}
+}
+
+func setBool(v url.Values, key string, b bool) {
+	if b {
+		v.Set(key, "true")
+	}
+}
+
+func setNonEmpty(v url.Values, key, value string) {
+	if value != "" {
+		v.Set(key, value)
+	}
+}
+
 // BuiltinLists are the navigable list IDs the Things URL scheme accepts
 // verbatim as `id=…`. Some (e.g. repeating, all-projects) have no direct
 // DB equivalent — they're app-side views only.
@@ -107,24 +125,12 @@ func AddProject(params AddProjectParams) error {
 	params.Deadline = deadline
 	v := url.Values{}
 	v.Set("title", params.Title)
-	if params.Notes != "" {
-		v.Set("notes", params.Notes)
-	}
-	if params.When != "" {
-		v.Set("when", params.When)
-	}
-	if params.Deadline != "" {
-		v.Set("deadline", params.Deadline)
-	}
-	if params.Tags != "" {
-		v.Set("tags", params.Tags)
-	}
-	if params.Area != "" {
-		v.Set("area", params.Area)
-	}
-	if params.Todos != "" {
-		v.Set("to-dos", params.Todos)
-	}
+	setNonEmpty(v, "notes", params.Notes)
+	setNonEmpty(v, "when", params.When)
+	setNonEmpty(v, "deadline", params.Deadline)
+	setNonEmpty(v, "tags", params.Tags)
+	setNonEmpty(v, "area", params.Area)
+	setNonEmpty(v, "to-dos", params.Todos)
 	return openThingsURL("add-project", v)
 }
 
@@ -182,36 +188,25 @@ func UpdateTask(params UpdateParams) error {
 	v.Set("id", params.ID)
 	v.Set("auth-token", params.AuthToken)
 
-	setStr := func(key string, p *string) {
-		if p != nil {
-			v.Set(key, *p)
-		}
-	}
-	setBool := func(key string, b bool) {
-		if b {
-			v.Set(key, "true")
-		}
-	}
-
-	setStr("title", params.Title)
-	setStr("notes", params.Notes)
-	setStr("prepend-notes", params.PrependNotes)
-	setStr("append-notes", params.AppendNotes)
-	setStr("when", params.When)
-	setStr("deadline", params.Deadline)
-	setStr("tags", params.Tags)
-	setStr("add-tags", params.AddTags)
-	setStr("checklist-items", params.Checklist)
-	setStr("prepend-checklist-items", params.PrependChecklist)
-	setStr("append-checklist-items", params.AppendChecklist)
-	setStr("list", params.List)
-	setStr("list-id", params.ListID)
-	setStr("heading", params.Heading)
-	setStr("heading-id", params.HeadingID)
-	setBool("completed", params.Completed)
-	setBool("canceled", params.Canceled)
-	setBool("duplicate", params.Duplicate)
-	setBool("reveal", params.Reveal)
+	setStr(v, "title", params.Title)
+	setStr(v, "notes", params.Notes)
+	setStr(v, "prepend-notes", params.PrependNotes)
+	setStr(v, "append-notes", params.AppendNotes)
+	setStr(v, "when", params.When)
+	setStr(v, "deadline", params.Deadline)
+	setStr(v, "tags", params.Tags)
+	setStr(v, "add-tags", params.AddTags)
+	setStr(v, "checklist-items", params.Checklist)
+	setStr(v, "prepend-checklist-items", params.PrependChecklist)
+	setStr(v, "append-checklist-items", params.AppendChecklist)
+	setStr(v, "list", params.List)
+	setStr(v, "list-id", params.ListID)
+	setStr(v, "heading", params.Heading)
+	setStr(v, "heading-id", params.HeadingID)
+	setBool(v, "completed", params.Completed)
+	setBool(v, "canceled", params.Canceled)
+	setBool(v, "duplicate", params.Duplicate)
+	setBool(v, "reveal", params.Reveal)
 
 	return openThingsURL("update", v)
 }
@@ -286,31 +281,20 @@ func UpdateProject(params UpdateProjectParams) error {
 	v.Set("id", params.ID)
 	v.Set("auth-token", params.AuthToken)
 
-	setStr := func(key string, p *string) {
-		if p != nil {
-			v.Set(key, *p)
-		}
-	}
-	setBool := func(key string, b bool) {
-		if b {
-			v.Set(key, "true")
-		}
-	}
-
-	setStr("title", params.Title)
-	setStr("notes", params.Notes)
-	setStr("prepend-notes", params.PrependNotes)
-	setStr("append-notes", params.AppendNotes)
-	setStr("when", params.When)
-	setStr("deadline", params.Deadline)
-	setStr("tags", params.Tags)
-	setStr("add-tags", params.AddTags)
-	setStr("area", params.Area)
-	setStr("area-id", params.AreaID)
-	setBool("completed", params.Completed)
-	setBool("canceled", params.Canceled)
-	setBool("duplicate", params.Duplicate)
-	setBool("reveal", params.Reveal)
+	setStr(v, "title", params.Title)
+	setStr(v, "notes", params.Notes)
+	setStr(v, "prepend-notes", params.PrependNotes)
+	setStr(v, "append-notes", params.AppendNotes)
+	setStr(v, "when", params.When)
+	setStr(v, "deadline", params.Deadline)
+	setStr(v, "tags", params.Tags)
+	setStr(v, "add-tags", params.AddTags)
+	setStr(v, "area", params.Area)
+	setStr(v, "area-id", params.AreaID)
+	setBool(v, "completed", params.Completed)
+	setBool(v, "canceled", params.Canceled)
+	setBool(v, "duplicate", params.Duplicate)
+	setBool(v, "reveal", params.Reveal)
 
 	return openThingsURL("update-project", v)
 }
@@ -331,26 +315,12 @@ func AddTask(params AddParams) error {
 	params.Deadline = deadline
 	v := url.Values{}
 	v.Set("title", params.Title)
-	if params.Notes != "" {
-		v.Set("notes", params.Notes)
-	}
-	if params.When != "" {
-		v.Set("when", params.When)
-	}
-	if params.Deadline != "" {
-		v.Set("deadline", params.Deadline)
-	}
-	if params.Tags != "" {
-		v.Set("tags", params.Tags)
-	}
-	if params.Checklist != "" {
-		v.Set("checklist-items", params.Checklist)
-	}
-	if params.List != "" {
-		v.Set("list", params.List)
-	}
-	if params.Heading != "" {
-		v.Set("heading", params.Heading)
-	}
+	setNonEmpty(v, "notes", params.Notes)
+	setNonEmpty(v, "when", params.When)
+	setNonEmpty(v, "deadline", params.Deadline)
+	setNonEmpty(v, "tags", params.Tags)
+	setNonEmpty(v, "checklist-items", params.Checklist)
+	setNonEmpty(v, "list", params.List)
+	setNonEmpty(v, "heading", params.Heading)
 	return openThingsURL("add", v)
 }
