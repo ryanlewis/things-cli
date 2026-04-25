@@ -419,6 +419,169 @@ func TestUpdateTaskCommandFails(t *testing.T) {
 	}
 }
 
+func TestUpdateProjectMinimal(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	err := UpdateProject(UpdateProjectParams{
+		ID:        "p-123",
+		AuthToken: "tok",
+		Title:     strPtr("New"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateProject: %v", err)
+	}
+	u := (*captured)[2]
+	if !strings.HasPrefix(u, "things:///update-project?") {
+		t.Fatalf("expected update-project URL, got %q", u)
+	}
+	if strings.Contains(u, "+") {
+		t.Errorf("URL should use %%20 not +: %q", u)
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	q := parsed.Query()
+	if q.Get("id") != "p-123" {
+		t.Errorf("id = %q", q.Get("id"))
+	}
+	if q.Get("auth-token") != "tok" {
+		t.Errorf("auth-token = %q", q.Get("auth-token"))
+	}
+	if q.Get("title") != "New" {
+		t.Errorf("title = %q", q.Get("title"))
+	}
+}
+
+func TestUpdateProjectAllFields(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	err := UpdateProject(UpdateProjectParams{
+		ID:           "p-1",
+		AuthToken:    "tok",
+		Title:        strPtr("T"),
+		Notes:        strPtr("n"),
+		PrependNotes: strPtr("pre"),
+		AppendNotes:  strPtr("post"),
+		When:         strPtr("today"),
+		Deadline:     strPtr("2026-05-01"),
+		Tags:         strPtr("a,b"),
+		AddTags:      strPtr("c"),
+		Area:         strPtr("Work"),
+		AreaID:       strPtr("area-uuid"),
+		Completed:    true,
+		Canceled:     true,
+		Duplicate:    true,
+		Reveal:       true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parsed, err := url.Parse((*captured)[2])
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	q := parsed.Query()
+
+	cases := map[string]string{
+		"id":            "p-1",
+		"auth-token":    "tok",
+		"title":         "T",
+		"notes":         "n",
+		"prepend-notes": "pre",
+		"append-notes":  "post",
+		"when":          "today",
+		"deadline":      "2026-05-01",
+		"tags":          "a,b",
+		"add-tags":      "c",
+		"area":          "Work",
+		"area-id":       "area-uuid",
+		"completed":     "true",
+		"canceled":      "true",
+		"duplicate":     "true",
+		"reveal":        "true",
+	}
+	for k, want := range cases {
+		if got := q.Get(k); got != want {
+			t.Errorf("query[%q] = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestUpdateProjectOmitsUnsetFlags(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := UpdateProject(UpdateProjectParams{
+		ID:        "id",
+		AuthToken: "tok",
+		Title:     strPtr("only"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	u := (*captured)[2]
+	omitted := []string{
+		"notes=", "prepend-notes=", "append-notes=",
+		"when=", "deadline=", "tags=", "add-tags=",
+		"area=", "area-id=",
+		"completed=", "canceled=", "duplicate=", "reveal=",
+	}
+	for _, k := range omitted {
+		if strings.Contains(u, k) {
+			t.Errorf("URL should not contain %q: %s", k, u)
+		}
+	}
+}
+
+func TestUpdateProjectEmptyStringClearsField(t *testing.T) {
+	captured := stubRunner(t, false)
+
+	if err := UpdateProject(UpdateProjectParams{
+		ID:        "id",
+		AuthToken: "tok",
+		Notes:     strPtr(""),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse((*captured)[2])
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	if _, ok := parsed.Query()["notes"]; !ok {
+		t.Errorf("expected notes= param to be present (clear field)")
+	}
+}
+
+func TestUpdateProjectRequiresID(t *testing.T) {
+	stubRunner(t, false)
+	err := UpdateProject(UpdateProjectParams{AuthToken: "tok", Title: strPtr("x")})
+	if err == nil {
+		t.Fatal("expected error for missing id")
+	}
+}
+
+func TestUpdateProjectRequiresAuthToken(t *testing.T) {
+	stubRunner(t, false)
+	err := UpdateProject(UpdateProjectParams{ID: "id", Title: strPtr("x")})
+	if err == nil {
+		t.Fatal("expected error for missing auth token")
+	}
+	if !strings.Contains(err.Error(), "auth token") {
+		t.Errorf("error should mention auth token: %v", err)
+	}
+}
+
+func TestUpdateProjectCommandFails(t *testing.T) {
+	stubRunner(t, true)
+	err := UpdateProject(UpdateProjectParams{ID: "id", AuthToken: "tok", Title: strPtr("x")})
+	if err == nil {
+		t.Fatal("expected error from failing command")
+	}
+	if !strings.Contains(err.Error(), "opening URL scheme") {
+		t.Errorf("error should mention URL scheme: %v", err)
+	}
+}
+
 func TestShowByID(t *testing.T) {
 	captured := stubRunner(t, false)
 

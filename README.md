@@ -80,6 +80,13 @@ attached automatically (required for `operation: update` items, harmless for
 create-only payloads). Pass `--reveal` to jump to the first created item.
 Note: macOS `open` has a URL length limit; split very large payloads.
 
+`project edit` updates an existing project via the `things:///update-project`
+URL scheme. Only flags you pass are sent. Supported flags: `--title`,
+`--notes`, `--prepend-notes`, `--append-notes`, `--when`, `--deadline`,
+`--tags` (replace), `--add-tags`, `--area` / `--area-id`, `--complete`,
+`--cancel`, `--duplicate`, `--reveal`. An empty value clears the field
+(e.g. `--deadline ""`). Requires the Things auth token, same as `edit`.
+
 `edit` updates an existing task via the `things:///update` URL scheme. Only
 flags you pass are sent, so unset fields stay untouched. Supported flags:
 `--title`, `--notes`, `--prepend-notes`, `--append-notes`, `--when`,

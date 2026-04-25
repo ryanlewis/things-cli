@@ -208,6 +208,67 @@ func ImportJSON(data, authToken string, reveal bool) error {
 	return nil
 }
 
+type UpdateProjectParams struct {
+	ID        string
+	AuthToken string
+
+	Title        *string
+	Notes        *string
+	PrependNotes *string
+	AppendNotes  *string
+	When         *string
+	Deadline     *string
+	Tags         *string
+	AddTags      *string
+	Area         *string
+	AreaID       *string
+	Completed    bool
+	Canceled     bool
+	Duplicate    bool
+	Reveal       bool
+}
+
+func UpdateProject(params UpdateProjectParams) error {
+	if params.ID == "" {
+		return fmt.Errorf("update-project: project id is required")
+	}
+	if params.AuthToken == "" {
+		return fmt.Errorf("update-project: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once")
+	}
+
+	v := url.Values{}
+	v.Set("id", params.ID)
+	v.Set("auth-token", params.AuthToken)
+
+	setStr := func(key string, p *string) {
+		if p != nil {
+			v.Set(key, *p)
+		}
+	}
+	setBool := func(key string, b bool) {
+		if b {
+			v.Set(key, "true")
+		}
+	}
+
+	setStr("title", params.Title)
+	setStr("notes", params.Notes)
+	setStr("prepend-notes", params.PrependNotes)
+	setStr("append-notes", params.AppendNotes)
+	setStr("when", params.When)
+	setStr("deadline", params.Deadline)
+	setStr("tags", params.Tags)
+	setStr("add-tags", params.AddTags)
+	setStr("area", params.Area)
+	setStr("area-id", params.AreaID)
+	setBool("completed", params.Completed)
+	setBool("canceled", params.Canceled)
+	setBool("duplicate", params.Duplicate)
+	setBool("reveal", params.Reveal)
+
+	return openThingsURL("update-project", v)
+}
+
 func AddTask(params AddParams) error {
 	v := url.Values{}
 	v.Set("title", params.Title)
