@@ -19,19 +19,15 @@ const (
 	MaxStringLen      = 4000
 )
 
-// runeLen counts characters as the URL-scheme docs do — multi-byte UTF-8
-// (emoji, CJK) shouldn't trip the limit earlier than a non-ASCII user expects.
-func runeLen(s string) int { return utf8.RuneCountInString(s) }
-
 func validateNotes(field, v string) error {
-	if n := runeLen(v); n > MaxNotesLen {
+	if n := utf8.RuneCountInString(v); n > MaxNotesLen {
 		return fmt.Errorf("%s: %d characters exceeds the %d-character limit", field, n, MaxNotesLen)
 	}
 	return nil
 }
 
 func validateString(field, v string) error {
-	if n := runeLen(v); n > MaxStringLen {
+	if n := utf8.RuneCountInString(v); n > MaxStringLen {
 		return fmt.Errorf("%s: %d characters exceeds the %d-character limit", field, n, MaxStringLen)
 	}
 	return nil
@@ -48,7 +44,7 @@ func validateChecklist(field, v string) error {
 		return fmt.Errorf("%s: %d items exceeds the %d-item limit", field, n, MaxChecklistItems)
 	}
 	for _, item := range strings.Split(trimmed, "\n") {
-		if c := runeLen(item); c > MaxStringLen {
+		if c := utf8.RuneCountInString(item); c > MaxStringLen {
 			return fmt.Errorf("%s: item %q (%d characters) exceeds the %d-character limit", field, truncate(item), c, MaxStringLen)
 		}
 	}
@@ -61,112 +57,109 @@ func validateTags(field, v string) error {
 	}
 	for _, t := range strings.Split(v, ",") {
 		t = strings.TrimSpace(t)
-		if c := runeLen(t); c > MaxStringLen {
+		if c := utf8.RuneCountInString(t); c > MaxStringLen {
 			return fmt.Errorf("%s: tag %q (%d characters) exceeds the %d-character limit", field, truncate(t), c, MaxStringLen)
 		}
 	}
 	return nil
 }
 
+// truncate returns s capped at 40 runes, with an ellipsis appended when
+// truncation occurred. Slicing by rune (not byte) keeps multi-byte
+// characters intact so the truncated value is always valid UTF-8.
 func truncate(s string) string {
 	const max = 40
-	if len(s) <= max {
-		return s
+	i := 0
+	for idx := range s {
+		if i == max {
+			return s[:idx] + "…"
+		}
+		i++
 	}
-	return s[:max] + "…"
+	return s
 }
 
-func opt(p *string, check func(string) error) error {
+func optString(field string, p *string) error {
 	if p == nil {
 		return nil
 	}
-	return check(*p)
+	return validateString(field, *p)
+}
+
+func optNotes(field string, p *string) error {
+	if p == nil {
+		return nil
+	}
+	return validateNotes(field, *p)
+}
+
+func optTags(field string, p *string) error {
+	if p == nil {
+		return nil
+	}
+	return validateTags(field, *p)
+}
+
+func optChecklist(field string, p *string) error {
+	if p == nil {
+		return nil
+	}
+	return validateChecklist(field, *p)
+}
+
+func firstErr(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateAdd(p AddParams) error {
-	if err := validateString("title", p.Title); err != nil {
-		return err
-	}
-	if err := validateNotes("notes", p.Notes); err != nil {
-		return err
-	}
-	if err := validateTags("tags", p.Tags); err != nil {
-		return err
-	}
-	if err := validateChecklist("checklist", p.Checklist); err != nil {
-		return err
-	}
-	if err := validateString("list", p.List); err != nil {
-		return err
-	}
-	return validateString("heading", p.Heading)
+	return firstErr(
+		validateString("title", p.Title),
+		validateNotes("notes", p.Notes),
+		validateTags("tags", p.Tags),
+		validateChecklist("checklist", p.Checklist),
+		validateString("list", p.List),
+		validateString("heading", p.Heading),
+	)
 }
 
 func validateAddProject(p AddProjectParams) error {
-	if err := validateString("title", p.Title); err != nil {
-		return err
-	}
-	if err := validateNotes("notes", p.Notes); err != nil {
-		return err
-	}
-	if err := validateTags("tags", p.Tags); err != nil {
-		return err
-	}
-	return validateString("area", p.Area)
+	return firstErr(
+		validateString("title", p.Title),
+		validateNotes("notes", p.Notes),
+		validateTags("tags", p.Tags),
+		validateString("area", p.Area),
+	)
 }
 
 func validateUpdate(p UpdateParams) error {
-	if err := opt(p.Title, func(s string) error { return validateString("title", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.Notes, func(s string) error { return validateNotes("notes", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.PrependNotes, func(s string) error { return validateNotes("prepend-notes", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.AppendNotes, func(s string) error { return validateNotes("append-notes", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.Tags, func(s string) error { return validateTags("tags", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.AddTags, func(s string) error { return validateTags("add-tags", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.Checklist, func(s string) error { return validateChecklist("checklist", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.PrependChecklist, func(s string) error { return validateChecklist("prepend-checklist", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.AppendChecklist, func(s string) error { return validateChecklist("append-checklist", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.List, func(s string) error { return validateString("list", s) }); err != nil {
-		return err
-	}
-	return opt(p.Heading, func(s string) error { return validateString("heading", s) })
+	return firstErr(
+		optString("title", p.Title),
+		optNotes("notes", p.Notes),
+		optNotes("prepend-notes", p.PrependNotes),
+		optNotes("append-notes", p.AppendNotes),
+		optTags("tags", p.Tags),
+		optTags("add-tags", p.AddTags),
+		optChecklist("checklist", p.Checklist),
+		optChecklist("prepend-checklist", p.PrependChecklist),
+		optChecklist("append-checklist", p.AppendChecklist),
+		optString("list", p.List),
+		optString("heading", p.Heading),
+	)
 }
 
 func validateUpdateProject(p UpdateProjectParams) error {
-	if err := opt(p.Title, func(s string) error { return validateString("title", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.Notes, func(s string) error { return validateNotes("notes", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.PrependNotes, func(s string) error { return validateNotes("prepend-notes", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.AppendNotes, func(s string) error { return validateNotes("append-notes", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.Tags, func(s string) error { return validateTags("tags", s) }); err != nil {
-		return err
-	}
-	if err := opt(p.AddTags, func(s string) error { return validateTags("add-tags", s) }); err != nil {
-		return err
-	}
-	return opt(p.Area, func(s string) error { return validateString("area", s) })
+	return firstErr(
+		optString("title", p.Title),
+		optNotes("notes", p.Notes),
+		optNotes("prepend-notes", p.PrependNotes),
+		optNotes("append-notes", p.AppendNotes),
+		optTags("tags", p.Tags),
+		optTags("add-tags", p.AddTags),
+		optString("area", p.Area),
+	)
 }

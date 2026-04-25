@@ -582,25 +582,30 @@ func runOpen(cli *CLI, database *db.DB) error {
 
 	params := things.ShowParams{Filter: cmd.Filter, Background: cmd.Background}
 
+	resolveUUID := func(kind, name string, find func(string) (string, error)) (string, error) {
+		uuid, err := find(name)
+		if err != nil {
+			return "", err
+		}
+		if uuid == "" {
+			return "", fmt.Errorf("%s not found: %s", kind, name)
+		}
+		return uuid, nil
+	}
+
 	switch {
 	case cmd.Query != "":
 		params.Query = cmd.Query
 	case cmd.Area != "":
-		uuid, err := database.FindAreaUUID(cmd.Area)
+		uuid, err := resolveUUID("area", cmd.Area, database.FindAreaUUID)
 		if err != nil {
 			return err
-		}
-		if uuid == "" {
-			return fmt.Errorf("area not found: %s", cmd.Area)
 		}
 		params.ID = uuid
 	case cmd.Tag != "":
-		uuid, err := database.FindTagUUID(cmd.Tag)
+		uuid, err := resolveUUID("tag", cmd.Tag, database.FindTagUUID)
 		if err != nil {
 			return err
-		}
-		if uuid == "" {
-			return fmt.Errorf("tag not found: %s", cmd.Tag)
 		}
 		params.ID = uuid
 	case cmd.Project != "":
