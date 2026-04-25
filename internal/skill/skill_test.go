@@ -13,6 +13,19 @@ func TestBodyNonEmpty(t *testing.T) {
 	}
 }
 
+func TestSkillMDIsSelfContained(t *testing.T) {
+	out := SkillMD()
+	if !strings.HasPrefix(out, "---\nname: "+Name+"\n") {
+		t.Errorf("SkillMD missing shared frontmatter prefix:\n%s", out[:min(len(out), 80)])
+	}
+	if !strings.Contains(out, "description: "+Description) {
+		t.Error("SkillMD missing shared description")
+	}
+	if !strings.Contains(out, Body()) {
+		t.Error("SkillMD missing body")
+	}
+}
+
 func TestClaudeSkillMDFrontmatterAndCommands(t *testing.T) {
 	a, err := Lookup("claude")
 	if err != nil {

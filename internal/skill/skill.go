@@ -19,8 +19,20 @@ import (
 //go:embed body.md
 var body string
 
-// Body returns the neutral, agent-independent skill source.
+// Skill identity shared across agents. Individual agents may override these
+// when their target requires it, but today every agent uses the defaults.
+const (
+	Name        = "things-cli"
+	Description = "Use when the user mentions Things3, tasks, todos, inbox, today, upcoming, projects, areas, or to-do lists on macOS. Provides the `things` CLI for listing, creating, editing, completing, and searching tasks."
+)
+
+// Body returns the neutral skill source body (no frontmatter).
 func Body() string { return body }
+
+// SkillMD returns a self-contained SKILL.md: shared frontmatter + body.
+func SkillMD() string {
+	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s", Name, Description, body)
+}
 
 // Agent renders and locates the skill for a particular AI coding agent.
 type Agent interface {
