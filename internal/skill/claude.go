@@ -7,15 +7,8 @@ import (
 
 func init() { register(claudeAgent{}) }
 
-const claudeFrontmatter = `---
-name: things-cli
-description: Use when the user mentions Things3, tasks, todos, inbox, today, upcoming, projects, areas, or to-do lists on macOS. Provides the ` + "`things`" + ` CLI for listing, creating, editing, completing, and searching tasks.
----
-
-`
-
 var claudeFiles = map[string][]byte{
-	"SKILL.md": []byte(claudeFrontmatter + body),
+	"SKILL.md": []byte(SkillMD()),
 }
 
 type claudeAgent struct{}

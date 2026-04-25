@@ -789,7 +789,7 @@ func runSkillUninstall(cli *CLI) error {
 func runSkillShow(cli *CLI) error {
 	name := cli.Skill.Show.Agent
 	if name == "" {
-		fmt.Print(skill.Body())
+		fmt.Print(skill.SkillMD())
 		return nil
 	}
 	agent, err := skill.Lookup(name)
