@@ -93,6 +93,9 @@ func Show(params ShowParams) error {
 }
 
 func AddProject(params AddProjectParams) error {
+	if err := validateAddProject(params); err != nil {
+		return err
+	}
 	v := url.Values{}
 	v.Set("title", params.Title)
 	if params.Notes != "" {
@@ -147,6 +150,9 @@ func UpdateTask(params UpdateParams) error {
 	}
 	if params.AuthToken == "" {
 		return fmt.Errorf("update: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once")
+	}
+	if err := validateUpdate(params); err != nil {
+		return err
 	}
 
 	v := url.Values{}
@@ -214,6 +220,9 @@ func UpdateProject(params UpdateProjectParams) error {
 	if params.AuthToken == "" {
 		return fmt.Errorf("update-project: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once")
 	}
+	if err := validateUpdateProject(params); err != nil {
+		return err
+	}
 
 	v := url.Values{}
 	v.Set("id", params.ID)
@@ -249,6 +258,9 @@ func UpdateProject(params UpdateProjectParams) error {
 }
 
 func AddTask(params AddParams) error {
+	if err := validateAdd(params); err != nil {
+		return err
+	}
 	v := url.Values{}
 	v.Set("title", params.Title)
 	if params.Notes != "" {
