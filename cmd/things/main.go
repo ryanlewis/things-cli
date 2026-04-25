@@ -81,7 +81,8 @@ type AddCmd struct {
 }
 
 type ProjectCmd struct {
-	Add ProjectAddCmd `cmd:"" help:"Create a new project."`
+	Add  ProjectAddCmd  `cmd:"" help:"Create a new project."`
+	Edit ProjectEditCmd `cmd:"" help:"Edit a project via the Things URL scheme."`
 }
 
 type ProjectAddCmd struct {
@@ -92,6 +93,30 @@ type ProjectAddCmd struct {
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial to-dos."`
+}
+
+type ProjectEditCmd struct {
+	Project string `arg:"" required:"" help:"Project title, UUID, or numeric index from last list."`
+
+	Title *string `help:"Replace title."`
+
+	Notes        *string `help:"Replace notes."`
+	PrependNotes *string `help:"Prepend text to notes." name:"prepend-notes"`
+	AppendNotes  *string `help:"Append text to notes." name:"append-notes"`
+
+	When     *string `help:"When to schedule (date, today, tomorrow, evening, someday, anytime, or an ISO date)."`
+	Deadline *string `help:"Deadline date (YYYY-MM-DD) or empty to clear."`
+
+	Tags    *string `help:"Replace all tags (comma-separated)."`
+	AddTags *string `help:"Add tags (comma-separated)." name:"add-tags"`
+
+	Area   *string `help:"Move to area by name."`
+	AreaID *string `help:"Move to area by UUID." name:"area-id"`
+
+	Complete  bool `help:"Mark the project as completed."`
+	Cancel    bool `help:"Mark the project as canceled."`
+	Duplicate bool `help:"Duplicate the project before applying edits."`
+	Reveal    bool `help:"Reveal the project in Things after editing."`
 }
 
 type EditCmd struct {
@@ -239,6 +264,8 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 		return runAdd(cli, database)
 	case "project add <title>":
 		return runProjectAdd(cli)
+	case "project edit <project>":
+		return runProjectEdit(cli, database)
 	case "edit <task>":
 		return runEdit(cli, database)
 	case "complete <task>":
@@ -363,6 +390,36 @@ func runProjectAdd(cli *CLI) error {
 // (e.g. --todos "Draft\nShip"). Actual newlines in the input are preserved.
 func expandNewlines(s string) string {
 	return strings.ReplaceAll(s, `\n`, "\n")
+}
+
+func runProjectEdit(cli *CLI, database *db.DB) error {
+	project, err := resolveTask(cli.Project.Edit.Project, database)
+	if err != nil {
+		return err
+	}
+	if project.Type != model.TypeProject {
+		return fmt.Errorf("not a project: %s", project.Title)
+	}
+
+	token, _ := database.GetAuthToken()
+	return things.UpdateProject(things.UpdateProjectParams{
+		ID:           project.UUID,
+		AuthToken:    token,
+		Title:        cli.Project.Edit.Title,
+		Notes:        cli.Project.Edit.Notes,
+		PrependNotes: cli.Project.Edit.PrependNotes,
+		AppendNotes:  cli.Project.Edit.AppendNotes,
+		When:         cli.Project.Edit.When,
+		Deadline:     cli.Project.Edit.Deadline,
+		Tags:         cli.Project.Edit.Tags,
+		AddTags:      cli.Project.Edit.AddTags,
+		Area:         cli.Project.Edit.Area,
+		AreaID:       cli.Project.Edit.AreaID,
+		Completed:    cli.Project.Edit.Complete,
+		Canceled:     cli.Project.Edit.Cancel,
+		Duplicate:    cli.Project.Edit.Duplicate,
+		Reveal:       cli.Project.Edit.Reveal,
+	})
 }
 
 func runEdit(cli *CLI, database *db.DB) error {

@@ -27,6 +27,7 @@ things search <query>
 
 things add <title> [--notes --when --deadline --tags --checklist --project --heading --list]
 things project add <title> [--notes --when --deadline --tags --area --todos]
+things project edit <project> [--title --notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal ...]
 things edit <task> [--title --notes --when --deadline --tags --add-tags --list --heading --complete --cancel --duplicate --reveal ...]
 things complete <task>
 things cancel <task>
