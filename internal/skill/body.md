@@ -32,6 +32,10 @@ things complete <task>
 things cancel <task>
 things log                      # move Today → Logbook
 things open <ref|list>          # reveal task/project/area/tag/built-in list in the app
+
+things import [--file F] [--reveal] < payload.json
+    # batch create/update via the Things JSON URL scheme
+    # payload is the array documented at culturedcode.com/things/support/articles/2803573/
 ```
 
 ### Task reference forms

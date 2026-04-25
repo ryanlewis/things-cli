@@ -2,8 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -42,6 +45,7 @@ type CLI struct {
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
 	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (Items → Log Completed)."`
 	Open     OpenCmd     `cmd:"" help:"Reveal a task, project, area, tag, or built-in list in Things3."`
+	Import   ImportCmd   `cmd:"" help:"Batch create/update via the Things JSON URL scheme. Reads JSON from stdin or --file."`
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 }
@@ -163,6 +167,11 @@ type SkillShowCmd struct {
 
 type SkillListCmd struct{}
 
+type ImportCmd struct {
+	File   string `help:"Read JSON payload from this file instead of stdin." short:"f" type:"existingfile"`
+	Reveal bool   `help:"Reveal the first created/updated item in Things after import."`
+}
+
 type OpenCmd struct {
 	Ref        string `arg:"" optional:"" help:"Task/project UUID, numeric list index, title, or built-in list name (${builtin_lists})."`
 	Project    string `help:"Open project by name or UUID." short:"p"`
@@ -251,6 +260,8 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 		return things.LogCompleted()
 	case "open", "open <ref>":
 		return runOpen(cli, database)
+	case "import":
+		return runImport(cli, database)
 	case "version":
 		return nil
 	default:
@@ -554,6 +565,81 @@ func runOpen(cli *CLI, database *db.DB) error {
 	}
 
 	return things.Show(params)
+}
+
+func runImport(cli *CLI, database *db.DB) error {
+	var data []byte
+	var err error
+	if cli.Import.File != "" {
+		data, err = os.ReadFile(cli.Import.File)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", cli.Import.File, err)
+		}
+	} else {
+		if isInteractive() {
+			return fmt.Errorf("no JSON on stdin and no --file given")
+		}
+		data, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+	}
+	if err := validateImportJSON(data); err != nil {
+		return err
+	}
+	token, err := database.GetAuthToken()
+	if err != nil {
+		// Don't fail the import — the payload may be create-only and not need
+		// the token at all — but surface the read error so users debugging an
+		// `operation: update` failure aren't left guessing.
+		fmt.Fprintf(os.Stderr, "warning: could not read Things auth token: %v\n", err)
+	}
+	return things.ImportJSON(string(data), token, cli.Import.Reveal)
+}
+
+// validateImportJSON checks the payload is a non-empty JSON array — the shape
+// the Things JSON URL scheme requires — without allocating on the happy path.
+// On syntax errors it falls back to a full decode purely to extract the byte
+// offset, which it converts to line/column so the user can jump to the bad
+// byte in their editor.
+func validateImportJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return fmt.Errorf("empty payload")
+	}
+	if !json.Valid(data) {
+		// Re-decode to get an offset for the error message; this is the slow
+		// path (only on invalid input) so the allocation doesn't matter.
+		var v any
+		err := json.Unmarshal(data, &v)
+		var syn *json.SyntaxError
+		if errors.As(err, &syn) {
+			line, col := offsetToLineCol(data, syn.Offset)
+			return fmt.Errorf("invalid JSON at line %d, column %d: %s", line, col, syn.Error())
+		}
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	if trimmed[0] != '[' {
+		return fmt.Errorf("payload must be a JSON array of items")
+	}
+	// Valid JSON starting with `[` is at minimum `[]`, so len >= 2.
+	if len(bytes.TrimSpace(trimmed[1:len(trimmed)-1])) == 0 {
+		return fmt.Errorf("payload array is empty")
+	}
+	return nil
+}
+
+func offsetToLineCol(data []byte, offset int64) (int, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if int(offset) > len(data) {
+		offset = int64(len(data))
+	}
+	prefix := data[:offset]
+	line := 1 + bytes.Count(prefix, []byte{'\n'})
+	col := int(offset) - bytes.LastIndexByte(prefix, '\n')
+	return line, col
 }
 
 func runSearch(cli *CLI, database *db.DB) error {
