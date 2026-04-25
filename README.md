@@ -64,9 +64,24 @@ cache the resulting UUIDs so you can refer to tasks by their index (`1`, `2`,
 ```
 
 `add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--checklist`,
-`--project`, `--heading` and `--list`. `--when` takes the same values Things
-itself accepts (`today`, `tomorrow`, `evening`, `anytime`, `someday`, or a
-date).
+`--project`, `--heading` and `--list`.
+
+`--when` accepts:
+
+- a keyword: `today`, `tomorrow`, `evening`, `anytime`, `someday`
+- a date: `YYYY-MM-DD` (e.g. `2026-05-01`)
+- a time: `HH:MM` or `H:MMam`/`H:MMpm` (e.g. `21:30`, `9:30PM`)
+- date + time: `YYYY-MM-DD@HH:MM` (e.g. `2026-05-01@09:30`)
+- RFC3339: rewritten to `YYYY-MM-DD@HH:MM` before being sent (the offset is
+  preserved as wall-clock; no conversion to local time)
+- an English natural-language phrase (e.g. `friday`, `next monday`) — passed
+  through verbatim; works only in English locales.
+
+Inputs within edit distance 2 of a known keyword are rejected client-side as
+likely typos (e.g. `tommorrow`, `evning`), with a "did you mean" hint.
+
+`--deadline` accepts a `YYYY-MM-DD` date or an English natural-language
+phrase. Keywords are not accepted.
 
 `project add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--area`
 and `--todos` (newline-separated initial to-dos).

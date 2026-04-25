@@ -47,6 +47,12 @@ things import [--file F] [--reveal] < payload.json
 - Numeric index from the last list (1-based) — `things list today; things complete 2`
 - Title substring — interactive prompt disambiguates; non-TTY errors with the match list.
 
+### `--when` / `--deadline` values
+
+`--when` accepts a keyword (`today`, `tomorrow`, `evening`, `anytime`, `someday`), a date `YYYY-MM-DD`, a time `HH:MM`, a date+time `YYYY-MM-DD@HH:MM`, or an RFC3339 timestamp. English natural-language phrases (`friday`, `next monday`) are passed through. Likely typos of the keywords (within edit distance 2, e.g. `tommorrow`) are rejected client-side with a "did you mean" hint.
+
+`--deadline` accepts a `YYYY-MM-DD` date or an English natural-language phrase — keywords like `today` are rejected.
+
 ### Multi-line values
 
 Newline-separated fields (`--checklist`, `--todos`, `--prepend-checklist`, `--append-checklist`) accept the literal two-character escape `\n` to pack multi-line values into one shell-quoted argument:

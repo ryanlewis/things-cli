@@ -245,6 +245,33 @@ func TestImportJSON(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
+func TestUpdateTaskEmptyWhenClearsField(t *testing.T) {
+	captured := stubRunner(t, false)
+	empty := ""
+	if err := UpdateTask(UpdateParams{
+		ID:        "id-1",
+		AuthToken: "tok",
+		When:      &empty,
+		Deadline:  &empty,
+	}); err != nil {
+		t.Fatalf("UpdateTask: %v", err)
+	}
+	parsed, err := url.Parse((*captured)[2])
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	q := parsed.Query()
+	if _, ok := q["when"]; !ok {
+		t.Error("expected `when` parameter present (empty value clears the field)")
+	}
+	if _, ok := q["deadline"]; !ok {
+		t.Error("expected `deadline` parameter present (empty value clears the field)")
+	}
+	if q.Get("when") != "" || q.Get("deadline") != "" {
+		t.Errorf("expected empty values, got when=%q deadline=%q", q.Get("when"), q.Get("deadline"))
+	}
+}
+
 func TestUpdateTaskMinimal(t *testing.T) {
 	captured := stubRunner(t, false)
 

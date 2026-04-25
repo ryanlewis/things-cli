@@ -75,8 +75,8 @@ type ShowCmd struct {
 type AddCmd struct {
 	Title     string `arg:"" required:"" help:"Task title."`
 	Notes     string `help:"Notes for the task."`
-	When      string `help:"When to schedule (date, today, tomorrow, evening, etc.)."`
-	Deadline  string `help:"Deadline date."`
+	When      string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, or RFC3339."`
+	Deadline  string `help:"Deadline date (YYYY-MM-DD)."`
 	Tags      string `help:"Comma-separated tags."`
 	Checklist string `help:"Newline-separated checklist items."`
 	Project   string `help:"Project name or UUID."`
@@ -92,8 +92,8 @@ type ProjectCmd struct {
 type ProjectAddCmd struct {
 	Title    string `arg:"" required:"" help:"Project title."`
 	Notes    string `help:"Notes for the project."`
-	When     string `help:"When to schedule (date, today, tomorrow, evening, etc.)."`
-	Deadline string `help:"Deadline date."`
+	When     string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, or RFC3339."`
+	Deadline string `help:"Deadline date (YYYY-MM-DD)."`
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial to-dos."`
@@ -108,7 +108,7 @@ type ProjectEditCmd struct {
 	PrependNotes *string `help:"Prepend text to notes." name:"prepend-notes"`
 	AppendNotes  *string `help:"Append text to notes." name:"append-notes"`
 
-	When     *string `help:"When to schedule (date, today, tomorrow, evening, someday, anytime, or an ISO date)."`
+	When     *string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, RFC3339, or empty to clear."`
 	Deadline *string `help:"Deadline date (YYYY-MM-DD) or empty to clear."`
 
 	Tags    *string `help:"Replace all tags (comma-separated)."`
@@ -132,7 +132,7 @@ type EditCmd struct {
 	PrependNotes *string `help:"Prepend text to notes." name:"prepend-notes"`
 	AppendNotes  *string `help:"Append text to notes." name:"append-notes"`
 
-	When     *string `help:"When to schedule (date, today, tomorrow, evening, someday, anytime, or an ISO date)."`
+	When     *string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, RFC3339, or empty to clear."`
 	Deadline *string `help:"Deadline date (YYYY-MM-DD) or empty to clear."`
 
 	Tags    *string `help:"Replace all tags (comma-separated)."`
