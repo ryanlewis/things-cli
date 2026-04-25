@@ -96,6 +96,16 @@ func AddProject(params AddProjectParams) error {
 	if err := validateAddProject(params); err != nil {
 		return err
 	}
+	when, err := NormalizeWhen(params.When)
+	if err != nil {
+		return err
+	}
+	params.When = when
+	deadline, err := NormalizeDeadline(params.Deadline)
+	if err != nil {
+		return err
+	}
+	params.Deadline = deadline
 	v := url.Values{}
 	v.Set("title", params.Title)
 	if params.Notes != "" {
@@ -153,6 +163,20 @@ func UpdateTask(params UpdateParams) error {
 	}
 	if err := validateUpdate(params); err != nil {
 		return err
+	}
+	if params.When != nil {
+		v, err := NormalizeWhen(*params.When)
+		if err != nil {
+			return err
+		}
+		params.When = &v
+	}
+	if params.Deadline != nil {
+		v, err := NormalizeDeadline(*params.Deadline)
+		if err != nil {
+			return err
+		}
+		params.Deadline = &v
 	}
 
 	v := url.Values{}
@@ -244,6 +268,20 @@ func UpdateProject(params UpdateProjectParams) error {
 	if err := validateUpdateProject(params); err != nil {
 		return err
 	}
+	if params.When != nil {
+		v, err := NormalizeWhen(*params.When)
+		if err != nil {
+			return err
+		}
+		params.When = &v
+	}
+	if params.Deadline != nil {
+		v, err := NormalizeDeadline(*params.Deadline)
+		if err != nil {
+			return err
+		}
+		params.Deadline = &v
+	}
 
 	v := url.Values{}
 	v.Set("id", params.ID)
@@ -282,6 +320,16 @@ func AddTask(params AddParams) error {
 	if err := validateAdd(params); err != nil {
 		return err
 	}
+	when, err := NormalizeWhen(params.When)
+	if err != nil {
+		return err
+	}
+	params.When = when
+	deadline, err := NormalizeDeadline(params.Deadline)
+	if err != nil {
+		return err
+	}
+	params.Deadline = deadline
 	v := url.Values{}
 	v.Set("title", params.Title)
 	if params.Notes != "" {
