@@ -270,7 +270,7 @@ func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
 	case "show <task>":
 		return runShow(cli, database)
 	case "add <title>":
-		return runAdd(cli, database)
+		return runAdd(cli)
 	case "project add <title>":
 		return runProjectAdd(cli)
 	case "project edit <project>":
@@ -365,12 +365,11 @@ func runShow(cli *CLI, database *db.DB) error {
 	return output.PrintTaskWithChecklist(os.Stdout, task, items, cli.JSON)
 }
 
-func runAdd(cli *CLI, database *db.DB) error {
+func runAdd(cli *CLI) error {
 	list := cli.Add.List
 	if list == "" {
 		list = cli.Add.Project
 	}
-	token, _ := database.GetAuthToken()
 	return things.AddTask(things.AddParams{
 		Title:     cli.Add.Title,
 		Notes:     cli.Add.Notes,
@@ -380,7 +379,6 @@ func runAdd(cli *CLI, database *db.DB) error {
 		Checklist: expandNewlines(cli.Add.Checklist),
 		Heading:   cli.Add.Heading,
 		List:      list,
-		AuthToken: token,
 	})
 }
 

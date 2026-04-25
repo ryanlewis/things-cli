@@ -16,7 +16,6 @@ type AddParams struct {
 	Checklist string
 	Heading   string
 	List      string
-	AuthToken string
 }
 
 type AddProjectParams struct {
@@ -304,9 +303,6 @@ func AddTask(params AddParams) error {
 	}
 	if params.Heading != "" {
 		v.Set("heading", params.Heading)
-	}
-	if params.AuthToken != "" {
-		v.Set("auth-token", params.AuthToken)
 	}
 	return openThingsURL("add", v)
 }

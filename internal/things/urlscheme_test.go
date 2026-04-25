@@ -62,7 +62,6 @@ func TestAddTaskAllFields(t *testing.T) {
 		Checklist: "x\ny",
 		Heading:   "H",
 		List:      "Inbox",
-		AuthToken: "tok",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -84,12 +83,14 @@ func TestAddTaskAllFields(t *testing.T) {
 		"checklist-items": "x\ny",
 		"heading":         "H",
 		"list":            "Inbox",
-		"auth-token":      "tok",
 	}
 	for k, want := range cases {
 		if got := q.Get(k); got != want {
 			t.Errorf("query[%q] = %q, want %q", k, got, want)
 		}
+	}
+	if q.Has("auth-token") {
+		t.Error("auth-token must not be sent on add (endpoint does not require it)")
 	}
 }
 
