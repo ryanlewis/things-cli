@@ -43,6 +43,8 @@ things open --project "Launch"    # reveal a project
 things open --query staging       # app-side quick find
 
 things log                        # move today's done/cancelled items to Logbook
+things import < payload.json      # batch create/update via the Things JSON URL scheme
+things import --file payload.json --reveal
 things version                    # print version
 ```
 
@@ -68,6 +70,15 @@ date).
 
 `project add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--area`
 and `--todos` (newline-separated initial to-dos).
+
+`import` accepts a JSON array on stdin (or via `--file`) matching the
+[Things JSON URL scheme payload](https://culturedcode.com/things/support/articles/2803573/)
+— a batch of `to-do`, `project`, `heading`, and `checklist-item` items, each
+with `operation` and `attributes`. The CLI validates the payload is
+syntactically valid JSON, then forwards it verbatim. The auth token is
+attached automatically (required for `operation: update` items, harmless for
+create-only payloads). Pass `--reveal` to jump to the first created item.
+Note: macOS `open` has a URL length limit; split very large payloads.
 
 `project edit` updates an existing project via the `things:///update-project`
 URL scheme. Only flags you pass are sent. Supported flags: `--title`,

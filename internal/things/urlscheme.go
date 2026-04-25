@@ -187,6 +187,27 @@ func UpdateTask(params UpdateParams) error {
 	return openThingsURL("update", v)
 }
 
+// ImportJSON dispatches a Things JSON payload via `things:///json`. The
+// auth token is always sent when present: it's required for any item with
+// `operation: update`, and harmless on create-only payloads.
+func ImportJSON(data, authToken string, reveal bool) error {
+	v := url.Values{}
+	v.Set("data", data)
+	if authToken != "" {
+		v.Set("auth-token", authToken)
+	}
+	if reveal {
+		v.Set("reveal", "true")
+	}
+	if err := openThingsURL("json", v); err != nil {
+		// Things reports payload-level errors via an in-app notification, not
+		// via the URL handler exit code, so callers see only `exit status 1`
+		// from `open`. Point them at the right place to look.
+		return fmt.Errorf("%w (check Things for an error notification)", err)
+	}
+	return nil
+}
+
 type UpdateProjectParams struct {
 	ID        string
 	AuthToken string

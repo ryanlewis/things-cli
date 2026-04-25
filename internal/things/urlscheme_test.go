@@ -192,6 +192,57 @@ func TestAddProjectCommandFails(t *testing.T) {
 	}
 }
 
+func TestImportJSON(t *testing.T) {
+	payload := `[{"type":"to-do","attributes":{"title":"Hi"}}]`
+
+	t.Run("minimal", func(t *testing.T) {
+		captured := stubRunner(t, false)
+		if err := ImportJSON(payload, "", false); err != nil {
+			t.Fatal(err)
+		}
+		u := (*captured)[2]
+		if !strings.HasPrefix(u, "things:///json?") {
+			t.Fatalf("expected json URL, got %q", u)
+		}
+		if strings.Contains(u, "+") {
+			t.Errorf("URL should use %%20 not +: %q", u)
+		}
+		parsed, _ := url.Parse(u)
+		q := parsed.Query()
+		if q.Get("data") != payload {
+			t.Errorf("data = %q, want %q", q.Get("data"), payload)
+		}
+		if q.Has("auth-token") {
+			t.Error("auth-token should be omitted when empty")
+		}
+		if q.Has("reveal") {
+			t.Error("reveal should be omitted when false")
+		}
+	})
+
+	t.Run("withTokenAndReveal", func(t *testing.T) {
+		captured := stubRunner(t, false)
+		if err := ImportJSON(payload, "tok", true); err != nil {
+			t.Fatal(err)
+		}
+		parsed, _ := url.Parse((*captured)[2])
+		q := parsed.Query()
+		if q.Get("auth-token") != "tok" {
+			t.Errorf("auth-token = %q", q.Get("auth-token"))
+		}
+		if q.Get("reveal") != "true" {
+			t.Errorf("reveal = %q", q.Get("reveal"))
+		}
+	})
+
+	t.Run("commandFails", func(t *testing.T) {
+		stubRunner(t, true)
+		if err := ImportJSON(payload, "", false); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
 func strPtr(s string) *string { return &s }
 
 func TestUpdateTaskMinimal(t *testing.T) {
