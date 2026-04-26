@@ -48,49 +48,93 @@ func printJSON(w io.Writer, v any) error {
 }
 
 func printTasks(w io.Writer, tasks []model.Task) error {
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	const sentinel = "\x00" // distinct from empty string
-	currentProject, currentArea := sentinel, sentinel
+	type row struct {
+		num, status, title, tags, date string
+		groupKey, groupTitle           string
+		isProjectGroup                 bool
+	}
+	rows := make([]row, len(tasks))
+	var numW, statusW, titleW, tagsW int
 	for i, t := range tasks {
-		// Items belonging to a project group under the project header
-		// (whose own area is implicit). Otherwise, group by area.
-		groupKey := t.ProjectUUID
-		groupTitle := t.ProjectTitle
-		current := &currentProject
-		other := &currentArea
-		if t.ProjectUUID == "" {
-			groupKey = t.AreaUUID
-			groupTitle = t.AreaTitle
-			current, other = &currentArea, &currentProject
+		r := row{
+			num:    fmt.Sprintf("%d.", i+1),
+			status: statusIcon(t.Status),
+			title:  t.Title,
 		}
-		if groupKey != *current || *other != sentinel {
+		if t.Start == model.StartAnytime && t.StartBucket == 0 && t.StartDate != nil {
+			r.title = "\u2605 " + r.title
+		}
+		if len(t.Tags) > 0 {
+			r.tags = "[" + strings.Join(t.Tags, ", ") + "]"
+		}
+		switch {
+		case t.Deadline != nil:
+			r.date = "due:" + t.Deadline.String()
+		case t.StartDate != nil:
+			r.date = t.StartDate.String()
+		}
+		if t.ProjectUUID != "" {
+			r.groupKey = t.ProjectUUID
+			r.groupTitle = t.ProjectTitle
+			r.isProjectGroup = true
+		} else {
+			r.groupKey = t.AreaUUID
+			r.groupTitle = t.AreaTitle
+		}
+		rows[i] = r
+
+		if n := len(r.num); n > numW {
+			numW = n
+		}
+		if n := len(r.status); n > statusW {
+			statusW = n
+		}
+		// Length is fine for ASCII; \u2605 is multibyte but rendered single-cell.
+		if n := runeWidth(r.title); n > titleW {
+			titleW = n
+		}
+		if n := len(r.tags); n > tagsW {
+			tagsW = n
+		}
+	}
+
+	const sentinel = "\x00"
+	currentProject, currentArea := sentinel, sentinel
+	for _, r := range rows {
+		current := &currentArea
+		other := &currentProject
+		if r.isProjectGroup {
+			current, other = &currentProject, &currentArea
+		}
+		if r.groupKey != *current || *other != sentinel {
 			if currentProject != sentinel || currentArea != sentinel {
-				fmt.Fprintln(tw)
+				fmt.Fprintln(w)
 			}
-			if groupTitle != "" {
-				fmt.Fprintf(tw, "\t%s\n", groupTitle)
+			if r.groupTitle != "" {
+				fmt.Fprintf(w, "    %s\n", r.groupTitle)
 			}
-			*current = groupKey
+			*current = r.groupKey
 			*other = sentinel
 		}
-		status := statusIcon(t.Status)
-		tags := ""
-		if len(t.Tags) > 0 {
-			tags = "[" + strings.Join(t.Tags, ", ") + "]"
-		}
-		date := ""
-		if t.Deadline != nil {
-			date = "due:" + t.Deadline.String()
-		} else if t.StartDate != nil {
-			date = t.StartDate.String()
-		}
-		star := ""
-		if t.Start == model.StartAnytime && t.StartBucket == 0 && t.StartDate != nil {
-			star = "\u2605 "
-		}
-		fmt.Fprintf(tw, "%d.\t%s\t%s%s\t%s\t%s\n", i+1, status, star, t.Title, tags, date)
+		fmt.Fprintf(w, "%-*s  %-*s  %-*s  %-*s  %s\n",
+			numW, r.num,
+			statusW, r.status,
+			titleW, r.title,
+			tagsW, r.tags,
+			r.date,
+		)
 	}
-	return tw.Flush()
+	return nil
+}
+
+// runeWidth returns the visible width of s (rune count). Good enough for the
+// titles we print \u2014 no combining marks or East-Asian wide chars in practice.
+func runeWidth(s string) int {
+	n := 0
+	for range s {
+		n++
+	}
+	return n
 }
 
 func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) error {
