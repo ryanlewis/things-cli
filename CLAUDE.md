@@ -10,7 +10,7 @@ CLI for Things3 on macOS. Reads from the Things3 SQLite database (read-only) and
 - **IMPORTANT:** A PreToolUse hook (`.claude/settings.json`) blocks `git add`/`commit`/`merge` on `main`. If it fires, your workflow is wrong — fix it, don't route around it.
 - **NEVER** `git push` to `main`. It only moves via PR merge or release tag (`/release`).
 - **DO** use Conventional Commits.
-- **DO** update `internal/skill/body.md` when adding, removing, or changing a subcommand's surface — the bundled agent skill is shipped in-binary and drifts silently otherwise.
+- **DO** update `internal/skill/SKILL.md` when adding, removing, or changing a subcommand's surface — the bundled agent skill is shipped in-binary and drifts silently otherwise.
 
 ## Commands
 

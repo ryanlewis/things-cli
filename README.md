@@ -132,8 +132,9 @@ things skill uninstall <agent>   # remove the installed skill
 
 Pass `--path DIR` to install or uninstall under a custom directory (e.g. a
 project-local `.claude/skills/` or `.agents/skills/`). The skill body is
-embedded in the binary, so a plain `things` upgrade refreshes it — re-run
-`skill install` to pick up the new version.
+[`internal/skill/SKILL.md`](internal/skill/SKILL.md), embedded in the binary
+— so a plain `things` upgrade refreshes it; re-run `skill install` to pick
+up the new version.
 
 ## How it works
 
