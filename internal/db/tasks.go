@@ -94,9 +94,9 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 var viewFilters = map[string]string{
 	"today":     "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND (t.status = 0 OR (t.status IN (2, 3) AND t.todayIndexReferenceDate = ? AND t.stopDate > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0))) AND t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.type = 0",
 	"inbox":     "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	"upcoming":  "t.start = 1 AND t.startDate IS NOT NULL AND t.startBucket = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	"anytime":   "t.start = 1 AND t.startBucket = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	"someday":   "t.start = 2 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	"upcoming":  "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	"anytime":   "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	"someday":   "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	"logbook":   "t.status = 3 AND t.trashed = 0 AND t.type = 0",
 	"trash":     "t.trashed = 1 AND t.type = 0",
 	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
