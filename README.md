@@ -8,10 +8,10 @@ app stays the source of truth and your data never leaves the machine.
 **AI-friendly by design.** Every command speaks JSON (`-j` / `--json`) for
 clean piping into `jq`, agents, or scripts. A bundled agent skill ships in
 the binary itself — `things skill install claude` drops it into Claude
-Code, and `things skill show` prints the neutral source so you can wire it
-into Codex, Cursor, or anything else (e.g. `things skill show > ~/.codex/things.md`).
-Install once and your agent knows when to reach for `things` instead of
-guessing at AppleScript.
+Code, and `things skill show` prints the neutral source so you can append
+it to whatever your agent reads for instructions (e.g. a project
+`AGENTS.md` for Codex). Install once and your agent knows when to reach
+for `things` instead of guessing at AppleScript.
 
 ## CLI
 
