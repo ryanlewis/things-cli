@@ -7,6 +7,10 @@ import (
 	"testing"
 )
 
+// allAgents is the set of registered agent names exercised by the table-driven
+// tests below. Add a new agent here when registering one in skill/<agent>.go.
+var allAgents = []string{"claude", "codex", "pi"}
+
 func TestBodyNonEmpty(t *testing.T) {
 	if strings.TrimSpace(Body()) == "" {
 		t.Fatal("Body() is empty")
@@ -27,7 +31,7 @@ func TestSkillMDIsSelfContained(t *testing.T) {
 }
 
 func TestAgentSkillMDFrontmatterAndCommands(t *testing.T) {
-	for _, name := range []string{"claude", "codex"} {
+	for _, name := range allAgents {
 		t.Run(name, func(t *testing.T) {
 			a, err := Lookup(name)
 			if err != nil {
@@ -91,6 +95,7 @@ func TestAgentDefaultDir(t *testing.T) {
 	}{
 		{"claude", filepath.Join("/tmp/fake-home", ".claude", "skills", "things-cli")},
 		{"codex", filepath.Join("/tmp/fake-home", ".codex", "skills", "things-cli")},
+		{"pi", filepath.Join("/tmp/fake-home", ".pi", "agent", "skills", "things-cli")},
 	} {
 		t.Run(tc.agent, func(t *testing.T) {
 			a, err := Lookup(tc.agent)
@@ -109,7 +114,7 @@ func TestAgentDefaultDir(t *testing.T) {
 }
 
 func TestInstallExistsUninstall(t *testing.T) {
-	for _, name := range []string{"claude", "codex"} {
+	for _, name := range allAgents {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			a, _ := Lookup(name)
@@ -153,7 +158,7 @@ func TestInstallExistsUninstall(t *testing.T) {
 }
 
 func TestUninstallLeavesUnrelatedFiles(t *testing.T) {
-	for _, name := range []string{"claude", "codex"} {
+	for _, name := range allAgents {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			a, _ := Lookup(name)

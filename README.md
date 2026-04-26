@@ -115,13 +115,15 @@ URLs*.
 ## Agent skill
 
 `things-cli` bundles an agent skill that teaches Claude Code, OpenAI's Codex
-CLI, and other compatible agents how to drive the CLI. Install it once and
-the agent will know when to reach for `things` instead of guessing.
+CLI, the Pi coding agent, and other compatible agents how to drive the CLI.
+Install it once and the agent will know when to reach for `things` instead
+of guessing.
 
 ```sh
 things skill list                # show supported agents and install status
 things skill install claude      # install for Claude Code (~/.claude/skills/things-cli)
-things skill install codex       # install for Codex CLI    (~/.codex/skills/things-cli)
+things skill install codex       # install for Codex CLI   (~/.codex/skills/things-cli)
+things skill install pi          # install for Pi          (~/.pi/agent/skills/things-cli)
 things skill install <agent> -y  # overwrite without prompting
 things skill show                # print the neutral skill source
 things skill show <agent>        # print the files that would be installed
