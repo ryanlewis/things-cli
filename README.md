@@ -119,13 +119,13 @@ CLI, and other compatible agents how to drive the CLI. Install it once and
 the agent will know when to reach for `things` instead of guessing.
 
 ```sh
-things skill list               # show supported agents and install status
-things skill install claude     # install for Claude Code (~/.claude/skills/things-cli)
-things skill install codex      # install for Codex CLI    (~/.codex/skills/things-cli)
-things skill install claude -y  # overwrite without prompting
-things skill show               # print the neutral skill source
-things skill show claude        # print the files that would be installed
-things skill uninstall claude   # remove the installed skill
+things skill list                # show supported agents and install status
+things skill install claude      # install for Claude Code (~/.claude/skills/things-cli)
+things skill install codex       # install for Codex CLI    (~/.codex/skills/things-cli)
+things skill install <agent> -y  # overwrite without prompting
+things skill show                # print the neutral skill source
+things skill show <agent>        # print the files that would be installed
+things skill uninstall <agent>   # remove the installed skill
 ```
 
 Pass `--path DIR` to install or uninstall under a custom directory (e.g. a
