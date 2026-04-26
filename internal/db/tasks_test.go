@@ -91,7 +91,10 @@ func TestListTasksViews(t *testing.T) {
 		view string
 		want []string
 	}{
-		{"today", []string{"t-today"}},
+		// Today view includes both the Today bucket (startBucket=0, here t-today)
+		// and the Evening bucket (startBucket=1, here t-upcoming). This mirrors
+		// the Things app, which lists Evening items beneath Today's main list.
+		{"today", []string{"t-today", "t-upcoming"}},
 		{"inbox", []string{"t-inbox", "t-in-proj"}},
 		{"upcoming", []string{"t-upcoming"}},
 		// "anytime" filters start=1 AND startBucket=0, which matches t-today too.
@@ -116,26 +119,40 @@ func TestListTasksViews(t *testing.T) {
 	}
 }
 
-// Recently-completed items scheduled for today should show in the Today view
-// until a Log-Completed action bumps TMSettings.manualLogDate past their stopDate.
-func TestListTasksTodayIncludesRecentlyCompletedUntilLogged(t *testing.T) {
+// Completed items show in Today only while their todayIndexReferenceDate
+// matches today (Things auto-clears them when the day rolls over) AND while
+// their stopDate is newer than TMSettings.manualLogDate (Log Completed Now
+// clears them within the same day). Items completed on previous days, or
+// items whose stopDate is older than manualLogDate, must not appear.
+func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	stop := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
+	yesterday := today - (1 << 7) // ThingsDate encodes the day in bits 7..11
+	recentStop := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
 
+	// Completed today, not yet logged → should appear.
 	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
-		VALUES ('t-just-done', 'Just done', 0, 3, 0, 1, 0, ?, ?, 20)`, today, stop)
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, "index")
+		VALUES ('t-just-done', 'Just done', 0, 3, 0, 1, 0, ?, ?, ?, 20)`,
+		today, today, recentStop)
 
-	// No manualLogDate yet — should appear in Today.
+	// Completed yesterday — Things auto-clears these from Today even though
+	// no manual log has run, because their todayIndexReferenceDate is stale.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, "index")
+		VALUES ('t-done-yesterday', 'Done yesterday', 0, 3, 0, 1, 0, ?, ?, ?, 21)`,
+		today, yesterday, recentStop)
+
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatalf("ListTasks today: %v", err)
 	}
-	if !sameSet([]string{"t-today", "t-just-done"}, uuidsOf(got)) {
-		t.Fatalf("pre-log: expected {t-today, t-just-done}, got %v", uuidsOf(got))
+	if !sameSet([]string{"t-today", "t-upcoming", "t-just-done"}, uuidsOf(got)) {
+		t.Fatalf("pre-log: expected {t-today, t-upcoming, t-just-done}, got %v", uuidsOf(got))
 	}
 
 	// Simulate "Log Completed Now": bump manualLogDate past the stopDate.
@@ -146,8 +163,8 @@ func TestListTasksTodayIncludesRecentlyCompletedUntilLogged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks today: %v", err)
 	}
-	if !sameSet([]string{"t-today"}, uuidsOf(got)) {
-		t.Fatalf("post-log: expected {t-today}, got %v", uuidsOf(got))
+	if !sameSet([]string{"t-today", "t-upcoming"}, uuidsOf(got)) {
+		t.Fatalf("post-log: expected {t-today, t-upcoming}, got %v", uuidsOf(got))
 	}
 }
 
@@ -212,7 +229,9 @@ func TestTagGroupConcatDelimiter(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	tasks, err := d.ListTasks("today", TaskFilter{})
+	// Filter to t-today specifically; today now also includes the Evening
+	// bucket (t-upcoming), so don't assert the row count of the whole view.
+	tasks, err := d.ListTasks("today", TaskFilter{Tag: "urgent"})
 	if err != nil {
 		t.Fatal(err)
 	}
