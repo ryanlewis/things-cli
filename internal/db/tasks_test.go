@@ -28,22 +28,25 @@ func seedTasks(t *testing.T, d *DB) {
 	today := int64(model.ThingsDateFromTime(time.Now()))
 
 	// Tasks covering views:
-	//   t-today       → today view
-	//   t-inbox       → inbox (no start bucket set, start=0)
-	//   t-upcoming    → scheduled for later (startBucket=1)
-	//   t-anytime     → start=1, bucket=0, no startDate (not a today task)
-	//   t-someday     → start=2
+	//   t-today       → today view (start=1, startBucket=0)
+	//   t-inbox       → inbox (start=0)
+	//   t-evening     → today/evening (start=1, startBucket=1)
+	//   t-upcoming    → upcoming, scheduled for the future (start=2, startDate set)
+	//   t-anytime     → anytime (start=1, no startDate)
+	//   t-someday     → someday (start=2, no startDate)
 	//   t-done        → status=completed (logbook)
 	//   t-cancelled   → status=cancelled (logbook)
 	//   t-trashed     → trashed
 	//   t-deadline    → has deadline
 	//   t-in-proj     → open task inside proj-1
+	tomorrow := today + (1 << 7)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, notes, type, status, trashed, start, startBucket,
 		 startDate, todayIndexReferenceDate, deadline, project, area, "index", todayIndex) VALUES
 		('t-today',     'Today task',    '',       0, 0, 0, 1, 0, ?, ?, NULL, NULL,     NULL,        10, 1),
 		('t-inbox',     'Inbox task',    'notes',  0, 0, 0, 0, 0, NULL, NULL, NULL, NULL,     NULL,        11, 0),
-		('t-upcoming',  'Upcoming task', '',       0, 0, 0, 1, 1, ?, NULL, NULL, NULL,     NULL,        12, 0),
+		('t-evening',   'Evening task',  '',       0, 0, 0, 1, 1, ?, NULL, NULL, NULL,     NULL,        12, 0),
+		('t-upcoming',  'Upcoming task', '',       0, 0, 0, 2, 0, ?, NULL, NULL, NULL,     NULL,        22, 0),
 		('t-anytime',   'Anytime task',  '',       0, 0, 0, 1, 0, NULL, NULL, NULL, NULL,     NULL,        13, 0),
 		('t-someday',   'Someday task',  '',       0, 0, 0, 2, 0, NULL, NULL, NULL, NULL,     NULL,        14, 0),
 		('t-done',      'Done task',     '',       0, 3, 0, 0, 0, NULL, NULL, NULL, NULL,     NULL,        15, 0),
@@ -51,7 +54,7 @@ func seedTasks(t *testing.T, d *DB) {
 		('t-trashed',   'Trashed task',  '',       0, 0, 1, 0, 0, NULL, NULL, NULL, NULL,     NULL,        17, 0),
 		('t-deadline',  'Has deadline',  '',       0, 0, 0, 1, 0, NULL, NULL, ?,    NULL,     NULL,        18, 0),
 		('t-in-proj',   'Project task',  '',       0, 0, 0, 0, 0, NULL, NULL, NULL, 'proj-1', 'area-work', 19, 0)`,
-		today, today, today, today+1<<7) // last arg is the deadline
+		today, today, today, tomorrow, tomorrow) // last arg is the deadline
 
 	// Tag the today task with urgent + home
 	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES
@@ -91,11 +94,14 @@ func TestListTasksViews(t *testing.T) {
 		view string
 		want []string
 	}{
-		{"today", []string{"t-today"}},
+		// Today view includes both the Today bucket (startBucket=0, here t-today)
+		// and the Evening bucket (startBucket=1, here t-evening). This mirrors
+		// the Things app, which lists Evening items beneath Today's main list.
+		{"today", []string{"t-today", "t-evening"}},
 		{"inbox", []string{"t-inbox", "t-in-proj"}},
 		{"upcoming", []string{"t-upcoming"}},
-		// "anytime" filters start=1 AND startBucket=0, which matches t-today too.
-		{"anytime", []string{"t-today", "t-anytime", "t-deadline"}},
+		// Anytime is everything with start=1 — Today, Evening, and undated.
+		{"anytime", []string{"t-today", "t-evening", "t-anytime", "t-deadline"}},
 		{"someday", []string{"t-someday"}},
 		{"logbook", []string{"t-done"}},
 		{"trash", []string{"t-trashed"}},
@@ -116,26 +122,40 @@ func TestListTasksViews(t *testing.T) {
 	}
 }
 
-// Recently-completed items scheduled for today should show in the Today view
-// until a Log-Completed action bumps TMSettings.manualLogDate past their stopDate.
-func TestListTasksTodayIncludesRecentlyCompletedUntilLogged(t *testing.T) {
+// Completed items show in Today only while their todayIndexReferenceDate
+// matches today (Things auto-clears them when the day rolls over) AND while
+// their stopDate is newer than TMSettings.manualLogDate (Log Completed Now
+// clears them within the same day). Items completed on previous days, or
+// items whose stopDate is older than manualLogDate, must not appear.
+func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	stop := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
+	yesterday := today - (1 << 7) // ThingsDate encodes the day in bits 7..11
+	recentStop := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
 
+	// Completed today, not yet logged → should appear.
 	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
-		VALUES ('t-just-done', 'Just done', 0, 3, 0, 1, 0, ?, ?, 20)`, today, stop)
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, "index")
+		VALUES ('t-just-done', 'Just done', 0, 3, 0, 1, 0, ?, ?, ?, 20)`,
+		today, today, recentStop)
 
-	// No manualLogDate yet — should appear in Today.
+	// Completed yesterday — Things auto-clears these from Today even though
+	// no manual log has run, because their todayIndexReferenceDate is stale.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, "index")
+		VALUES ('t-done-yesterday', 'Done yesterday', 0, 3, 0, 1, 0, ?, ?, ?, 21)`,
+		today, yesterday, recentStop)
+
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatalf("ListTasks today: %v", err)
 	}
-	if !sameSet([]string{"t-today", "t-just-done"}, uuidsOf(got)) {
-		t.Fatalf("pre-log: expected {t-today, t-just-done}, got %v", uuidsOf(got))
+	if !sameSet([]string{"t-today", "t-evening", "t-just-done"}, uuidsOf(got)) {
+		t.Fatalf("pre-log: expected {t-today, t-evening, t-just-done}, got %v", uuidsOf(got))
 	}
 
 	// Simulate "Log Completed Now": bump manualLogDate past the stopDate.
@@ -146,8 +166,8 @@ func TestListTasksTodayIncludesRecentlyCompletedUntilLogged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks today: %v", err)
 	}
-	if !sameSet([]string{"t-today"}, uuidsOf(got)) {
-		t.Fatalf("post-log: expected {t-today}, got %v", uuidsOf(got))
+	if !sameSet([]string{"t-today", "t-evening"}, uuidsOf(got)) {
+		t.Fatalf("post-log: expected {t-today, t-evening}, got %v", uuidsOf(got))
 	}
 }
 
@@ -212,7 +232,9 @@ func TestTagGroupConcatDelimiter(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	tasks, err := d.ListTasks("today", TaskFilter{})
+	// Filter to t-today specifically; today now also includes the Evening
+	// bucket (t-evening), so don't assert the row count of the whole view.
+	tasks, err := d.ListTasks("today", TaskFilter{Tag: "urgent"})
 	if err != nil {
 		t.Fatal(err)
 	}
