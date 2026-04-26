@@ -1,7 +1,7 @@
 // Package skill bundles the things-cli agent skill and manages its
 // installation into supported AI coding agents (e.g. Claude Code).
 //
-// The skill body is authored in a neutral Markdown source (body.md),
+// The skill body is authored in a neutral Markdown source (SKILL.md),
 // embedded into the binary. Each Agent adapter renders that source into
 // on-disk files appropriate for its target (e.g. Claude Code's SKILL.md with
 // YAML frontmatter).
@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-//go:embed body.md
+//go:embed SKILL.md
 var body string
 
 // Skill identity shared across agents. Individual agents may override these
@@ -32,6 +32,12 @@ func Body() string { return body }
 // SkillMD returns a self-contained SKILL.md: shared frontmatter + body.
 func SkillMD() string {
 	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s", Name, Description, body)
+}
+
+// sharedFiles is the SKILL.md payload every registered agent installs today.
+// Agents that need extra files should compose this with their own additions.
+var sharedFiles = map[string][]byte{
+	"SKILL.md": []byte(SkillMD()),
 }
 
 // Agent renders and locates the skill for a particular AI coding agent.

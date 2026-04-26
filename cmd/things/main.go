@@ -550,6 +550,7 @@ func (c *SkillListCmd) Run(d *Deps) error {
 		}
 		fmt.Fprintf(d.Stdout, "%-10s %s  (%s)\n", a.Name(), dir, status)
 	}
+	fmt.Fprintf(d.Stdout, "\nUse `things skill install <agent>` (agents: %s)\n", skill.AgentNames())
 	return nil
 }
 

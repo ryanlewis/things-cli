@@ -239,29 +239,68 @@ as likely typos (e.g. `tommorrow`, `evning`) with a "did you mean" hint.
 `--deadline` accepts a `YYYY-MM-DD` date or an English natural-language
 phrase. Keywords are not accepted.
 
-## Claude Code skill
+`project add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--area`
+and `--todos` (newline-separated initial to-dos).
 
-`things-cli` bundles an agent skill that teaches Claude Code (and other
-compatible agents) how to drive the CLI. Install it once and Claude will
-know when to reach for `things` instead of guessing.
+`import` accepts a JSON array on stdin (or via `--file`) matching the
+[Things JSON URL scheme payload](https://culturedcode.com/things/support/articles/2803573/)
+— a batch of `to-do`, `project`, `heading`, and `checklist-item` items, each
+with `operation` and `attributes`. The CLI validates the payload is
+syntactically valid JSON, then forwards it verbatim. The auth token is
+attached automatically (required for `operation: update` items, harmless for
+create-only payloads). Pass `--reveal` to jump to the first created item.
+Note: macOS `open` has a URL length limit; split very large payloads.
+
+`project edit` updates an existing project via the `things:///update-project`
+URL scheme. Only flags you pass are sent. Supported flags: `--title`,
+`--notes`, `--prepend-notes`, `--append-notes`, `--when`, `--deadline`,
+`--tags` (replace), `--add-tags`, `--area` / `--area-id`, `--complete`,
+`--cancel`, `--duplicate`, `--reveal`. An empty value clears the field
+(e.g. `--deadline ""`). Requires the Things auth token, same as `edit`.
+
+`edit` updates an existing task via the `things:///update` URL scheme. Only
+flags you pass are sent, so unset fields stay untouched. Supported flags:
+`--title`, `--notes`, `--prepend-notes`, `--append-notes`, `--when`,
+`--deadline`, `--tags` (replace), `--add-tags`, `--checklist`,
+`--prepend-checklist`, `--append-checklist`, `--list` / `--list-id`,
+`--heading` / `--heading-id`, `--complete`, `--cancel`, `--duplicate`,
+`--reveal`. An empty value clears the field (e.g. `--deadline ""`). Requires
+the Things auth token — enable *Things → Settings → General → Enable Things
+URLs*.
+
+## Agent skill
+
+`things-cli` bundles an agent skill that teaches Claude Code, OpenAI's Codex
+CLI, the Pi coding agent, and other compatible agents how to drive the CLI.
+Install it once and the agent will know when to reach for `things` instead
+of guessing.
 
 | Command | Description |
 | --- | --- |
 | `things skill list` | Show supported agents and install status |
-| `things skill install <agent>` | Install the skill (e.g. `claude` → `~/.claude/skills/things-cli`) |
+| `things skill install <agent>` | Install the skill for an agent (`claude`, `codex`, `pi`) |
 | `things skill uninstall <agent>` | Remove the installed skill |
 | `things skill show` | Print the neutral skill source |
 | `things skill show <agent>` | Print the files that would be installed for that agent |
+
+Default install paths:
+
+| Agent | Path |
+| --- | --- |
+| `claude` | `~/.claude/skills/things-cli/` |
+| `codex` | `~/.codex/skills/things-cli/` |
+| `pi` | `~/.pi/agent/skills/things-cli/` |
 
 `install` and `uninstall` accept:
 
 | Flag | Description |
 | --- | --- |
-| `--path DIR` | Install or uninstall under a custom directory (e.g. project-local `.claude/skills/`) |
+| `--path DIR` | Install or uninstall under a custom directory (e.g. project-local `.claude/skills/` or `.agents/skills/`) |
 | `-y, --yes` | Skip the overwrite/removal prompt |
 
-The skill body is embedded in the binary, so a plain `things` upgrade
-refreshes it — re-run `skill install` to pick up the new version.
+The skill body is [`internal/skill/SKILL.md`](internal/skill/SKILL.md),
+embedded in the binary — so a plain `things` upgrade refreshes it; re-run
+`skill install` to pick up the new version.
 
 ## How it works
 
