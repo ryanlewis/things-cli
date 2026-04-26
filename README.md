@@ -5,13 +5,20 @@ tasks, projects, areas and tags straight from the Things3 SQLite database
 (read-only) and writes via the `things:///` URL scheme and AppleScript — so the
 app stays the source of truth and your data never leaves the machine.
 
+**AI-friendly by design.** Every command speaks JSON (`-j` / `--json`) for
+clean piping into `jq`, agents, or scripts. A bundled agent skill ships in
+the binary itself — `things skill install claude` drops it into Claude
+Code, and `things skill show` prints the neutral source so you can wire it
+into Codex, Cursor, or anything else (e.g. `things skill show > ~/.codex/things.md`).
+Install once and your agent knows when to reach for `things` instead of
+guessing at AppleScript.
+
 ## CLI
 
 By default output is plain text formatted for humans. Pass `-j` / `--json`
 for structured JSON suitable for piping into `jq` or another tool. List
-commands cache the resulting UUIDs so you can refer to tasks by their index
-(`1`, `2`, `3`, …) in follow-up commands like `show`, `edit`, `complete`,
-and `cancel`.
+commands assign each result a stable index (`1`, `2`, `3`, …) you can use
+in follow-up commands like `show`, `edit`, `complete`, and `cancel`.
 
 ### Global flags
 
