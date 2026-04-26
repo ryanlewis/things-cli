@@ -7,110 +7,230 @@ app stays the source of truth and your data never leaves the machine.
 
 ## CLI
 
+By default output is plain text formatted for humans. Pass `-j` / `--json`
+for structured JSON suitable for piping into `jq` or another tool. List
+commands cache the resulting UUIDs so you can refer to tasks by their index
+(`1`, `2`, `3`, …) in follow-up commands like `show`, `edit`, `complete`,
+and `cancel`.
+
+### Global flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-j, --json` | Output as JSON instead of plain text | `false` |
+| `--db PATH` | Override the Things3 SQLite database path | auto-detected |
+| `-v, --version` | Print version, commit, and build date and exit (same as `things version`) | — |
+
+### Listing tasks
+
+`things <view>` prints a built-in list. With no arguments, `things` prints
+`today`. View names take precedence over project names — a non-view
+argument is treated as a project name (`things "Weekly Review"`), so a
+project literally called `Inbox` would need `things -p Inbox`.
+
+| View | Description |
+| --- | --- |
+| `today` | Tasks scheduled for today (default) |
+| `inbox` | Inbox |
+| `upcoming` | Scheduled tasks and deadlines |
+| `anytime` | Anytime list |
+| `someday` | Someday list |
+| `logbook` | Completed tasks |
+| `trash` | Trashed tasks |
+| `deadlines` | Tasks with a deadline |
+
+Filters (combine freely with any view):
+
+| Flag | Description |
+| --- | --- |
+| `-p, --project NAME` | Filter by project name or UUID |
+| `-a, --area NAME` | Filter by area name or UUID |
+| `-t, --tag NAME` | Filter by tag name |
+
+Examples:
+
 ```sh
-things today                      # tasks scheduled for today
-things inbox                      # inbox
-things upcoming                   # scheduled + deadlines
-things anytime                    # anytime list
-things someday                    # someday list
-things logbook                    # completed tasks
-things deadlines                  # tasks with deadlines
-
+things                            # today (default)
+things inbox
+things upcoming -t urgent
 things "Weekly Review"            # tasks in a project by name
-things -p "Weekly Review"         # same, explicit
-things -a Work                    # filter by area
-things -t urgent                  # filter by tag
+things -a Work                    # tasks in an area
+```
 
-things projects                   # list projects
-things areas                      # list areas
-things tags                       # list tags
+### Inspecting tasks, projects, areas, tags
 
-things show 3                     # show task #3 from the last list
-things show "Pay rent"            # show by title (interactive disambig)
+| Command | Description |
+| --- | --- |
+| `things show <task>` | Show a task's detail (with checklist) |
+| `things projects [--area NAME] [--completed]` | List projects |
+| `things areas` | List areas |
+| `things tags` | List tags |
+| `things search <query>` | Full-text search across titles and notes |
 
+`<task>` accepts a UUID, a numeric index from the last list, or a title
+substring. When a title matches multiple tasks, an interactive prompt picks
+between them; non-TTY callers get the match list as an error.
+
+```sh
+things show 3                     # task #3 from the last list
+things show "Pay rent"            # by title (interactive disambig)
+things search migrate             # full-text search
+```
+
+### Creating tasks and projects
+
+`things add <title>` creates a task. `things project add <title>` creates a
+project.
+
+| Flag | `add` | `project add` | Description |
+| --- | --- | --- | --- |
+| `--notes TEXT` | ✓ | ✓ | Free-form notes |
+| `--when VALUE` | ✓ | ✓ | Schedule (see [Date values](#date-values)) |
+| `--deadline DATE` | ✓ | ✓ | Deadline date |
+| `--tags LIST` | ✓ | ✓ | Comma-separated tags |
+| `--checklist ITEMS` | ✓ | — | Newline-separated checklist items |
+| `--todos ITEMS` | — | ✓ | Newline-separated initial to-dos |
+| `--project NAME` | ✓ | — | Project to add the task into |
+| `--heading NAME` | ✓ | — | Heading within the project |
+| `--list NAME` | ✓ | — | List (project or area) name |
+| `--area NAME` | — | ✓ | Area to file the project under |
+
+Examples:
+
+```sh
 things add "Buy milk" --when today --tags errand,shopping
 things add "Ship v2" --project "Launch" --deadline 2026-04-30
 things project add "Launch site" --area Work --deadline 2026-05-01
+```
+
+### Editing tasks and projects
+
+`things edit <task>` updates a task via `things:///update`.
+`things project edit <project>` updates a project via
+`things:///update-project`. Only the flags you pass are sent — unset fields
+stay untouched. An empty value clears the field (e.g. `--deadline ""`).
+Both require the Things auth token — enable *Things → Settings → General →
+Enable Things URLs*.
+
+| Flag | `edit` | `project edit` | Description |
+| --- | --- | --- | --- |
+| `--title TEXT` | ✓ | ✓ | Replace title |
+| `--notes TEXT` | ✓ | ✓ | Replace notes |
+| `--prepend-notes TEXT` | ✓ | ✓ | Prepend to notes |
+| `--append-notes TEXT` | ✓ | ✓ | Append to notes |
+| `--when VALUE` | ✓ | ✓ | Reschedule (see [Date values](#date-values)) |
+| `--deadline DATE` | ✓ | ✓ | Set deadline |
+| `--tags LIST` | ✓ | ✓ | Replace all tags (comma-separated) |
+| `--add-tags LIST` | ✓ | ✓ | Add tags without replacing existing |
+| `--checklist ITEMS` | ✓ | — | Replace checklist (newline-separated) |
+| `--prepend-checklist ITEMS` | ✓ | — | Prepend checklist items |
+| `--append-checklist ITEMS` | ✓ | — | Append checklist items |
+| `--list NAME` | ✓ | — | Move to list/project by name |
+| `--list-id UUID` | ✓ | — | Move to list/project by UUID |
+| `--heading NAME` | ✓ | — | Set heading within project by name |
+| `--heading-id UUID` | ✓ | — | Set heading within project by UUID |
+| `--area NAME` | — | ✓ | Move project to area by name |
+| `--area-id UUID` | — | ✓ | Move project to area by UUID |
+| `--complete` | ✓ | ✓ | Mark as completed |
+| `--cancel` | ✓ | ✓ | Mark as canceled |
+| `--duplicate` | ✓ | ✓ | Duplicate before applying edits |
+| `--reveal` | ✓ | ✓ | Reveal in Things after editing |
+
+Examples:
+
+```sh
 things edit 3 --title "New title" --when tomorrow
 things edit "Buy milk" --add-tags urgent --deadline 2026-05-01
+things edit "Old idea" --deadline ""              # clear the deadline
+things project edit "Launch" --append-notes "Beta cut on Friday"
+```
+
+### Completing, cancelling, logging
+
+| Command | Description |
+| --- | --- |
+| `things complete <task>` | Mark a task or project as completed (project completion is confirmed interactively) |
+| `things cancel <task>` | Cancel a task |
+| `things log` | Move today's done/cancelled items to the Logbook (Items → Log Completed) |
+
+`log` is the housekeeping action; `logbook` (above) is the *view* of
+already-archived tasks.
+
+```sh
 things complete 3
 things cancel "Old idea"
-things search migrate
+things log
+```
 
-things open today                 # reveal a built-in list in the app
-things open "Pay rent"            # reveal a task by title
-things open --project "Launch"    # reveal a project
-things open --query staging       # app-side quick find
+### Revealing items in Things3
 
-things log                        # move today's done/cancelled items to Logbook
-things import < payload.json      # batch create/update via the Things JSON URL scheme
+`things open` brings Things3 forward and reveals a list, item, or quick-find
+result. Pass exactly one of:
+
+| Flag / Argument | Description |
+| --- | --- |
+| `<ref>` | Built-in list name (`today`, `inbox`, …), task UUID, numeric list index, or title |
+| `-p, --project NAME` | Open a project by name or UUID |
+| `-a, --area NAME` | Open an area by name or UUID |
+| `-t, --tag NAME` | Open a tag by name or UUID |
+| `-q, --query TEXT` | App-side quick find |
+
+Additional flags:
+
+| Flag | Description |
+| --- | --- |
+| `--filter TAGS` | Tag filter on the shown list (comma-separated) |
+| `--background` | Don't bring Things to the foreground |
+
+Examples:
+
+```sh
+things open today
+things open "Pay rent"
+things open --project "Launch"
+things open --query staging
+```
+
+### Importing JSON payloads
+
+`things import` forwards a [Things JSON URL scheme
+payload](https://culturedcode.com/things/support/articles/2803573/) — a
+batch of `to-do`, `project`, `heading`, and `checklist-item` items, each
+with `operation` and `attributes`. The CLI validates the payload is
+syntactically valid JSON, then forwards it verbatim. The auth token is
+attached automatically (required for `operation: update` items, harmless
+for create-only payloads).
+
+| Flag | Description |
+| --- | --- |
+| `-f, --file PATH` | Read JSON payload from this file instead of stdin |
+| `--reveal` | Reveal the first created/updated item in Things after import |
+
+```sh
+things import < payload.json
 things import --file payload.json --reveal
-things version                    # print version
 ```
 
-By default output is plain text formatted for humans. Pass `-j` / `--json` for
-structured JSON suitable for piping into `jq` or another tool. List commands
-cache the resulting UUIDs so you can refer to tasks by their index (`1`, `2`,
-`3`, …) in follow-up commands like `show`, `complete` and `cancel`.
+Note: macOS `open` has a URL length limit; split very large payloads.
 
-### Flags
-
-```
-  -j, --json          output JSON instead of plain text
-      --db PATH       override the Things3 database path
-  -p, --project NAME  filter list by project name or UUID
-  -a, --area NAME     filter list by area name or UUID
-  -t, --tag NAME      filter list by tag name
-```
-
-`add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--checklist`,
-`--project`, `--heading` and `--list`.
+### Date values
 
 `--when` accepts:
 
-- a keyword: `today`, `tomorrow`, `evening`, `anytime`, `someday`
-- a date: `YYYY-MM-DD` (e.g. `2026-05-01`)
-- a time: `HH:MM` or `H:MMam`/`H:MMpm` (e.g. `21:30`, `9:30PM`)
-- date + time: `YYYY-MM-DD@HH:MM` (e.g. `2026-05-01@09:30`)
-- RFC3339: rewritten to `YYYY-MM-DD@HH:MM` before being sent (the offset is
-  preserved as wall-clock; no conversion to local time)
-- an English natural-language phrase (e.g. `friday`, `next monday`) — passed
-  through verbatim; works only in English locales.
+| Form | Example |
+| --- | --- |
+| Keyword | `today`, `tomorrow`, `evening`, `anytime`, `someday` |
+| Date | `2026-05-01` |
+| Time | `HH:MM` (`21:30`) or `H:MMam` / `H:MMpm` (`9:30PM`) |
+| Date + time | `2026-05-01@09:30` |
+| RFC3339 | `2026-05-01T09:30:00Z` (rewritten to `YYYY-MM-DD@HH:MM`; offset preserved as wall-clock, no conversion to local time) |
+| Natural language | `friday`, `next monday` (English locales only; passed through verbatim) |
 
-Inputs within edit distance 2 of a known keyword are rejected client-side as
-likely typos (e.g. `tommorrow`, `evning`), with a "did you mean" hint.
+Inputs within edit distance 2 of a known keyword are rejected client-side
+as likely typos (e.g. `tommorrow`, `evning`) with a "did you mean" hint.
 
 `--deadline` accepts a `YYYY-MM-DD` date or an English natural-language
 phrase. Keywords are not accepted.
-
-`project add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--area`
-and `--todos` (newline-separated initial to-dos).
-
-`import` accepts a JSON array on stdin (or via `--file`) matching the
-[Things JSON URL scheme payload](https://culturedcode.com/things/support/articles/2803573/)
-— a batch of `to-do`, `project`, `heading`, and `checklist-item` items, each
-with `operation` and `attributes`. The CLI validates the payload is
-syntactically valid JSON, then forwards it verbatim. The auth token is
-attached automatically (required for `operation: update` items, harmless for
-create-only payloads). Pass `--reveal` to jump to the first created item.
-Note: macOS `open` has a URL length limit; split very large payloads.
-
-`project edit` updates an existing project via the `things:///update-project`
-URL scheme. Only flags you pass are sent. Supported flags: `--title`,
-`--notes`, `--prepend-notes`, `--append-notes`, `--when`, `--deadline`,
-`--tags` (replace), `--add-tags`, `--area` / `--area-id`, `--complete`,
-`--cancel`, `--duplicate`, `--reveal`. An empty value clears the field
-(e.g. `--deadline ""`). Requires the Things auth token, same as `edit`.
-
-`edit` updates an existing task via the `things:///update` URL scheme. Only
-flags you pass are sent, so unset fields stay untouched. Supported flags:
-`--title`, `--notes`, `--prepend-notes`, `--append-notes`, `--when`,
-`--deadline`, `--tags` (replace), `--add-tags`, `--checklist`,
-`--prepend-checklist`, `--append-checklist`, `--list` / `--list-id`,
-`--heading` / `--heading-id`, `--complete`, `--cancel`, `--duplicate`,
-`--reveal`. An empty value clears the field (e.g. `--deadline ""`). Requires
-the Things auth token — enable *Things → Settings → General → Enable Things
-URLs*.
 
 ## Claude Code skill
 
@@ -118,19 +238,23 @@ URLs*.
 compatible agents) how to drive the CLI. Install it once and Claude will
 know when to reach for `things` instead of guessing.
 
-```sh
-things skill list               # show supported agents and install status
-things skill install claude     # install for Claude Code (~/.claude/skills/things-cli)
-things skill install claude -y  # overwrite without prompting
-things skill show               # print the neutral skill source
-things skill show claude        # print the files that would be installed
-things skill uninstall claude   # remove the installed skill
-```
+| Command | Description |
+| --- | --- |
+| `things skill list` | Show supported agents and install status |
+| `things skill install <agent>` | Install the skill (e.g. `claude` → `~/.claude/skills/things-cli`) |
+| `things skill uninstall <agent>` | Remove the installed skill |
+| `things skill show` | Print the neutral skill source |
+| `things skill show <agent>` | Print the files that would be installed for that agent |
 
-Pass `--path DIR` to install or uninstall under a custom directory (e.g. a
-project-local `.claude/skills/`). The skill body is embedded in the binary,
-so a plain `things` upgrade refreshes it — re-run `skill install` to pick up
-the new version.
+`install` and `uninstall` accept:
+
+| Flag | Description |
+| --- | --- |
+| `--path DIR` | Install or uninstall under a custom directory (e.g. project-local `.claude/skills/`) |
+| `-y, --yes` | Skip the overwrite/removal prompt |
+
+The skill body is embedded in the binary, so a plain `things` upgrade
+refreshes it — re-run `skill install` to pick up the new version.
 
 ## How it works
 
