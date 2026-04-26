@@ -34,6 +34,12 @@ func SkillMD() string {
 	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s", Name, Description, body)
 }
 
+// sharedFiles is the SKILL.md payload every registered agent installs today.
+// Agents that need extra files should compose this with their own additions.
+var sharedFiles = map[string][]byte{
+	"SKILL.md": []byte(SkillMD()),
+}
+
 // Agent renders and locates the skill for a particular AI coding agent.
 type Agent interface {
 	Name() string
