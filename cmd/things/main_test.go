@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -127,6 +128,28 @@ func TestKongJSONFlag(t *testing.T) {
 	if !cli.JSON {
 		t.Error("expected JSON=true")
 	}
+}
+
+// Ensures Run methods write to the injected Deps.Stdout rather than os.Stdout —
+// without this, output capture and JSON streaming silently fall back to global
+// stdout.
+func TestVersionCmdWritesToDepsStdout(t *testing.T) {
+	var buf bytes.Buffer
+	deps := &Deps{Stdout: &buf}
+	if err := (&VersionCmd{}).Run(deps); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(buf.String(), "things ") {
+		t.Errorf("expected version banner on Deps.Stdout, got %q", buf.String())
+	}
+}
+
+// Close on a Deps that never opened a DB must not panic, and must remain safe
+// to call twice (defer in main pairs with potential explicit close).
+func TestDepsCloseSafeWhenNoDB(t *testing.T) {
+	deps := &Deps{}
+	deps.Close()
+	deps.Close()
 }
 
 func TestCacheTaskUUIDs(t *testing.T) {

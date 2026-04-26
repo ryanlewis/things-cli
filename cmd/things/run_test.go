@@ -119,9 +119,10 @@ func runWith(t *testing.T, database *db.DB, args ...string) error {
 	if err != nil {
 		t.Fatalf("parse %v: %v", args, err)
 	}
+	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: io.Discard}
 	var runErr error
 	withSilentStdout(t, func() {
-		runErr = run(ctx, &cli, database)
+		runErr = ctx.Run(deps)
 	})
 	return runErr
 }
