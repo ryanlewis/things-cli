@@ -50,7 +50,51 @@ type CLI struct {
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 }
 
+// Deps carries cross-cutting state into each command's Run method. The DB is
+// opened lazily so commands that don't touch it skip the FindDBPath/Open work,
+// and tests can pre-populate DB with an in-memory SQLite handle.
+type Deps struct {
+	DB     *db.DB
+	DBPath string
+	JSON   bool
+	Stdout io.Writer
+}
+
+// Database returns the lazily-opened DB. Subsequent calls return the same
+// handle. Callers must call (*Deps).Close to release it.
+func (d *Deps) Database() (*db.DB, error) {
+	if d.DB != nil {
+		return d.DB, nil
+	}
+	path := d.DBPath
+	if path == "" {
+		p, err := db.FindDBPath()
+		if err != nil {
+			return nil, err
+		}
+		path = p
+	}
+	database, err := db.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	d.DB = database
+	return database, nil
+}
+
+func (d *Deps) Close() {
+	if d.DB != nil {
+		_ = d.DB.Close()
+		d.DB = nil
+	}
+}
+
 type VersionCmd struct{}
+
+func (c *VersionCmd) Run(d *Deps) error {
+	fmt.Fprintf(d.Stdout, "things %s (commit %s, built %s)\n", version, commit, date)
+	return nil
+}
 
 type ListCmd struct {
 	Args    []string `arg:"" optional:"" help:"View or project name. Views: today,inbox,upcoming,anytime,someday,logbook,trash,deadlines."`
@@ -59,17 +103,102 @@ type ListCmd struct {
 	Tag     string   `help:"Filter by tag name." short:"t"`
 }
 
+func (c *ListCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+
+	view := "today"
+	project := c.Project
+	args := c.Args
+
+	if len(args) > 0 && db.ValidView(args[0]) {
+		view = args[0]
+		args = args[1:]
+	}
+	if project == "" && len(args) > 0 {
+		project = strings.Join(args, " ")
+		if view == "today" {
+			view = "project"
+		}
+	}
+
+	tasks, err := database.ListTasks(view, db.TaskFilter{
+		Project: project,
+		Area:    c.Area,
+		Tag:     c.Tag,
+	})
+	if err != nil {
+		return err
+	}
+	cacheTaskUUIDs(tasks)
+	return output.Print(d.Stdout, tasks, d.JSON)
+}
+
 type ProjectsCmd struct {
 	Area      string `help:"Filter by area name or UUID."`
 	Completed bool   `help:"Include completed projects." default:"false"`
 }
 
+func (c *ProjectsCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	projects, err := database.ListProjects(c.Area, c.Completed)
+	if err != nil {
+		return err
+	}
+	return output.Print(d.Stdout, projects, d.JSON)
+}
+
 type AreasCmd struct{}
+
+func (c *AreasCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	areas, err := database.ListAreas()
+	if err != nil {
+		return err
+	}
+	return output.Print(d.Stdout, areas, d.JSON)
+}
 
 type TagsCmd struct{}
 
+func (c *TagsCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	tags, err := database.ListTags()
+	if err != nil {
+		return err
+	}
+	return output.Print(d.Stdout, tags, d.JSON)
+}
+
 type ShowCmd struct {
 	Task string `arg:"" required:"" help:"Task title or UUID."`
+}
+
+func (c *ShowCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	task, err := resolveTask(c.Task, database)
+	if err != nil {
+		return err
+	}
+	items, err := database.GetChecklistItems(task.UUID)
+	if err != nil {
+		return err
+	}
+	return output.PrintTaskWithChecklist(d.Stdout, task, items, d.JSON)
 }
 
 type AddCmd struct {
@@ -82,6 +211,23 @@ type AddCmd struct {
 	Project   string `help:"Project name or UUID."`
 	Heading   string `help:"Heading within project."`
 	List      string `help:"List (project or area) name."`
+}
+
+func (c *AddCmd) Run(_ *Deps) error {
+	list := c.List
+	if list == "" {
+		list = c.Project
+	}
+	return things.AddTask(things.AddParams{
+		Title:     c.Title,
+		Notes:     c.Notes,
+		When:      c.When,
+		Deadline:  c.Deadline,
+		Tags:      c.Tags,
+		Checklist: expandNewlines(c.Checklist),
+		Heading:   c.Heading,
+		List:      list,
+	})
 }
 
 type ProjectCmd struct {
@@ -97,6 +243,18 @@ type ProjectAddCmd struct {
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial to-dos."`
+}
+
+func (c *ProjectAddCmd) Run(_ *Deps) error {
+	return things.AddProject(things.AddProjectParams{
+		Title:    c.Title,
+		Notes:    c.Notes,
+		When:     c.When,
+		Deadline: c.Deadline,
+		Tags:     c.Tags,
+		Area:     c.Area,
+		Todos:    expandNewlines(c.Todos),
+	})
 }
 
 type ProjectEditCmd struct {
@@ -121,6 +279,40 @@ type ProjectEditCmd struct {
 	Cancel    bool `help:"Mark the project as canceled."`
 	Duplicate bool `help:"Duplicate the project before applying edits."`
 	Reveal    bool `help:"Reveal the project in Things after editing."`
+}
+
+func (c *ProjectEditCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	project, err := resolveTask(c.Project, database)
+	if err != nil {
+		return err
+	}
+	if project.Type != model.TypeProject {
+		return fmt.Errorf("not a project: %s", project.Title)
+	}
+
+	token, _ := database.GetAuthToken()
+	return things.UpdateProject(things.UpdateProjectParams{
+		ID:           project.UUID,
+		AuthToken:    token,
+		Title:        c.Title,
+		Notes:        c.Notes,
+		PrependNotes: c.PrependNotes,
+		AppendNotes:  c.AppendNotes,
+		When:         c.When,
+		Deadline:     c.Deadline,
+		Tags:         c.Tags,
+		AddTags:      c.AddTags,
+		Area:         c.Area,
+		AreaID:       c.AreaID,
+		Completed:    c.Complete,
+		Canceled:     c.Cancel,
+		Duplicate:    c.Duplicate,
+		Reveal:       c.Reveal,
+	})
 }
 
 type EditCmd struct {
@@ -153,19 +345,102 @@ type EditCmd struct {
 	Reveal    bool `help:"Reveal the task in Things after editing."`
 }
 
+func (c *EditCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	task, err := resolveTask(c.Task, database)
+	if err != nil {
+		return err
+	}
+
+	token, _ := database.GetAuthToken()
+	return things.UpdateTask(things.UpdateParams{
+		ID:               task.UUID,
+		AuthToken:        token,
+		Title:            c.Title,
+		Notes:            c.Notes,
+		PrependNotes:     c.PrependNotes,
+		AppendNotes:      c.AppendNotes,
+		When:             c.When,
+		Deadline:         c.Deadline,
+		Tags:             c.Tags,
+		AddTags:          c.AddTags,
+		Checklist:        expandNewlinesPtr(c.Checklist),
+		PrependChecklist: expandNewlinesPtr(c.PrependChecklist),
+		AppendChecklist:  expandNewlinesPtr(c.AppendChecklist),
+		List:             c.List,
+		ListID:           c.ListID,
+		Heading:          c.Heading,
+		HeadingID:        c.HeadingID,
+		Completed:        c.Complete,
+		Canceled:         c.Cancel,
+		Duplicate:        c.Duplicate,
+		Reveal:           c.Reveal,
+	})
+}
+
 type CompleteCmd struct {
 	Task string `arg:"" required:"" help:"Task title or UUID."`
+}
+
+func (c *CompleteCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	task, err := resolveTask(c.Task, database)
+	if err != nil {
+		return err
+	}
+	if task.Type == model.TypeProject {
+		if !confirmAction(fmt.Sprintf("Complete project %q? This will also complete all its tasks.", task.Title)) {
+			return fmt.Errorf("cancelled")
+		}
+		return things.CompleteProject(task.UUID)
+	}
+	return things.CompleteTask(task.UUID)
 }
 
 type CancelCmd struct {
 	Task string `arg:"" required:"" help:"Task title or UUID."`
 }
 
+func (c *CancelCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	task, err := resolveTask(c.Task, database)
+	if err != nil {
+		return err
+	}
+	return things.CancelTask(task.UUID)
+}
+
 type SearchCmd struct {
 	Query string `arg:"" required:"" help:"Search query."`
 }
 
+func (c *SearchCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	tasks, err := database.SearchTasks(c.Query)
+	if err != nil {
+		return err
+	}
+	cacheTaskUUIDs(tasks)
+	return output.Print(d.Stdout, tasks, d.JSON)
+}
+
 type LogCmd struct{}
+
+func (c *LogCmd) Run(_ *Deps) error {
+	return things.LogCompleted()
+}
 
 type SkillCmd struct {
 	Install   SkillInstallCmd   `cmd:"" help:"Install the bundled skill for an AI coding agent."`
@@ -180,21 +455,140 @@ type SkillInstallCmd struct {
 	Yes   bool   `help:"Assume yes — overwrite without prompting." short:"y"`
 }
 
+func (c *SkillInstallCmd) Run(d *Deps) error {
+	agent, err := skill.Lookup(c.Agent)
+	if err != nil {
+		return err
+	}
+	dir, err := resolveSkillDir(agent, c.Path)
+	if err != nil {
+		return err
+	}
+	if skill.Exists(agent, dir) && !c.Yes {
+		if !isInteractive() {
+			return fmt.Errorf("skill already installed at %s — pass -y to overwrite", dir)
+		}
+		if !confirmAction(fmt.Sprintf("Skill already installed at %s. Overwrite?", dir)) {
+			return fmt.Errorf("cancelled")
+		}
+	}
+	if err := skill.Install(agent, dir); err != nil {
+		return err
+	}
+	fmt.Fprintf(d.Stdout, "Installed %s skill to %s\n", agent.Name(), dir)
+	return nil
+}
+
 type SkillUninstallCmd struct {
 	Agent string `arg:"" required:"" help:"Target agent (${skill_agents})."`
 	Path  string `help:"Override directory to uninstall from."`
 	Yes   bool   `help:"Assume yes — uninstall without prompting." short:"y"`
 }
 
+func (c *SkillUninstallCmd) Run(d *Deps) error {
+	agent, err := skill.Lookup(c.Agent)
+	if err != nil {
+		return err
+	}
+	dir, err := resolveSkillDir(agent, c.Path)
+	if err != nil {
+		return err
+	}
+	present := skill.InstalledFiles(agent, dir)
+	if len(present) == 0 {
+		return fmt.Errorf("no %s skill installed at %s", agent.Name(), dir)
+	}
+	fmt.Fprintf(os.Stderr, "Will remove %d file(s) from %s:\n", len(present), dir)
+	for _, f := range present {
+		fmt.Fprintf(os.Stderr, "  - %s\n", f)
+	}
+	if !c.Yes {
+		if !isInteractive() {
+			return fmt.Errorf("refusing to uninstall non-interactively — pass -y to confirm")
+		}
+		if !confirmAction(fmt.Sprintf("Remove %s skill at %s?", agent.Name(), dir)) {
+			return fmt.Errorf("cancelled")
+		}
+	}
+	if err := skill.Uninstall(agent, dir); err != nil {
+		return err
+	}
+	fmt.Fprintf(d.Stdout, "Removed %s skill from %s\n", agent.Name(), dir)
+	return nil
+}
+
 type SkillShowCmd struct {
 	Agent string `arg:"" optional:"" help:"Render for a specific agent (${skill_agents}); default is the neutral source."`
 }
 
+func (c *SkillShowCmd) Run(d *Deps) error {
+	if c.Agent == "" {
+		fmt.Fprint(d.Stdout, skill.SkillMD())
+		return nil
+	}
+	agent, err := skill.Lookup(c.Agent)
+	if err != nil {
+		return err
+	}
+	for fname, content := range agent.Files() {
+		fmt.Fprintf(d.Stdout, "# %s\n%s", fname, content)
+	}
+	return nil
+}
+
 type SkillListCmd struct{}
+
+func (c *SkillListCmd) Run(d *Deps) error {
+	for _, a := range skill.Agents() {
+		dir, err := a.DefaultDir()
+		if err != nil {
+			dir = "(unknown)"
+		}
+		status := "not installed"
+		if skill.Exists(a, dir) {
+			status = "installed"
+		}
+		fmt.Fprintf(d.Stdout, "%-10s %s  (%s)\n", a.Name(), dir, status)
+	}
+	return nil
+}
 
 type ImportCmd struct {
 	File   string `help:"Read JSON payload from this file instead of stdin." short:"f" type:"existingfile"`
 	Reveal bool   `help:"Reveal the first created/updated item in Things after import."`
+}
+
+func (c *ImportCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+	var data []byte
+	if c.File != "" {
+		data, err = os.ReadFile(c.File)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", c.File, err)
+		}
+	} else {
+		if isInteractive() {
+			return fmt.Errorf("no JSON on stdin and no --file given")
+		}
+		data, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+	}
+	if err := validateImportJSON(data); err != nil {
+		return err
+	}
+	token, err := database.GetAuthToken()
+	if err != nil {
+		// Don't fail the import — the payload may be create-only and not need
+		// the token at all — but surface the read error so users debugging an
+		// `operation: update` failure aren't left guessing.
+		fmt.Fprintf(os.Stderr, "warning: could not read Things auth token: %v\n", err)
+	}
+	return things.ImportJSON(string(data), token, c.Reveal)
 }
 
 type OpenCmd struct {
@@ -205,6 +599,72 @@ type OpenCmd struct {
 	Query      string `help:"App-side quick find." short:"q"`
 	Filter     string `help:"Tag filter on the shown list (comma-separated)."`
 	Background bool   `help:"Don't bring Things to the foreground."`
+}
+
+func (c *OpenCmd) Run(d *Deps) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
+	}
+
+	flags := 0
+	for _, s := range []string{c.Ref, c.Project, c.Area, c.Tag, c.Query} {
+		if s != "" {
+			flags++
+		}
+	}
+	if flags == 0 {
+		return fmt.Errorf("open: pass a reference, --project, --area, --tag, or --query")
+	}
+	if flags > 1 {
+		return fmt.Errorf("open: pass only one of <ref>, --project, --area, --tag, --query")
+	}
+
+	params := things.ShowParams{Filter: c.Filter, Background: c.Background}
+
+	resolveUUID := func(kind, name string, find func(string) (string, error)) (string, error) {
+		uuid, err := find(name)
+		if err != nil {
+			return "", err
+		}
+		if uuid == "" {
+			return "", fmt.Errorf("%s not found: %s", kind, name)
+		}
+		return uuid, nil
+	}
+
+	switch {
+	case c.Query != "":
+		params.Query = c.Query
+	case c.Area != "":
+		uuid, err := resolveUUID("area", c.Area, database.FindAreaUUID)
+		if err != nil {
+			return err
+		}
+		params.ID = uuid
+	case c.Tag != "":
+		uuid, err := resolveUUID("tag", c.Tag, database.FindTagUUID)
+		if err != nil {
+			return err
+		}
+		params.ID = uuid
+	case c.Project != "":
+		task, err := resolveTask(c.Project, database)
+		if err != nil {
+			return err
+		}
+		params.ID = task.UUID
+	case things.IsBuiltinList(c.Ref):
+		params.ID = c.Ref
+	default:
+		task, err := resolveTask(c.Ref, database)
+		if err != nil {
+			return err
+		}
+		params.ID = task.UUID
+	}
+
+	return things.Show(params)
 }
 
 func main() {
@@ -220,178 +680,18 @@ func main() {
 		},
 	)
 
-	if ctx.Command() == "version" {
-		fmt.Printf("things %s (commit %s, built %s)\n", version, commit, date)
-		return
-	}
+	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout}
+	defer deps.Close()
 
-	if strings.HasPrefix(ctx.Command(), "skill ") {
-		if err := runSkill(ctx, &cli); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	dbPath := cli.DB
-	if dbPath == "" {
-		var err error
-		dbPath, err = db.FindDBPath()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	database, err := db.Open(dbPath)
-	if err != nil {
+	if err := ctx.Run(deps); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
-	}
-	defer database.Close()
-
-	err = run(ctx, &cli, database)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func run(ctx *kong.Context, cli *CLI, database *db.DB) error {
-	switch ctx.Command() {
-	case "list", "list <args>":
-		return runList(cli, database)
-	case "projects":
-		return runProjects(cli, database)
-	case "areas":
-		return runAreas(cli, database)
-	case "tags":
-		return runTags(cli, database)
-	case "show <task>":
-		return runShow(cli, database)
-	case "add <title>":
-		return runAdd(cli)
-	case "project add <title>":
-		return runProjectAdd(cli)
-	case "project edit <project>":
-		return runProjectEdit(cli, database)
-	case "edit <task>":
-		return runEdit(cli, database)
-	case "complete <task>":
-		return runComplete(cli, database)
-	case "cancel <task>":
-		return runCancel(cli, database)
-	case "search <query>":
-		return runSearch(cli, database)
-	case "log":
-		return things.LogCompleted()
-	case "open", "open <ref>":
-		return runOpen(cli, database)
-	case "import":
-		return runImport(cli, database)
-	case "version":
-		return nil
-	default:
-		return fmt.Errorf("unknown command: %s", ctx.Command())
 	}
 }
 
 func isInteractive() bool {
 	fd := os.Stdin.Fd()
 	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
-}
-
-func runList(cli *CLI, database *db.DB) error {
-	view := "today"
-	project := cli.List.Project
-	args := cli.List.Args
-
-	if len(args) > 0 && db.ValidView(args[0]) {
-		view = args[0]
-		args = args[1:]
-	}
-	if project == "" && len(args) > 0 {
-		project = strings.Join(args, " ")
-		if view == "today" {
-			view = "project"
-		}
-	}
-
-	tasks, err := database.ListTasks(view, db.TaskFilter{
-		Project: project,
-		Area:    cli.List.Area,
-		Tag:     cli.List.Tag,
-	})
-	if err != nil {
-		return err
-	}
-	cacheTaskUUIDs(tasks)
-	return output.Print(os.Stdout, tasks, cli.JSON)
-}
-
-func runProjects(cli *CLI, database *db.DB) error {
-	projects, err := database.ListProjects(cli.Projects.Area, cli.Projects.Completed)
-	if err != nil {
-		return err
-	}
-	return output.Print(os.Stdout, projects, cli.JSON)
-}
-
-func runAreas(cli *CLI, database *db.DB) error {
-	areas, err := database.ListAreas()
-	if err != nil {
-		return err
-	}
-	return output.Print(os.Stdout, areas, cli.JSON)
-}
-
-func runTags(cli *CLI, database *db.DB) error {
-	tags, err := database.ListTags()
-	if err != nil {
-		return err
-	}
-	return output.Print(os.Stdout, tags, cli.JSON)
-}
-
-func runShow(cli *CLI, database *db.DB) error {
-	task, err := resolveTask(cli.Show.Task, database)
-	if err != nil {
-		return err
-	}
-	items, err := database.GetChecklistItems(task.UUID)
-	if err != nil {
-		return err
-	}
-	return output.PrintTaskWithChecklist(os.Stdout, task, items, cli.JSON)
-}
-
-func runAdd(cli *CLI) error {
-	list := cli.Add.List
-	if list == "" {
-		list = cli.Add.Project
-	}
-	return things.AddTask(things.AddParams{
-		Title:     cli.Add.Title,
-		Notes:     cli.Add.Notes,
-		When:      cli.Add.When,
-		Deadline:  cli.Add.Deadline,
-		Tags:      cli.Add.Tags,
-		Checklist: expandNewlines(cli.Add.Checklist),
-		Heading:   cli.Add.Heading,
-		List:      list,
-	})
-}
-
-func runProjectAdd(cli *CLI) error {
-	return things.AddProject(things.AddProjectParams{
-		Title:    cli.Project.Add.Title,
-		Notes:    cli.Project.Add.Notes,
-		When:     cli.Project.Add.When,
-		Deadline: cli.Project.Add.Deadline,
-		Tags:     cli.Project.Add.Tags,
-		Area:     cli.Project.Add.Area,
-		Todos:    expandNewlines(cli.Project.Add.Todos),
-	})
 }
 
 // expandNewlines converts the literal two-character sequence `\n` into real
@@ -401,96 +701,12 @@ func expandNewlines(s string) string {
 	return strings.ReplaceAll(s, `\n`, "\n")
 }
 
-func runProjectEdit(cli *CLI, database *db.DB) error {
-	project, err := resolveTask(cli.Project.Edit.Project, database)
-	if err != nil {
-		return err
-	}
-	if project.Type != model.TypeProject {
-		return fmt.Errorf("not a project: %s", project.Title)
-	}
-
-	token, _ := database.GetAuthToken()
-	return things.UpdateProject(things.UpdateProjectParams{
-		ID:           project.UUID,
-		AuthToken:    token,
-		Title:        cli.Project.Edit.Title,
-		Notes:        cli.Project.Edit.Notes,
-		PrependNotes: cli.Project.Edit.PrependNotes,
-		AppendNotes:  cli.Project.Edit.AppendNotes,
-		When:         cli.Project.Edit.When,
-		Deadline:     cli.Project.Edit.Deadline,
-		Tags:         cli.Project.Edit.Tags,
-		AddTags:      cli.Project.Edit.AddTags,
-		Area:         cli.Project.Edit.Area,
-		AreaID:       cli.Project.Edit.AreaID,
-		Completed:    cli.Project.Edit.Complete,
-		Canceled:     cli.Project.Edit.Cancel,
-		Duplicate:    cli.Project.Edit.Duplicate,
-		Reveal:       cli.Project.Edit.Reveal,
-	})
-}
-
-func runEdit(cli *CLI, database *db.DB) error {
-	task, err := resolveTask(cli.Edit.Task, database)
-	if err != nil {
-		return err
-	}
-
-	token, _ := database.GetAuthToken()
-	return things.UpdateTask(things.UpdateParams{
-		ID:               task.UUID,
-		AuthToken:        token,
-		Title:            cli.Edit.Title,
-		Notes:            cli.Edit.Notes,
-		PrependNotes:     cli.Edit.PrependNotes,
-		AppendNotes:      cli.Edit.AppendNotes,
-		When:             cli.Edit.When,
-		Deadline:         cli.Edit.Deadline,
-		Tags:             cli.Edit.Tags,
-		AddTags:          cli.Edit.AddTags,
-		Checklist:        expandNewlinesPtr(cli.Edit.Checklist),
-		PrependChecklist: expandNewlinesPtr(cli.Edit.PrependChecklist),
-		AppendChecklist:  expandNewlinesPtr(cli.Edit.AppendChecklist),
-		List:             cli.Edit.List,
-		ListID:           cli.Edit.ListID,
-		Heading:          cli.Edit.Heading,
-		HeadingID:        cli.Edit.HeadingID,
-		Completed:        cli.Edit.Complete,
-		Canceled:         cli.Edit.Cancel,
-		Duplicate:        cli.Edit.Duplicate,
-		Reveal:           cli.Edit.Reveal,
-	})
-}
-
 func expandNewlinesPtr(p *string) *string {
 	if p == nil {
 		return nil
 	}
 	v := expandNewlines(*p)
 	return &v
-}
-
-func runComplete(cli *CLI, database *db.DB) error {
-	task, err := resolveTask(cli.Complete.Task, database)
-	if err != nil {
-		return err
-	}
-	if task.Type == model.TypeProject {
-		if !confirmAction(fmt.Sprintf("Complete project %q? This will also complete all its tasks.", task.Title)) {
-			return fmt.Errorf("cancelled")
-		}
-		return things.CompleteProject(task.UUID)
-	}
-	return things.CompleteTask(task.UUID)
-}
-
-func runCancel(cli *CLI, database *db.DB) error {
-	task, err := resolveTask(cli.Cancel.Task, database)
-	if err != nil {
-		return err
-	}
-	return things.CancelTask(task.UUID)
 }
 
 func resolveTask(ref string, database *db.DB) (*model.Task, error) {
@@ -564,99 +780,6 @@ func confirmAction(msg string) bool {
 	return answer == "y" || answer == "yes"
 }
 
-func runOpen(cli *CLI, database *db.DB) error {
-	cmd := &cli.Open
-
-	flags := 0
-	for _, s := range []string{cmd.Ref, cmd.Project, cmd.Area, cmd.Tag, cmd.Query} {
-		if s != "" {
-			flags++
-		}
-	}
-	if flags == 0 {
-		return fmt.Errorf("open: pass a reference, --project, --area, --tag, or --query")
-	}
-	if flags > 1 {
-		return fmt.Errorf("open: pass only one of <ref>, --project, --area, --tag, --query")
-	}
-
-	params := things.ShowParams{Filter: cmd.Filter, Background: cmd.Background}
-
-	resolveUUID := func(kind, name string, find func(string) (string, error)) (string, error) {
-		uuid, err := find(name)
-		if err != nil {
-			return "", err
-		}
-		if uuid == "" {
-			return "", fmt.Errorf("%s not found: %s", kind, name)
-		}
-		return uuid, nil
-	}
-
-	switch {
-	case cmd.Query != "":
-		params.Query = cmd.Query
-	case cmd.Area != "":
-		uuid, err := resolveUUID("area", cmd.Area, database.FindAreaUUID)
-		if err != nil {
-			return err
-		}
-		params.ID = uuid
-	case cmd.Tag != "":
-		uuid, err := resolveUUID("tag", cmd.Tag, database.FindTagUUID)
-		if err != nil {
-			return err
-		}
-		params.ID = uuid
-	case cmd.Project != "":
-		task, err := resolveTask(cmd.Project, database)
-		if err != nil {
-			return err
-		}
-		params.ID = task.UUID
-	case things.IsBuiltinList(cmd.Ref):
-		params.ID = cmd.Ref
-	default:
-		task, err := resolveTask(cmd.Ref, database)
-		if err != nil {
-			return err
-		}
-		params.ID = task.UUID
-	}
-
-	return things.Show(params)
-}
-
-func runImport(cli *CLI, database *db.DB) error {
-	var data []byte
-	var err error
-	if cli.Import.File != "" {
-		data, err = os.ReadFile(cli.Import.File)
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", cli.Import.File, err)
-		}
-	} else {
-		if isInteractive() {
-			return fmt.Errorf("no JSON on stdin and no --file given")
-		}
-		data, err = io.ReadAll(os.Stdin)
-		if err != nil {
-			return fmt.Errorf("reading stdin: %w", err)
-		}
-	}
-	if err := validateImportJSON(data); err != nil {
-		return err
-	}
-	token, err := database.GetAuthToken()
-	if err != nil {
-		// Don't fail the import — the payload may be create-only and not need
-		// the token at all — but surface the read error so users debugging an
-		// `operation: update` failure aren't left guessing.
-		fmt.Fprintf(os.Stderr, "warning: could not read Things auth token: %v\n", err)
-	}
-	return things.ImportJSON(string(data), token, cli.Import.Reveal)
-}
-
 // validateImportJSON checks the payload is a non-empty JSON array — the shape
 // the Things JSON URL scheme requires — without allocating on the happy path.
 // On syntax errors it falls back to a full decode purely to extract the byte
@@ -702,122 +825,11 @@ func offsetToLineCol(data []byte, offset int64) (int, int) {
 	return line, col
 }
 
-func runSearch(cli *CLI, database *db.DB) error {
-	tasks, err := database.SearchTasks(cli.Search.Query)
-	if err != nil {
-		return err
-	}
-	cacheTaskUUIDs(tasks)
-	return output.Print(os.Stdout, tasks, cli.JSON)
-}
-
 func resolveSkillDir(agent skill.Agent, override string) (string, error) {
 	if override != "" {
 		return override, nil
 	}
 	return agent.DefaultDir()
-}
-
-func runSkill(ctx *kong.Context, cli *CLI) error {
-	switch ctx.Command() {
-	case "skill install <agent>":
-		return runSkillInstall(cli)
-	case "skill uninstall <agent>":
-		return runSkillUninstall(cli)
-	case "skill show", "skill show <agent>":
-		return runSkillShow(cli)
-	case "skill list":
-		return runSkillList()
-	default:
-		return fmt.Errorf("unknown skill command: %s", ctx.Command())
-	}
-}
-
-func runSkillInstall(cli *CLI) error {
-	agent, err := skill.Lookup(cli.Skill.Install.Agent)
-	if err != nil {
-		return err
-	}
-	dir, err := resolveSkillDir(agent, cli.Skill.Install.Path)
-	if err != nil {
-		return err
-	}
-	if skill.Exists(agent, dir) && !cli.Skill.Install.Yes {
-		if !isInteractive() {
-			return fmt.Errorf("skill already installed at %s — pass -y to overwrite", dir)
-		}
-		if !confirmAction(fmt.Sprintf("Skill already installed at %s. Overwrite?", dir)) {
-			return fmt.Errorf("cancelled")
-		}
-	}
-	if err := skill.Install(agent, dir); err != nil {
-		return err
-	}
-	fmt.Printf("Installed %s skill to %s\n", agent.Name(), dir)
-	return nil
-}
-
-func runSkillUninstall(cli *CLI) error {
-	agent, err := skill.Lookup(cli.Skill.Uninstall.Agent)
-	if err != nil {
-		return err
-	}
-	dir, err := resolveSkillDir(agent, cli.Skill.Uninstall.Path)
-	if err != nil {
-		return err
-	}
-	present := skill.InstalledFiles(agent, dir)
-	if len(present) == 0 {
-		return fmt.Errorf("no %s skill installed at %s", agent.Name(), dir)
-	}
-	fmt.Fprintf(os.Stderr, "Will remove %d file(s) from %s:\n", len(present), dir)
-	for _, f := range present {
-		fmt.Fprintf(os.Stderr, "  - %s\n", f)
-	}
-	if !cli.Skill.Uninstall.Yes {
-		if !isInteractive() {
-			return fmt.Errorf("refusing to uninstall non-interactively — pass -y to confirm")
-		}
-		if !confirmAction(fmt.Sprintf("Remove %s skill at %s?", agent.Name(), dir)) {
-			return fmt.Errorf("cancelled")
-		}
-	}
-	if err := skill.Uninstall(agent, dir); err != nil {
-		return err
-	}
-	fmt.Printf("Removed %s skill from %s\n", agent.Name(), dir)
-	return nil
-}
-
-func runSkillShow(cli *CLI) error {
-	name := cli.Skill.Show.Agent
-	if name == "" {
-		fmt.Print(skill.SkillMD())
-		return nil
-	}
-	agent, err := skill.Lookup(name)
-	if err != nil {
-		return err
-	}
-	for fname, content := range agent.Files() {
-		fmt.Printf("# %s\n%s", fname, content)
-	}
-	return nil
-}
-
-func runSkillList() error {
-	for _, a := range skill.Agents() {
-		dir, err := a.DefaultDir()
-		if err != nil {
-			dir = "(unknown)"
-		}
-		status := "not installed"
-		if skill.Exists(a, dir) {
-			status = "installed"
-		}
-		fmt.Printf("%-10s %s  (%s)\n", a.Name(), dir, status)
-	}
-	return nil
 }
 
 func cacheTaskUUIDs(tasks []model.Task) {
