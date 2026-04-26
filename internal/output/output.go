@@ -49,16 +49,29 @@ func printJSON(w io.Writer, v any) error {
 
 func printTasks(w io.Writer, tasks []model.Task) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	currentProject := "\x00" // sentinel — distinct from empty string
+	const sentinel = "\x00" // distinct from empty string
+	currentProject, currentArea := sentinel, sentinel
 	for i, t := range tasks {
-		if t.ProjectUUID != currentProject {
-			if currentProject != "\x00" {
+		// Items belonging to a project group under the project header
+		// (whose own area is implicit). Otherwise, group by area.
+		groupKey := t.ProjectUUID
+		groupTitle := t.ProjectTitle
+		current := &currentProject
+		other := &currentArea
+		if t.ProjectUUID == "" {
+			groupKey = t.AreaUUID
+			groupTitle = t.AreaTitle
+			current, other = &currentArea, &currentProject
+		}
+		if groupKey != *current || *other != sentinel {
+			if currentProject != sentinel || currentArea != sentinel {
 				fmt.Fprintln(tw)
 			}
-			if t.ProjectTitle != "" {
-				fmt.Fprintf(tw, "\t%s\n", t.ProjectTitle)
+			if groupTitle != "" {
+				fmt.Fprintf(tw, "\t%s\n", groupTitle)
 			}
-			currentProject = t.ProjectUUID
+			*current = groupKey
+			*other = sentinel
 		}
 		status := statusIcon(t.Status)
 		tags := ""
