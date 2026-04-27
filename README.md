@@ -150,7 +150,7 @@ cancelled):
 
 ```text
 $ things projects
-◑  Launch v2          Work      [urgent]
+◑  Launch v2          Work
 ◔  Migrate API        Work
 ○  Garden plan        Home
 ●  Spring cleaning    Home
