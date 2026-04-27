@@ -93,6 +93,20 @@ things "Weekly Review"            # tasks in a project by name
 things -a Work                    # tasks in an area
 ```
 
+Output groups by project or area; numeric indices are stable for follow-up
+commands until the next listing:
+
+```text
+$ things
+    Launch v2
+1.  [ ]  Draft release notes      [docs]      today
+2.  [ ]  Cut RC build                          due:2026-04-30
+
+    Errands
+3.  [ ]  Buy milk                 [shopping]
+4.  [x]  Pick up dry cleaning
+```
+
 ### Inspecting tasks, projects, areas, tags
 
 | Command | Description |
@@ -111,6 +125,35 @@ between them; non-TTY callers get the match list as an error.
 things show 3                     # task #3 from the last list
 things show "Pay rent"            # by title (interactive disambig)
 things search migrate             # full-text search
+```
+
+```text
+$ things show 2
+Title:    Cut RC build
+UUID:     8K3FpQ2eRtNbHwpNiM71Eu
+Status:   Open
+Project:  Launch v2
+Tags:     release
+Deadline: 2026-04-30
+Created:  2026-04-12 09:14
+Notes:
+  Coordinate with marketing before tagging.
+Checklist:
+  [x] Bump version
+  [ ] Update changelog
+  [ ] Tag and push
+```
+
+`things projects` renders a one-line-per-project list; the leading glyph
+shows completion progress (`○` empty, `◔ ◑ ◕` partial, `●` done, `◌`
+cancelled):
+
+```text
+$ things projects
+◑  Launch v2          Work      [urgent]
+◔  Migrate API        Work
+○  Garden plan        Home
+●  Spring cleaning    Home
 ```
 
 ### Creating tasks and projects
