@@ -10,8 +10,8 @@ description: >-
   Every command speaks JSON. A bundled agent skill teaches Claude
   Code, Codex, and Pi when to reach for `things` instead of guessing.
 
-url: "https://ryanlewis.github.io"
-baseurl: "/things-cli"
+url: "https://things.rlew.io"
+baseurl: ""
 repository: ryanlewis/things-cli
 
 github:

@@ -1,6 +1,6 @@
 # things-cli
 
-[Website](https://ryanlewis.github.io/things-cli/) ·
+[Website](https://things.rlew.io) ·
 [Releases](https://github.com/ryanlewis/things-cli/releases/latest) ·
 [Issues](https://github.com/ryanlewis/things-cli/issues)
 
