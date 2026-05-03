@@ -33,6 +33,14 @@ things skill install claude
 things skill show
 ```
 
+## Credits
+
+Things3 is built and maintained by
+[Cultured Code](https://culturedcode.com/things/). `things-cli` is an
+independent, unaffiliated third-party tool that talks to the official
+`things:///` URL scheme and reads the on-disk SQLite database — same
+interfaces Cultured Code expose to Shortcuts and other automation.
+
 ## Source
 
 The full command reference and contributing guide live on
