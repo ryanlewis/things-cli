@@ -1,5 +1,5 @@
 ---
-layout: home
+layout: page
 title: things-cli
 ---
 
@@ -9,8 +9,7 @@ database (read-only) and writes via the `things:///` URL scheme and
 AppleScript — so the app stays the source of truth and your data never
 leaves the machine.
 
-[![Release](https://img.shields.io/github/v/release/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }}/releases/latest)
-[![Stars](https://img.shields.io/github/stars/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }})
+[![GitHub stars](https://img.shields.io/github/stars/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }})
 
 **AI-friendly by design.** Every command speaks JSON (`-j` / `--json`)
 for clean piping into `jq`, agents, or scripts. A bundled agent skill
