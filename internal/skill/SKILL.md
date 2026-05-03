@@ -12,6 +12,8 @@ today, upcoming, projects, or areas on macOS.
 
 Most commands accept `--json` / `-j`. Prefer it when parsing output.
 
+Human output is styled with colors and aligned columns. Color auto-disables when piping or when `NO_COLOR` is set. Override with `--color=always|never` (default `auto`). JSON output is unaffected.
+
 ## Core commands
 
 ```

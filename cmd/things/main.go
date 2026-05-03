@@ -29,6 +29,7 @@ var (
 
 type CLI struct {
 	JSON    bool             `help:"Output as JSON." short:"j" default:"false"`
+	Color   string           `help:"Color mode (auto|always|never)." enum:"auto,always,never" default:"auto"`
 	DB      string           `help:"Override database path." type:"existingfile"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
@@ -680,6 +681,11 @@ func main() {
 			"skill_agents":  skill.AgentNames(),
 		},
 	)
+
+	if err := output.SetColorMode(cli.Color); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(2)
+	}
 
 	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout}
 	defer deps.Close()
