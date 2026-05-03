@@ -9,7 +9,16 @@ database (read-only) and writes via the `things:///` URL scheme and
 AppleScript — so the app stays the source of truth and your data never
 leaves the machine.
 
+[![Release](https://img.shields.io/github/v/release/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }}/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/{{ site.repository }}?logo=go)](https://github.com/{{ site.repository }}/blob/main/go.mod)
+[![License](https://img.shields.io/github/license/{{ site.repository }})](https://github.com/{{ site.repository }}/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple)]({{ '/install/' | relative_url }})
 [![GitHub stars](https://img.shields.io/github/stars/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }})
+{: .gh-badges }
+
+<style>
+.gh-badges a.img-link { margin-right: 4px; }
+</style>
 
 **AI-friendly by design.** Every command speaks JSON (`-j` / `--json`)
 for clean piping into `jq`, agents, or scripts. A bundled agent skill
