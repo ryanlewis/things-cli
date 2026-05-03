@@ -106,13 +106,13 @@ var viewFilters = map[string]string{
 var viewOrderBy = map[string]string{
 	"logbook":   "ORDER BY t.stopDate DESC",
 	"deadlines": "ORDER BY t.deadline ASC",
-	// Today view groups: (1) top-level items with no project and no area,
-	// (2) area-only items grouped by area.index, (3) project items grouped by
-	// their project (ordered by their own area then project index). Within
-	// each group, sort by status (open before completed/cancelled), then by
-	// todayIndexReferenceDate DESC (most-recently scheduled first), then by
-	// todayIndex ASC (Things' manual ordering within a day).
-	"today":   "ORDER BY CASE WHEN t.project IS NULL AND t.area IS NULL THEN 0 WHEN t.project IS NULL THEN 1 ELSE 2 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC",
+	// Today view: top-level items (no project, no area) come first, then
+	// everything else sorted by area then project index. Project tasks and
+	// area-only tasks interleave by area.index — so projects in a low-index
+	// area come before area-only items in higher-index areas, matching the
+	// Things app. Within each group, sort by status (open before completed),
+	// then todayIndexReferenceDate DESC, then todayIndex ASC.
+	"today":   "ORDER BY CASE WHEN t.project IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC",
 	"project": "ORDER BY t.start ASC, t.\"index\" ASC",
 }
 
