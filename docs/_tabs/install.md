@@ -7,6 +7,14 @@ order: 1
 `things-cli` runs on macOS and ships as a single static Go binary. Three
 ways to install — pick whichever fits your workflow.
 
+> **You'll need Things3.** This CLI talks to the
+> [Things3 app by Cultured Code](https://culturedcode.com/things/) —
+> a paid task manager for macOS, iPad, iPhone, and Apple Watch. It must
+> be installed and have been launched at least once for the database
+> to exist. `things-cli` is an independent third-party tool and is not
+> affiliated with Cultured Code.
+{: .prompt-info }
+
 ## One-line install script
 
 ```sh
