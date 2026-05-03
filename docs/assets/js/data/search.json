@@ -1,0 +1,36 @@
+---
+layout: compress
+swcache: true
+---
+
+[
+  {% for tab in site.tabs %}
+  {
+    "title": {{ tab.title | jsonify }},
+    "url": {{ tab.url | relative_url | jsonify }},
+    "categories": "",
+    "tags": "",
+    "date": "",
+    "content": {{ tab.content | strip_html | strip_newlines | jsonify }}
+  },
+  {% endfor %}
+  {
+    "title": {{ site.title | jsonify }},
+    "url": {{ '/' | relative_url | jsonify }},
+    "categories": "",
+    "tags": "",
+    "date": "",
+    "content": {{ site.pages | where: "url", "/" | first | map: "content" | first | strip_html | strip_newlines | jsonify }}
+  }{% if site.posts.size > 0 %},
+  {% for post in site.posts %}
+  {
+    "title": {{ post.title | jsonify }},
+    "url": {{ post.url | relative_url | jsonify }},
+    "categories": {{ post.categories | join: ', ' | jsonify }},
+    "tags": {{ post.tags | join: ', ' | jsonify }},
+    "date": {{ post.date | jsonify }},
+    {% capture content -%}{% include post-summary.html full_text=true %}{%- endcapture -%}
+    "content": {{ content | jsonify }}
+  }{% unless forloop.last %},{% endunless %}
+  {% endfor %}{% endif %}
+]

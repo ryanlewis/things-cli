@@ -1,5 +1,9 @@
 # things-cli
 
+[Website](https://ryanlewis.github.io/things-cli/) ·
+[Releases](https://github.com/ryanlewis/things-cli/releases/latest) ·
+[Issues](https://github.com/ryanlewis/things-cli/issues)
+
 A small Go CLI for [Things3](https://culturedcode.com/things/) on macOS. Reads
 tasks, projects, areas and tags straight from the Things3 SQLite database
 (read-only) and writes via the `things:///` URL scheme and AppleScript — so the

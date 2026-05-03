@@ -1,0 +1,75 @@
+theme: jekyll-theme-chirpy
+
+lang: en
+timezone: Europe/London
+
+title: things-cli
+tagline: A small, AI-friendly CLI for Things3 on macOS
+description: >-
+  Read tasks, projects, areas, and tags straight from Things3.
+  Every command speaks JSON. A bundled agent skill teaches Claude
+  Code, Codex, and Pi when to reach for `things` instead of guessing.
+
+url: "https://ryanlewis.github.io"
+baseurl: "/things-cli"
+repository: ryanlewis/things-cli
+
+github:
+  username: ryanlewis
+
+social:
+  name: Ryan Lewis
+  links:
+    - https://github.com/ryanlewis
+
+theme_mode: dark
+
+avatar: /assets/img/avatar.svg
+
+toc: true
+
+assets:
+  self_host:
+    enabled: false
+
+collections:
+  tabs:
+    output: true
+    sort_by: order
+
+defaults:
+  - scope:
+      path: ""
+      type: tabs
+    values:
+      layout: page
+      permalink: /:title/
+
+markdown: kramdown
+
+kramdown:
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    css_class: highlight
+    block:
+      line_numbers: true
+      start_line: 1
+
+sass:
+  style: compressed
+
+compress_html:
+  clippings: all
+  comments: all
+  endings: all
+  profile: false
+  blanklines: false
+  ignore:
+    envs: [development]
+
+exclude:
+  - "*.gem"
+  - "*.gemspec"
+  - vendor
+  - README.md
+  - LICENSE
