@@ -9,14 +9,8 @@ database (read-only) and writes via the `things:///` URL scheme and
 AppleScript — so the app stays the source of truth and your data never
 leaves the machine.
 
-<div class="github-cta d-flex flex-wrap gap-2 my-4">
-  <a class="btn btn-primary" href="https://github.com/{{ site.repository }}" target="_blank" rel="noopener">
-    <i class="fa-brands fa-github"></i> View on GitHub
-  </a>
-  <a class="btn btn-outline-primary" href="https://github.com/{{ site.repository }}/releases/latest" target="_blank" rel="noopener">
-    Latest release
-  </a>
-</div>
+[![Release](https://img.shields.io/github/v/release/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }}/releases/latest)
+[![Stars](https://img.shields.io/github/stars/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }})
 
 **AI-friendly by design.** Every command speaks JSON (`-j` / `--json`)
 for clean piping into `jq`, agents, or scripts. A bundled agent skill
