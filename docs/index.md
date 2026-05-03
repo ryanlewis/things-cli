@@ -15,10 +15,6 @@ ships in the binary itself — `things skill install claude` drops it into
 Claude Code, and `things skill show` prints the neutral source so you
 can append it to whatever your agent reads for instructions.
 
-[![Latest release](https://img.shields.io/github/v/release/{{ site.repository }}?display_name=tag&color=blue)](https://github.com/{{ site.repository }}/releases/latest)
-[![MIT licensed](https://img.shields.io/github/license/{{ site.repository }})](https://github.com/{{ site.repository }}/blob/main/LICENSE)
-[![GitHub](https://img.shields.io/badge/source-github-181717?logo=github)](https://github.com/{{ site.repository }})
-
 ## Quickstart
 
 ```sh
