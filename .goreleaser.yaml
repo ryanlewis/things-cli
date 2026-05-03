@@ -48,4 +48,5 @@ release:
   mode: replace
   header: |
     {{ readFile (printf ".github/releases/%s.md" .Tag) }}
+
     ---
