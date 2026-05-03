@@ -140,12 +140,12 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		}
 
 		cols := []string{
-			lipgloss.NewStyle().Width(numW).Render(r.num),
-			lipgloss.NewStyle().Width(statusW).Render(r.status),
-			lipgloss.NewStyle().Width(titleW).Render(r.title),
+			padCol(numW, r.num),
+			padCol(statusW, r.status),
+			padCol(titleW, r.title),
 		}
 		if !dropTags {
-			cols = append(cols, lipgloss.NewStyle().Width(tagsW).Render(r.tags))
+			cols = append(cols, padCol(tagsW, r.tags))
 		}
 		if !dropDate {
 			cols = append(cols, r.date)
@@ -153,6 +153,10 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		fmt.Fprintln(w, joinWithGap(cols, gap))
 	}
 	return nil
+}
+
+func padCol(width int, s string) string {
+	return lipgloss.NewStyle().Width(width).Render(s)
 }
 
 func joinWithGap(cols []string, gap string) string {
@@ -167,9 +171,8 @@ func joinWithGap(cols []string, gap string) string {
 }
 
 func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) error {
-	const labelW = 10
 	label := func(s string) string {
-		return lipgloss.NewStyle().Width(labelW).Render(labelStyle.Render(s))
+		return padCol(10, labelStyle.Render(s))
 	}
 
 	fmt.Fprintf(w, "%s%s\n", label("Title:"), t.Title)
@@ -235,9 +238,9 @@ func printProjects(w io.Writer, projects []model.Project) error {
 	}
 	for _, r := range rows {
 		fmt.Fprintln(w, joinWithGap([]string{
-			lipgloss.NewStyle().Width(iconW).Render(r.icon),
-			lipgloss.NewStyle().Width(titleW).Render(r.title),
-			lipgloss.NewStyle().Width(areaW).Render(r.area),
+			padCol(iconW, r.icon),
+			padCol(titleW, r.title),
+			padCol(areaW, r.area),
 			r.tags,
 		}, "  "))
 	}
@@ -251,7 +254,7 @@ func printAreas(w io.Writer, areas []model.Area) error {
 	for i, a := range areas {
 		r := row{title: a.Title}
 		if !a.Visible {
-			r.vis = dateNormalStyle.Render("(hidden)")
+			r.vis = dimStyle.Render("(hidden)")
 		}
 		rows[i] = r
 		if n := lipgloss.Width(r.title); n > titleW {
@@ -260,7 +263,7 @@ func printAreas(w io.Writer, areas []model.Area) error {
 	}
 	for _, r := range rows {
 		fmt.Fprintln(w, joinWithGap([]string{
-			lipgloss.NewStyle().Width(titleW).Render(r.title),
+			padCol(titleW, r.title),
 			r.vis,
 		}, "  "))
 	}
@@ -274,7 +277,7 @@ func printTags(w io.Writer, tags []model.Tag) error {
 	for i, t := range tags {
 		r := row{title: t.Title}
 		if t.Shortcut != "" {
-			r.shortcut = dateNormalStyle.Render("(" + t.Shortcut + ")")
+			r.shortcut = dimStyle.Render("(" + t.Shortcut + ")")
 		}
 		rows[i] = r
 		if n := lipgloss.Width(r.title); n > titleW {
@@ -283,7 +286,7 @@ func printTags(w io.Writer, tags []model.Tag) error {
 	}
 	for _, r := range rows {
 		fmt.Fprintln(w, joinWithGap([]string{
-			lipgloss.NewStyle().Width(titleW).Render(r.title),
+			padCol(titleW, r.title),
 			r.shortcut,
 		}, "  "))
 	}

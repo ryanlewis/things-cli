@@ -46,7 +46,7 @@ var (
 	dateOverdueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
 	dateTodayStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
 	dateSoonStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	dateNormalStyle  = lipgloss.NewStyle().Faint(true)
+	dimStyle         = lipgloss.NewStyle().Faint(true)
 
 	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
 	labelStyle  = lipgloss.NewStyle().Bold(true)
@@ -99,7 +99,7 @@ func styledDate(d *model.ThingsDate, deadline bool) string {
 	case target.Sub(today) <= 3*24*time.Hour:
 		return dateSoonStyle.Render(text)
 	default:
-		return dateNormalStyle.Render(text)
+		return dimStyle.Render(text)
 	}
 }
 

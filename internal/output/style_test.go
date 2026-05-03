@@ -88,7 +88,7 @@ func TestStyledDate_Buckets(t *testing.T) {
 		{"overdue", mustDate(2026, 5, 1), dateOverdueStyle},
 		{"today", mustDate(2026, 5, 3), dateTodayStyle},
 		{"soon", mustDate(2026, 5, 5), dateSoonStyle},
-		{"normal", mustDate(2026, 6, 1), dateNormalStyle},
+		{"normal", mustDate(2026, 6, 1), dimStyle},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
