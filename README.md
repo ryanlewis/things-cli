@@ -192,8 +192,11 @@ things project add "Launch site" --area Work --deadline 2026-05-01
 `things project edit <project>` updates a project via
 `things:///update-project`. Only the flags you pass are sent — unset fields
 stay untouched. An empty value clears the field (e.g. `--deadline ""`).
-Both require the Things auth token — enable *Things → Settings → General →
-Enable Things URLs*.
+
+> **Prerequisite:** `edit`, `project edit`, and `import` payloads with
+> `operation: update` require the Things auth token. Enable it once via
+> *Things → Settings → General → Enable Things URLs*. Without it, writes fail
+> with `update: auth token is required — enable Things URLs in Things → Settings → General …`.
 
 | Flag | `edit` | `project edit` | Description |
 | --- | --- | --- | --- |
