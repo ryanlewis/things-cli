@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 const (
 	TypeTask    = 0
@@ -31,6 +35,25 @@ func ThingsDateFromTime(t time.Time) ThingsDate {
 
 func (d ThingsDate) String() string {
 	return d.ToTime().Format("2006-01-02")
+}
+
+// MarshalJSON renders the date as YYYY-MM-DD so jq/agents/scripts see a real
+// date rather than the bit-encoded int.
+func (d ThingsDate) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+func (d *ThingsDate) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("ThingsDate: %w", err)
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return fmt.Errorf("ThingsDate: %w", err)
+	}
+	*d = ThingsDateFromTime(t)
+	return nil
 }
 
 var coreDataEpoch = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
