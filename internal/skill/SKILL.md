@@ -7,6 +7,7 @@ today, upcoming, projects, or areas on macOS.
 
 - Reads (`list`, `show`, `projects`, `areas`, `tags`, `search`) are safe — use freely.
 - Writes (`add`, `project add`, `edit`, `complete`, `cancel`, `log`, `open`) modify the user's real data. Confirm before destructive ones (`complete`, `cancel`, bulk `edit`).
+- `edit`, `project edit`, and `import` payloads with `operation: update` require *Things → Settings → General → Enable Things URLs*. The error to recognise: `update: auth token is required — enable Things URLs in Things → Settings → General …`.
 
 ## Output
 
@@ -83,6 +84,22 @@ Reschedule and tag an existing task:
 
 ```
 things edit "Ship release" --when tomorrow --add-tags "priority"
+things edit 3 --when monday              # weekday names work
+things edit 4 --when "next friday"
+```
+
+Reschedule several tasks at once (not transactional — partial failures stick):
+
+```
+things upcoming --area Work -j | jq -r '.[].uuid' | \
+  while read uuid; do things edit "$uuid" --when monday; done
+
+things import <<'JSON'
+[
+  {"type":"to-do","operation":"update","id":"<uuid-1>","attributes":{"when":"monday"}},
+  {"type":"to-do","operation":"update","id":"<uuid-2>","attributes":{"when":"tuesday"}}
+]
+JSON
 ```
 
 Pipe JSON to another tool:
