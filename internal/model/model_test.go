@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -40,6 +41,73 @@ func TestThingsDateEncoding(t *testing.T) {
 	want := ThingsDate(2026<<16 | 4<<12 | 14<<7)
 	if d != want {
 		t.Fatalf("encoding mismatch: got %d, want %d", d, want)
+	}
+}
+
+func TestThingsDateMarshalJSON(t *testing.T) {
+	d := ThingsDateFromTime(time.Date(2026, 5, 9, 0, 0, 0, 0, time.Local))
+	got, err := json.Marshal(d)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if want := `"2026-05-09"`; string(got) != want {
+		t.Fatalf("Marshal = %s, want %s", got, want)
+	}
+}
+
+func TestThingsDateUnmarshalJSON(t *testing.T) {
+	var d ThingsDate
+	if err := json.Unmarshal([]byte(`"2026-05-09"`), &d); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got, want := d.String(), "2026-05-09"; got != want {
+		t.Fatalf("Unmarshal -> String = %q, want %q", got, want)
+	}
+	want := ThingsDateFromTime(time.Date(2026, 5, 9, 0, 0, 0, 0, time.Local))
+	if d != want {
+		t.Fatalf("Unmarshal value = %d, want %d", d, want)
+	}
+}
+
+func TestThingsDateUnmarshalInvalid(t *testing.T) {
+	cases := []string{
+		`"2026/05/09"`,
+		`"not a date"`,
+		`12345`,
+	}
+	for _, in := range cases {
+		var d ThingsDate
+		if err := json.Unmarshal([]byte(in), &d); err == nil {
+			t.Errorf("Unmarshal(%s) succeeded, want error", in)
+		}
+	}
+}
+
+func TestThingsDateOmitemptyNil(t *testing.T) {
+	type holder struct {
+		StartDate *ThingsDate `json:"startDate,omitempty"`
+	}
+	got, err := json.Marshal(holder{})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(got) != `{}` {
+		t.Fatalf("Marshal of nil = %s, want {}", got)
+	}
+}
+
+func TestThingsDateRoundTripJSON(t *testing.T) {
+	in := ThingsDateFromTime(time.Date(2024, 2, 29, 0, 0, 0, 0, time.Local))
+	data, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var out ThingsDate
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if in != out {
+		t.Fatalf("round-trip mismatch: in=%d out=%d", in, out)
 	}
 }
 

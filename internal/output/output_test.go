@@ -45,17 +45,30 @@ func TestPrintTasksPlain(t *testing.T) {
 }
 
 func TestPrintTasksJSON(t *testing.T) {
-	tasks := []model.Task{{UUID: "u1", Title: "T1", Status: model.StatusOpen}}
+	tasks := []model.Task{{
+		UUID: "u1", Title: "T1", Status: model.StatusOpen,
+		StartDate: mustDate(2026, 5, 9),
+		Deadline:  mustDate(2026, 5, 20),
+	}}
 	var buf bytes.Buffer
 	if err := Print(&buf, tasks, true); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
+	out := buf.String()
+	for _, want := range []string{`"startDate": "2026-05-09"`, `"deadline": "2026-05-20"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("json missing %q:\n%s", want, out)
+		}
+	}
 	var got []model.Task
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
-		t.Fatalf("parse json: %v\n%s", err, buf.String())
+		t.Fatalf("parse json: %v\n%s", err, out)
 	}
 	if len(got) != 1 || got[0].UUID != "u1" || got[0].Title != "T1" {
 		t.Fatalf("unexpected json: %+v", got)
+	}
+	if got[0].StartDate == nil || got[0].StartDate.String() != "2026-05-09" {
+		t.Fatalf("startDate round-trip wrong: %+v", got[0].StartDate)
 	}
 }
 
@@ -181,11 +194,14 @@ func TestPrintTaskDetail(t *testing.T) {
 }
 
 func TestPrintTaskDetailJSON(t *testing.T) {
-	task := &model.Task{UUID: "u1", Title: "T1"}
+	task := &model.Task{UUID: "u1", Title: "T1", Deadline: mustDate(2026, 5, 20)}
 	items := []model.ChecklistItem{{UUID: "c1", Title: "step", Status: model.StatusOpen}}
 	var buf bytes.Buffer
 	if err := PrintTaskWithChecklist(&buf, task, items, true); err != nil {
 		t.Fatalf("PrintTaskWithChecklist: %v", err)
+	}
+	if want := `"deadline": "2026-05-20"`; !strings.Contains(buf.String(), want) {
+		t.Errorf("json missing %q:\n%s", want, buf.String())
 	}
 	var got struct {
 		UUID      string                `json:"uuid"`
