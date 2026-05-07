@@ -43,6 +43,26 @@ func NormalizeWhen(s string) (string, error) {
 	return v, nil
 }
 
+// ParseListDate parses a list-filter date (--on/--from/--to). Accepts
+// YYYY-MM-DD or RFC3339 (reduced to its date portion). Returns midnight in
+// the local timezone — callers convert into whichever representation they
+// need (e.g. model.ThingsDateFromTime). The flag name is used in error
+// messages so the user knows which input was bad.
+func ParseListDate(flag, s string) (time.Time, error) {
+	v := strings.TrimSpace(s)
+	if v == "" {
+		return time.Time{}, fmt.Errorf("--%s: date is empty", flag)
+	}
+	if t, ok := parseISO8601(v); ok {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local), nil
+	}
+	t, err := time.ParseInLocation("2006-01-02", v, time.Local)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("--%s: invalid date %q (expected YYYY-MM-DD)", flag, v)
+	}
+	return t, nil
+}
+
 // NormalizeDeadline validates and canonicalises a --deadline value. The URL
 // scheme accepts a date (YYYY-MM-DD) or English natural-language phrase.
 // RFC3339 inputs are reduced to their date component since deadlines have

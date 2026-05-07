@@ -229,6 +229,86 @@ func TestListTasksTagFilter(t *testing.T) {
 	}
 }
 
+func TestListTasksDateFilters(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('a', 'Work', 1, 0)`)
+
+	d1 := int64(model.ThingsDateFromTime(time.Date(2026, 5, 9, 0, 0, 0, 0, time.Local)))
+	d2 := int64(model.ThingsDateFromTime(time.Date(2026, 5, 10, 0, 0, 0, 0, time.Local)))
+	d3 := int64(model.ThingsDateFromTime(time.Date(2026, 5, 11, 0, 0, 0, 0, time.Local)))
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, startDate, area, "index") VALUES
+		('u-09', 'Sat', 0, 0, 0, 2, 0, ?, 'a', 1),
+		('u-10', 'Sun', 0, 0, 0, 2, 0, ?, 'a', 2),
+		('u-11', 'Mon', 0, 0, 0, 2, 0, ?, 'a', 3)`,
+		d1, d2, d3)
+
+	on09 := model.ThingsDate(d1)
+	on10 := model.ThingsDate(d2)
+
+	cases := []struct {
+		name   string
+		filter TaskFilter
+		want   []string
+	}{
+		{"on exact", TaskFilter{On: &on09}, []string{"u-09"}},
+		{"from inclusive", TaskFilter{From: &on10}, []string{"u-10", "u-11"}},
+		{"to inclusive", TaskFilter{To: &on10}, []string{"u-09", "u-10"}},
+		{"range weekend", TaskFilter{From: &on09, To: &on10}, []string{"u-09", "u-10"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.ListTasks("upcoming", tc.filter)
+			if err != nil {
+				t.Fatalf("ListTasks: %v", err)
+			}
+			if !sameSet(uuidsOf(got), tc.want) {
+				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
+			}
+		})
+	}
+}
+
+// On the deadlines view, --on/--from/--to filter against t.deadline rather
+// than t.startDate; verify we hit the right column.
+func TestListTasksDeadlinesDateFilters(t *testing.T) {
+	d := newTestDB(t)
+
+	d1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+	d2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, deadline, "index") VALUES
+		('dl-1', 'A', 0, 0, 0, ?, 1),
+		('dl-2', 'B', 0, 0, 0, ?, 2)`,
+		d1, d2)
+
+	on := model.ThingsDate(d1)
+	got, err := d.ListTasks("deadlines", TaskFilter{On: &on})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if !sameSet(uuidsOf(got), []string{"dl-1"}) {
+		t.Errorf("deadlines --on: got %v", uuidsOf(got))
+	}
+}
+
+func TestDateFilterableView(t *testing.T) {
+	allowed := []string{"today", "upcoming", "anytime", "someday", "deadlines", "project"}
+	denied := []string{"inbox", "trash", "logbook", "bogus"}
+	for _, v := range allowed {
+		if !DateFilterableView(v) {
+			t.Errorf("%q: expected filterable", v)
+		}
+	}
+	for _, v := range denied {
+		if DateFilterableView(v) {
+			t.Errorf("%q: expected NOT filterable", v)
+		}
+	}
+}
+
 func TestTagGroupConcatDelimiter(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)

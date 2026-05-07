@@ -164,6 +164,69 @@ func TestRunListWithTagFilter(t *testing.T) {
 	}
 }
 
+func TestRunListDateFilterEndToEnd(t *testing.T) {
+	database := seedFullDB(t)
+	today := time.Now().Format("2006-01-02")
+	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+
+	// task-1 in seedFullDB is scheduled for today — --on today should match,
+	// --on tomorrow should not. Assert via the last-list cache, which records
+	// exactly the uuids `list` returned.
+	if err := runWith(t, database, "list", "today", "--on", today); err != nil {
+		t.Fatalf("run list today --on today: %v", err)
+	}
+	got, err := cache.ReadLastList()
+	if err != nil {
+		t.Fatalf("ReadLastList: %v", err)
+	}
+	if len(got) != 1 || got[0] != "task-1" {
+		t.Errorf("--on today: got %v, want [task-1]", got)
+	}
+
+	if err := runWith(t, database, "list", "today", "--on", tomorrow); err != nil {
+		t.Fatalf("run list today --on tomorrow: %v", err)
+	}
+	got, err = cache.ReadLastList()
+	if err != nil {
+		t.Fatalf("ReadLastList: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("--on tomorrow: got %v, want empty", got)
+	}
+}
+
+func TestRunListDateFilterRejectsView(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "list", "inbox", "--on", "2026-05-09")
+	if err == nil || !strings.Contains(err.Error(), "not supported on the \"inbox\" view") {
+		t.Fatalf("expected view-rejection error, got: %v", err)
+	}
+}
+
+func TestRunListDateFilterRejectsOnWithRange(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "list", "upcoming", "--on", "2026-05-09", "--from", "2026-05-09")
+	if err == nil || !strings.Contains(err.Error(), "--on cannot be combined with --from/--to") {
+		t.Fatalf("expected mutex error, got: %v", err)
+	}
+}
+
+func TestRunListDateFilterRejectsBadDate(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "list", "upcoming", "--from", "tomorrow")
+	if err == nil || !strings.Contains(err.Error(), "invalid date") {
+		t.Fatalf("expected invalid-date error, got: %v", err)
+	}
+}
+
+func TestRunListDateFilterRejectsInvertedRange(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "list", "upcoming", "--from", "2026-05-10", "--to", "2026-05-09")
+	if err == nil || !strings.Contains(err.Error(), "is after --to") {
+		t.Fatalf("expected inverted-range error, got: %v", err)
+	}
+}
+
 func TestResolveTaskAmbiguousNonInteractive(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	for _, uuid := range []string{"a1", "a2"} {
