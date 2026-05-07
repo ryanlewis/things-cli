@@ -12,6 +12,27 @@ type TaskFilter struct {
 	Project string
 	Area    string
 	Tag     string
+
+	On   *model.ThingsDate
+	From *model.ThingsDate
+	To   *model.ThingsDate
+}
+
+// dateFilterableViews lists the views where --on/--from/--to make sense.
+// Excluded: inbox tasks have no startDate; trash is trashed-only; logbook
+// items have a stopDate but no meaningful startDate filter.
+var dateFilterableViews = map[string]bool{
+	"today":     true,
+	"upcoming":  true,
+	"anytime":   true,
+	"someday":   true,
+	"deadlines": true,
+	"project":   true,
+}
+
+// DateFilterableView reports whether --on/--from/--to apply to the view.
+func DateFilterableView(view string) bool {
+	return dateFilterableViews[view]
 }
 
 const baseTaskQuery = `
@@ -138,6 +159,27 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	if opts.Tag != "" {
 		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ?)"
 		args = append(args, opts.Tag)
+	}
+
+	if opts.On != nil || opts.From != nil || opts.To != nil {
+		// ThingsDate is bit-encoded year<<16|month<<12|day<<7 — directly
+		// comparable across (year, month, day), so no decode is needed.
+		col := "t.startDate"
+		if view == "deadlines" {
+			col = "t.deadline"
+		}
+		if opts.On != nil {
+			where += " AND " + col + " = ?"
+			args = append(args, int64(*opts.On))
+		}
+		if opts.From != nil {
+			where += " AND " + col + " >= ?"
+			args = append(args, int64(*opts.From))
+		}
+		if opts.To != nil {
+			where += " AND " + col + " <= ?"
+			args = append(args, int64(*opts.To))
+		}
 	}
 
 	orderBy := viewOrderBy[view]

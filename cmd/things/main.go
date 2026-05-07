@@ -102,6 +102,9 @@ type ListCmd struct {
 	Project string   `help:"Filter by project name or UUID." short:"p"`
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
+	On      string   `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline. Mutually exclusive with --from/--to."`
+	From    string   `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
+	To      string   `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
 }
 
 func (c *ListCmd) Run(d *Deps) error {
@@ -125,16 +128,60 @@ func (c *ListCmd) Run(d *Deps) error {
 		}
 	}
 
-	tasks, err := database.ListTasks(view, db.TaskFilter{
+	filter := db.TaskFilter{
 		Project: project,
 		Area:    c.Area,
 		Tag:     c.Tag,
-	})
+	}
+	if err := applyDateFilters(&filter, view, c.On, c.From, c.To); err != nil {
+		return err
+	}
+
+	tasks, err := database.ListTasks(view, filter)
 	if err != nil {
 		return err
 	}
 	cacheTaskUUIDs(tasks)
 	return output.Print(d.Stdout, tasks, d.JSON)
+}
+
+func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
+	if on == "" && from == "" && to == "" {
+		return nil
+	}
+	if !db.DateFilterableView(view) {
+		return fmt.Errorf("--on/--from/--to are not supported on the %q view", view)
+	}
+	if on != "" && (from != "" || to != "") {
+		return fmt.Errorf("--on cannot be combined with --from/--to")
+	}
+
+	parse := func(flag, raw string) (*model.ThingsDate, error) {
+		if raw == "" {
+			return nil, nil
+		}
+		t, err := things.ParseListDate(flag, raw)
+		if err != nil {
+			return nil, err
+		}
+		d := model.ThingsDateFromTime(t)
+		return &d, nil
+	}
+
+	var err error
+	if filter.On, err = parse("on", on); err != nil {
+		return err
+	}
+	if filter.From, err = parse("from", from); err != nil {
+		return err
+	}
+	if filter.To, err = parse("to", to); err != nil {
+		return err
+	}
+	if filter.From != nil && filter.To != nil && *filter.From > *filter.To {
+		return fmt.Errorf("--from %s is after --to %s", filter.From, filter.To)
+	}
+	return nil
 }
 
 type ProjectsCmd struct {
