@@ -50,3 +50,28 @@ release:
     {{ readFile (printf ".github/releases/%s.md" .Tag) }}
 
     ---
+
+homebrew_casks:
+  - name: things
+    binaries:
+      - things
+    repository:
+      owner: ryanlewis
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/ryanlewis/things-cli
+    description: Manage your Things3 to-dos from the terminal.
+    url:
+      verified: github.com/ryanlewis/things-cli/
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "chore(brew): {{ .ProjectName }} {{ .Tag }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/things"]
+          end

@@ -4,8 +4,8 @@ icon: fas fa-download
 order: 1
 ---
 
-`things-cli` runs on macOS and ships as a single static Go binary. Three
-ways to install — pick whichever fits your workflow.
+`things-cli` runs on macOS and ships as a single static Go binary. Pick
+whichever install method fits your workflow.
 
 > **You'll need Things3.** This CLI talks to the
 > [Things3 app by Cultured Code](https://culturedcode.com/things/) —
@@ -14,6 +14,22 @@ ways to install — pick whichever fits your workflow.
 > to exist. `things-cli` is an independent third-party tool and is not
 > affiliated with Cultured Code.
 {: .prompt-info }
+
+## Homebrew
+
+```sh
+brew install ryanlewis/tap/things
+```
+
+Or, if you'd rather add the tap explicitly:
+
+```sh
+brew tap ryanlewis/tap
+brew install things
+```
+
+The cask is auto-published from each tagged release into
+[`ryanlewis/homebrew-tap`](https://github.com/ryanlewis/homebrew-tap).
 
 ## One-line install script
 
