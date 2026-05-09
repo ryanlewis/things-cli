@@ -62,7 +62,7 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
     homepage: https://github.com/ryanlewis/things-cli
-    description: CLI for Things3 on macOS — read your Things3 database and create/edit tasks from the terminal.
+    description: Manage your Things3 to-dos from the terminal.
     url:
       verified: github.com/ryanlewis/things-cli/
     commit_author:
