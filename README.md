@@ -395,7 +395,13 @@ embedded in the binary — so a plain `things` upgrade refreshes it; re-run
 
 ## Install
 
-One-line install (downloads the latest release, verifies checksums,
+With Homebrew:
+
+```sh
+brew install ryanlewis/tap/things
+```
+
+Or one-line install (downloads the latest release, verifies checksums,
 installs to `/usr/local/bin`):
 
 ```sh
