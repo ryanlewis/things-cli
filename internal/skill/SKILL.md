@@ -33,12 +33,16 @@ things search <query>
 
 things add <title> [--notes --when --deadline --tags --checklist --project --heading --list]
 things project add <title> [--notes --when --deadline --tags --area --todos]
-things project edit <project> [--title --notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal ...]
-things edit <task> [--title --notes --when --deadline --tags --add-tags --list --heading --complete --cancel --duplicate --reveal ...]
+things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal]
+things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal]
 things complete <task>
 things cancel <task>
 things log                      # move Today → Logbook
-things open <ref|list>          # reveal task/project/area/tag/built-in list in the app
+things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
+    # ref: task/project UUID, numeric list index, title, or built-in list name
+    #      (today, inbox, upcoming, anytime, someday, logbook, trash, deadlines)
+    # exactly one of <ref> / -p / -a / -t / -q is required
+    # --filter narrows the opened list by tags; --background keeps focus elsewhere
 
 things import [--file F] [--reveal] < payload.json
     # batch create/update via the Things JSON URL scheme
