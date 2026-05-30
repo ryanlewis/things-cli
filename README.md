@@ -411,6 +411,52 @@ The skill body is [`internal/skill/SKILL.md`](internal/skill/SKILL.md),
 embedded in the binary — so a plain `things` upgrade refreshes it; re-run
 `skill install` to pick up the new version.
 
+## MCP server
+
+`things mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io)
+server over stdio, exposing the **read-only** side of the CLI as typed tools.
+It's aimed at MCP hosts that can't shell out — chiefly **Claude Desktop** — but
+hosts that can (Cursor, Claude Code) get a typed alternative to driving the CLI
+via Bash. The agent skill above and the MCP server are independent; use whichever
+your host supports.
+
+Tools (results are the same JSON the CLI emits with `--json`):
+
+| Tool | Mirrors | Arguments |
+| --- | --- | --- |
+| `things_list` | `things <view>` | `view`, `project`, `area`, `tag`, `on`, `from`, `to` (all optional) |
+| `things_show` | `things show` | `task` (UUID or title) |
+| `things_search` | `things search` | `query` |
+| `things_projects` | `things projects` | `area`, `completed` (optional) |
+| `things_areas` | `things areas` | — |
+| `things_tags` | `things tags` | — |
+
+The server is **read-only** (no add/complete/cancel/edit) and **fails fast** at
+startup with a clear error if the Things3 database can't be found or opened. It
+requires Things3 on macOS, like the rest of the CLI.
+
+Point your MCP host at the `things` binary you already installed. **Claude
+Desktop** — edit `claude_desktop_config.json` (Settings → Developer → Edit
+Config):
+
+```json
+{
+  "mcpServers": {
+    "things": {
+      "command": "things",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**Cursor** — add the same block to `~/.cursor/mcp.json` (global) or
+`.cursor/mcp.json` (project). The generic form for any MCP host is identical:
+command `things`, args `["mcp"]`. If `things` isn't on the host's `PATH`, use an
+absolute path (e.g. `"command": "/opt/homebrew/bin/things"`) and find yours with
+`which things`. To run against a specific database, add `"--db", "/path/to/main.sqlite"`
+before `"mcp"` in `args`.
+
 ## How it works
 
 - **Reads** go through `modernc.org/sqlite` (pure Go, no cgo) with
