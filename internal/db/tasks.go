@@ -266,7 +266,9 @@ func (d *DB) collectTasks(query string, args ...any) ([]model.Task, error) {
 	}
 	defer rows.Close()
 
-	var tasks []model.Task
+	// Initialize empty (not nil) so an empty result set renders as a JSON `[]`
+	// rather than `null` for --json / MCP consumers.
+	tasks := []model.Task{}
 	for rows.Next() {
 		t, err := scanTask(rows)
 		if err != nil {
