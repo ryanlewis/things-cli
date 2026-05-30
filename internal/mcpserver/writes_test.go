@@ -17,18 +17,17 @@ import (
 // method instead of shelling out to open/osascript, so write handlers can be
 // tested for the params they forward.
 type recordingWriter struct {
-	addTask         *things.AddParams
-	addProject      *things.AddProjectParams
-	updateTask      *things.UpdateParams
-	updateProject   *things.UpdateProjectParams
-	completeTask    string
-	completeProject string
-	cancelTask      string
-	logged          bool
-	importData      string
-	importToken     string
-	importReveal    bool
-	err             error // returned by every method when set
+	addTask       *things.AddParams
+	addProject    *things.AddProjectParams
+	updateTask    *things.UpdateParams
+	updateProject *things.UpdateProjectParams
+	completeTask  string
+	cancelTask    string
+	logged        bool
+	importData    string
+	importToken   string
+	importReveal  bool
+	err           error // returned by every method when set
 }
 
 func (w *recordingWriter) AddTask(p things.AddParams) error { w.addTask = &p; return w.err }
@@ -41,10 +40,9 @@ func (w *recordingWriter) UpdateProject(p things.UpdateProjectParams) error {
 	w.updateProject = &p
 	return w.err
 }
-func (w *recordingWriter) CompleteTask(uuid string) error    { w.completeTask = uuid; return w.err }
-func (w *recordingWriter) CompleteProject(uuid string) error { w.completeProject = uuid; return w.err }
-func (w *recordingWriter) CancelTask(uuid string) error      { w.cancelTask = uuid; return w.err }
-func (w *recordingWriter) LogCompleted() error               { w.logged = true; return w.err }
+func (w *recordingWriter) CompleteTask(uuid string) error { w.completeTask = uuid; return w.err }
+func (w *recordingWriter) CancelTask(uuid string) error   { w.cancelTask = uuid; return w.err }
+func (w *recordingWriter) LogCompleted() error            { w.logged = true; return w.err }
 func (w *recordingWriter) ImportJSON(data, token string, reveal bool) error {
 	w.importData, w.importToken, w.importReveal = data, token, reveal
 	return w.err
@@ -140,6 +138,23 @@ func TestToolsetGating(t *testing.T) {
 				if !got[w] {
 					t.Errorf("missing tool %q (got %v)", w, got)
 				}
+			}
+		})
+	}
+}
+
+// TestEveryToolsetRegistersTools guards against AllToolsets drifting from
+// registerTools: every declared toolset must contribute at least one tool when
+// writes are enabled. A name added to AllToolsets without a matching
+// registration branch (or a typo in either) would otherwise pass validation yet
+// expose nothing.
+func TestEveryToolsetRegistersTools(t *testing.T) {
+	noOpen := func() (mcpserver.Backend, error) { return fakeBackend{}, nil }
+	for _, ts := range mcpserver.AllToolsets {
+		t.Run(ts, func(t *testing.T) {
+			cs := sessionCfg(t, mcpserver.Config{Open: noOpen, Toolsets: []string{ts}, EnableWrites: true})
+			if got := toolNames(t, cs); len(got) == 0 {
+				t.Errorf("toolset %q registered no tools", ts)
 			}
 		})
 	}
@@ -281,26 +296,23 @@ func TestCompleteForwarding(t *testing.T) {
 		if w.completeTask != "task-1" {
 			t.Errorf("CompleteTask = %q, want task-1", w.completeTask)
 		}
-		if w.completeProject != "" {
-			t.Errorf("CompleteProject should not be called for a to-do")
-		}
 		if !strings.Contains(text, "Completed to-do") {
 			t.Errorf("result text = %q", text)
 		}
 	})
 
-	t.Run("project completes cascade", func(t *testing.T) {
+	t.Run("project is rejected (route via edit_project)", func(t *testing.T) {
 		w := &recordingWriter{}
 		cs := writeSession(t, w, openFake(fakeBackend{task: &model.Task{UUID: "proj-1", Title: "Chores", Type: model.TypeProject}}))
 		text, isErr := call(t, cs, "things_complete", map[string]any{"task": "proj-1"})
-		if isErr {
-			t.Fatalf("unexpected tool error: %s", text)
+		if !isErr {
+			t.Fatalf("expected error completing a project, got: %s", text)
 		}
-		if w.completeProject != "proj-1" {
-			t.Errorf("CompleteProject = %q, want proj-1", w.completeProject)
+		if !strings.Contains(text, "is a project") {
+			t.Errorf("error should point at edit_project: %s", text)
 		}
-		if !strings.Contains(text, "Completed project") {
-			t.Errorf("result text = %q", text)
+		if w.completeTask != "" {
+			t.Errorf("CompleteTask should not be called for a project")
 		}
 	})
 }

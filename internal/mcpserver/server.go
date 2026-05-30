@@ -50,7 +50,6 @@ type Writer interface {
 	UpdateTask(things.UpdateParams) error
 	UpdateProject(things.UpdateProjectParams) error
 	CompleteTask(uuid string) error
-	CompleteProject(uuid string) error
 	CancelTask(uuid string) error
 	LogCompleted() error
 	ImportJSON(data, authToken string, reveal bool) error
@@ -65,10 +64,9 @@ func (thingsWriter) UpdateTask(p things.UpdateParams) error     { return things.
 func (thingsWriter) UpdateProject(p things.UpdateProjectParams) error {
 	return things.UpdateProject(p)
 }
-func (thingsWriter) CompleteTask(uuid string) error    { return things.CompleteTask(uuid) }
-func (thingsWriter) CompleteProject(uuid string) error { return things.CompleteProject(uuid) }
-func (thingsWriter) CancelTask(uuid string) error      { return things.CancelTask(uuid) }
-func (thingsWriter) LogCompleted() error               { return things.LogCompleted() }
+func (thingsWriter) CompleteTask(uuid string) error { return things.CompleteTask(uuid) }
+func (thingsWriter) CancelTask(uuid string) error   { return things.CancelTask(uuid) }
+func (thingsWriter) LogCompleted() error            { return things.LogCompleted() }
 func (thingsWriter) ImportJSON(data, authToken string, reveal bool) error {
 	return things.ImportJSON(data, authToken, reveal)
 }

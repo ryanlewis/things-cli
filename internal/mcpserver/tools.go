@@ -59,8 +59,8 @@ const (
 		"Requires the Things URL auth token (Things → Settings → General → Enable Things URLs). " +
 		"Submitted asynchronously; not confirmed by this tool."
 	completeDesc = "Mark a Things3 to-do as completed. MUTATES your Things database. " +
-		"Identify it by UUID (preferred) or title. If the target is a project, the project AND all of its to-dos are " +
-		"completed. Applied synchronously via AppleScript (requires Things3 to be running)."
+		"Identify it by UUID (preferred) or title. Applies to to-dos only — complete a project (which also completes " +
+		"all its to-dos) with things_edit_project (complete=true). Applied synchronously via AppleScript (requires Things3 to be running)."
 	cancelDesc = "Cancel a Things3 to-do. MUTATES your Things database. " +
 		"Identify it by UUID (preferred) or title. Applies to to-dos only — cancel a project with things_edit_project " +
 		"(cancel=true). Applied synchronously via AppleScript (requires Things3 to be running)."
@@ -302,10 +302,10 @@ func (t toolset) edit(_ context.Context, _ *mcp.CallToolRequest, in editInput) (
 	if err != nil {
 		return nil, nil, err
 	}
-	token, err := b.GetAuthToken()
-	if err != nil {
-		return nil, nil, err
-	}
+	// Ignore a token-read error like the CLI's EditCmd (`token, _ :=`): a missing
+	// token yields "", and things.UpdateTask then surfaces the actionable
+	// "enable Things URLs" guidance rather than a raw DB error.
+	token, _ := b.GetAuthToken()
 	if err := t.write.UpdateTask(things.UpdateParams{
 		ID:               task.UUID,
 		AuthToken:        token,
@@ -347,10 +347,7 @@ func (t toolset) editProject(_ context.Context, _ *mcp.CallToolRequest, in editP
 	if project.Type != model.TypeProject {
 		return nil, nil, fmt.Errorf("not a project: %s", project.Title)
 	}
-	token, err := b.GetAuthToken()
-	if err != nil {
-		return nil, nil, err
-	}
+	token, _ := b.GetAuthToken() // see edit(): a token-read error is non-fatal, mirroring the CLI
 	if err := t.write.UpdateProject(things.UpdateProjectParams{
 		ID:           project.UUID,
 		AuthToken:    token,
@@ -384,11 +381,12 @@ func (t toolset) complete(_ context.Context, _ *mcp.CallToolRequest, in complete
 	if err != nil {
 		return nil, nil, err
 	}
+	// Completing a project cascades to every to-do inside it. The CLI guards
+	// that behind an interactive y/N and refuses it non-interactively; MCP has
+	// no prompt, so route project completion through the explicit, project-named
+	// tool rather than doing the cascade silently here.
 	if task.Type == model.TypeProject {
-		if err := t.write.CompleteProject(task.UUID); err != nil {
-			return nil, nil, err
-		}
-		return textResult(fmt.Sprintf("Completed project %q (%s) and all of its to-dos.", task.Title, task.UUID)), nil, nil
+		return nil, nil, fmt.Errorf("%q is a project; complete it (and all its to-dos) with things_edit_project (complete=true)", task.Title)
 	}
 	if err := t.write.CompleteTask(task.UUID); err != nil {
 		return nil, nil, err
@@ -431,10 +429,9 @@ func (t toolset) importJSON(_ context.Context, _ *mcp.CallToolRequest, in import
 		return nil, nil, err
 	}
 	defer func() { _ = b.Close() }()
-	token, err := b.GetAuthToken()
-	if err != nil {
-		return nil, nil, err
-	}
+	// Send the token when present but don't fail on a read error: a create-only
+	// payload needs no token, and the CLI's ImportCmd warns-and-continues too.
+	token, _ := b.GetAuthToken()
 	if err := t.write.ImportJSON(in.Data, token, in.Reveal); err != nil {
 		return nil, nil, err
 	}
@@ -552,6 +549,12 @@ func validateImportPayload(data string) error {
 	}
 	if trimmed[0] != '[' {
 		return fmt.Errorf("import: data must be a JSON array of items")
+	}
+	// A valid JSON array starting with '[' is at minimum "[]"; reject an empty
+	// one (as the CLI's validateImportJSON does) so a no-op import isn't reported
+	// back as submitted.
+	if len(strings.TrimSpace(trimmed[1:len(trimmed)-1])) == 0 {
+		return fmt.Errorf("import: data array is empty")
 	}
 	return nil
 }
