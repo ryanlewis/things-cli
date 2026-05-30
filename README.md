@@ -347,6 +347,36 @@ flags you pass are sent, so unset fields stay untouched. Supported flags:
 the Things auth token — enable *Things → Settings → General → Enable Things
 URLs*.
 
+### Shell completions
+
+`things completions <bash|zsh|fish>` prints a completion script for the named
+shell. The script delegates back to `things` at completion time, so it never
+goes stale as the command surface changes — `things <TAB>` completes
+subcommands and flag names, and a flag's values complete once you've typed it
+(`things list --color <TAB>` → `auto`, `always`, `never`).
+
+The Homebrew cask installs the binary but doesn't generate completions yet —
+that's a planned follow-up. Until it lands, and on every install path, load the
+script yourself. Completion shells out to `things` by name, so it works as long
+as `things` is on your `PATH` (the Homebrew, `go install`, and `make install`
+paths all put it there):
+
+```sh
+# bash — add to ~/.bashrc (complete -C is a bash builtin; no extra package needed)
+source <(things completions bash)
+
+# zsh — add to ~/.zshrc, after compinit runs (the stub's bashcompinit needs compdef)
+source <(things completions zsh)
+
+# fish — load now, and/or persist for new shells
+things completions fish | source
+mkdir -p ~/.config/fish/completions
+things completions fish > ~/.config/fish/completions/things.fish
+```
+
+Completion runs entirely from the static command tree — it never reads the
+Things database, so project, area, and tag *names* are not (yet) completed.
+
 ## Agent skill
 
 `things-cli` bundles an agent skill that teaches Claude Code, OpenAI's Codex

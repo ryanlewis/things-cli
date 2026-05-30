@@ -13,6 +13,8 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/mattn/go-isatty"
+	"github.com/willabides/kongplete"
+
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -49,6 +51,8 @@ type CLI struct {
 	Import   ImportCmd   `cmd:"" help:"Batch create/update via the Things JSON URL scheme. Reads JSON from stdin or --file."`
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
+
+	Completions CompletionsCmd `cmd:"" help:"Print a shell completion script (bash|zsh|fish)."`
 }
 
 // Deps carries cross-cutting state into each command's Run method. The DB is
@@ -718,7 +722,7 @@ func (c *OpenCmd) Run(d *Deps) error {
 
 func main() {
 	var cli CLI
-	ctx := kong.Parse(&cli,
+	parser := kong.Must(&cli,
 		kong.Name("things"),
 		kong.Description("CLI for Things3"),
 		kong.UsageOnError(),
@@ -728,6 +732,15 @@ func main() {
 			"skill_agents":  skill.AgentNames(),
 		},
 	)
+
+	// Answer shell completion requests. When the shell invokes us with COMP_LINE
+	// set — via the script emitted by `things completions <shell>` — this
+	// computes candidates from the command tree and exits. For normal
+	// invocations COMP_LINE is unset and this is a no-op.
+	kongplete.Complete(parser)
+
+	ctx, err := parser.Parse(os.Args[1:])
+	parser.FatalIfErrorf(err)
 
 	if err := output.SetColorMode(cli.Color); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

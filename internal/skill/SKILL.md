@@ -115,6 +115,10 @@ Pipe JSON to another tool:
 things --json list today | jq '.[] | .title'
 ```
 
+## Shell completions
+
+`things completions <bash|zsh|fish>` prints a completion script for that shell. It delegates back to the binary (which must be on `PATH`), so it stays in sync with the CLI surface. The Homebrew cask installs the binary but doesn't generate completions yet (a planned follow-up); for now the user loads it with `source <(things completions zsh)` (bash/zsh) or `things completions fish | source`. Completion is flag/subcommand-name only — it never reads the Things database.
+
 ## Tips
 
 - Prefer `--json` in scripted contexts.
