@@ -355,10 +355,10 @@ goes stale as the command surface changes — `things <TAB>` completes
 subcommands and flag names, and a flag's values complete once you've typed it
 (`things list --color <TAB>` → `auto`, `always`, `never`).
 
-Once the Homebrew cask wiring lands, cask users will get this with no extra
-steps. Until then — and on every other install path — load the script
-yourself. Completion shells out to `things` by name, so it works as long as
-`things` is on your `PATH` (the Homebrew, `go install`, and `make install`
+The Homebrew cask installs the binary but doesn't generate completions yet —
+that's a planned follow-up. Until it lands, and on every install path, load the
+script yourself. Completion shells out to `things` by name, so it works as long
+as `things` is on your `PATH` (the Homebrew, `go install`, and `make install`
 paths all put it there):
 
 ```sh
