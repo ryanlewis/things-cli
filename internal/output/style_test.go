@@ -1,15 +1,28 @@
 package output
 
 import (
+	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
+
+// TestMain forces a deterministic no-color baseline for the output package
+// tests. Lipgloss v2 renders full-fidelity ANSI unconditionally; stripping
+// happens at write time according to the active color profile (see style.go).
+// The default profile is auto-detected from os.Stdout, so without this the
+// layout/content assertions would depend on whether the test process is
+// attached to a TTY (interactive/PTY runner) or a pipe (CI). Color behavior is
+// covered explicitly by TestColorMode_* which set their own mode.
+func TestMain(m *testing.M) {
+	_ = SetColorMode("never")
+	os.Exit(m.Run())
+}
 
 func TestSetColorMode(t *testing.T) {
 	t.Cleanup(func() { _ = SetColorMode("never") })
@@ -35,50 +48,113 @@ func TestSetColorMode(t *testing.T) {
 	}
 }
 
-func TestStyledStatus_NeverMode(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+// In v2, styles always render full-fidelity ANSI; stripping/downsampling happens
+// at write time via the color profile. These tests therefore assert on the bytes
+// that reach the writer (via Print), not on the raw output of style helpers.
 
+func TestColorMode_Never_StripsANSI(t *testing.T) {
+	t.Cleanup(func() { _ = SetColorMode("never") })
 	if err := SetColorMode("never"); err != nil {
 		t.Fatal(err)
 	}
-	got := styledStatus(model.StatusCompleted)
-	if strings.Contains(got, "\x1b[") {
-		t.Errorf("expected no ANSI escapes in never mode, got %q", got)
+	var buf bytes.Buffer
+	tasks := []model.Task{{UUID: "u1", Title: "Done", Status: model.StatusCompleted}}
+	if err := Print(&buf, tasks, false); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(got, "[x]") {
-		t.Errorf("expected glyph [x] in output, got %q", got)
+	out := buf.String()
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("expected no ANSI escapes in never mode, got %q", out)
+	}
+	if !strings.Contains(out, "[x]") {
+		t.Errorf("expected glyph [x] in output, got %q", out)
 	}
 }
 
-func TestStyledStatus_AlwaysMode(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(prev)
-	})
-
+func TestColorMode_Always_EmitsANSI(t *testing.T) {
+	t.Cleanup(func() { _ = SetColorMode("never") })
 	if err := SetColorMode("always"); err != nil {
 		t.Fatal(err)
 	}
-	got := styledStatus(model.StatusCompleted)
-	if !strings.Contains(got, "\x1b[") {
-		t.Errorf("expected ANSI escapes in always mode, got %q", got)
+	var buf bytes.Buffer
+	// The tag is styled with a pure foreground color (SGR 33), unlike the
+	// completed title which carries only faint/strikethrough decoration. Asserting
+	// the tag's color sequence proves always-mode emits *color*, not merely text
+	// decoration that would survive an accidental downsample to ASCII.
+	tasks := []model.Task{{UUID: "u1", Title: "Done", Status: model.StatusCompleted, Tags: []string{"tag"}}}
+	if err := Print(&buf, tasks, false); err != nil {
+		t.Fatal(err)
+	}
+	if out := buf.String(); !strings.Contains(out, "\x1b[33m") {
+		t.Errorf("expected the tag color (SGR 33) in always mode, got %q", out)
+	}
+}
+
+func TestColorMode_Always_TaskDetail(t *testing.T) {
+	t.Cleanup(func() { _ = SetColorMode("never") })
+	if err := SetColorMode("always"); err != nil {
+		t.Fatal(err)
+	}
+	// The detail view styles tags with a pure foreground color (SGR 33); assert
+	// it survives the always-mode (TrueColor) writer on the PrintTaskWithChecklist
+	// path, which is distinct from the printTasks path.
+	task := &model.Task{UUID: "u1", Title: "T1", Tags: []string{"tag"}}
+	var buf bytes.Buffer
+	if err := PrintTaskWithChecklist(&buf, task, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if out := buf.String(); !strings.Contains(out, "\x1b[33m") {
+		t.Errorf("expected the tag color (SGR 33) in always-mode detail, got %q", out)
+	}
+}
+
+func TestColorMode_Auto_StripsWhenNonTTY(t *testing.T) {
+	// "auto" detects from os.Stdout. Point stdout at a pipe (a non-TTY) and clear
+	// any color-forcing env so detection is deterministic, then confirm auto
+	// strips ANSI — the `things ... | cat` / redirect-to-file path. This covers
+	// the default real-CLI branch (colorprofile.Detect), which the never/always
+	// tests bypass by pinning a static profile.
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TTY_FORCE", "")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = orig
+		_ = w.Close()
+		_ = r.Close()
+		_ = SetColorMode("never")
+	})
+
+	if err := SetColorMode("auto"); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	tasks := []model.Task{{UUID: "u1", Title: "Done", Status: model.StatusCompleted}}
+	if err := Print(&buf, tasks, false); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("auto mode on a non-TTY should strip ANSI, got %q", out)
+	}
+	if !strings.Contains(out, "[x]") {
+		t.Errorf("expected glyph [x] in output, got %q", out)
 	}
 }
 
 func TestStyledDate_Buckets(t *testing.T) {
 	prevNow := nowFn
-	prevProfile := lipgloss.ColorProfile()
-	t.Cleanup(func() {
-		nowFn = prevNow
-		lipgloss.SetColorProfile(prevProfile)
-	})
+	t.Cleanup(func() { nowFn = prevNow })
 
 	// Pin "now" to 2026-05-03 (Sunday).
 	nowFn = func() time.Time {
 		return time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local)
 	}
-	lipgloss.SetColorProfile(termenv.TrueColor)
 
 	cases := []struct {
 		name string
@@ -113,15 +189,15 @@ func TestStyledDate_Buckets(t *testing.T) {
 }
 
 func TestStyledTags(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-	_ = SetColorMode("never")
-
 	if got := styledTags(nil); got != "" {
 		t.Errorf("empty tags should render empty, got %q", got)
 	}
+	// In v2 styledTags always wraps the bracketed content in tag styling, so the
+	// expected value is that same render. Comparing against tagStyle.Render keeps
+	// v1's exact-equality scrutiny (catching a missing/extra bracket or stray
+	// content) without depending on the color mode.
 	got := styledTags([]string{"a", "b"})
-	if got != "[a, b]" {
-		t.Errorf("styledTags = %q, want %q", got, "[a, b]")
+	if want := tagStyle.Render("[a, b]"); got != want {
+		t.Errorf("styledTags = %q, want %q", got, want)
 	}
 }

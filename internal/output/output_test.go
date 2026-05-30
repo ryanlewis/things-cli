@@ -193,6 +193,29 @@ func TestPrintTaskDetail(t *testing.T) {
 	}
 }
 
+func TestPrintTaskDetail_StripsAnsiInUserContent(t *testing.T) {
+	// Untrusted task content (from the Things DB) is routed through the same
+	// colorprofile.Writer as styled output, so literal ANSI escapes embedded in a
+	// note are stripped under --color=never / non-TTY instead of being injected
+	// into the terminal. TestMain pins "never".
+	task := &model.Task{
+		UUID:  "u1",
+		Title: "T1",
+		Notes: "before\x1b[31mRED\x1b[mafter",
+	}
+	var buf bytes.Buffer
+	if err := PrintTaskWithChecklist(&buf, task, nil, false); err != nil {
+		t.Fatalf("PrintTaskWithChecklist: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("expected ANSI stripped from note content, got %q", out)
+	}
+	if !strings.Contains(out, "beforeREDafter") {
+		t.Errorf("expected note text preserved, got %q", out)
+	}
+}
+
 func TestPrintTaskDetailJSON(t *testing.T) {
 	task := &model.Task{UUID: "u1", Title: "T1", Deadline: mustDate(2026, 5, 20)}
 	items := []model.ChecklistItem{{UUID: "c1", Title: "step", Status: model.StatusOpen}}
