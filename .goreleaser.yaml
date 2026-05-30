@@ -55,6 +55,14 @@ homebrew_casks:
   - name: things
     binaries:
       - things
+    # Run `things completions <shell>` at cask install time to drop bash/zsh/fish
+    # completion scripts into the Homebrew prefix. `<shell>` is a positional arg
+    # (shell_parameter_format: arg) — matches the CLI added in #88 PR 1.
+    generate_completions_from_executable:
+      args: [completions]
+      base_name: things
+      shell_parameter_format: arg
+      shells: [bash, zsh, fish]
     repository:
       owner: ryanlewis
       name: homebrew-tap
@@ -69,8 +77,12 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "chore(brew): {{ .ProjectName }} {{ .Tag }}"
+    # De-quarantine in preflight (before artifact install) rather than postflight,
+    # so the binary is runnable when generate_completions_from_executable invokes
+    # it during install — otherwise Gatekeeper blocks the unsigned binary and no
+    # completion files are written.
     hooks:
-      post:
+      pre:
         install: |
           if OS.mac?
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/things"]
