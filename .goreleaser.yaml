@@ -56,12 +56,13 @@ homebrew_casks:
     binaries:
       - things
     # Run `things completions <shell>` at cask install time to drop bash/zsh/fish
-    # completion scripts into the Homebrew prefix. `<shell>` is a positional arg
-    # (shell_parameter_format: arg) — matches the CLI added in #88 PR 1.
+    # completion scripts into the Homebrew prefix. The shell name is passed as a
+    # bare positional arg (`things completions bash`) — that's Homebrew's default
+    # when shell_parameter_format is omitted. Do NOT set it to `arg`: Homebrew's
+    # :arg emits `--shell=bash`, which our positional CLI rejects.
     generate_completions_from_executable:
       args: [completions]
       base_name: things
-      shell_parameter_format: arg
       shells: [bash, zsh, fish]
     repository:
       owner: ryanlewis
