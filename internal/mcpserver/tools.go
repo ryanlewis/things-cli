@@ -172,10 +172,10 @@ func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
 		return nil
 	}
 	if !db.DateFilterableView(view) {
-		return fmt.Errorf("on/from/to are not supported on the %q view", view)
+		return fmt.Errorf("--on/--from/--to are not supported on the %q view", view)
 	}
 	if on != "" && (from != "" || to != "") {
-		return fmt.Errorf("on cannot be combined with from/to")
+		return fmt.Errorf("--on cannot be combined with --from/--to")
 	}
 
 	parse := func(field, raw string) (*model.ThingsDate, error) {
@@ -201,7 +201,7 @@ func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
 		return err
 	}
 	if filter.From != nil && filter.To != nil && *filter.From > *filter.To {
-		return fmt.Errorf("from %s is after to %s", filter.From, filter.To)
+		return fmt.Errorf("--from %s is after --to %s", filter.From, filter.To)
 	}
 	return nil
 }

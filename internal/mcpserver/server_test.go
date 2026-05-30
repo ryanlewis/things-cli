@@ -290,6 +290,19 @@ func TestSearchTool(t *testing.T) {
 	}
 }
 
+// TestEmptyResultIsJSONArray pins the array contract: a query matching nothing
+// must serialize as `[]`, not `null`, so clients can iterate unconditionally.
+func TestEmptyResultIsJSONArray(t *testing.T) {
+	cs := connect(t)
+	text, isErr := call(t, cs, "things_search", map[string]any{"query": "zzz-no-such-task-zzz"})
+	if isErr {
+		t.Fatalf("unexpected tool error: %s", text)
+	}
+	if got := strings.TrimSpace(text); got != "[]" {
+		t.Errorf("empty search result = %q, want %q", got, "[]")
+	}
+}
+
 func TestProjectsAreasTags(t *testing.T) {
 	cs := connect(t)
 
