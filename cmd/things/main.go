@@ -54,7 +54,7 @@ type CLI struct {
 	Open     OpenCmd     `cmd:"" help:"Reveal a task, project, area, tag, or built-in list in Things3."`
 	Import   ImportCmd   `cmd:"" help:"Batch create/update via the Things JSON URL scheme. Reads JSON from stdin or --file."`
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
-	MCP      MCPCmd      `cmd:"" name:"mcp" help:"Run a read-only MCP server over stdio (for Claude Desktop, Cursor, etc.)."`
+	MCP      MCPCmd      `cmd:"" name:"mcp" help:"Run an MCP server over stdio (read-only by default; --read-only=false enables write tools). For Claude Desktop, Cursor, etc."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 
 	Completions CompletionsCmd `cmd:"" help:"Print a shell completion script (bash|zsh|fish)."`
@@ -499,12 +499,20 @@ func (c *LogCmd) Run(_ *Deps) error {
 	return things.LogCompleted()
 }
 
-// MCPCmd runs a read-only Model Context Protocol server over stdio, exposing
-// the CLI's read commands as MCP tools (see internal/mcpserver). Transport is
-// stdio only; the global --db flag selects the database.
-type MCPCmd struct{}
+// MCPCmd runs a Model Context Protocol server over stdio, exposing the CLI's
+// commands as MCP tools (see internal/mcpserver). Tools are grouped into
+// toolsets the operator mounts à la carte; the server is read-only unless
+// --read-only=false. Transport is stdio only; the global --db flag selects the
+// database.
+type MCPCmd struct {
+	Toolsets []string `help:"Toolsets to expose (comma-separated): tasks, projects, areas, tags, bulk, or all. Defaults to all." env:"THINGS_TOOLSETS"`
+	ReadOnly bool     `help:"Expose only read tools. Pass --read-only=false (or --no-read-only) to enable write tools." default:"true" negatable:""`
+}
 
 func (c *MCPCmd) Run(d *Deps) error {
+	if err := mcpserver.ValidateToolsets(c.Toolsets); err != nil {
+		return err
+	}
 	path := d.DBPath
 	if path == "" {
 		p, err := db.FindDBPath()
@@ -526,7 +534,9 @@ func (c *MCPCmd) Run(d *Deps) error {
 	defer stop()
 
 	return mcpserver.Serve(ctx, mcpserver.Config{
-		Version: version,
+		Version:      version,
+		Toolsets:     c.Toolsets,
+		EnableWrites: !c.ReadOnly,
 		Open: func() (mcpserver.Backend, error) {
 			return db.Open(path)
 		},
