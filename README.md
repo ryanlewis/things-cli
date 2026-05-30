@@ -414,26 +414,50 @@ embedded in the binary — so a plain `things` upgrade refreshes it; re-run
 ## MCP server
 
 `things mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io)
-server over stdio, exposing the **read-only** side of the CLI as typed tools.
-It's aimed at MCP hosts that can't shell out — chiefly **Claude Desktop** — but
-hosts that can (Cursor, Claude Code) get a typed alternative to driving the CLI
-via Bash. The agent skill above and the MCP server are independent; use whichever
-your host supports.
+server over stdio, exposing the CLI as typed tools. It's aimed at MCP hosts that
+can't shell out — chiefly **Claude Desktop** — but hosts that can (Cursor, Claude
+Code) get a typed alternative to driving the CLI via Bash. The agent skill above
+and the MCP server are independent; use whichever your host supports.
 
-Tools (results are the same JSON the CLI emits with `--json`):
+The server is **read-only by default** and **fails fast** at startup with a clear
+error if the Things3 database can't be found or opened. It requires Things3 on
+macOS, like the rest of the CLI.
 
-| Tool | Mirrors | Arguments |
+### Toolsets
+
+Tools are grouped into **toolsets** you mount with `--toolsets` (comma-separated;
+`all` is shorthand; defaults to all). Mount only what you use to keep the tool
+list short. The read tools of a mounted toolset are always available; its write
+tools appear only when you pass `--read-only=false` (see [Writes](#writes)).
+
+| Toolset | Read tools | Write tools (need `--read-only=false`) |
 | --- | --- | --- |
-| `things_list` | `things <view>` | `view`, `project`, `area`, `tag`, `on`, `from`, `to` (all optional) |
-| `things_show` | `things show` | `task` (UUID or title) |
-| `things_search` | `things search` | `query` |
-| `things_projects` | `things projects` | `area`, `completed` (optional) |
-| `things_areas` | `things areas` | — |
-| `things_tags` | `things tags` | — |
+| `tasks` | `things_list`, `things_show`, `things_search` | `things_add`, `things_edit`, `things_complete`, `things_cancel` |
+| `projects` | `things_projects` | `things_add_project`, `things_edit_project` |
+| `areas` | `things_areas` | — |
+| `tags` | `things_tags` | — |
+| `bulk` | — | `things_log`, `things_import` |
 
-The server is **read-only** (no add/complete/cancel/edit) and **fails fast** at
-startup with a clear error if the Things3 database can't be found or opened. It
-requires Things3 on macOS, like the rest of the CLI.
+Each tool mirrors the CLI command of the same name (run `things <cmd> --help` for
+its arguments); read results are the same JSON the CLI emits with `--json`.
+`--toolsets` also reads from the `THINGS_TOOLSETS` environment variable. For
+example, `--toolsets=tasks` mounts just `things_list`/`things_show`/`things_search`.
+
+### Writes
+
+Write tools are **off by default**; enable them by adding `--read-only=false`
+(or `--no-read-only`) to the server's `args`. A few things to know:
+
+- **`things_add` / `things_edit` (and the project and import variants) are
+  fire-and-forget**: they hand the change to the Things URL scheme and return
+  *before* Things has applied it, so the result reports *submitted*, not
+  *confirmed*, and a bad payload surfaces only as an in-app Things notification.
+  `things_complete` / `things_cancel` go through AppleScript and are synchronous.
+- **`things_edit`, `things_edit_project`, and `things_import` need the Things URL
+  auth token.** Enable it once in **Things → Settings → General → Enable Things
+  URLs**; the server reads it from your database automatically.
+- Most MCP hosts ask you to approve each tool call, so writes stay under your
+  control.
 
 ### Add it to Claude Desktop
 
@@ -462,6 +486,10 @@ in-app config editor keeps setup to a copy-paste:
 6. Click the **+ / tools (🔨)** icon in the chat box; **things** should be
    listed. Try *"what's on my list today?"*
 
+To let Claude **create and change** to-dos, add `--read-only=false` to `args`
+(`"args": ["mcp", "--read-only=false"]`) and read [Writes](#writes) first — it
+enables the add/edit/complete/cancel tools.
+
 **Not working?** ① the `command` must be the full absolute path from `which
 things`; ② a JSON typo makes Claude ignore the whole file silently — recheck the
 braces and commas; ③ errors are logged to
@@ -477,8 +505,10 @@ like this.
 - **Generic** — `command: things` (use the absolute path if the host doesn't
   inherit your `PATH`), `args: ["mcp"]`.
 
-To pin a specific database, add `"--db", "/path/to/main.sqlite"` before `"mcp"`
-in `args`; otherwise it auto-discovers your Things3 database.
+All of these accept the same flags in `args`: append `"--read-only=false"` to
+enable writes, `"--toolsets=tasks,projects"` to mount a subset, or
+`"--db", "/path/to/main.sqlite"` (before `"mcp"`) to pin a database — otherwise
+it auto-discovers your Things3 database.
 
 ## How it works
 

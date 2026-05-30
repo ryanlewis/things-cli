@@ -37,7 +37,17 @@ func connect(t *testing.T) *mcp.ClientSession {
 // in-memory transport and returns a connected client session.
 func session(t *testing.T, open func() (mcpserver.Backend, error)) *mcp.ClientSession {
 	t.Helper()
-	srv := mcpserver.NewServer(mcpserver.Config{Version: "test", Open: open})
+	return sessionCfg(t, mcpserver.Config{Open: open})
+}
+
+// sessionCfg is session with a caller-supplied Config (for toolset/write
+// coverage). Version defaults to "test" when unset.
+func sessionCfg(t *testing.T, cfg mcpserver.Config) *mcp.ClientSession {
+	t.Helper()
+	if cfg.Version == "" {
+		cfg.Version = "test"
+	}
+	srv := mcpserver.NewServer(cfg)
 
 	ctx := context.Background()
 	serverT, clientT := mcp.NewInMemoryTransports()
