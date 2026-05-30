@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -15,17 +15,20 @@ func Print(w io.Writer, v any, asJSON bool) error {
 	if asJSON {
 		return printJSON(w, v)
 	}
+	// Styled output renders full-fidelity ANSI; downsample/strip it on the way
+	// out according to the active color profile. JSON carries no ANSI, so it is
+	// written to the raw writer.
 	switch val := v.(type) {
 	case []model.Task:
-		return printTasks(w, val)
+		return printTasks(newWriter(w), val)
 	case *model.Task:
-		return printTaskDetail(w, val, nil)
+		return printTaskDetail(newWriter(w), val, nil)
 	case []model.Project:
-		return printProjects(w, val)
+		return printProjects(newWriter(w), val)
 	case []model.Area:
-		return printAreas(w, val)
+		return printAreas(newWriter(w), val)
 	case []model.Tag:
-		return printTags(w, val)
+		return printTags(newWriter(w), val)
 	default:
 		return printJSON(w, v)
 	}
@@ -39,7 +42,7 @@ func PrintTaskWithChecklist(w io.Writer, t *model.Task, items []model.ChecklistI
 		}
 		return printJSON(w, taskWithChecklist{Task: t, Checklist: items})
 	}
-	return printTaskDetail(w, t, items)
+	return printTaskDetail(newWriter(w), t, items)
 }
 
 func printJSON(w io.Writer, v any) error {

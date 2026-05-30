@@ -2,36 +2,58 @@ package output
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
-// SetColorMode reconfigures lipgloss's default renderer based on the user's
-// --color flag. "auto" defers to lipgloss/termenv, which detects TTY and
-// honours NO_COLOR. "always" forces TrueColor; "never" forces Ascii.
+// colorProfile controls how the ANSI emitted by lipgloss renders is downsampled
+// when written out. Lipgloss v2 styles always render full-fidelity ANSI; the
+// stripping/downsampling that v1 did inside Render now happens at write time via
+// a colorprofile.Writer (see newWriter). It is set by SetColorMode and defaults
+// to auto-detection from stdout (honouring NO_COLOR, CLICOLOR_FORCE, etc.).
+var colorProfile = detectProfile()
+
+// detectProfile auto-detects the color profile from stdout and the environment
+// (honouring NO_COLOR, CLICOLOR_FORCE, etc.). Used for both the package default
+// and the "auto" mode so the two can't drift.
+func detectProfile() colorprofile.Profile {
+	return colorprofile.Detect(os.Stdout, os.Environ())
+}
+
+// SetColorMode reconfigures color output based on the user's --color flag.
+// "auto" detects from stdout/env, "always" forces TrueColor, "never" strips all
+// ANSI.
 func SetColorMode(mode string) error {
 	switch mode {
 	case "", "auto":
-		// no-op — lipgloss self-detects from os.Stdout
+		colorProfile = detectProfile()
 	case "always":
-		lipgloss.SetColorProfile(termenv.TrueColor)
+		colorProfile = colorprofile.TrueColor
 	case "never":
-		lipgloss.SetColorProfile(termenv.Ascii)
+		colorProfile = colorprofile.NoTTY
 	default:
 		return fmt.Errorf("invalid --color mode %q (want auto|always|never)", mode)
 	}
 	return nil
 }
 
-// Palette. Lipgloss strips ANSI when writing to non-TTY, so existing
-// substring-based tests remain valid.
+// newWriter wraps w so that the ANSI emitted by lipgloss renders is downsampled
+// (or stripped entirely) according to the active color profile on the way out.
+func newWriter(w io.Writer) *colorprofile.Writer {
+	return &colorprofile.Writer{Forward: w, Profile: colorProfile}
+}
+
+// Palette. Styles render full-fidelity ANSI unconditionally; the
+// colorprofile.Writer applied in Print strips it for non-TTY / --color=never
+// output, so substring-based tests over Print remain valid.
 var (
 	statusOpenStyle      = lipgloss.NewStyle()
 	statusDoneStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Faint(true)
