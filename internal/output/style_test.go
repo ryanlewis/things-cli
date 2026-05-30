@@ -90,6 +90,24 @@ func TestColorMode_Always_EmitsANSI(t *testing.T) {
 	}
 }
 
+func TestColorMode_Always_TaskDetail(t *testing.T) {
+	t.Cleanup(func() { _ = SetColorMode("never") })
+	if err := SetColorMode("always"); err != nil {
+		t.Fatal(err)
+	}
+	// The detail view styles tags with a pure foreground color (SGR 33); assert
+	// it survives the always-mode (TrueColor) writer on the PrintTaskWithChecklist
+	// path, which is distinct from the printTasks path.
+	task := &model.Task{UUID: "u1", Title: "T1", Tags: []string{"tag"}}
+	var buf bytes.Buffer
+	if err := PrintTaskWithChecklist(&buf, task, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if out := buf.String(); !strings.Contains(out, "\x1b[33m") {
+		t.Errorf("expected the tag color (SGR 33) in always-mode detail, got %q", out)
+	}
+}
+
 func TestColorMode_Auto_StripsWhenNonTTY(t *testing.T) {
 	// "auto" detects from os.Stdout. Point stdout at a pipe (a non-TTY) and clear
 	// any color-forcing env so detection is deterministic, then confirm auto
