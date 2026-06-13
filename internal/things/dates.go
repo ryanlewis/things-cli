@@ -9,8 +9,21 @@ import (
 
 var whenKeywords = []string{"today", "tomorrow", "evening", "anytime", "someday"}
 
+// weekdayWords are natural-language day names Things accepts verbatim. They are
+// allowlisted so the typo detector never mistakes them for a keyword — e.g.
+// "monday" is Levenshtein distance 2 from "today" and would otherwise be
+// rejected as a typo. Abbreviations are included for the same reason.
+var weekdayWords = []string{
+	"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+	"mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun",
+}
+
 func isWhenKeyword(s string) bool {
 	return slices.Contains(whenKeywords, s)
+}
+
+func isWeekdayWord(s string) bool {
+	return slices.Contains(weekdayWords, s)
 }
 
 // NormalizeWhen validates and canonicalises a --when value.
@@ -36,6 +49,9 @@ func NormalizeWhen(s string) (string, error) {
 	}
 	if t, ok := parseISO8601(v); ok {
 		return t.Format("2006-01-02") + "@" + t.Format("15:04"), nil
+	}
+	if isWeekdayWord(strings.ToLower(v)) {
+		return v, nil
 	}
 	if k, ok := nearKeyword(v); ok {
 		return "", fmt.Errorf("unrecognised --when value %q (did you mean %q? valid keywords: %s)", v, k, strings.Join(whenKeywords, ", "))

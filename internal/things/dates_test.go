@@ -25,6 +25,11 @@ func TestNormalizeWhen(t *testing.T) {
 		{"21:30", "21:30"},
 		{"next friday", "next friday"},
 		{"friday", "friday"},
+		{"monday", "monday"}, // dist 2 from "today" — must not be flagged as a typo
+		{"Monday", "Monday"}, // case preserved for NL pass-through
+		{"tuesday", "tuesday"},
+		{"sunday", "sunday"},
+		{"mon", "mon"},
 		{"tonight", "tonight"},
 		{"noon", "noon"},
 		{"2026-03-10T14:30:00Z", "2026-03-10@14:30"},
