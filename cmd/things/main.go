@@ -3,13 +3,16 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/alecthomas/kong"
 	"github.com/mattn/go-isatty"
@@ -17,6 +20,7 @@ import (
 
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
+	"github.com/ryanlewis/things-cli/internal/mcpserver"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
 	"github.com/ryanlewis/things-cli/internal/skill"
@@ -50,6 +54,7 @@ type CLI struct {
 	Open     OpenCmd     `cmd:"" help:"Reveal a task, project, area, tag, or built-in list in Things3."`
 	Import   ImportCmd   `cmd:"" help:"Batch create/update via the Things JSON URL scheme. Reads JSON from stdin or --file."`
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
+	MCP      MCPCmd      `cmd:"" name:"mcp" help:"Run a read-only MCP server over stdio (for Claude Desktop, Cursor, etc.)."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 
 	Completions CompletionsCmd `cmd:"" help:"Print a shell completion script (bash|zsh|fish)."`
@@ -492,6 +497,40 @@ type LogCmd struct{}
 
 func (c *LogCmd) Run(_ *Deps) error {
 	return things.LogCompleted()
+}
+
+// MCPCmd runs a read-only Model Context Protocol server over stdio, exposing
+// the CLI's read commands as MCP tools (see internal/mcpserver). Transport is
+// stdio only; the global --db flag selects the database.
+type MCPCmd struct{}
+
+func (c *MCPCmd) Run(d *Deps) error {
+	path := d.DBPath
+	if path == "" {
+		p, err := db.FindDBPath()
+		if err != nil {
+			return err
+		}
+		path = p
+	}
+	// Fail fast: confirm the database is reachable before serving, so a missing
+	// or unreadable DB surfaces as a clear startup error instead of failing
+	// every tool call once a client has connected.
+	probe, err := db.Open(path)
+	if err != nil {
+		return err
+	}
+	_ = probe.Close()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return mcpserver.Serve(ctx, mcpserver.Config{
+		Version: version,
+		Open: func() (mcpserver.Backend, error) {
+			return db.Open(path)
+		},
+	})
 }
 
 type SkillCmd struct {
