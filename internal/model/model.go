@@ -10,14 +10,64 @@ const (
 	TypeTask    = 0
 	TypeProject = 1
 
-	StatusOpen      = 0
-	StatusCancelled = 2
-	StatusCompleted = 3
+	StatusOpen      Status = 0
+	StatusCancelled Status = 2
+	StatusCompleted Status = 3
 
 	StartInbox   = 0
 	StartAnytime = 1
 	StartSomeday = 2
 )
+
+// Status is a Things3 task/project status. The underlying integers are the
+// raw Things codes (0 = open, 2 = cancelled, 3 = completed — note there is no
+// 1), but JSON renders the human-readable string so scripts and agents never
+// have to decode the magic ints.
+type Status int
+
+func (s Status) String() string {
+	switch s {
+	case StatusOpen:
+		return "open"
+	case StatusCancelled:
+		return "cancelled"
+	case StatusCompleted:
+		return "completed"
+	default:
+		return "unknown"
+	}
+}
+
+// MarshalJSON renders the status as its string name ("open"/"cancelled"/
+// "completed") rather than the raw Things integer.
+func (s Status) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+// UnmarshalJSON accepts either the string name or the raw integer so JSON
+// emitted by this tool round-trips and legacy integer input still parses.
+func (s *Status) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		switch str {
+		case "open":
+			*s = StatusOpen
+		case "cancelled":
+			*s = StatusCancelled
+		case "completed":
+			*s = StatusCompleted
+		default:
+			return fmt.Errorf("Status: unknown value %q", str)
+		}
+		return nil
+	}
+	var n int
+	if err := json.Unmarshal(data, &n); err != nil {
+		return fmt.Errorf("Status: %w", err)
+	}
+	*s = Status(n)
+	return nil
+}
 
 // ThingsDate is a bit-encoded date: year<<16 | month<<12 | day<<7.
 type ThingsDate int64
@@ -73,7 +123,7 @@ type Task struct {
 	Title        string      `json:"title"`
 	Notes        string      `json:"notes,omitempty"`
 	Type         int         `json:"type"`
-	Status       int         `json:"status"`
+	Status       Status      `json:"status"`
 	Start        int         `json:"start"`
 	StartBucket  int         `json:"startBucket"`
 	StartDate    *ThingsDate `json:"startDate,omitempty"`
@@ -95,7 +145,7 @@ type Task struct {
 type ChecklistItem struct {
 	UUID     string     `json:"uuid"`
 	Title    string     `json:"title"`
-	Status   int        `json:"status"`
+	Status   Status     `json:"status"`
 	StopDate *time.Time `json:"stopDate,omitempty"`
 	Index    int        `json:"index"`
 }
@@ -103,7 +153,7 @@ type ChecklistItem struct {
 type Project struct {
 	UUID      string   `json:"uuid"`
 	Title     string   `json:"title"`
-	Status    int      `json:"status"`
+	Status    Status   `json:"status"`
 	AreaUUID  string   `json:"areaUUID,omitempty"`
 	AreaTitle string   `json:"areaTitle,omitempty"`
 	Tags      []string `json:"tags,omitempty"`

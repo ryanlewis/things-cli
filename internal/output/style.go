@@ -77,7 +77,7 @@ var (
 // nowFn is overridable in tests.
 var nowFn = time.Now
 
-func styledStatus(status int) string {
+func styledStatus(status model.Status) string {
 	icon := statusIcon(status)
 	switch status {
 	case model.StatusCompleted:

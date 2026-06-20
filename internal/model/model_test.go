@@ -135,3 +135,65 @@ func TestCoreDataEpochZero(t *testing.T) {
 		t.Fatalf("CoreDataToTime(0) = %s, want %s", got, epoch)
 	}
 }
+
+func TestStatusMarshalJSON(t *testing.T) {
+	cases := []struct {
+		status Status
+		want   string
+	}{
+		{StatusOpen, `"open"`},
+		{StatusCancelled, `"cancelled"`},
+		{StatusCompleted, `"completed"`},
+		{Status(99), `"unknown"`},
+	}
+	for _, tc := range cases {
+		got, err := json.Marshal(tc.status)
+		if err != nil {
+			t.Fatalf("Marshal(%d): %v", tc.status, err)
+		}
+		if string(got) != tc.want {
+			t.Errorf("Marshal(%d) = %s, want %s", tc.status, got, tc.want)
+		}
+	}
+}
+
+func TestStatusUnmarshalJSON(t *testing.T) {
+	cases := []struct {
+		in   string
+		want Status
+	}{
+		{`"open"`, StatusOpen},
+		{`"cancelled"`, StatusCancelled},
+		{`"completed"`, StatusCompleted},
+		{`0`, StatusOpen},      // legacy integer input
+		{`3`, StatusCompleted}, // legacy integer input
+	}
+	for _, tc := range cases {
+		var s Status
+		if err := json.Unmarshal([]byte(tc.in), &s); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", tc.in, err)
+		}
+		if s != tc.want {
+			t.Errorf("Unmarshal(%s) = %d, want %d", tc.in, s, tc.want)
+		}
+	}
+	var s Status
+	if err := json.Unmarshal([]byte(`"bogus"`), &s); err == nil {
+		t.Error("Unmarshal of unknown string should error")
+	}
+}
+
+func TestStatusRoundTripJSON(t *testing.T) {
+	in := Task{Title: "t", Status: StatusCompleted}
+	data, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var out Task
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if out.Status != StatusCompleted {
+		t.Errorf("round-trip status = %d, want %d", out.Status, StatusCompleted)
+	}
+}

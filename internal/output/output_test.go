@@ -255,7 +255,7 @@ func TestPrintFallbackJSON(t *testing.T) {
 
 func TestStatusHelpers(t *testing.T) {
 	cases := []struct {
-		status int
+		status model.Status
 		icon   string
 		text   string
 	}{

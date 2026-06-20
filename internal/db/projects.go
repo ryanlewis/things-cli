@@ -52,7 +52,7 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 			return nil, fmt.Errorf("scanning project: %w", err)
 		}
 		if status.Valid {
-			p.Status = int(status.Int64)
+			p.Status = model.Status(status.Int64)
 		}
 		if tagsStr != "" {
 			p.Tags = strings.Split(tagsStr, "\x1f")

@@ -296,7 +296,7 @@ func printTags(w io.Writer, tags []model.Tag) error {
 	return nil
 }
 
-func statusIcon(status int) string {
+func statusIcon(status model.Status) string {
 	switch status {
 	case model.StatusOpen:
 		return "[ ]"
@@ -309,7 +309,7 @@ func statusIcon(status int) string {
 	}
 }
 
-func statusText(status int) string {
+func statusText(status model.Status) string {
 	switch status {
 	case model.StatusOpen:
 		return "Open"
