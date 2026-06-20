@@ -144,7 +144,7 @@ func TestStatusMarshalJSON(t *testing.T) {
 		{StatusOpen, `"open"`},
 		{StatusCancelled, `"cancelled"`},
 		{StatusCompleted, `"completed"`},
-		{Status(99), `"unknown"`},
+		{Status(99), `99`}, // unrecognized code preserved as its raw int
 	}
 	for _, tc := range cases {
 		got, err := json.Marshal(tc.status)
@@ -167,6 +167,7 @@ func TestStatusUnmarshalJSON(t *testing.T) {
 		{`"completed"`, StatusCompleted},
 		{`0`, StatusOpen},      // legacy integer input
 		{`3`, StatusCompleted}, // legacy integer input
+		{`99`, Status(99)},     // unrecognized raw code taken verbatim
 	}
 	for _, tc := range cases {
 		var s Status
@@ -177,23 +178,30 @@ func TestStatusUnmarshalJSON(t *testing.T) {
 			t.Errorf("Unmarshal(%s) = %d, want %d", tc.in, s, tc.want)
 		}
 	}
-	var s Status
-	if err := json.Unmarshal([]byte(`"bogus"`), &s); err == nil {
-		t.Error("Unmarshal of unknown string should error")
+	// Unknown string names are rejected, but a malformed JSON token must not be
+	// silently funnelled into the integer branch.
+	for _, bad := range []string{`"bogus"`, `{}`, `[1]`} {
+		var s Status
+		if err := json.Unmarshal([]byte(bad), &s); err == nil {
+			t.Errorf("Unmarshal(%s) succeeded, want error", bad)
+		}
 	}
 }
 
 func TestStatusRoundTripJSON(t *testing.T) {
-	in := Task{Title: "t", Status: StatusCompleted}
-	data, err := json.Marshal(in)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	var out Task
-	if err := json.Unmarshal(data, &out); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if out.Status != StatusCompleted {
-		t.Errorf("round-trip status = %d, want %d", out.Status, StatusCompleted)
+	// Both a recognized status and an unrecognized raw code must round-trip.
+	for _, want := range []Status{StatusCompleted, Status(99)} {
+		in := Task{Title: "t", Status: want}
+		data, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var out Task
+		if err := json.Unmarshal(data, &out); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if out.Status != want {
+			t.Errorf("round-trip status = %d, want %d", out.Status, want)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -25,41 +26,48 @@ const (
 // have to decode the magic ints.
 type Status int
 
+// statusNames is the single source of truth for the name<->code mapping used
+// by String, MarshalJSON, and UnmarshalJSON.
+var statusNames = map[Status]string{
+	StatusOpen:      "open",
+	StatusCancelled: "cancelled",
+	StatusCompleted: "completed",
+}
+
 func (s Status) String() string {
-	switch s {
-	case StatusOpen:
-		return "open"
-	case StatusCancelled:
-		return "cancelled"
-	case StatusCompleted:
-		return "completed"
-	default:
-		return "unknown"
+	if name, ok := statusNames[s]; ok {
+		return name
 	}
+	return "unknown"
 }
 
-// MarshalJSON renders the status as its string name ("open"/"cancelled"/
-// "completed") rather than the raw Things integer.
+// MarshalJSON renders a recognized status as its string name
+// ("open"/"cancelled"/"completed"). An unrecognized raw Things code is
+// preserved as its integer so the value round-trips losslessly rather than
+// collapsing to a lossy "unknown" string.
 func (s Status) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.String())
+	if name, ok := statusNames[s]; ok {
+		return json.Marshal(name)
+	}
+	return json.Marshal(int(s))
 }
 
-// UnmarshalJSON accepts either the string name or the raw integer so JSON
-// emitted by this tool round-trips and legacy integer input still parses.
+// UnmarshalJSON accepts either a status name or the raw Things integer,
+// mirroring MarshalJSON so values round-trip. Names are matched strictly
+// against the known set; integers are taken verbatim as the raw wire code.
 func (s *Status) UnmarshalJSON(data []byte) error {
-	var str string
-	if err := json.Unmarshal(data, &str); err == nil {
-		switch str {
-		case "open":
-			*s = StatusOpen
-		case "cancelled":
-			*s = StatusCancelled
-		case "completed":
-			*s = StatusCompleted
-		default:
-			return fmt.Errorf("Status: unknown value %q", str)
+	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && trimmed[0] == '"' {
+		var name string
+		if err := json.Unmarshal(trimmed, &name); err != nil {
+			return fmt.Errorf("Status: %w", err)
 		}
-		return nil
+		for st, n := range statusNames {
+			if n == name {
+				*s = st
+				return nil
+			}
+		}
+		return fmt.Errorf("Status: unknown value %q", name)
 	}
 	var n int
 	if err := json.Unmarshal(data, &n); err != nil {
