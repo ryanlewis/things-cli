@@ -51,6 +51,18 @@ func TestKongListView(t *testing.T) {
 	}
 }
 
+func TestKongListIncludeCompleted(t *testing.T) {
+	cli, _ := parse(t, "list", "today", "--include-completed")
+	if !cli.List.IncludeCompleted {
+		t.Errorf("IncludeCompleted = %v, want true", cli.List.IncludeCompleted)
+	}
+
+	cli, _ = parse(t, "list", "today")
+	if cli.List.IncludeCompleted {
+		t.Errorf("IncludeCompleted defaulted to %v, want false", cli.List.IncludeCompleted)
+	}
+}
+
 func TestKongAddFlags(t *testing.T) {
 	cli, ctx := parse(t,
 		"add", "Buy milk",

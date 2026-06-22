@@ -106,9 +106,11 @@ type ListCmd struct {
 	Project string   `help:"Filter by project name or UUID." short:"p"`
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
-	On      string   `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline. Mutually exclusive with --from/--to."`
-	From    string   `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
-	To      string   `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
+
+	IncludeCompleted bool   `help:"On the today view, also show completed/cancelled items Things hasn't logged out of Today yet (UI-parity). Not supported on other views."`
+	On               string `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline. Mutually exclusive with --from/--to."`
+	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
+	To               string `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
 }
 
 func (c *ListCmd) Run(d *Deps) error {
@@ -132,10 +134,18 @@ func (c *ListCmd) Run(d *Deps) error {
 		}
 	}
 
+	// --include-completed only changes the today view. Reject it elsewhere
+	// (including when a trailing project name promotes today → project) rather
+	// than silently ignoring it, matching how --on/--from/--to reject views.
+	if c.IncludeCompleted && view != "today" {
+		return fmt.Errorf("--include-completed is only supported on the %q view", "today")
+	}
+
 	filter := db.TaskFilter{
-		Project: project,
-		Area:    c.Area,
-		Tag:     c.Tag,
+		Project:          project,
+		Area:             c.Area,
+		Tag:              c.Tag,
+		IncludeCompleted: c.IncludeCompleted,
 	}
 	if err := applyDateFilters(&filter, view, c.On, c.From, c.To); err != nil {
 		return err

@@ -13,6 +13,11 @@ type TaskFilter struct {
 	Area    string
 	Tag     string
 
+	// IncludeCompleted keeps completed/cancelled items in the today view that
+	// Things has not yet logged out of Today (UI-parity). Without it, today
+	// returns only open tasks. Ignored by every other view.
+	IncludeCompleted bool
+
 	On   *model.ThingsDate
 	From *model.ThingsDate
 	To   *model.ThingsDate
@@ -111,8 +116,20 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	return t, nil
 }
 
+// todayWhere builds the today view's WHERE clause. By default only open tasks
+// are returned. With includeCompleted, completed/cancelled items are kept while
+// Things still shows them in Today — i.e. until "Log Completed Now" bumps
+// TMSettings.manualLogDate past their stopDate (UI-parity, see issue #106).
+func todayWhere(includeCompleted bool) string {
+	status := "t.status = 0"
+	if includeCompleted {
+		status = "(t.status = 0 OR (t.status IN (2, 3) AND t.stopDate > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0)))"
+	}
+	return "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND " + status + " AND t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.type = 0"
+}
+
 var viewFilters = map[string]string{
-	"today":     "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND (t.status = 0 OR (t.status IN (2, 3) AND t.stopDate > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0))) AND t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.type = 0",
+	"today":     todayWhere(false),
 	"inbox":     "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	"upcoming":  "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	"anytime":   "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
@@ -145,6 +162,9 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	where, ok := viewFilters[view]
 	if !ok {
 		return nil, fmt.Errorf("unknown view: %s", view)
+	}
+	if view == "today" && opts.IncludeCompleted {
+		where = todayWhere(true)
 	}
 
 	var args []any

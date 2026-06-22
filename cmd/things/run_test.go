@@ -203,6 +203,22 @@ func TestRunListDateFilterRejectsView(t *testing.T) {
 	}
 }
 
+func TestRunListIncludeCompletedRejectsView(t *testing.T) {
+	database := seedFullDB(t)
+
+	// Non-today view: the flag is rejected rather than silently ignored.
+	err := runWith(t, database, "list", "inbox", "--include-completed")
+	if err == nil || !strings.Contains(err.Error(), "only supported on the \"today\" view") {
+		t.Fatalf("inbox: expected view-rejection error, got: %v", err)
+	}
+
+	// Trailing project name promotes today → project, which also rejects.
+	err = runWith(t, database, "list", "today", "Chores", "--include-completed")
+	if err == nil || !strings.Contains(err.Error(), "only supported on the \"today\" view") {
+		t.Fatalf("promoted project: expected view-rejection error, got: %v", err)
+	}
+}
+
 func TestRunListDateFilterRejectsOnWithRange(t *testing.T) {
 	database := seedFullDB(t)
 	err := runWith(t, database, "list", "upcoming", "--on", "2026-05-09", "--from", "2026-05-09")
