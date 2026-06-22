@@ -132,8 +132,10 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
+	// AddDate keeps the ThingsDate valid across month boundaries; raw bit
+	// subtraction would underflow the day field to 0 on the 1st.
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	yesterday := today - (1 << 7) // ThingsDate encodes the day in bits 7..11
+	yesterday := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -1)))
 	stopToday := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
 	stopYesterday := model.TimeToCoreData(time.Now().Add(-25 * time.Hour))
 
@@ -151,6 +153,14 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 		VALUES ('t-done-yesterday', 'Done yesterday', 0, 3, 0, 1, 0, ?, ?, ?, 21)`,
 		today, yesterday, stopYesterday)
 
+	// Cancelled today, not yet logged — exercises the status=2 branch of
+	// `status IN (2, 3)`, which the completed (status=3) fixtures don't cover.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, "index")
+		VALUES ('t-cancelled-today', 'Cancelled today', 0, 2, 0, 1, 0, ?, ?, ?, 22)`,
+		today, today, stopToday)
+
 	// Default: completed/cancelled items are excluded outright.
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
@@ -160,12 +170,12 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 		t.Fatalf("default: expected {t-today, t-evening}, got %v", uuidsOf(got))
 	}
 
-	// IncludeCompleted (pre-log): unlogged completed items reappear.
+	// IncludeCompleted (pre-log): unlogged completed and cancelled items reappear.
 	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
 	if err != nil {
 		t.Fatalf("ListTasks today --include-completed: %v", err)
 	}
-	want := []string{"t-today", "t-evening", "t-just-done", "t-done-yesterday"}
+	want := []string{"t-today", "t-evening", "t-just-done", "t-done-yesterday", "t-cancelled-today"}
 	if !sameSet(want, uuidsOf(got)) {
 		t.Fatalf("pre-log: expected %v, got %v", want, uuidsOf(got))
 	}
