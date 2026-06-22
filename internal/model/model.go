@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -10,14 +11,82 @@ const (
 	TypeTask    = 0
 	TypeProject = 1
 
-	StatusOpen      = 0
-	StatusCancelled = 2
-	StatusCompleted = 3
+	StatusOpen      Status = 0
+	StatusCancelled Status = 2
+	StatusCompleted Status = 3
 
 	StartInbox   = 0
 	StartAnytime = 1
 	StartSomeday = 2
 )
+
+// Status is a Things3 task/project status. The underlying integers are the
+// raw Things codes (0 = open, 2 = cancelled, 3 = completed — note there is no
+// 1), but JSON renders the human-readable string so scripts and agents never
+// have to decode the magic ints.
+type Status int
+
+// statusNames is the single source of truth for the name<->code mapping used
+// by String, MarshalJSON, and UnmarshalJSON.
+var statusNames = map[Status]string{
+	StatusOpen:      "open",
+	StatusCancelled: "cancelled",
+	StatusCompleted: "completed",
+}
+
+func (s Status) String() string {
+	if name, ok := statusNames[s]; ok {
+		return name
+	}
+	return "unknown"
+}
+
+// MarshalJSON renders a recognized status as its string name
+// ("open"/"cancelled"/"completed"). An unrecognized raw Things code is
+// preserved as its integer so the value round-trips losslessly rather than
+// collapsing to a lossy "unknown" string.
+func (s Status) MarshalJSON() ([]byte, error) {
+	if name, ok := statusNames[s]; ok {
+		return json.Marshal(name)
+	}
+	return json.Marshal(int(s))
+}
+
+// UnmarshalJSON accepts either a status name or the raw Things integer,
+// mirroring MarshalJSON so values round-trip. Names are matched strictly
+// against the known set; integers are taken verbatim as the raw wire code.
+func (s *Status) UnmarshalJSON(data []byte) error {
+	// Per the json.Unmarshaler convention, a JSON null is a no-op: leave the
+	// existing value untouched rather than silently coercing it to Status(0)
+	// ("open").
+	if string(data) == "null" {
+		return nil
+	}
+	// Try the string name first; on a type mismatch fall back to the raw
+	// integer so both the emitted string form and the legacy integer decode. A
+	// non-type error (malformed JSON) is surfaced as-is rather than retried as
+	// an int.
+	var name string
+	if err := json.Unmarshal(data, &name); err != nil {
+		var typeErr *json.UnmarshalTypeError
+		if !errors.As(err, &typeErr) {
+			return fmt.Errorf("Status: %w", err)
+		}
+		var n int
+		if err := json.Unmarshal(data, &n); err != nil {
+			return fmt.Errorf("Status: %w", err)
+		}
+		*s = Status(n)
+		return nil
+	}
+	for st, n := range statusNames {
+		if n == name {
+			*s = st
+			return nil
+		}
+	}
+	return fmt.Errorf("Status: unknown value %q", name)
+}
 
 // ThingsDate is a bit-encoded date: year<<16 | month<<12 | day<<7.
 type ThingsDate int64
@@ -73,7 +142,7 @@ type Task struct {
 	Title        string      `json:"title"`
 	Notes        string      `json:"notes,omitempty"`
 	Type         int         `json:"type"`
-	Status       int         `json:"status"`
+	Status       Status      `json:"status"`
 	Start        int         `json:"start"`
 	StartBucket  int         `json:"startBucket"`
 	StartDate    *ThingsDate `json:"startDate,omitempty"`
@@ -95,7 +164,7 @@ type Task struct {
 type ChecklistItem struct {
 	UUID     string     `json:"uuid"`
 	Title    string     `json:"title"`
-	Status   int        `json:"status"`
+	Status   Status     `json:"status"`
 	StopDate *time.Time `json:"stopDate,omitempty"`
 	Index    int        `json:"index"`
 }
@@ -103,7 +172,7 @@ type ChecklistItem struct {
 type Project struct {
 	UUID      string   `json:"uuid"`
 	Title     string   `json:"title"`
-	Status    int      `json:"status"`
+	Status    Status   `json:"status"`
 	AreaUUID  string   `json:"areaUUID,omitempty"`
 	AreaTitle string   `json:"areaTitle,omitempty"`
 	Tags      []string `json:"tags,omitempty"`

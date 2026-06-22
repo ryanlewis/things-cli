@@ -13,6 +13,8 @@ today, upcoming, projects, or areas on macOS.
 
 Most commands accept `--json` / `-j`. Prefer it when parsing output.
 
+In JSON, `status` is a string enum — `"open"`, `"cancelled"`, or `"completed"` (not the raw Things integer) — on tasks, projects, and checklist items. Filter with e.g. `jq 'select(.status=="open")'`.
+
 Human output is styled with colors and aligned columns. Color auto-disables when piping or when `NO_COLOR` is set. Override with `--color=always|never` (default `auto`). JSON output is unaffected.
 
 ## Core commands

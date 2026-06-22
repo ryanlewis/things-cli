@@ -135,3 +135,83 @@ func TestCoreDataEpochZero(t *testing.T) {
 		t.Fatalf("CoreDataToTime(0) = %s, want %s", got, epoch)
 	}
 }
+
+func TestStatusMarshalJSON(t *testing.T) {
+	cases := []struct {
+		status Status
+		want   string
+	}{
+		{StatusOpen, `"open"`},
+		{StatusCancelled, `"cancelled"`},
+		{StatusCompleted, `"completed"`},
+		{Status(99), `99`}, // unrecognized code preserved as its raw int
+	}
+	for _, tc := range cases {
+		got, err := json.Marshal(tc.status)
+		if err != nil {
+			t.Fatalf("Marshal(%d): %v", tc.status, err)
+		}
+		if string(got) != tc.want {
+			t.Errorf("Marshal(%d) = %s, want %s", tc.status, got, tc.want)
+		}
+	}
+}
+
+func TestStatusUnmarshalJSON(t *testing.T) {
+	cases := []struct {
+		in   string
+		want Status
+	}{
+		{`"open"`, StatusOpen},
+		{`"cancelled"`, StatusCancelled},
+		{`"completed"`, StatusCompleted},
+		{`0`, StatusOpen},      // legacy integer input
+		{`2`, StatusCancelled}, // legacy integer input (the non-obvious code)
+		{`3`, StatusCompleted}, // legacy integer input
+		{`99`, Status(99)},     // unrecognized raw code taken verbatim
+	}
+	for _, tc := range cases {
+		var s Status
+		if err := json.Unmarshal([]byte(tc.in), &s); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", tc.in, err)
+		}
+		if s != tc.want {
+			t.Errorf("Unmarshal(%s) = %d, want %d", tc.in, s, tc.want)
+		}
+	}
+	// A JSON null is a no-op: it must leave the existing value untouched rather
+	// than silently coercing it to Status(0) ("open").
+	pre := StatusCompleted
+	if err := json.Unmarshal([]byte(`null`), &pre); err != nil {
+		t.Fatalf("Unmarshal(null): %v", err)
+	}
+	if pre != StatusCompleted {
+		t.Errorf("Unmarshal(null) = %d, want %d (unchanged)", pre, StatusCompleted)
+	}
+	// Unknown string names are rejected, but a malformed JSON token must not be
+	// silently funnelled into the integer branch.
+	for _, bad := range []string{`"bogus"`, `{}`, `[1]`} {
+		var s Status
+		if err := json.Unmarshal([]byte(bad), &s); err == nil {
+			t.Errorf("Unmarshal(%s) succeeded, want error", bad)
+		}
+	}
+}
+
+func TestStatusRoundTripJSON(t *testing.T) {
+	// Both a recognized status and an unrecognized raw code must round-trip.
+	for _, want := range []Status{StatusCancelled, StatusCompleted, Status(99)} {
+		in := Task{Title: "t", Status: want}
+		data, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var out Task
+		if err := json.Unmarshal(data, &out); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if out.Status != want {
+			t.Errorf("round-trip status = %d, want %d", out.Status, want)
+		}
+	}
+}
