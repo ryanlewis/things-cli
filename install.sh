@@ -6,7 +6,7 @@
 #
 # Environment:
 #   INSTALL_DIR        target directory for the binary (default: /usr/local/bin)
-#   VERSION            version tag to install, e.g. v0.1.0 (default: latest release)
+#   VERSION            version tag to install, e.g. vX.Y.Z (default: latest release)
 #   RELEASE_BASE_URL   override the asset download base URL (for mirrors / testing)
 
 set -eu

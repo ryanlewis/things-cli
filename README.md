@@ -79,13 +79,22 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks with a deadline |
 
-Filters (combine freely with any view):
+Filters:
 
 | Flag | Description |
 | --- | --- |
 | `-p, --project NAME` | Filter by project name or UUID |
 | `-a, --area NAME` | Filter by area name or UUID |
 | `-t, --tag NAME` | Filter by tag name |
+| `--on DATE` | Only tasks scheduled on `YYYY-MM-DD` (or RFC3339); on `deadlines`, filters by deadline |
+| `--from DATE` | Only tasks scheduled on or after the date |
+| `--to DATE` | Only tasks scheduled on or before the date |
+| `--include-completed` | On `today` only: also show completed/cancelled items Things hasn't logged out of Today yet |
+
+`-p`/`-a`/`-t` combine with any view. The date filters (`--on`, `--from`,
+`--to`) apply to date-filterable views — `today`, `upcoming`, `anytime`,
+`someday`, `deadlines`, and project listings — and `--on` can't be combined
+with `--from`/`--to`. `--include-completed` applies to the `today` view only.
 
 Examples:
 

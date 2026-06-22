@@ -41,14 +41,17 @@ Downloads the latest release for your architecture, verifies the
 checksum against `checksums.txt`, and installs the `things` binary to
 `/usr/local/bin`.
 
-The script reads two optional environment variables:
+The script reads three optional environment variables:
 
 ```sh
 # Install somewhere other than /usr/local/bin
 INSTALL_DIR=$HOME/.local/bin curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
 
 # Pin a specific version (defaults to the latest release)
-VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
+VERSION=vX.Y.Z curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
+
+# Override the asset download base URL (for mirrors / testing)
+RELEASE_BASE_URL=https://example.com/things curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
 ```
 
 ## go install
