@@ -166,6 +166,7 @@ func TestStatusUnmarshalJSON(t *testing.T) {
 		{`"cancelled"`, StatusCancelled},
 		{`"completed"`, StatusCompleted},
 		{`0`, StatusOpen},      // legacy integer input
+		{`2`, StatusCancelled}, // legacy integer input (the non-obvious code)
 		{`3`, StatusCompleted}, // legacy integer input
 		{`99`, Status(99)},     // unrecognized raw code taken verbatim
 	}
@@ -177,6 +178,15 @@ func TestStatusUnmarshalJSON(t *testing.T) {
 		if s != tc.want {
 			t.Errorf("Unmarshal(%s) = %d, want %d", tc.in, s, tc.want)
 		}
+	}
+	// A JSON null is a no-op: it must leave the existing value untouched rather
+	// than silently coercing it to Status(0) ("open").
+	pre := StatusCompleted
+	if err := json.Unmarshal([]byte(`null`), &pre); err != nil {
+		t.Fatalf("Unmarshal(null): %v", err)
+	}
+	if pre != StatusCompleted {
+		t.Errorf("Unmarshal(null) = %d, want %d (unchanged)", pre, StatusCompleted)
 	}
 	// Unknown string names are rejected, but a malformed JSON token must not be
 	// silently funnelled into the integer branch.
@@ -190,7 +200,7 @@ func TestStatusUnmarshalJSON(t *testing.T) {
 
 func TestStatusRoundTripJSON(t *testing.T) {
 	// Both a recognized status and an unrecognized raw code must round-trip.
-	for _, want := range []Status{StatusCompleted, Status(99)} {
+	for _, want := range []Status{StatusCancelled, StatusCompleted, Status(99)} {
 		in := Task{Title: "t", Status: want}
 		data, err := json.Marshal(in)
 		if err != nil {

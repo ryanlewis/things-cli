@@ -1,8 +1,8 @@
 package model
 
 import (
-	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -56,25 +56,36 @@ func (s Status) MarshalJSON() ([]byte, error) {
 // mirroring MarshalJSON so values round-trip. Names are matched strictly
 // against the known set; integers are taken verbatim as the raw wire code.
 func (s *Status) UnmarshalJSON(data []byte) error {
-	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && trimmed[0] == '"' {
-		var name string
-		if err := json.Unmarshal(trimmed, &name); err != nil {
+	// Per the json.Unmarshaler convention, a JSON null is a no-op: leave the
+	// existing value untouched rather than silently coercing it to Status(0)
+	// ("open").
+	if string(data) == "null" {
+		return nil
+	}
+	// Try the string name first; on a type mismatch fall back to the raw
+	// integer so both the emitted string form and the legacy integer decode. A
+	// non-type error (malformed JSON) is surfaced as-is rather than retried as
+	// an int.
+	var name string
+	if err := json.Unmarshal(data, &name); err != nil {
+		var typeErr *json.UnmarshalTypeError
+		if !errors.As(err, &typeErr) {
 			return fmt.Errorf("Status: %w", err)
 		}
-		for st, n := range statusNames {
-			if n == name {
-				*s = st
-				return nil
-			}
+		var n int
+		if err := json.Unmarshal(data, &n); err != nil {
+			return fmt.Errorf("Status: %w", err)
 		}
-		return fmt.Errorf("Status: unknown value %q", name)
+		*s = Status(n)
+		return nil
 	}
-	var n int
-	if err := json.Unmarshal(data, &n); err != nil {
-		return fmt.Errorf("Status: %w", err)
+	for st, n := range statusNames {
+		if n == name {
+			*s = st
+			return nil
+		}
 	}
-	*s = Status(n)
-	return nil
+	return fmt.Errorf("Status: unknown value %q", name)
 }
 
 // ThingsDate is a bit-encoded date: year<<16 | month<<12 | day<<7.
