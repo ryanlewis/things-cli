@@ -4,8 +4,9 @@ icon: fas fa-list
 order: 2
 ---
 
-Every subcommand accepts `-j` / `--json` for structured output. Run
-`things --help` or `things <subcommand> --help` for the full flag list.
+Read commands (`list`/views, `projects`, `areas`, `tags`, `show`, `search`)
+accept `-j` / `--json` for structured output. Run `things --help` or
+`things <subcommand> --help` for the full flag list.
 
 ## Listing
 
@@ -54,7 +55,8 @@ things search "release" --json
 things add "Buy milk"
 things add "Ship the thing" --when today --tags work,urgent
 things add "Pay invoice" --deadline 2026-06-01 --notes "Send PDF"
-things add "Review PR" --project "things-cli" --list "Open source"
+things add "Review PR" --project "things-cli"
+things add "Plan offsite" --list "Open source"   # --list takes a project or area; it overrides --project if both are given
 things add "Groceries" --checklist "Milk\nBread\nEggs"
 ```
 
@@ -79,7 +81,11 @@ things edit 3 --append-checklist "Almond too"
 things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
 ```
 
-`things project edit` mirrors the same flag set for projects.
+`things project edit` takes most of the same flags (`--title`, `--notes`,
+`--prepend-notes`/`--append-notes`, `--when`, `--deadline`, `--tags`,
+`--add-tags`, `--complete`, `--cancel`, `--duplicate`, `--reveal`) plus
+`--area`/`--area-id` to move the project. It has no checklist or
+heading flags.
 
 ## Completing and cancelling
 
@@ -108,7 +114,9 @@ things import < payload.json  # batch create/update via the Things JSON URL sche
 things open today              # built-in views
 things open inbox
 things open <uuid>             # specific task or project
-things open "Side projects"    # area or project by name
+things open "Weekly Review"    # task or project by title
+things open --area "Side projects"   # an area (bare titles never resolve areas)
+things open --tag urgent             # a tag
 ```
 
 ## Agent skill
@@ -127,6 +135,25 @@ things skill uninstall claude  # remove the installed copy
 
 The skill is bundled into the binary, so a plain `things` upgrade
 refreshes every installed copy on next `install`.
+
+## Shell completions
+
+`things completions <shell>` prints a completion script for `bash`, `zsh`,
+or `fish`:
+
+```sh
+things completions zsh > ~/.things-completions.zsh   # then source it from ~/.zshrc
+```
+
+Homebrew-cask installs wire these up automatically.
+
+## Version
+
+```sh
+things version       # or: things --version / things -v
+```
+
+Prints the version, commit, and build date.
 
 ## Caching
 

@@ -20,7 +20,7 @@ leaves the machine.
 .gh-badges a.img-link { margin-right: 4px; }
 </style>
 
-**AI-friendly by design.** Every command speaks JSON (`-j` / `--json`)
+**AI-friendly by design.** Every read command speaks JSON (`-j` / `--json`)
 for clean piping into `jq`, agents, or scripts. A bundled agent skill
 ships in the binary itself — `things skill install claude` drops it into
 Claude Code, and `things skill show` prints the neutral source so you
@@ -48,7 +48,7 @@ things complete 3
 things open today
 ```
 
-Every command takes `-j` / `--json` for structured output:
+Every read command takes `-j` / `--json` for structured output:
 
 ```sh
 things upcoming --json | jq '.[] | select(.deadline)'
