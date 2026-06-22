@@ -122,10 +122,12 @@ func TestListTasksViews(t *testing.T) {
 	}
 }
 
-// Completed items remain in Today until "Log Completed Now" bumps
-// TMSettings.manualLogDate past their stopDate. Items completed on previous
-// days are still visible (matching the Things app, which keeps them on screen
-// regardless of todayIndexReferenceDate until the user explicitly logs).
+// By default the today view returns only open tasks (issue #106) — completed
+// and cancelled items never appear, even before Things logs them out of Today.
+// With IncludeCompleted, those items remain visible until "Log Completed Now"
+// bumps TMSettings.manualLogDate past their stopDate, matching the Things app
+// (which keeps them on screen regardless of todayIndexReferenceDate until the
+// user explicitly logs).
 func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
@@ -135,24 +137,33 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	stopToday := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
 	stopYesterday := model.TimeToCoreData(time.Now().Add(-25 * time.Hour))
 
-	// Completed today, not yet logged → should appear.
+	// Completed today, not yet logged.
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate,
 		 todayIndexReferenceDate, stopDate, "index")
 		VALUES ('t-just-done', 'Just done', 0, 3, 0, 1, 0, ?, ?, ?, 20)`,
 		today, today, stopToday)
 
-	// Completed yesterday but not yet logged → still appears in Today, even
-	// though todayIndexReferenceDate is stale. This matches the Things app.
+	// Completed yesterday but not yet logged.
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate,
 		 todayIndexReferenceDate, stopDate, "index")
 		VALUES ('t-done-yesterday', 'Done yesterday', 0, 3, 0, 1, 0, ?, ?, ?, 21)`,
 		today, yesterday, stopYesterday)
 
+	// Default: completed/cancelled items are excluded outright.
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatalf("ListTasks today: %v", err)
+	}
+	if !sameSet([]string{"t-today", "t-evening"}, uuidsOf(got)) {
+		t.Fatalf("default: expected {t-today, t-evening}, got %v", uuidsOf(got))
+	}
+
+	// IncludeCompleted (pre-log): unlogged completed items reappear.
+	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatalf("ListTasks today --include-completed: %v", err)
 	}
 	want := []string{"t-today", "t-evening", "t-just-done", "t-done-yesterday"}
 	if !sameSet(want, uuidsOf(got)) {
@@ -163,9 +174,9 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	future := model.TimeToCoreData(time.Now().Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 
-	got, err = d.ListTasks("today", TaskFilter{})
+	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
 	if err != nil {
-		t.Fatalf("ListTasks today: %v", err)
+		t.Fatalf("ListTasks today --include-completed: %v", err)
 	}
 	if !sameSet([]string{"t-today", "t-evening"}, uuidsOf(got)) {
 		t.Fatalf("post-log: expected {t-today, t-evening}, got %v", uuidsOf(got))

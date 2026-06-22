@@ -18,12 +18,14 @@ Human output is styled with colors and aligned columns. Color auto-disables when
 ## Core commands
 
 ```
-things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
+things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--include-completed]
     # views: today, inbox, upcoming, anytime, someday, logbook, trash, deadlines
     # shortcut: `things today`, `things inbox`, etc.
     # --on / --from / --to take YYYY-MM-DD (or RFC3339). They filter startDate
     # on most views and `deadline` on the `deadlines` view. Not supported on
     # inbox/trash/logbook. --on is mutually exclusive with --from/--to.
+    # today shows only open tasks; --include-completed also lists completed/
+    # cancelled items Things hasn't logged out of Today yet (today only).
 
 things show <task>              # task detail
 things projects [--area A] [--completed]
