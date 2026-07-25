@@ -43,7 +43,8 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 	}
 	defer rows.Close()
 
-	var projects []model.Project
+	// Empty (not nil) so a zero-row result renders as JSON `[]`, not `null`.
+	projects := []model.Project{}
 	for rows.Next() {
 		var p model.Project
 		var tagsStr string

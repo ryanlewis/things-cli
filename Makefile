@@ -1,4 +1,4 @@
-.PHONY: build install lint test cover fmt tidy clean release-snapshot release-check test-install
+.PHONY: build install lint test test-integration cover fmt tidy clean release-snapshot release-check test-install
 
 BINARY := things
 
@@ -13,6 +13,11 @@ lint:
 
 test:
 	go test -race ./...
+
+# Integration tests (build tag `integration`) build the binary and exercise it
+# end-to-end, e.g. the MCP stdio round-trip. Kept out of the default `test`.
+test-integration:
+	go test -tags integration -race ./...
 
 cover:
 	go test -race -coverprofile=coverage.out ./...

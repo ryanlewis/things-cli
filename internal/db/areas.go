@@ -36,7 +36,8 @@ func (d *DB) ListAreas() ([]model.Area, error) {
 	}
 	defer rows.Close()
 
-	var areas []model.Area
+	// Empty (not nil) so a zero-row result renders as JSON `[]`, not `null`.
+	areas := []model.Area{}
 	for rows.Next() {
 		var a model.Area
 		var visible int

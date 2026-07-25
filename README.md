@@ -420,6 +420,75 @@ The skill body is [`internal/skill/SKILL.md`](internal/skill/SKILL.md),
 embedded in the binary — so a plain `things` upgrade refreshes it; re-run
 `skill install` to pick up the new version.
 
+## MCP server
+
+`things mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io)
+server over stdio, exposing the **read-only** side of the CLI as typed tools.
+It's aimed at MCP hosts that can't shell out — chiefly **Claude Desktop** — but
+hosts that can (Cursor, Claude Code) get a typed alternative to driving the CLI
+via Bash. The agent skill above and the MCP server are independent; use whichever
+your host supports.
+
+Tools (results are the same JSON the CLI emits with `--json`):
+
+| Tool | Mirrors | Arguments |
+| --- | --- | --- |
+| `things_list` | `things <view>` | `view`, `project`, `area`, `tag`, `on`, `from`, `to` (all optional) |
+| `things_show` | `things show` | `task` (UUID or title) |
+| `things_search` | `things search` | `query` |
+| `things_projects` | `things projects` | `area`, `completed` (optional) |
+| `things_areas` | `things areas` | — |
+| `things_tags` | `things tags` | — |
+
+The server is **read-only** (no add/complete/cancel/edit) and **fails fast** at
+startup with a clear error if the Things3 database can't be found or opened. It
+requires Things3 on macOS, like the rest of the CLI.
+
+### Add it to Claude Desktop
+
+Claude Desktop can't run shell commands, so the MCP server is how it reaches your
+tasks. There's no point-and-click installer for a self-built binary yet, but the
+in-app config editor keeps setup to a copy-paste:
+
+1. **Install `things`** if you haven't (see [Install](#install)).
+2. **Find its full path** — in Terminal, run `which things` and copy the line it
+   prints (e.g. `/opt/homebrew/bin/things`). The full path matters: Claude
+   Desktop doesn't inherit your Terminal's `PATH`, so a bare `things` won't work.
+3. In Claude Desktop, open **Settings** (the `Claude` menu, top-left of the
+   screen) → **Developer** → **Edit Config**. A text file opens.
+4. Paste the block below, swapping in the path from step 2:
+   ```json
+   {
+     "mcpServers": {
+       "things": { "command": "/opt/homebrew/bin/things", "args": ["mcp"] }
+     }
+   }
+   ```
+   If the file already lists other servers, add just the `"things": { … }` entry
+   inside the existing `"mcpServers"`.
+5. **Save**, then **fully quit** Claude Desktop with **⌘Q** (closing the window
+   isn't enough — the config is only read on launch) and reopen it.
+6. Click the **+ / tools (🔨)** icon in the chat box; **things** should be
+   listed. Try *"what's on my list today?"*
+
+**Not working?** ① the `command` must be the full absolute path from `which
+things`; ② a JSON typo makes Claude ignore the whole file silently — recheck the
+braces and commas; ③ errors are logged to
+`~/Library/Logs/Claude/mcp-server-things.log`. Note: the **"Add custom
+connector"** button is for remote/HTTP servers only and won't add a local one
+like this.
+
+### Other hosts
+
+- **Cursor** — add the same block to `~/.cursor/mcp.json` (global) or a project's
+  `.cursor/mcp.json`.
+- **Claude Code** — `claude mcp add things -- things mcp` (or the same JSON).
+- **Generic** — `command: things` (use the absolute path if the host doesn't
+  inherit your `PATH`), `args: ["mcp"]`.
+
+To pin a specific database, add `"--db", "/path/to/main.sqlite"` before `"mcp"`
+in `args`; otherwise it auto-discovers your Things3 database.
+
 ## How it works
 
 - **Reads** go through `modernc.org/sqlite` (pure Go, no cgo) with
