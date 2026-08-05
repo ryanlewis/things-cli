@@ -1,19 +1,14 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:best-practices",
-    "group:allNonMajor"
+    "github>ryanlewis/renovate-config",
+    ":preserveSemverRanges"
   ],
-  "labels": ["dependencies"],
-  "minimumReleaseAge": "5 days",
-  "vulnerabilityAlerts": {
-    "minimumReleaseAge": "0 days"
-  },
   "packageRules": [
     {
+      "description": "Pin Ruby to 3.x while jekyll-theme-chirpy 7.x requires Ruby ~> 3.1",
       "matchPackageNames": ["ruby"],
-      "allowedVersions": "<4",
-      "description": "Pin Ruby to 3.x while jekyll-theme-chirpy 7.x requires Ruby ~> 3.1"
+      "allowedVersions": "<4"
     }
   ]
 }
