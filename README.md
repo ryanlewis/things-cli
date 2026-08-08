@@ -454,6 +454,15 @@ curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.s
   | INSTALL_DIR="$HOME/bin" VERSION=v0.1.0 sh
 ```
 
+When the [GitHub CLI](https://cli.github.com) is installed and logged in, the
+installer also verifies [build provenance](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) —
+cryptographic proof that the tarball was built by this repository's release
+workflow. You can check any release artifact yourself:
+
+```sh
+gh attestation verify things_<version>_darwin_arm64.tar.gz -R ryanlewis/things-cli
+```
+
 Or download a prebuilt binary manually from the
 [latest release](https://github.com/ryanlewis/things-cli/releases/latest)
 (`darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel):
