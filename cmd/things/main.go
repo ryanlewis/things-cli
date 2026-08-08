@@ -43,8 +43,8 @@ type CLI struct {
 	Add      AddCmd      `cmd:"" help:"Create a new task."`
 	Project  ProjectCmd  `cmd:"" help:"Manage projects."`
 	Edit     EditCmd     `cmd:"" help:"Edit a task via the Things URL scheme."`
-	Complete CompleteCmd `cmd:"" help:"Mark a task as completed."`
-	Cancel   CancelCmd   `cmd:"" help:"Cancel a task."`
+	Complete CompleteCmd `cmd:"" help:"Mark a task or project as completed."`
+	Cancel   CancelCmd   `cmd:"" help:"Cancel a task or project."`
 	Search   SearchCmd   `cmd:"" help:"Search tasks by title or notes."`
 	Log      LogCmd      `cmd:"" help:"Move completed and cancelled items from Today to the Logbook (Items → Log Completed)."`
 	Open     OpenCmd     `cmd:"" help:"Reveal a task, project, area, tag, or built-in list in Things3."`
@@ -199,7 +199,7 @@ func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
 }
 
 type ProjectsCmd struct {
-	Area      string `help:"Filter by area name or UUID."`
+	Area      string `help:"Filter by area name or UUID." short:"a"`
 	Completed bool   `help:"Include completed projects." default:"false"`
 }
 
@@ -244,7 +244,7 @@ func (c *TagsCmd) Run(d *Deps) error {
 }
 
 type ShowCmd struct {
-	Task string `arg:"" required:"" help:"Task title or UUID."`
+	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
 }
 
 func (c *ShowCmd) Run(d *Deps) error {
@@ -444,7 +444,7 @@ func (c *EditCmd) Run(d *Deps) error {
 }
 
 type CompleteCmd struct {
-	Task string `arg:"" required:"" help:"Task title or UUID."`
+	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
 }
 
 func (c *CompleteCmd) Run(d *Deps) error {
@@ -466,7 +466,7 @@ func (c *CompleteCmd) Run(d *Deps) error {
 }
 
 type CancelCmd struct {
-	Task string `arg:"" required:"" help:"Task title or UUID."`
+	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
 }
 
 func (c *CancelCmd) Run(d *Deps) error {
@@ -477,6 +477,12 @@ func (c *CancelCmd) Run(d *Deps) error {
 	task, err := resolveTask(c.Task, database)
 	if err != nil {
 		return err
+	}
+	if task.Type == model.TypeProject {
+		if !confirmAction(fmt.Sprintf("Cancel project %q? This will also cancel all its tasks.", task.Title)) {
+			return fmt.Errorf("cancelled")
+		}
+		return things.CancelProject(task.UUID)
 	}
 	return things.CancelTask(task.UUID)
 }

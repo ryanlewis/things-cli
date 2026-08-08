@@ -31,7 +31,7 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # cancelled items Things hasn't logged out of Today yet (today only).
 
 things show <task>              # task detail
-things projects [--area A] [--completed]
+things projects [-a|--area A] [--completed]
 things areas
 things tags
 things search <query>
@@ -40,8 +40,8 @@ things add <title> [--notes --when --deadline --tags --checklist --project --hea
 things project add <title> [--notes --when --deadline --tags --area --todos]
 things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal]
 things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal]
-things complete <task>
-things cancel <task>
+things complete <task>          # task or project; project completion asks to confirm
+things cancel <task>            # task or project; project cancellation asks to confirm
 things log                      # move Today → Logbook
 things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
     # ref: task/project UUID, numeric list index, title, or built-in list name

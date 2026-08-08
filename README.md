@@ -126,7 +126,7 @@ $ things
 | Command | Description |
 | --- | --- |
 | `things show <task>` | Show a task's detail (with checklist) |
-| `things projects [--area NAME] [--completed]` | List projects |
+| `things projects [-a NAME] [--completed]` | List projects |
 | `things areas` | List areas |
 | `things tags` | List tags |
 | `things search <query>` | Full-text search across titles and notes |
@@ -246,7 +246,7 @@ things project edit "Launch" --append-notes "Beta cut on Friday"
 | Command | Description |
 | --- | --- |
 | `things complete <task>` | Mark a task or project as completed (project completion is confirmed interactively) |
-| `things cancel <task>` | Cancel a task |
+| `things cancel <task>` | Cancel a task or project (project cancellation is confirmed interactively) |
 | `things log` | Move today's done/cancelled items to the Logbook (Items → Log Completed) |
 
 `log` is the housekeeping action; `logbook` (above) is the *view* of

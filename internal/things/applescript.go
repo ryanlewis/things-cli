@@ -41,3 +41,10 @@ set theToDo to to do id "%s"
 set status of theToDo to canceled
 end tell`, uuid), "cancelling task")
 }
+
+func CancelProject(uuid string) error {
+	return runAppleScript(fmt.Sprintf(`tell application "Things3"
+set theProject to project id "%s"
+set status of theProject to canceled
+end tell`, uuid), "cancelling project")
+}

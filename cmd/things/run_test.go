@@ -330,6 +330,26 @@ func TestConfirmActionNonInteractive(t *testing.T) {
 	}
 }
 
+// Cancelling a project must route through the project branch (confirmation
+// prompt + CancelProject), not the task AppleScript path — which can't
+// address projects and fails with a raw osascript error. Non-interactively
+// the confirmation declines, proving the branch was taken.
+func TestRunCancelProjectRequiresConfirmation(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "cancel", "Chores")
+	if err == nil || !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("expected confirmation-declined error, got: %v", err)
+	}
+}
+
+func TestRunCompleteProjectRequiresConfirmation(t *testing.T) {
+	database := seedFullDB(t)
+	err := runWith(t, database, "complete", "Chores")
+	if err == nil || !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("expected confirmation-declined error, got: %v", err)
+	}
+}
+
 func TestIsInteractiveStdinPipe(t *testing.T) {
 	// In `go test`, stdin is typically not a TTY. Just call it for coverage;
 	// don't assert on the result since test runners vary.
