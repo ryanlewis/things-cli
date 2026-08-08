@@ -60,6 +60,30 @@ EXPECTED=$(awk -v f="$TARBALL" '$2 == f {print $1}' "$TMP/checksums.txt")
 ACTUAL=$(shasum -a 256 "$TMP/$TARBALL" | awk '{print $1}')
 [ "$EXPECTED" = "$ACTUAL" ] || err "checksum mismatch (expected $EXPECTED, got $ACTUAL)"
 
+# Verify build provenance when the GitHub CLI is available: proves the tarball
+# was built by this repo's release workflow, not just that it downloaded
+# intact. Skipped (with a note) when gh is missing or logged out, since the
+# checksum has already passed. Releases before v0.5.1 predate attestations, so
+# "no attestations found" warns rather than fails. Opt out with SKIP_ATTESTATION=1.
+if [ -n "${SKIP_ATTESTATION:-}" ]; then
+	printf 'Note: provenance verification skipped (SKIP_ATTESTATION set).\n'
+elif command -v gh >/dev/null 2>&1; then
+	printf 'Verifying build provenance...\n'
+	if ATTEST_OUT=$(gh attestation verify "$TMP/$TARBALL" --repo "$REPO" 2>&1); then
+		printf 'Provenance verified: built by the %s release workflow.\n' "$REPO"
+	elif ! gh auth status >/dev/null 2>&1; then
+		printf 'Note: skipping provenance check (gh is not logged in).\n'
+	elif printf '%s' "$ATTEST_OUT" | grep -Eqi 'no attestations found|HTTP 404.*attestations'; then
+		printf 'Note: no provenance attestation for %s (releases before v0.5.1 predate attestations).\n' "$VERSION"
+	else
+		err "build provenance verification FAILED for $TARBALL — refusing to install.
+This artifact does not verify as built by the ${REPO} release workflow.
+(To bypass at your own risk: SKIP_ATTESTATION=1)"
+	fi
+else
+	printf 'Note: install gh (https://cli.github.com) to enable build provenance verification.\n'
+fi
+
 tar -xzf "$TMP/$TARBALL" -C "$TMP"
 [ -f "$TMP/$BIN" ] || err "archive did not contain expected binary: $BIN"
 
