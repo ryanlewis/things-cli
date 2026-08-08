@@ -5,12 +5,16 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # Protected environment restricted to v* tags — release secrets live there,
+    # so they are never exposed to workflow runs on other refs.
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       # Egress monitoring: this job holds the tap token, which can push
       # formulae. Audit mode records every outbound connection per step
@@ -23,11 +27,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          # No cache in the release build — a poisoned cache entry written from
+          # another ref would flow straight into published artifacts.
+          cache: false
 
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -37,3 +44,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/checksums.txt
