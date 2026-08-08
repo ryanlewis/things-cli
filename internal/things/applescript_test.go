@@ -80,6 +80,22 @@ func TestCancelTaskScript(t *testing.T) {
 	}
 }
 
+func TestCancelProjectScript(t *testing.T) {
+	script := applescriptStub(t, "")
+
+	if err := CancelProject("PRJ-2"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`project id "PRJ-2"`,
+		`set status of theProject to canceled`,
+	} {
+		if !strings.Contains(*script, want) {
+			t.Errorf("script missing %q:\n%s", want, *script)
+		}
+	}
+}
+
 func TestLogCompletedScript(t *testing.T) {
 	script := applescriptStub(t, "")
 
