@@ -43,7 +43,7 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 	}
 	defer rows.Close()
 
-	var projects []model.Project
+	projects := []model.Project{}
 	for rows.Next() {
 		var p model.Project
 		var tagsStr string

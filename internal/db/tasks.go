@@ -25,12 +25,12 @@ type TaskFilter struct {
 
 // dateFilterableViews lists the views where --on/--from/--to make sense.
 // Excluded: inbox tasks have no startDate; trash is trashed-only; logbook
-// items have a stopDate but no meaningful startDate filter.
+// items have a stopDate but no meaningful startDate filter; someday requires
+// startDate IS NULL, so a startDate range could never match anything.
 var dateFilterableViews = map[string]bool{
 	"today":     true,
 	"upcoming":  true,
 	"anytime":   true,
-	"someday":   true,
 	"deadlines": true,
 	"project":   true,
 }
@@ -286,7 +286,7 @@ func (d *DB) collectTasks(query string, args ...any) ([]model.Task, error) {
 	}
 	defer rows.Close()
 
-	var tasks []model.Task
+	tasks := []model.Task{}
 	for rows.Next() {
 		t, err := scanTask(rows)
 		if err != nil {

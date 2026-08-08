@@ -36,7 +36,7 @@ func (d *DB) ListAreas() ([]model.Area, error) {
 	}
 	defer rows.Close()
 
-	var areas []model.Area
+	areas := []model.Area{}
 	for rows.Next() {
 		var a model.Area
 		var visible int
