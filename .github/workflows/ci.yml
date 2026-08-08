@@ -38,8 +38,28 @@ jobs:
       - name: Coverage summary
         run: go tool cover -func=coverage.out
 
+      # Exit-code gate: a reachable vulnerability fails this job and blocks
+      # the merge. The govulncheck-sarif job below is the same scan for the
+      # Security tab — SARIF mode never fails the build, hence both.
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  govulncheck-sarif:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          go-version-file: go.mod
+          output-format: sarif
+          output-file: govulncheck.sarif
+
+      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck
 
   dependency-review:
     if: github.event_name == 'pull_request'
