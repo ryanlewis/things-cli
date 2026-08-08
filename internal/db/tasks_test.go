@@ -316,8 +316,10 @@ func TestListTasksDeadlinesDateFilters(t *testing.T) {
 }
 
 func TestDateFilterableView(t *testing.T) {
-	allowed := []string{"today", "upcoming", "anytime", "someday", "deadlines", "project"}
-	denied := []string{"inbox", "trash", "logbook", "bogus"}
+	allowed := []string{"today", "upcoming", "anytime", "deadlines", "project"}
+	// someday is denied because its view predicate requires startDate IS NULL —
+	// a startDate range filter could never match anything.
+	denied := []string{"inbox", "trash", "logbook", "someday", "bogus"}
 	for _, v := range allowed {
 		if !DateFilterableView(v) {
 			t.Errorf("%q: expected filterable", v)

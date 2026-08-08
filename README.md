@@ -93,8 +93,9 @@ Filters:
 
 `-p`/`-a`/`-t` combine with any view. The date filters (`--on`, `--from`,
 `--to`) apply to date-filterable views — `today`, `upcoming`, `anytime`,
-`someday`, `deadlines`, and project listings — and `--on` can't be combined
-with `--from`/`--to`. `--include-completed` applies to the `today` view only.
+`deadlines`, and project listings (`someday` items have no start date, so
+they can't be date-filtered) — and `--on` can't be combined with
+`--from`/`--to`. `--include-completed` applies to the `today` view only.
 
 Examples:
 

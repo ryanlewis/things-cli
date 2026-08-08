@@ -82,6 +82,17 @@ func TestPrintEmptyTasks(t *testing.T) {
 	}
 }
 
+// Empty lists must encode as [], not null — jq '.[]' fails on null.
+func TestPrintEmptyTasksJSON(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Print(&buf, []model.Task{}, true); err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "[]" {
+		t.Errorf("expected [], got %q", got)
+	}
+}
+
 func TestPrintProjectsPlain(t *testing.T) {
 	projects := []model.Project{
 		{UUID: "p1", Title: "Empty project", TaskCount: 0},

@@ -87,3 +87,49 @@ func TestOpenBadPath(t *testing.T) {
 		t.Fatal("expected error for bad path")
 	}
 }
+
+// Empty result sets must be non-nil slices: a nil slice JSON-encodes as
+// `null`, which breaks documented `--json | jq '.[]'` pipelines.
+func TestEmptyResultsAreNonNil(t *testing.T) {
+	d := newTestDB(t)
+
+	tasks, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if tasks == nil || len(tasks) != 0 {
+		t.Errorf("ListTasks: want non-nil empty slice, got %#v", tasks)
+	}
+
+	found, err := d.SearchTasks("no-such-task")
+	if err != nil {
+		t.Fatalf("SearchTasks: %v", err)
+	}
+	if found == nil || len(found) != 0 {
+		t.Errorf("SearchTasks: want non-nil empty slice, got %#v", found)
+	}
+
+	projects, err := d.ListProjects("", false)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if projects == nil || len(projects) != 0 {
+		t.Errorf("ListProjects: want non-nil empty slice, got %#v", projects)
+	}
+
+	areas, err := d.ListAreas()
+	if err != nil {
+		t.Fatalf("ListAreas: %v", err)
+	}
+	if areas == nil || len(areas) != 0 {
+		t.Errorf("ListAreas: want non-nil empty slice, got %#v", areas)
+	}
+
+	tags, err := d.ListTags()
+	if err != nil {
+		t.Fatalf("ListTags: %v", err)
+	}
+	if tags == nil || len(tags) != 0 {
+		t.Errorf("ListTags: want non-nil empty slice, got %#v", tags)
+	}
+}

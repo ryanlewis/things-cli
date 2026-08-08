@@ -36,7 +36,7 @@ func (d *DB) ListTags() ([]model.Tag, error) {
 	}
 	defer rows.Close()
 
-	var tags []model.Tag
+	tags := []model.Tag{}
 	for rows.Next() {
 		var t model.Tag
 		if err := rows.Scan(&t.UUID, &t.Title, &t.Shortcut, &t.ParentUUID); err != nil {
