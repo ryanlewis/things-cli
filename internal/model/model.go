@@ -132,7 +132,7 @@ func (d *ThingsDate) UnmarshalJSON(data []byte) error {
 // REAL columns against 1970, not Apple's 2001 reference date.
 func UnixToTime(ts float64) time.Time {
 	sec, frac := math.Modf(ts)
-	return time.Unix(int64(sec), int64(frac*float64(time.Second))).UTC()
+	return time.Unix(int64(sec), int64(math.Round(frac*float64(time.Second)))).UTC()
 }
 
 // TimeToUnix converts a time.Time to a Things absolute timestamp.
