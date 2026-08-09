@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -125,16 +126,18 @@ func (d *ThingsDate) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-var coreDataEpoch = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
-
-// CoreDataToTime converts a Core Data timestamp (seconds since 2001-01-01) to time.Time.
-func CoreDataToTime(ts float64) time.Time {
-	return coreDataEpoch.Add(time.Duration(ts * float64(time.Second)))
+// UnixToTime converts a Things absolute timestamp (fractional seconds since
+// the Unix epoch, as stored in creationDate/stopDate/userModificationDate) to
+// time.Time. Despite the Core Data heritage of the schema, Things stores these
+// REAL columns against 1970, not Apple's 2001 reference date.
+func UnixToTime(ts float64) time.Time {
+	sec, frac := math.Modf(ts)
+	return time.Unix(int64(sec), int64(math.Round(frac*float64(time.Second)))).UTC()
 }
 
-// TimeToCoreData converts a time.Time to Core Data timestamp.
-func TimeToCoreData(t time.Time) float64 {
-	return t.Sub(coreDataEpoch).Seconds()
+// TimeToUnix converts a time.Time to a Things absolute timestamp.
+func TimeToUnix(t time.Time) float64 {
+	return float64(t.UnixNano()) / float64(time.Second)
 }
 
 type Task struct {

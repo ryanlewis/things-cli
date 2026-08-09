@@ -62,7 +62,7 @@ func seedTasks(t *testing.T, d *DB) {
 		('t-today', 'tg-home')`)
 
 	// stopDate on the done task so logbook has something to order by
-	done := model.TimeToCoreData(time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC))
+	done := model.TimeToUnix(time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC))
 	mustExec(t, d, `UPDATE TMTask SET stopDate = ? WHERE uuid = 't-done'`, done)
 }
 
@@ -136,8 +136,8 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	// subtraction would underflow the day field to 0 on the 1st.
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	yesterday := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -1)))
-	stopToday := model.TimeToCoreData(time.Now().Add(-1 * time.Minute))
-	stopYesterday := model.TimeToCoreData(time.Now().Add(-25 * time.Hour))
+	stopToday := model.TimeToUnix(time.Now().Add(-1 * time.Minute))
+	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
 
 	// Completed today, not yet logged.
 	mustExec(t, d, `INSERT INTO TMTask
@@ -181,7 +181,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	}
 
 	// Simulate "Log Completed Now": bump manualLogDate past both stopDates.
-	future := model.TimeToCoreData(time.Now().Add(1 * time.Minute))
+	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 
 	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})

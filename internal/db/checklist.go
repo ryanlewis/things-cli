@@ -28,7 +28,7 @@ func (d *DB) GetChecklistItems(taskUUID string) ([]model.ChecklistItem, error) {
 			return nil, fmt.Errorf("scanning checklist item: %w", err)
 		}
 		if stopDate.Valid {
-			ts := model.CoreDataToTime(stopDate.Float64)
+			ts := model.UnixToTime(stopDate.Float64)
 			item.StopDate = &ts
 		}
 		items = append(items, item)

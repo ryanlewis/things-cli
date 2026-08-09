@@ -27,7 +27,7 @@ make fmt     # gofmt -w . && goimports -w .
 
 ## Architecture
 
-- `internal/model/` — shared types (Task, Project, Area, Tag, ChecklistItem) and date codecs (ThingsDate bit-encoding, Core Data timestamps)
+- `internal/model/` — shared types (Task, Project, Area, Tag, ChecklistItem) and date codecs (ThingsDate bit-encoding, Unix-epoch absolute timestamps)
 - `internal/db/` — SQLite queries via `modernc.org/sqlite` (pure Go, no cgo). Opens DB read-only with `PRAGMA query_only = ON`. `NewFromSQL` exists purely to let test helpers wrap an externally-built `*sql.DB`.
 - `internal/db/dbtest/` — test-only helper: `dbtest.NewSQL(t)` returns an in-memory SQLite with the pared-down Things3 schema (embedded via `//go:embed schema.sql`). Use from any package's tests.
 - `internal/things/` — write operations: URL scheme (`things:///add`) for task creation, AppleScript for complete/cancel
