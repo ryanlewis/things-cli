@@ -9,7 +9,7 @@ import (
 func TestGetChecklistItemsOrderedAndDated(t *testing.T) {
 	d := newTestDB(t)
 
-	stopTS := model.TimeToCoreData(mustTime("2026-04-10T10:00:00Z"))
+	stopTS := model.TimeToUnix(mustTime("2026-04-10T10:00:00Z"))
 	mustExec(t, d, `INSERT INTO TMChecklistItem (uuid, title, status, stopDate, "index", task) VALUES
 		('c1', 'step B', 0, NULL,       2, 'task1'),
 		('c2', 'step A', 3, ?,          1, 'task1'),

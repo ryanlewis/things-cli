@@ -111,28 +111,43 @@ func TestThingsDateRoundTripJSON(t *testing.T) {
 	}
 }
 
-func TestCoreDataRoundTrip(t *testing.T) {
+func TestUnixTimeRoundTrip(t *testing.T) {
 	cases := []time.Time{
-		time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC), // epoch
+		time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC), // epoch
 		time.Date(2026, 4, 14, 12, 34, 56, 0, time.UTC),
-		time.Date(2000, 6, 15, 8, 0, 0, 0, time.UTC), // pre-epoch
+		time.Date(1969, 6, 15, 8, 0, 0, 0, time.UTC), // pre-epoch
 	}
 	for _, in := range cases {
-		ts := TimeToCoreData(in)
-		got := CoreDataToTime(ts)
+		ts := TimeToUnix(in)
+		got := UnixToTime(ts)
 		if !got.Equal(in) {
 			t.Fatalf("roundtrip mismatch: in=%s got=%s (ts=%f)", in, got, ts)
 		}
 	}
 }
 
-func TestCoreDataEpochZero(t *testing.T) {
-	epoch := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
-	if ts := TimeToCoreData(epoch); ts != 0 {
+func TestUnixTimeEpochZero(t *testing.T) {
+	epoch := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
+	if ts := TimeToUnix(epoch); ts != 0 {
 		t.Fatalf("epoch should be 0, got %f", ts)
 	}
-	if got := CoreDataToTime(0); !got.Equal(epoch) {
-		t.Fatalf("CoreDataToTime(0) = %s, want %s", got, epoch)
+	if got := UnixToTime(0); !got.Equal(epoch) {
+		t.Fatalf("UnixToTime(0) = %s, want %s", got, epoch)
+	}
+}
+
+// Regression for the "+31 years" bug: Things stores creationDate/stopDate as
+// Unix-epoch seconds, but they were being decoded against the Core Data 2001
+// reference date, shifting every absolute timestamp 31 years into the future.
+// The raw value below came from a real TMTask row created 2026-08-09.
+func TestUnixTimeNotCoreDataEpoch(t *testing.T) {
+	got := UnixToTime(1786235005.119778)
+	want := time.Date(2026, 8, 9, 0, 23, 25, 0, time.UTC)
+	if got.Year() != want.Year() {
+		t.Fatalf("UnixToTime decoded into year %d, want %d (Core Data epoch regression)", got.Year(), want.Year())
+	}
+	if got.Sub(want).Abs() > time.Second {
+		t.Fatalf("UnixToTime(1786235005.119778) = %s, want ~%s", got, want)
 	}
 }
 

@@ -103,11 +103,11 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 		t.Deadline = &d
 	}
 	if stopDate.Valid {
-		ts := model.CoreDataToTime(stopDate.Float64)
+		ts := model.UnixToTime(stopDate.Float64)
 		t.StopDate = &ts
 	}
 	if creationDate.Valid {
-		ts := model.CoreDataToTime(creationDate.Float64)
+		ts := model.UnixToTime(creationDate.Float64)
 		t.CreationDate = &ts
 	}
 	if tagsStr != "" {
