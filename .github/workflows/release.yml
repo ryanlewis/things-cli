@@ -36,14 +36,38 @@ jobs:
           # another ref would flow straight into published artifacts.
           cache: false
 
+      # goreleaser only signs when MACOS_SIGN_P12 is set (so local snapshot
+      # builds work without secrets) — which means a missing secret in CI
+      # would silently publish unsigned binaries and a Homebrew cask with no
+      # de-quarantine hook. Fail loudly instead.
+      - name: Ensure signing secrets are present
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          if [ -z "$MACOS_SIGN_P12" ] || [ -z "$MACOS_NOTARY_KEY" ]; then
+            echo "::error::signing/notarization secrets missing from the release environment — refusing to publish unsigned binaries. See .github/SIGNING.md"
+            exit 1
+          fi
+
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          # --timeout raised from the 30m default: notarization waits on
+          # Apple's queue, which can be slow for a young developer account.
+          args: release --clean --timeout 60m
+        # Secrets are exposed to this step only — never job-wide — so other
+        # steps (and anything they download) can't read them from the
+        # environment.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

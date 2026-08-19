@@ -33,6 +33,37 @@ archives:
       - README.md
       - LICENSE*
 
+# Sign and notarize the darwin binaries in place before archiving, so the
+# tarballs (and therefore checksums and provenance attestations) contain the
+# signed Mach-O. Uses quill under the hood — runs fine on the Linux runner, no
+# macOS runner or keychain needed. Skipped when MACOS_SIGN_P12 is unset so
+# local snapshot builds still work; CI enforces the secrets separately (see
+# the preflight step in .github/workflows/release.yml).
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      # Must match the build id above. The default filter is the project name
+      # (things-cli), which matches no build here and would silently sign
+      # nothing.
+      ids:
+        - things
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        # Block until Apple accepts the submission. This runs before archiving
+        # and publishing, so a rejected or timed-out notarization fails the
+        # whole release cleanly — nothing partial is published and the job can
+        # simply be re-run.
+        wait: true
+        # First-ever submissions on a new developer account can sit in Apple's
+        # queue for a while; the workflow raises goreleaser's global --timeout
+        # to match.
+        timeout: 30m
+
 checksum:
   name_template: "checksums.txt"
 
@@ -78,16 +109,11 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "chore(brew): {{ .ProjectName }} {{ .Tag }}"
-    # De-quarantine in preflight (before artifact install) rather than postflight,
-    # so the binary is runnable when generate_completions_from_executable invokes
-    # it during install — otherwise Gatekeeper blocks the unsigned binary and no
-    # completion files are written.
-    hooks:
-      pre:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/things"]
-          end
+    # No de-quarantine hook: the binary is signed and notarized (see the
+    # notarize block above), so Gatekeeper passes it — including when
+    # generate_completions_from_executable runs it at install time. Bare
+    # Mach-O binaries can't have a ticket stapled, so the first run needs
+    # network for Gatekeeper's online notarization lookup.
     zap:
       trash:
         - ~/Library/Caches/things-cli
