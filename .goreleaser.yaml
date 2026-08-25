@@ -59,10 +59,10 @@ notarize:
         # whole release cleanly — nothing partial is published and the job can
         # simply be re-run.
         wait: true
-        # First-ever submissions on a new developer account can sit in Apple's
-        # queue for a while; the workflow raises goreleaser's global --timeout
-        # to match.
-        timeout: 30m
+        # 20m is the hard maximum (goreleaser >= 2.18 rejects more — Apple
+        # refuses auth tokens with longer lifetimes) and far above the ~30s
+        # a submission normally takes on this account.
+        timeout: 20m
 
 checksum:
   name_template: "checksums.txt"
