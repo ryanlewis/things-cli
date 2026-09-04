@@ -145,7 +145,7 @@ func runOut(t *testing.T, database *db.DB, args ...string) (string, error) {
 		t.Fatalf("parse %v: %v", args, err)
 	}
 	var buf bytes.Buffer
-	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &buf}
+	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &buf, NoVerify: cli.NoVerify}
 	var runErr error
 	withSilentStdout(t, func() {
 		runErr = ctx.Run(deps)

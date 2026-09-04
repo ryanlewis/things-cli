@@ -214,6 +214,9 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 	if t.Deadline != nil {
 		fmt.Fprintf(w, "%s%s\n", label("Deadline:"), styledDate(t.Deadline, false))
 	}
+	if t.Repeating {
+		fmt.Fprintf(w, "%s%s\n", label("Repeats:"), "yes (Things blocks status, when and deadline edits)")
+	}
 	if t.CreationDate != nil {
 		fmt.Fprintf(w, "%s%s\n", label("Created:"), t.CreationDate.Format("2006-01-02 15:04"))
 	}

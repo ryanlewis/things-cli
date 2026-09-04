@@ -35,6 +35,8 @@ type CLI struct {
 	DB      string           `help:"Override database path." type:"existingfile"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
+	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel actually landed." name:"no-verify" default:"false"`
+
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
 	Areas    AreasCmd    `cmd:"" help:"List areas."`
@@ -63,6 +65,9 @@ type Deps struct {
 	DBPath string
 	JSON   bool
 	Stdout io.Writer
+
+	// NoVerify skips the post-write read-back on complete/cancel.
+	NoVerify bool
 }
 
 // Database returns the lazily-opened DB. Subsequent calls return the same
@@ -372,25 +377,32 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 		return fmt.Errorf("not a project: %s", project.Title)
 	}
 
+	if err := checkRepeating(project, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
+		return err
+	}
+
 	token, _ := database.GetAuthToken()
-	return things.UpdateProject(things.UpdateProjectParams{
-		ID:           project.UUID,
-		AuthToken:    token,
-		Title:        c.Title,
-		Notes:        c.Notes,
-		PrependNotes: c.PrependNotes,
-		AppendNotes:  c.AppendNotes,
-		When:         c.When,
-		Deadline:     c.Deadline,
-		Tags:         c.Tags,
-		AddTags:      c.AddTags,
-		Area:         c.Area,
-		AreaID:       c.AreaID,
-		Completed:    c.Complete,
-		Canceled:     c.Cancel,
-		Duplicate:    c.Duplicate,
-		Reveal:       c.Reveal,
-	})
+	update := func() error {
+		return things.UpdateProject(things.UpdateProjectParams{
+			ID:           project.UUID,
+			AuthToken:    token,
+			Title:        c.Title,
+			Notes:        c.Notes,
+			PrependNotes: c.PrependNotes,
+			AppendNotes:  c.AppendNotes,
+			When:         c.When,
+			Deadline:     c.Deadline,
+			Tags:         c.Tags,
+			AddTags:      c.AddTags,
+			Area:         c.Area,
+			AreaID:       c.AreaID,
+			Completed:    c.Complete,
+			Canceled:     c.Cancel,
+			Duplicate:    c.Duplicate,
+			Reveal:       c.Reveal,
+		})
+	}
+	return applyEditStatusWrite(d, database, project, c.Complete, c.Cancel, c.Duplicate, update)
 }
 
 type EditCmd struct {
@@ -433,30 +445,37 @@ func (c *EditCmd) Run(d *Deps) error {
 		return err
 	}
 
+	if err := checkRepeating(task, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
+		return err
+	}
+
 	token, _ := database.GetAuthToken()
-	return things.UpdateTask(things.UpdateParams{
-		ID:               task.UUID,
-		AuthToken:        token,
-		Title:            c.Title,
-		Notes:            c.Notes,
-		PrependNotes:     c.PrependNotes,
-		AppendNotes:      c.AppendNotes,
-		When:             c.When,
-		Deadline:         c.Deadline,
-		Tags:             c.Tags,
-		AddTags:          c.AddTags,
-		Checklist:        expandNewlinesPtr(c.Checklist),
-		PrependChecklist: expandNewlinesPtr(c.PrependChecklist),
-		AppendChecklist:  expandNewlinesPtr(c.AppendChecklist),
-		List:             c.List,
-		ListID:           c.ListID,
-		Heading:          c.Heading,
-		HeadingID:        c.HeadingID,
-		Completed:        c.Complete,
-		Canceled:         c.Cancel,
-		Duplicate:        c.Duplicate,
-		Reveal:           c.Reveal,
-	})
+	update := func() error {
+		return things.UpdateTask(things.UpdateParams{
+			ID:               task.UUID,
+			AuthToken:        token,
+			Title:            c.Title,
+			Notes:            c.Notes,
+			PrependNotes:     c.PrependNotes,
+			AppendNotes:      c.AppendNotes,
+			When:             c.When,
+			Deadline:         c.Deadline,
+			Tags:             c.Tags,
+			AddTags:          c.AddTags,
+			Checklist:        expandNewlinesPtr(c.Checklist),
+			PrependChecklist: expandNewlinesPtr(c.PrependChecklist),
+			AppendChecklist:  expandNewlinesPtr(c.AppendChecklist),
+			List:             c.List,
+			ListID:           c.ListID,
+			Heading:          c.Heading,
+			HeadingID:        c.HeadingID,
+			Completed:        c.Complete,
+			Canceled:         c.Cancel,
+			Duplicate:        c.Duplicate,
+			Reveal:           c.Reveal,
+		})
+	}
+	return applyEditStatusWrite(d, database, task, c.Complete, c.Cancel, c.Duplicate, update)
 }
 
 type CompleteCmd struct {
@@ -472,13 +491,20 @@ func (c *CompleteCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
+	if err := checkRepeating(task, []string{"completed"}); err != nil {
+		return err
+	}
 	if task.Type == model.TypeProject {
 		if !confirmAction(fmt.Sprintf("Complete project %q? This will also complete all its tasks.", task.Title)) {
 			return fmt.Errorf("cancelled")
 		}
-		return things.CompleteProject(task.UUID)
+		return applyStatusWrite(d, database, task, model.StatusCompleted, func() error {
+			return things.CompleteProject(task.UUID)
+		})
 	}
-	return things.CompleteTask(task.UUID)
+	return applyStatusWrite(d, database, task, model.StatusCompleted, func() error {
+		return things.CompleteTask(task.UUID)
+	})
 }
 
 type CancelCmd struct {
@@ -494,13 +520,20 @@ func (c *CancelCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
+	if err := checkRepeating(task, []string{"canceled"}); err != nil {
+		return err
+	}
 	if task.Type == model.TypeProject {
 		if !confirmAction(fmt.Sprintf("Cancel project %q? This will also cancel all its tasks.", task.Title)) {
 			return fmt.Errorf("cancelled")
 		}
-		return things.CancelProject(task.UUID)
+		return applyStatusWrite(d, database, task, model.StatusCancelled, func() error {
+			return things.CancelProject(task.UUID)
+		})
 	}
-	return things.CancelTask(task.UUID)
+	return applyStatusWrite(d, database, task, model.StatusCancelled, func() error {
+		return things.CancelTask(task.UUID)
+	})
 }
 
 type SearchCmd struct {
@@ -779,7 +812,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout}
+	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, NoVerify: cli.NoVerify}
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {

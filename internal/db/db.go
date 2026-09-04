@@ -5,12 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 type DB struct {
 	db *sql.DB
+
+	// repeatSQL caches the probed recurrence-column expression; see
+	// (*DB).repeatingExpr.
+	repeatOnce sync.Once
+	repeatSQL  string
 }
 
 // FindDBPath locates the Things3 SQLite database.

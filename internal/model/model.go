@@ -162,6 +162,11 @@ type Task struct {
 	Tags         []string    `json:"tags,omitempty"`
 	Index        int         `json:"index"`
 	TodayIndex   int         `json:"todayIndex"`
+
+	// Repeating marks an item Things treats as a repeating to-do or project.
+	// Things refuses status, when, deadline and duplicate updates on these,
+	// silently, so callers need to know before they try.
+	Repeating bool `json:"repeating,omitempty"`
 }
 
 type ChecklistItem struct {
