@@ -65,9 +65,19 @@ type Deps struct {
 	DBPath string
 	JSON   bool
 	Stdout io.Writer
+	Stderr io.Writer
 
 	// NoVerify skips the post-write read-back on complete/cancel.
 	NoVerify bool
+}
+
+// errOut is where warnings go. Tests leave Stderr nil and capture os.Stderr,
+// or set it to a buffer to assert on the text.
+func (d *Deps) errOut() io.Writer {
+	if d.Stderr == nil {
+		return os.Stderr
+	}
+	return d.Stderr
 }
 
 // Database returns the lazily-opened DB. Subsequent calls return the same
@@ -294,9 +304,14 @@ type AddCmd struct {
 	Project   string `help:"Project name or UUID."`
 	Heading   string `help:"Heading within project."`
 	List      string `help:"List (project or area) name."`
+
+	StrictTags
 }
 
-func (c *AddCmd) Run(_ *Deps) error {
+func (c *AddCmd) Run(d *Deps) error {
+	if err := verifyTagStrings(d, c.StrictTags.StrictTags, &c.Tags); err != nil {
+		return err
+	}
 	list := c.List
 	if list == "" {
 		list = c.Project
@@ -326,9 +341,14 @@ type ProjectAddCmd struct {
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial to-dos."`
+
+	StrictTags
 }
 
-func (c *ProjectAddCmd) Run(_ *Deps) error {
+func (c *ProjectAddCmd) Run(d *Deps) error {
+	if err := verifyTagStrings(d, c.StrictTags.StrictTags, &c.Tags); err != nil {
+		return err
+	}
 	return things.AddProject(things.AddProjectParams{
 		Title:    c.Title,
 		Notes:    c.Notes,
@@ -362,6 +382,8 @@ type ProjectEditCmd struct {
 	Cancel    bool `help:"Mark the project as canceled." xor:"status"`
 	Duplicate bool `help:"Duplicate the project before applying edits."`
 	Reveal    bool `help:"Reveal the project in Things after editing."`
+
+	StrictTags
 }
 
 func (c *ProjectEditCmd) Run(d *Deps) error {
@@ -376,8 +398,12 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 	if project.Type != model.TypeProject {
 		return fmt.Errorf("not a project: %s", project.Title)
 	}
-
 	if err := checkRepeating(project, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
+		return err
+	}
+	// After checkRepeating: no point warning about tags on an edit Things
+	// is going to refuse anyway.
+	if err := verifyTagStrings(d, c.StrictTags.StrictTags, c.Tags, c.AddTags); err != nil {
 		return err
 	}
 
@@ -433,6 +459,8 @@ type EditCmd struct {
 	Cancel    bool `help:"Mark the task as canceled." xor:"status"`
 	Duplicate bool `help:"Duplicate the task before applying edits."`
 	Reveal    bool `help:"Reveal the task in Things after editing."`
+
+	StrictTags
 }
 
 func (c *EditCmd) Run(d *Deps) error {
@@ -444,8 +472,12 @@ func (c *EditCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-
 	if err := checkRepeating(task, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
+		return err
+	}
+	// After checkRepeating: no point warning about tags on an edit Things
+	// is going to refuse anyway.
+	if err := verifyTagStrings(d, c.StrictTags.StrictTags, c.Tags, c.AddTags); err != nil {
 		return err
 	}
 
@@ -668,6 +700,8 @@ func (c *SkillListCmd) Run(d *Deps) error {
 type ImportCmd struct {
 	File   string `help:"Read JSON payload from this file instead of stdin." short:"f" type:"existingfile"`
 	Reveal bool   `help:"Reveal the first created/updated item in Things after import."`
+
+	StrictTags
 }
 
 func (c *ImportCmd) Run(d *Deps) error {
@@ -693,12 +727,15 @@ func (c *ImportCmd) Run(d *Deps) error {
 	if err := validateImportJSON(data); err != nil {
 		return err
 	}
+	if err := verifyTags(d, c.StrictTags.StrictTags, importTags(data)); err != nil {
+		return err
+	}
 	token, err := database.GetAuthToken()
 	if err != nil {
 		// Don't fail the import — the payload may be create-only and not need
 		// the token at all — but surface the read error so users debugging an
 		// `operation: update` failure aren't left guessing.
-		fmt.Fprintf(os.Stderr, "warning: could not read Things auth token: %v\n", err)
+		fmt.Fprintf(d.errOut(), "warning: could not read Things auth token: %v\n", err)
 	}
 	return things.ImportJSON(string(data), token, c.Reveal)
 }
@@ -806,7 +843,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, NoVerify: cli.NoVerify}
+	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify}
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {

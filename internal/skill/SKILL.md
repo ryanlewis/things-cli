@@ -46,10 +46,10 @@ things areas
 things tags
 things search <query>
 
-things add <title> [--notes --when --deadline --tags --checklist --project --heading --list]
-things project add <title> [--notes --when --deadline --tags --area --todos]
-things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal]
-things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal]
+things add <title> [--notes --when --deadline --tags --checklist --project --heading --list --strict-tags]
+things project add <title> [--notes --when --deadline --tags --area --todos --strict-tags]
+things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal --strict-tags]
+things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal --strict-tags]
 things complete <task>          # task or project; project completion asks to confirm
 things cancel <task>            # task or project; project cancellation asks to confirm
 things log                      # move Today → Logbook
@@ -60,7 +60,7 @@ things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
     # exactly one of <ref> / -p / -a / -t / -q is required
     # --filter narrows the opened list by tags; --background keeps focus elsewhere
 
-things import [--file F] [--reveal] < payload.json
+things import [--file F] [--reveal] [--strict-tags] < payload.json
     # batch create/update via the Things JSON URL scheme
     # payload is the array documented at culturedcode.com/things/support/articles/2803573/
 ```
@@ -75,6 +75,16 @@ on repeating to-dos and drops the request silently (…). Change it in the Thing
 ```
 
 There is no CLI workaround — the user has to make the change in the Things app. Every other attribute (`--title`, `--notes`, `--tags`, `--list`, …) edits normally.
+
+### Tags must already exist
+
+Things applies only tags that already exist and ignores the rest without saying so. Before any write that carries tags, the CLI checks them against the database and warns on stderr about ones it cannot find:
+
+```
+warning: these tags do not exist in Things and will be ignored: cifas-auto-reject
+```
+
+The write still goes ahead. Pass `--strict-tags` to fail before writing instead. There is no way to create a tag from the CLI — create it in Things first, then re-run.
 
 ### Task reference forms
 

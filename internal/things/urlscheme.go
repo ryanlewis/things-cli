@@ -63,6 +63,22 @@ func setNonEmpty(v url.Values, key, value string) {
 	}
 }
 
+// SplitTags splits the comma-separated tag syntax the Things URL scheme uses
+// into individual names, trimming surrounding whitespace and dropping empty
+// entries. Things has no escape for a comma inside a tag name.
+func SplitTags(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	var tags []string
+	for _, t := range strings.Split(s, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
+}
+
 // BuiltinLists are the navigable list IDs the Things URL scheme accepts
 // verbatim as `id=…`. Some (e.g. repeating, all-projects) have no direct
 // DB equivalent — they're app-side views only.
