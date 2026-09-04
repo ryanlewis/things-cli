@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
@@ -90,6 +92,21 @@ func seedFullDB(t *testing.T) *db.DB {
 		t.Fatalf("seed inbox task: %v", err)
 	}
 
+	// Heading in proj-1, plus an anytime task filed under it. The task has no
+	// project of its own and no start date, so it is outside the today view.
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask (uuid, title, type, status, trashed, project, "index")
+		 VALUES ('head-1', 'Weekly', 2, 0, 0, 'proj-1', 2)`,
+	); err != nil {
+		t.Fatalf("seed heading: %v", err)
+	}
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, heading, "index")
+		 VALUES ('task-3', 'Sweep floor', 0, 0, 0, 1, 0, 'head-1', 3)`,
+	); err != nil {
+		t.Fatalf("seed heading task: %v", err)
+	}
+
 	// Checklist item on task-1
 	if _, err := sqlDB.Exec(
 		`INSERT INTO TMChecklistItem (uuid, title, status, "index", task)
@@ -102,6 +119,14 @@ func seedFullDB(t *testing.T) *db.DB {
 }
 
 func runWith(t *testing.T, database *db.DB, args ...string) error {
+	t.Helper()
+	_, err := runOut(t, database, args...)
+	return err
+}
+
+// runOut parses args, runs the command against database, and returns whatever
+// the handler wrote to Deps.Stdout.
+func runOut(t *testing.T, database *db.DB, args ...string) (string, error) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 
@@ -119,12 +144,13 @@ func runWith(t *testing.T, database *db.DB, args ...string) error {
 	if err != nil {
 		t.Fatalf("parse %v: %v", args, err)
 	}
-	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: io.Discard}
+	var buf bytes.Buffer
+	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &buf}
 	var runErr error
 	withSilentStdout(t, func() {
 		runErr = ctx.Run(deps)
 	})
-	return runErr
+	return buf.String(), runErr
 }
 
 func TestRunDispatchReadOnly(t *testing.T) {
@@ -212,10 +238,15 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 		t.Fatalf("inbox: expected view-rejection error, got: %v", err)
 	}
 
-	// Trailing project name promotes today → project, which also rejects.
-	err = runWith(t, database, "list", "today", "Chores", "--include-completed")
+	// A filter with no explicit view lists the whole project, which also rejects.
+	err = runWith(t, database, "list", "Chores", "--include-completed")
 	if err == nil || !strings.Contains(err.Error(), "only supported on the \"today\" view") {
-		t.Fatalf("promoted project: expected view-rejection error, got: %v", err)
+		t.Fatalf("project filter: expected view-rejection error, got: %v", err)
+	}
+
+	// An explicit today view keeps the flag valid alongside a filter.
+	if err := runWith(t, database, "list", "today", "Chores", "--include-completed"); err != nil {
+		t.Fatalf("today + project filter: %v", err)
 	}
 }
 
@@ -369,5 +400,118 @@ func TestRunListThenResolveByIndex(t *testing.T) {
 	}
 	if len(got) == 0 {
 		t.Fatal("expected cached uuids")
+	}
+}
+
+// A filter with no explicit view lists the target's whole open set rather than
+// its Today slice — task-3 is an anytime task under a heading in Chores, so it
+// only shows up if both the default view and the heading join are right
+// (issues #139, #140).
+func TestRunListFilterDefaultsToAllOpenTasks(t *testing.T) {
+	database := seedFullDB(t)
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"project flag", []string{"list", "--project", "Chores"}},
+		{"project arg", []string{"list", "Chores"}},
+		{"area flag", []string{"list", "--area", "Home"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := runWith(t, database, tc.args...); err != nil {
+				t.Fatalf("run %v: %v", tc.args, err)
+			}
+			got, err := cache.ReadLastList()
+			if err != nil {
+				t.Fatalf("ReadLastList: %v", err)
+			}
+			want := map[string]bool{"task-1": true, "task-3": true}
+			if len(got) != len(want) {
+				t.Fatalf("got %v, want task-1 and task-3", got)
+			}
+			for _, uuid := range got {
+				if !want[uuid] {
+					t.Errorf("unexpected uuid %q in %v", uuid, got)
+				}
+			}
+		})
+	}
+}
+
+// An explicit view still wins over the filter default, and the listing says
+// which view it drew from so a short list can't read as the whole project
+// (issue #140).
+func TestRunListLabelsExplicitViewWhenFiltered(t *testing.T) {
+	database := seedFullDB(t)
+
+	out, err := runOut(t, database, "list", "today", "--project", "Chores")
+	if err != nil {
+		t.Fatalf("run list today --project Chores: %v", err)
+	}
+	if !strings.Contains(out, "view: today") {
+		t.Errorf("expected the today view labelled, got:\n%s", out)
+	}
+	if strings.Contains(out, "Sweep floor") {
+		t.Errorf("explicit today view should not list the anytime task, got:\n%s", out)
+	}
+
+	// The unfiltered default and the full-project listing carry no label.
+	out, err = runOut(t, database, "list", "--project", "Chores")
+	if err != nil {
+		t.Fatalf("run list --project Chores: %v", err)
+	}
+	if strings.Contains(out, "view:") {
+		t.Errorf("unlabelled listing expected, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Sweep floor") {
+		t.Errorf("expected the heading-nested task, got:\n%s", out)
+	}
+
+	out, err = runOut(t, database, "list", "today")
+	if err != nil {
+		t.Fatalf("run list today: %v", err)
+	}
+	if strings.Contains(out, "view:") {
+		t.Errorf("unfiltered today needs no label, got:\n%s", out)
+	}
+}
+
+// JSON output stays a bare task array — the view label is human output only.
+func TestRunListJSONIsUnlabelled(t *testing.T) {
+	database := seedFullDB(t)
+
+	out, err := runOut(t, database, "--json", "list", "today", "--project", "Chores")
+	if err != nil {
+		t.Fatalf("run --json list today --project Chores: %v", err)
+	}
+	var tasks []model.Task
+	if err := json.Unmarshal([]byte(out), &tasks); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if len(tasks) != 1 || tasks[0].UUID != "task-1" {
+		t.Errorf("got %d tasks, want [task-1]", len(tasks))
+	}
+}
+
+// A heading-nested task reports the project it sits in, so `things show` and
+// listings don't present it as a standalone task (issue #139).
+func TestRunListHeadingTaskShowsProject(t *testing.T) {
+	database := seedFullDB(t)
+
+	out, err := runOut(t, database, "--json", "show", "task-3")
+	if err != nil {
+		t.Fatalf("run show task-3: %v", err)
+	}
+	var task model.Task
+	if err := json.Unmarshal([]byte(out), &task); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if task.ProjectTitle != "Chores" {
+		t.Errorf("projectTitle = %q, want Chores", task.ProjectTitle)
+	}
+	if task.HeadingTitle != "Weekly" {
+		t.Errorf("headingTitle = %q, want Weekly", task.HeadingTitle)
 	}
 }

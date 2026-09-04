@@ -91,11 +91,28 @@ Filters:
 | `--to DATE` | Only tasks scheduled on or before the date |
 | `--include-completed` | On `today` only: also show completed/cancelled items Things hasn't logged out of Today yet |
 
-`-p`/`-a`/`-t` combine with any view. The date filters (`--on`, `--from`,
+`-p`/`-a`/`-t` name what to list, so on their own they cover every open
+task in the project, area, or tag — not just the ones scheduled for today.
+Name a view as well and the filter applies within that view, and the
+listing says which view it drew from:
+
+```sh
+things -p "Launch v2"                # every open task in the project
+things today -p "Launch v2"          # today's slice of it, labelled "view: today"
+things "Launch v2"                   # same as -p, project name as an argument
+```
+
+Tasks filed under a project heading count as part of the project, so they
+show up under `-p` and under the project's `-a` area, and carry the project
+name in `show` and JSON output.
+
+The date filters (`--on`, `--from`,
 `--to`) apply to date-filterable views — `today`, `upcoming`, `anytime`,
 `deadlines`, and project listings (`someday` items have no start date, so
 they can't be date-filtered) — and `--on` can't be combined with
-`--from`/`--to`. `--include-completed` applies to the `today` view only.
+`--from`/`--to`. `--include-completed` applies to the `today` view only, so
+with a filter it needs the view spelled out: `things today -p "Launch v2"
+--include-completed`.
 
 Examples:
 
