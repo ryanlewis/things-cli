@@ -123,6 +123,17 @@ func TestImportTags(t *testing.T) {
 		{"array", `[{"type":"to-do","attributes":{"title":"x","tags":["work","urgent"]}}]`, []string{"work", "urgent"}},
 		{"commaString", `[{"type":"to-do","attributes":{"title":"x","tags":"work, urgent"}}]`, []string{"work", "urgent"}},
 		{
+			"addTags",
+			`[{"type":"to-do","operation":"update","id":"u1","attributes":{"add-tags":["work"]}}]`,
+			[]string{"work"},
+		},
+		{
+			// An array entry is one tag name, commas included.
+			"arrayEntryKeepsComma",
+			`[{"type":"to-do","attributes":{"title":"x","tags":["a, b"]}}]`,
+			[]string{"a, b"},
+		},
+		{
 			"nestedItems",
 			`[{"type":"project","attributes":{"title":"p","tags":["outer"],
 			  "items":[{"type":"to-do","attributes":{"title":"t","tags":["inner"]}}]}}]`,

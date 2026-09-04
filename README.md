@@ -299,8 +299,10 @@ Error: these tags do not exist in Things: cifas-auto-reject — create them in T
 
 Nothing is written in that case, and the exit status is non-zero. Tag names
 are matched case-insensitively, the way Things treats them. If the database
-can't be read, the check is skipped with a warning — unless `--strict-tags`
-is set, which then fails rather than write unchecked.
+can't be read, `add` and `project add` skip the check with a warning — unless
+`--strict-tags` is set, which then fails rather than write unchecked. `edit`,
+`project edit` and `import` need the database for other reasons and fail
+either way.
 
 ### Completing, cancelling, logging
 

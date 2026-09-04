@@ -86,7 +86,10 @@ func walkImportTags(node any, names *[]string) {
 	switch v := node.(type) {
 	case map[string]any:
 		if attrs, ok := v["attributes"].(map[string]any); ok {
+			// `add-tags` is the additive form used by `operation: update`
+			// items; it carries tag names just like `tags` does.
 			*names = append(*names, jsonTagValues(attrs["tags"])...)
+			*names = append(*names, jsonTagValues(attrs["add-tags"])...)
 		}
 		for _, child := range v {
 			walkImportTags(child, names)
@@ -98,15 +101,22 @@ func walkImportTags(node any, names *[]string) {
 	}
 }
 
-// jsonTagValues reads the `tags` attribute, which Things documents as an array
-// of strings but also accepts as a single comma-separated string.
+// jsonTagValues reads a tag attribute, which Things documents as an array of
+// strings but also accepts as a single comma-separated string. Array entries
+// are taken verbatim — the array form is what lets a payload name a tag that
+// contains a comma, so splitting them would invent unknown tags and, under
+// --strict-tags, refuse an import that Things would have applied fine.
 func jsonTagValues(node any) []string {
 	switch v := node.(type) {
 	case []any:
 		var out []string
 		for _, item := range v {
-			if s, ok := item.(string); ok {
-				out = append(out, things.SplitTags(s)...)
+			s, ok := item.(string)
+			if !ok {
+				continue
+			}
+			if s = strings.TrimSpace(s); s != "" {
+				out = append(out, s)
 			}
 		}
 		return out
