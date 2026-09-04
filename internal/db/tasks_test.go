@@ -543,3 +543,122 @@ func sameSet(a, b []string) bool {
 	}
 	return true
 }
+
+// seedHeadingTasks builds a project with a heading, holding one task directly
+// on the project and one under the heading. The heading-nested task leaves
+// t.project NULL, as Things does — the heading row carries the project.
+func seedHeadingTasks(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('area-launch', 'Launch', 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
+		('proj-h', 'Ship v2', 1, 0, 0, 'area-launch', 1)`)
+	// Heading (type=2) belonging to proj-h.
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, project, "index") VALUES
+		('head-1', 'Phase one', 2, 0, 0, 'proj-h', 2)`)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg-ship', 'ship', 1)`)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, project, heading, "index") VALUES
+		('t-direct',  'Direct task',  0, 0, 0, 1, 0, ?,    'proj-h', NULL,     3),
+		('t-nested',  'Nested task',  0, 0, 0, 1, 0, NULL, NULL,     'head-1', 4),
+		('t-loose',   'Loose task',   0, 0, 0, 1, 0, NULL, NULL,     NULL,     5)`,
+		today)
+	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('t-nested', 'tg-ship')`)
+}
+
+// Tasks filed under a project heading have no t.project of their own; the
+// project filter has to reach it through the heading row (issue #139).
+func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
+	d := newTestDB(t)
+	seedHeadingTasks(t, d)
+
+	for _, filter := range []string{"proj-h", "Ship v2"} {
+		got, err := d.ListTasks("project", TaskFilter{Project: filter})
+		if err != nil {
+			t.Fatalf("ListTasks(project, %q): %v", filter, err)
+		}
+		if !sameSet(uuidsOf(got), []string{"t-direct", "t-nested"}) {
+			t.Errorf("project filter %q: got %v, want [t-direct t-nested]", filter, uuidsOf(got))
+		}
+	}
+}
+
+// The area comes from the project, so a heading-nested task has to inherit it
+// through the heading too.
+func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
+	d := newTestDB(t)
+	seedHeadingTasks(t, d)
+
+	got, err := d.ListTasks("project", TaskFilter{Area: "Launch"})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if !sameSet(uuidsOf(got), []string{"t-direct", "t-nested"}) {
+		t.Errorf("area filter: got %v, want [t-direct t-nested]", uuidsOf(got))
+	}
+}
+
+// A heading-nested task reports its project in output, so it can't be mistaken
+// for a standalone task (issue #139).
+func TestHeadingTaskCarriesProject(t *testing.T) {
+	d := newTestDB(t)
+	seedHeadingTasks(t, d)
+
+	task, err := d.GetTaskByUUID("t-nested")
+	if err != nil {
+		t.Fatalf("GetTaskByUUID: %v", err)
+	}
+	if task == nil {
+		t.Fatal("t-nested not found")
+	}
+	if task.ProjectUUID != "proj-h" || task.ProjectTitle != "Ship v2" {
+		t.Errorf("project = %q/%q, want proj-h/Ship v2", task.ProjectUUID, task.ProjectTitle)
+	}
+	if task.HeadingUUID != "head-1" || task.HeadingTitle != "Phase one" {
+		t.Errorf("heading = %q/%q, want head-1/Phase one", task.HeadingUUID, task.HeadingTitle)
+	}
+	if task.AreaUUID != "area-launch" || task.AreaTitle != "Launch" {
+		t.Errorf("area = %q/%q, want area-launch/Launch", task.AreaUUID, task.AreaTitle)
+	}
+}
+
+// The project view is the whole open set, so a project filter run against it
+// returns tasks the today view would have hidden (issue #140).
+func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
+	d := newTestDB(t)
+	seedHeadingTasks(t, d)
+
+	today, err := d.ListTasks("today", TaskFilter{Project: "Ship v2"})
+	if err != nil {
+		t.Fatalf("ListTasks(today): %v", err)
+	}
+	if !sameSet(uuidsOf(today), []string{"t-direct"}) {
+		t.Fatalf("today slice: got %v, want [t-direct]", uuidsOf(today))
+	}
+
+	all, err := d.ListTasks("project", TaskFilter{Project: "Ship v2"})
+	if err != nil {
+		t.Fatalf("ListTasks(project): %v", err)
+	}
+	if !sameSet(uuidsOf(all), []string{"t-direct", "t-nested"}) {
+		t.Errorf("project view: got %v, want [t-direct t-nested]", uuidsOf(all))
+	}
+}
+
+// Tags live on the task itself, but the tag filter still has to work on a
+// heading-nested task now that the project join reaches through the heading.
+func TestListTasksTagFilterIncludesHeadingTasks(t *testing.T) {
+	d := newTestDB(t)
+	seedHeadingTasks(t, d)
+
+	got, err := d.ListTasks("project", TaskFilter{Tag: "ship"})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if !sameSet(uuidsOf(got), []string{"t-nested"}) {
+		t.Errorf("tag filter: got %v, want [t-nested]", uuidsOf(got))
+	}
+}

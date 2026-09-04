@@ -40,6 +40,13 @@ func DateFilterableView(view string) bool {
 	return dateFilterableViews[view]
 }
 
+// baseTaskQuery selects a task with its project, heading, area and tags.
+//
+// A task filed under a project heading carries t.heading and leaves t.project
+// NULL — the heading row (a TMTask) holds the project. Resolving p through
+// COALESCE(t.project, h.project) therefore folds heading-nested tasks into
+// their project, so they carry a project title in output and match the
+// --project and --area filters (issue #139).
 const baseTaskQuery = `
 SELECT
 	t.uuid,
@@ -64,8 +71,8 @@ SELECT
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0)
 FROM TMTask t
-LEFT JOIN TMTask p ON t.project = p.uuid
 LEFT JOIN TMTask h ON t.heading = h.uuid
+LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
 LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
@@ -149,7 +156,7 @@ var viewOrderBy = map[string]string{
 	// area come before area-only items in higher-index areas, matching the
 	// Things app. Within each group, sort by status (open before completed),
 	// then todayIndexReferenceDate DESC, then todayIndex ASC.
-	"today":   "ORDER BY CASE WHEN t.project IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC",
+	"today":   "ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC",
 	"project": "ORDER BY t.start ASC, t.\"index\" ASC",
 }
 
