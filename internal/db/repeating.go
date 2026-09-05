@@ -11,19 +11,27 @@ import (
 // degrades to "nothing repeats" instead of breaking every task query.
 var recurrenceColumns = []string{"rt1_recurrenceRule", "recurrenceRule"}
 
-// repeatingExpr returns the SQL expression that yields 1 for a repeating item
-// and 0 otherwise, aliased against the `t` TMTask row. The probe runs once per
-// DB and the result is cached.
-func (d *DB) repeatingExpr() string {
+// recurrenceCol returns the recurrence column reference, aliased against the
+// `t` TMTask row, for callers to test with IS NULL / IS NOT NULL. On a schema
+// carrying no such column it is the literal NULL, which makes "IS NOT NULL"
+// false for every row and "IS NULL" true for every row — nothing repeats. The
+// probe runs once per DB and the result is cached.
+//
+// A bare column reference rather than a CASE expression is deliberate: Things
+// ships a partial index (index_TMTask_id_where_recurrenceRuleNotNull, ON
+// TMTask(uuid) WHERE rt1_recurrenceRule IS NOT NULL) that SQLite only matches
+// syntactically, so `t."rt1_recurrenceRule" IS NOT NULL` uses it while
+// `CASE WHEN ... END = 1` falls back to scanning every task.
+func (d *DB) recurrenceCol() string {
 	d.probeRepeating()
 	return d.repeatSQL
 }
 
-// probeRepeating resolves the recurrence expression and the assembled task
-// query once per DB.
+// probeRepeating resolves the recurrence column reference and the assembled
+// task query once per DB.
 func (d *DB) probeRepeating() {
 	d.repeatOnce.Do(func() {
-		d.repeatSQL = "0"
+		d.repeatSQL = "NULL"
 		defer func() {
 			d.repeatQuery = strings.Replace(baseTaskQuery, repeatingPlaceholder, d.repeatSQL, 1)
 		}()
@@ -33,7 +41,7 @@ func (d *DB) probeRepeating() {
 		}
 		for _, c := range recurrenceColumns {
 			if cols[c] {
-				d.repeatSQL = `CASE WHEN t."` + c + `" IS NOT NULL THEN 1 ELSE 0 END`
+				d.repeatSQL = `t."` + c + `"`
 				return
 			}
 		}

@@ -111,16 +111,15 @@ name in `show` and JSON output.
 A repeating to-do is stored as a template plus the to-dos it generates. Only
 the template appears in `things repeating`; the generated to-dos are ordinary
 tasks and show up in `today`, `upcoming` and the rest as usual. Templates are
-kept out of every other view.
+kept out of every other view except `trash` and `logbook`, which report what
+the database holds.
 
-The date filters (`--on`, `--from`,
-`--to`) apply to date-filterable views — `today`, `upcoming`, `anytime`,
-`deadlines`, and project listings (`someday` items have no start date, so
-they can't be date-filtered, and neither can `repeating` templates) — and
-`--on` can't be combined with
-`--from`/`--to`. `--include-completed` applies to the `today` view only, so
-with a filter it needs the view spelled out: `things today -p "Launch v2"
---include-completed`.
+The date filters (`--on`, `--from`, `--to`) apply to date-filterable views —
+`today`, `upcoming`, `anytime`, `deadlines`, and project listings (`someday`
+items have no start date, so they can't be date-filtered, and neither can
+`repeating` templates) — and `--on` can't be combined with `--from`/`--to`.
+`--include-completed` applies to the `today` view only, so with a filter it
+needs the view spelled out: `things today -p "Launch v2" --include-completed`.
 
 Examples:
 

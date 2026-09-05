@@ -106,6 +106,27 @@ func TestRepeatingViewHonoursFilters(t *testing.T) {
 	}
 }
 
+// Trashing a project leaves its rows trashed = 0, so a template inside one
+// would outlive the project it lived in — the Repeating view needs the same
+// guard the today and project views apply.
+func TestRepeatingViewExcludesTrashedProject(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('proj-gone', 'Trashed project', 1, 0, 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index", rt1_recurrenceRule) VALUES
+		('rep-orphan', 'Water plants', 0, 0, 0, 2, 0, 'proj-gone', 1, x'0102')`)
+
+	got, err := d.ListTasks("repeating", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ListTasks(repeating) = %v, want no templates from a trashed project", uuidsOf(got))
+	}
+}
+
 // Older Things schemas name the column differently, and a future one could
 // drop it. The probe must degrade to "nothing repeats" rather than making
 // every task query fail.
@@ -121,8 +142,8 @@ func TestRepeatingColumnAbsentDegradesGracefully(t *testing.T) {
 	}
 	d := &DB{db: sqlDB}
 
-	if expr := d.repeatingExpr(); expr != "0" {
-		t.Errorf("repeatingExpr() = %q, want %q", expr, "0")
+	if col := d.recurrenceCol(); col != "NULL" {
+		t.Errorf("recurrenceCol() = %q, want %q", col, "NULL")
 	}
 	task, err := d.GetTaskByUUID("t1")
 	if err != nil {
@@ -151,14 +172,14 @@ func TestRepeatingColumnAbsentDegradesGracefully(t *testing.T) {
 	}
 }
 
-func TestRepeatingExprIsProbedOnce(t *testing.T) {
+func TestRecurrenceColIsProbedOnce(t *testing.T) {
 	d := seedRepeatingPair(t)
-	first := d.repeatingExpr()
-	if first == "0" {
-		t.Fatalf("repeatingExpr() = %q, want a recurrence-column expression", first)
+	first := d.recurrenceCol()
+	if first == "NULL" {
+		t.Fatalf("recurrenceCol() = %q, want a recurrence-column reference", first)
 	}
-	if second := d.repeatingExpr(); second != first {
-		t.Errorf("repeatingExpr() = %q on second call, want the cached %q", second, first)
+	if second := d.recurrenceCol(); second != first {
+		t.Errorf("recurrenceCol() = %q on second call, want the cached %q", second, first)
 	}
 }
 

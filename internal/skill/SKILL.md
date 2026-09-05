@@ -68,7 +68,7 @@ things import [--file F] [--reveal] [--strict-tags] < payload.json
 
 ### Repeating to-dos and projects
 
-A repeating to-do is stored as a template plus the to-dos it generates. `things repeating` lists the templates; they do not appear in `someday` or any other view. The generated to-dos carry no recurrence rule of their own, so they list as ordinary tasks under `today`, `upcoming` and the rest.
+A repeating to-do is stored as a template plus the to-dos it generates. `things repeating` lists the templates; they do not appear in `someday` or any other view except `trash` and `logbook`, which report what the database holds. The generated to-dos carry no recurrence rule of their own, so they list as ordinary tasks under `today`, `upcoming` and the rest.
 
 Things refuses to update `when`, `deadline`, completed/canceled status, and duplication on repeating items, and drops the request silently rather than reporting an error. The CLI checks first and fails with a non-zero exit:
 
