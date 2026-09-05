@@ -1,4 +1,4 @@
-.PHONY: build install lint test cover fmt tidy clean release-snapshot release-check test-install demo
+.PHONY: build install lint test cover fmt tidy clean release-snapshot release-check test-install demo og
 
 BINARY := things
 
@@ -48,3 +48,7 @@ test-install:
 # Re-record the README demo GIF (needs vhs, python3, jq). See scripts/demo/README.md.
 demo:
 	./scripts/demo/record.sh
+
+# Re-render the social preview image docs/static/img/og.png (fonts are fetched once into the user cache).
+og:
+	go run -C tools/og .
