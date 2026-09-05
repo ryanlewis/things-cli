@@ -268,6 +268,12 @@ too — marked `(project)` in plain output, `"type": 1` in JSON — and
 templates. `trash` and `logbook` are to-do lists, so a project template never
 shows there.
 
+The to-dos inside a project template are hidden along with it. They carry no
+recurrence rule of their own, so they are recognised by their project rather
+than by themselves — otherwise they would list as ordinary tasks against a
+project `things projects` does not report. `trash` and `logbook` still show
+them once they are trashed or logged.
+
 `things search` is a lookup rather than a view: it searches the database as
 it stands and returns templates along with everything else, so a title you
 can see in the Things app is always findable. Search results carry

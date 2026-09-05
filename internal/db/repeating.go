@@ -23,17 +23,36 @@ var recurrenceColumns = []string{"rt1_recurrenceRule", "recurrenceRule"}
 // syntactically, so `t."rt1_recurrenceRule" IS NOT NULL` uses it while
 // `CASE WHEN ... END = 1` falls back to scanning every task.
 func (d *DB) recurrenceCol() string {
+	return d.recurrenceColFor("t")
+}
+
+// recurrenceColFor is recurrenceCol against an arbitrary TMTask alias. The
+// `p` alias — the row's resolved parent project — is what tells a to-do
+// inside a repeating project template apart from an ordinary one: the child
+// carries no rule of its own, only its project does (issue #171).
+func (d *DB) recurrenceColFor(alias string) string {
 	d.probeRepeating()
-	return d.repeatSQL
+	return recurrenceRef(alias, d.repeatColumn)
+}
+
+// recurrenceRef builds the reference without probing, so probeRepeating can
+// use it while holding its sync.Once — recurrenceColFor cannot, since
+// re-entering Once.Do deadlocks.
+func recurrenceRef(alias, column string) string {
+	if column == "" {
+		return "NULL"
+	}
+	return alias + `."` + column + `"`
 }
 
 // probeRepeating resolves the recurrence column reference and the assembled
 // task query once per DB.
 func (d *DB) probeRepeating() {
 	d.repeatOnce.Do(func() {
-		d.repeatSQL = "NULL"
+		// repeatColumn stays "" — the reference degrades to NULL — unless
+		// the probe finds a column below.
 		defer func() {
-			d.repeatQuery = strings.Replace(baseTaskQuery, repeatingPlaceholder, d.repeatSQL, 1)
+			d.repeatQuery = strings.Replace(baseTaskQuery, repeatingPlaceholder, recurrenceRef("t", d.repeatColumn), 1)
 		}()
 		cols, err := d.tableColumns("TMTask")
 		if err != nil {
@@ -41,7 +60,7 @@ func (d *DB) probeRepeating() {
 		}
 		for _, c := range recurrenceColumns {
 			if cols[c] {
-				d.repeatSQL = `t."` + c + `"`
+				d.repeatColumn = c
 				return
 			}
 		}

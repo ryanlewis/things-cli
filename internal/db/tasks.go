@@ -235,7 +235,16 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 		where += " AND COALESCE(p.trashed, 0) = 0"
 	}
 	if !viewsIncludingTemplates[view] {
+		// The template row itself, which carries the recurrence rule.
 		where += " AND " + repeatingPlaceholder + " IS NULL"
+		// And the to-dos inside a repeating project template, which carry no
+		// rule of their own — only the project does — so the clause above
+		// cannot see them. Without this they list as ordinary tasks against
+		// a project `things projects` does not report (issue #171). Built
+		// here rather than through the placeholder because the placeholder
+		// exists for the static strings in viewFilters, and this one needs
+		// an alias those strings never mention.
+		where += " AND " + d.recurrenceColFor("p") + " IS NULL"
 	}
 
 	var args []any

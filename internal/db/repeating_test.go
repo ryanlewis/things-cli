@@ -1,8 +1,10 @@
 package db
 
 import (
+	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -245,5 +247,130 @@ func TestRepeatingViewExcludesHeadings(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("ListTasks(repeating) = %v, want no headings", uuidsOf(got))
+	}
+}
+
+// A to-do inside a repeating project template must not list as an ordinary
+// task: `things projects` does not report its project, so it would show
+// against a project the user cannot see (issue #171). Each case seeds the row
+// shape its view selects on, once inside a repeating project template and
+// once inside an ordinary project — the sibling proves the guard discriminates
+// rather than just hiding everything.
+func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	cases := []struct {
+		view    string
+		columns string
+		values  string
+	}{
+		{"inbox", "start, startBucket", "0, 0"},
+		{"today", "start, startBucket, startDate", fmt.Sprintf("1, 0, %d", today)},
+		{"upcoming", "start, startBucket, startDate", fmt.Sprintf("2, 0, %d", tomorrow)},
+		{"anytime", "start, startBucket", "1, 0"},
+		{"someday", "start, startBucket", "2, 0"},
+		{"deadlines", "start, startBucket, deadline", fmt.Sprintf("1, 0, %d", tomorrow)},
+		{"project", "start, startBucket", "1, 0"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.view, func(t *testing.T) {
+			d := newTestDB(t)
+			// The child carries no recurrence rule — only its project does,
+			// which is why the template exclusion cannot see it.
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, "index", rt1_recurrenceRule) VALUES
+				('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102')`)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, "index") VALUES
+				('p-real', 'Ship it', 1, 0, 0, 2)`)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, project, "index", `+tc.columns+`) VALUES
+				('t-child', 'Inside the template', 0, 0, 0, 'p-tmpl', 1, `+tc.values+`),
+				('t-plain', 'Inside a real one',   0, 0, 0, 'p-real', 2, `+tc.values+`)`)
+
+			got, err := d.ListTasks(tc.view, TaskFilter{})
+			if err != nil {
+				t.Fatalf("ListTasks(%q): %v", tc.view, err)
+			}
+			if !sameSet(uuidsOf(got), []string{"t-plain"}) {
+				t.Errorf("view %q: got %v, want just t-plain — the template's child must not list", tc.view, uuidsOf(got))
+			}
+		})
+	}
+}
+
+// The guard resolves the project through COALESCE(t.project, h.project), so a
+// to-do nested under a heading in a template project is caught too (#139).
+func TestTemplateProjectChildrenExcludedThroughHeading(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, "index", rt1_recurrenceRule) VALUES
+		('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102')`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, project, "index") VALUES
+		('head-1', 'A heading', 2, 0, 0, 'p-tmpl', 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, heading, "index") VALUES
+		('t-child', 'Under the heading', 0, 0, 0, 1, 0, 'head-1', 1)`)
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(anytime): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ListTasks(anytime) = %v, want no heading-nested children of a template project", uuidsOf(got))
+	}
+}
+
+// trash and logbook report what the database holds, so a template's child
+// that has been trashed or completed still belongs in them. Without this the
+// guard would swallow rows those two views exist to show.
+func TestTrashAndLogbookKeepTemplateProjectChildren(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, "index", rt1_recurrenceRule) VALUES
+		('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102')`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
+		('t-binned', 'Trashed child',   0, 0, 1, 1, 0, 'p-tmpl', 1),
+		('t-logged', 'Completed child', 0, 3, 0, 1, 0, 'p-tmpl', 2)`)
+
+	for _, tc := range []struct{ view, want string }{
+		{"trash", "t-binned"},
+		{"logbook", "t-logged"},
+	} {
+		got, err := d.ListTasks(tc.view, TaskFilter{})
+		if err != nil {
+			t.Fatalf("ListTasks(%q): %v", tc.view, err)
+		}
+		if !sameSet(uuidsOf(got), []string{tc.want}) {
+			t.Errorf("view %q: got %v, want [%s]", tc.view, uuidsOf(got), tc.want)
+		}
+	}
+}
+
+// The guard reads the parent through the `p` alias, so the helper has to
+// build a reference for an alias other than `t`, and still degrade to NULL on
+// a schema carrying no recurrence column.
+func TestRecurrenceColForAlias(t *testing.T) {
+	d := seedRepeatingPair(t)
+	if got, want := d.recurrenceColFor("p"), `p."rt1_recurrenceRule"`; got != want {
+		t.Errorf("recurrenceColFor(p) = %q, want %q", got, want)
+	}
+	if got, want := d.recurrenceColFor("t"), d.recurrenceCol(); got != want {
+		t.Errorf("recurrenceColFor(t) = %q, want recurrenceCol() = %q", got, want)
+	}
+
+	sqlDB := dbtest.NewSQL(t)
+	if _, err := sqlDB.Exec(`ALTER TABLE TMTask DROP COLUMN rt1_recurrenceRule`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	bare := &DB{db: sqlDB}
+	if got := bare.recurrenceColFor("p"); got != "NULL" {
+		t.Errorf("recurrenceColFor(p) with no column = %q, want %q", got, "NULL")
 	}
 }

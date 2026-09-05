@@ -118,7 +118,9 @@ things config init [--force]    # write a commented template
 
 A repeating to-do is stored as a template plus the to-dos it generates. `things repeating` lists the templates; they do not appear in `someday` or any other view except `trash` and `logbook`, which report what the database holds. The generated to-dos carry no recurrence rule of their own, so they list as ordinary tasks under `today`, `upcoming` and the rest.
 
-Projects repeat the same way. `things repeating` lists project templates too — marked `(project)` in plain output, `"type": 1` in JSON, to-dos first then projects — and `things projects` leaves them out. `trash` and `logbook` are to-do lists, so a project template never shows there. `things show` on a project prints a `Type: project` line. `trash` and `logbook` are to-do lists, so a project template never shows there.
+Projects repeat the same way. `things repeating` lists project templates too — marked `(project)` in plain output, `"type": 1` in JSON, to-dos first then projects — and `things projects` leaves them out. `trash` and `logbook` are to-do lists, so a project template never shows there. `things show` on a project prints a `Type: project` line.
+
+The to-dos inside a project template are hidden too. They carry no recurrence rule of their own, so they are recognised by their project rather than by themselves; without that they would list as ordinary tasks against a project `things projects` does not report. `trash` and `logbook` still show them once trashed or logged.
 
 `things search` is a lookup, not a view: it searches the database as it stands and returns templates like anything else. Results carry `"repeating": true`, so check that field before trying to write to a search hit.
 
