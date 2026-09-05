@@ -16,8 +16,8 @@ import (
 // and can branch on the "error" token (issue #152). A successful write command
 // still prints nothing — only the read commands emit JSON on success.
 //
-// Error is a stable token: "ambiguous task", "not found", "not a task", or
-// "error" for a failure with no structure worth naming. Message is the same
+// Error is a stable token: "ambiguous task", "not found", "not a task",
+// "not a project", or "error" for a failure with no structure worth naming. Message is the same
 // text the plain-text path prints, for a human reading the JSON.
 type jsonErrorPayload struct {
 	Error   string           `json:"error"`
@@ -73,23 +73,28 @@ func (e *notFoundError) Error() string {
 	return fmt.Sprintf("%s not found: %s", e.Kind, e.Query)
 }
 
-// notATaskError is a reference that resolved to something the command cannot
-// act on — today only a project handed to `edit`, which would otherwise open
+// wrongKindError is a reference that resolved to the wrong sort of item for
+// the command: a project handed to `edit`, which would otherwise open
 // things:///update with a project id and leave Things showing a "does not
-// exist" dialog (issue #189). Kind names what the reference turned out to be,
-// so a caller can retry against the right command.
-type notATaskError struct {
+// exist" dialog (issue #189), or a to-do handed to `project edit` (issue
+// #191). Kind names what the reference turned out to be, so a caller can
+// retry against the right command.
+type wrongKindError struct {
+	// Token is the stable --json error token for this direction of the
+	// mistake — "not a task" or "not a project". It names what the command
+	// wanted, while Kind names what it got.
+	Token string
 	Kind  string
 	Query string
 	UUID  string
 	Title string
 	// Retry is the command that does handle this kind, spelled out rather
 	// than derived from Kind — "project" happens to read as a command name,
-	// but a second kind would silently name a command that does not exist.
+	// but "to-do" does not.
 	Retry string
 }
 
-func (e *notATaskError) Error() string {
+func (e *wrongKindError) Error() string {
 	return fmt.Sprintf("%q is a %s; use %s", e.Title, e.Kind, e.Retry)
 }
 
@@ -147,13 +152,13 @@ func errorPayload(err error) jsonErrorPayload {
 		return payload
 	}
 
-	var notATask *notATaskError
-	if errors.As(err, &notATask) {
-		payload.Error = "not a task"
-		payload.Kind = notATask.Kind
-		payload.Query = notATask.Query
-		payload.UUID = notATask.UUID
-		payload.Title = notATask.Title
+	var wrongKind *wrongKindError
+	if errors.As(err, &wrongKind) {
+		payload.Error = wrongKind.Token
+		payload.Kind = wrongKind.Kind
+		payload.Query = wrongKind.Query
+		payload.UUID = wrongKind.UUID
+		payload.Title = wrongKind.Title
 		return payload
 	}
 
