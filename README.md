@@ -66,9 +66,9 @@ how a project completes under `--json`.
 
 A failing command prints a single JSON object to stdout and exits non-zero, so
 a consumer parsing stdout gets a structured failure either way. `error` is a
-stable token — `ambiguous task`, `not found`, `import refused`, `import
-partially applied`, or `error` for anything else — and `message` carries the
-same text plain-text mode prints.
+stable token — `ambiguous task`, `not found`, `not a task`, `import refused`,
+`import partially applied`, or `error` for anything else — and `message`
+carries the same text plain-text mode prints.
 
 ```console
 $ things show milk --json; echo "exit=$?"
@@ -88,6 +88,11 @@ exit=1
 Retry with one of the `matches[].uuid` values. Argument and flag errors take
 the same route, so `--json` never leaves a usage block on stdout. Without
 `--json`, errors stay a plain `Error: ...` line on stderr, unchanged.
+
+`not a task` means the reference resolved to something the command cannot act
+on. Today that is a project handed to `edit`: the payload carries `kind`,
+`query`, `uuid` and `title`, and nothing has been written — retry with `things
+project edit`.
 
 #### Batch failures: `items`
 

@@ -16,14 +16,16 @@ import (
 // and can branch on the "error" token (issue #152). A successful write command
 // still prints nothing — only the read commands emit JSON on success.
 //
-// Error is a stable token: "ambiguous task", "not found", or "error" for a
-// failure with no structure worth naming. Message is the same text the
-// plain-text path prints, for a human reading the JSON.
+// Error is a stable token: "ambiguous task", "not found", "not a task", or
+// "error" for a failure with no structure worth naming. Message is the same
+// text the plain-text path prints, for a human reading the JSON.
 type jsonErrorPayload struct {
 	Error   string           `json:"error"`
 	Message string           `json:"message"`
 	Kind    string           `json:"kind,omitempty"`
 	Query   string           `json:"query,omitempty"`
+	UUID    string           `json:"uuid,omitempty"`
+	Title   string           `json:"title,omitempty"`
 	Matches []jsonErrorMatch `json:"matches,omitempty"`
 	Items   []jsonErrorItem  `json:"items,omitempty"`
 }
@@ -69,6 +71,22 @@ func (e *notFoundError) Error() string {
 		return e.msg
 	}
 	return fmt.Sprintf("%s not found: %s", e.Kind, e.Query)
+}
+
+// notATaskError is a reference that resolved to something the command cannot
+// act on — today only a project handed to `edit`, which would otherwise open
+// things:///update with a project id and leave Things showing a "does not
+// exist" dialog (issue #189). Kind names what the reference turned out to be,
+// so a caller can retry against the right command.
+type notATaskError struct {
+	Kind  string
+	Query string
+	UUID  string
+	Title string
+}
+
+func (e *notATaskError) Error() string {
+	return fmt.Sprintf("%q is a %s; use things %s edit", e.Title, e.Kind, e.Kind)
 }
 
 // ambiguousRefError carries a *db.AmbiguousTaskError alongside the multi-line
@@ -122,6 +140,16 @@ func errorPayload(err error) jsonErrorPayload {
 	if errors.As(err, &unapplied) {
 		payload.Error = "import partially applied"
 		payload.Items = unapplied.jsonItems()
+		return payload
+	}
+
+	var notATask *notATaskError
+	if errors.As(err, &notATask) {
+		payload.Error = "not a task"
+		payload.Kind = notATask.Kind
+		payload.Query = notATask.Query
+		payload.UUID = notATask.UUID
+		payload.Title = notATask.Title
 		return payload
 	}
 

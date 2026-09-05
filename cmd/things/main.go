@@ -539,6 +539,14 @@ func (c *EditCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
+	// resolveTask returns projects too, and things:///update cannot address
+	// one: Things answers a project id with a modal "does not exist" dialog
+	// and changes nothing (issue #189). Refuse before anything is opened
+	// rather than routing to update-project, which would silently drop the
+	// task-only flags (checklist, list, heading).
+	if task.Type == model.TypeProject {
+		return &notATaskError{Kind: "project", Query: c.Task, UUID: task.UUID, Title: task.Title}
+	}
 	if err := checkRepeating(task, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
 		return err
 	}
