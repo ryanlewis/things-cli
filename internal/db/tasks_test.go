@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -704,6 +705,103 @@ func TestListTasksProjectViewExcludesTrashedProject(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("got %v, want no tasks from a trashed project", uuidsOf(got))
+	}
+}
+
+// Trashing a project in Things leaves its child rows at trashed = 0, so every
+// open view has to check the project as well as the task or those children
+// outlive the project they lived in (issue #155). One case per view, each
+// seeding the row shape that view selects on, all of them inside a trashed
+// project.
+func TestListTasksViewsExcludeTrashedProject(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	// view → the columns beyond the shared ones that put a row in that view.
+	cases := []struct {
+		view    string
+		columns string
+		values  string
+	}{
+		{"inbox", "start, startBucket", "0, 0"},
+		{"today", "start, startBucket, startDate", fmt.Sprintf("1, 0, %d", today)},
+		{"upcoming", "start, startBucket, startDate", fmt.Sprintf("2, 0, %d", tomorrow)},
+		{"anytime", "start, startBucket", "1, 0"},
+		{"someday", "start, startBucket", "2, 0"},
+		{"deadlines", "start, startBucket, deadline", fmt.Sprintf("1, 0, %d", tomorrow)},
+		{"project", "start, startBucket", "1, 0"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.view, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+				('proj-gone', 'Trashed project', 1, 0, 1, 1)`)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, project, "index", `+tc.columns+`) VALUES
+				('t-orphan', 'Child of trashed', 0, 0, 0, 'proj-gone', 1, `+tc.values+`)`)
+
+			got, err := d.ListTasks(tc.view, TaskFilter{})
+			if err != nil {
+				t.Fatalf("ListTasks(%q): %v", tc.view, err)
+			}
+			if len(got) != 0 {
+				t.Errorf("view %q: got %v, want no tasks from a trashed project", tc.view, uuidsOf(got))
+			}
+		})
+	}
+}
+
+// A task under a heading carries t.heading and leaves t.project NULL, so the
+// guard has to reach the project through the heading the way --project does
+// (issue #139), or heading-nested children of a trashed project slip past it.
+func TestListTasksExcludesTrashedProjectThroughHeading(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('proj-gone', 'Trashed project', 1, 0, 1, 1),
+		('head-1',    'A heading',       2, 0, 0, 2)`)
+	mustExec(t, d, `UPDATE TMTask SET project = 'proj-gone' WHERE uuid = 'head-1'`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, heading, "index") VALUES
+		('t-orphan', 'Under the heading', 0, 0, 0, 1, 0, 'head-1', 1)`)
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(anytime): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want no heading-nested tasks from a trashed project", uuidsOf(got))
+	}
+}
+
+// trash and logbook report what the database holds rather than what Things
+// would show as actionable, so they keep the children of a trashed project.
+// Without this the guard would silently swallow them.
+func TestTrashAndLogbookKeepTrashedProjectChildren(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('proj-gone', 'Trashed project', 1, 0, 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
+		('t-binned', 'Trashed child',   0, 0, 1, 1, 0, 'proj-gone', 1),
+		('t-logged', 'Completed child', 0, 3, 0, 1, 0, 'proj-gone', 2)`)
+
+	for _, tc := range []struct {
+		view string
+		want string
+	}{
+		{"trash", "t-binned"},
+		{"logbook", "t-logged"},
+	} {
+		got, err := d.ListTasks(tc.view, TaskFilter{})
+		if err != nil {
+			t.Fatalf("ListTasks(%q): %v", tc.view, err)
+		}
+		if !sameSet(uuidsOf(got), []string{tc.want}) {
+			t.Errorf("view %q: got %v, want [%s]", tc.view, uuidsOf(got), tc.want)
+		}
 	}
 }
 

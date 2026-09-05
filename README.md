@@ -112,6 +112,10 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks with a deadline |
 
+Trashing a project in Things leaves its to-dos untrashed in the database, so
+every view above hides to-dos whose project is in the trash — `trash` and
+`logbook` excepted, since those report what the database holds.
+
 Filters:
 
 | Flag | Description |
