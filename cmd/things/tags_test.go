@@ -18,7 +18,7 @@ func newTagDeps(t *testing.T) (*Deps, *bytes.Buffer) {
 func TestVerifyTagsAllKnown(t *testing.T) {
 	deps, stderr := newTagDeps(t)
 	// seedFullDB creates the tag "urgent".
-	if err := verifyTags(deps, false, []string{"urgent"}); err != nil {
+	if err := verifyTags(deps, TagFlags{}, []string{"urgent"}); err != nil {
 		t.Fatalf("verifyTags: %v", err)
 	}
 	if stderr.Len() != 0 {
@@ -28,7 +28,7 @@ func TestVerifyTagsAllKnown(t *testing.T) {
 
 func TestVerifyTagsWarnsOnUnknown(t *testing.T) {
 	deps, stderr := newTagDeps(t)
-	if err := verifyTags(deps, false, []string{"urgent", "cifas-auto-reject"}); err != nil {
+	if err := verifyTags(deps, TagFlags{}, []string{"urgent", "cifas-auto-reject"}); err != nil {
 		t.Fatalf("verifyTags: %v", err)
 	}
 	out := stderr.String()
@@ -45,7 +45,7 @@ func TestVerifyTagsWarnsOnUnknown(t *testing.T) {
 
 func TestVerifyTagsStrictFails(t *testing.T) {
 	deps, stderr := newTagDeps(t)
-	err := verifyTags(deps, true, []string{"cifas-auto-reject"})
+	err := verifyTags(deps, TagFlags{StrictTags: true}, []string{"cifas-auto-reject"})
 	if err == nil {
 		t.Fatal("expected an error under --strict-tags")
 	}
@@ -63,7 +63,7 @@ func TestVerifyTagsNoNamesSkipsDatabase(t *testing.T) {
 	// without a readable Things database.
 	var stderr bytes.Buffer
 	deps := &Deps{DBPath: filepath.Join(t.TempDir(), "missing.sqlite"), Stdout: io.Discard, Stderr: &stderr}
-	if err := verifyTags(deps, true, nil); err != nil {
+	if err := verifyTags(deps, TagFlags{StrictTags: true}, nil); err != nil {
 		t.Fatalf("verifyTags with no tags: %v", err)
 	}
 	if stderr.Len() != 0 {
@@ -83,7 +83,7 @@ func TestVerifyTagsDatabaseUnavailable(t *testing.T) {
 
 	// Default: the check is skipped with a warning and the write proceeds.
 	deps, stderr := newDeps()
-	if err := verifyTags(deps, false, []string{"anything"}); err != nil {
+	if err := verifyTags(deps, TagFlags{}, []string{"anything"}); err != nil {
 		t.Fatalf("verifyTags: %v", err)
 	}
 	if !strings.Contains(stderr.String(), "could not check tags") {
@@ -92,7 +92,7 @@ func TestVerifyTagsDatabaseUnavailable(t *testing.T) {
 
 	// Strict: an unverifiable tag is a failure, not a warning.
 	deps, _ = newDeps()
-	err := verifyTags(deps, true, []string{"anything"})
+	err := verifyTags(deps, TagFlags{StrictTags: true}, []string{"anything"})
 	if err == nil || !strings.Contains(err.Error(), "--strict-tags") {
 		t.Fatalf("expected a strict failure, got %v", err)
 	}
@@ -102,7 +102,7 @@ func TestVerifyTagStrings(t *testing.T) {
 	deps, stderr := newTagDeps(t)
 	tags := "urgent, nope"
 	addTags := "also-nope"
-	if err := verifyTagStrings(deps, false, &tags, nil, &addTags); err != nil {
+	if err := verifyTagStrings(deps, TagFlags{}, &tags, nil, &addTags); err != nil {
 		t.Fatalf("verifyTagStrings: %v", err)
 	}
 	out := stderr.String()
@@ -286,5 +286,39 @@ func TestRunImportWarnsOnUnknownTag(t *testing.T) {
 	}
 	if len(*captured) == 0 {
 		t.Error("expected the import to still be dispatched")
+	}
+}
+
+// The strict-tags error suggests a `things tag add` command. `tag add` takes
+// names as separate positional arguments and does not split on commas, so a
+// comma-joined suggestion would create a tag literally named "focus,".
+func TestTagAddHint(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want string
+	}{
+		{"one", []string{"focus"}, "things tag add focus"},
+		{"many", []string{"focus", "cifas-auto-reject"}, "things tag add focus cifas-auto-reject"},
+		{"spaces", []string{"deep work", "focus"}, `things tag add "deep work" focus`},
+		{"quote", []string{`ev"il`}, `things tag add "ev\"il"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := tagAddHint(c.in); got != c.want {
+				t.Errorf("tagAddHint(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestStrictTagsErrorSuggestsAUsableCommand(t *testing.T) {
+	deps, _ := newTagDeps(t)
+	err := verifyTags(deps, TagFlags{StrictTags: true}, []string{"cifas-auto-reject", "deep work"})
+	if err == nil {
+		t.Fatal("expected an error under --strict-tags")
+	}
+	if !strings.Contains(err.Error(), "`things tag add cifas-auto-reject \"deep work\"`") {
+		t.Errorf("error does not suggest a usable command: %v", err)
 	}
 }

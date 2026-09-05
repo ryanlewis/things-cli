@@ -6,7 +6,7 @@ today, upcoming, projects, or areas on macOS.
 ## Safety
 
 - Reads (`list`, `show`, `projects`, `areas`, `tags`, `search`) are safe — use freely.
-- Writes (`add`, `project add`, `edit`, `complete`, `cancel`, `log`, `open`) modify the user's real data. Confirm before destructive ones (`complete`, `cancel`, bulk `edit`).
+- Writes (`add`, `project add`, `edit`, `tag add`, `complete`, `cancel`, `log`, `open`) modify the user's real data. Confirm before destructive ones (`complete`, `cancel`, bulk `edit`).
 - `edit`, `project edit`, and `import` payloads with `operation: update` require *Things → Settings → General → Enable Things URLs*. The error to recognise: `update: auth token is required — enable Things URLs in Things → Settings → General …`.
 - `--complete` and `--cancel` are mutually exclusive on `edit` and `project edit`.
 - `complete` and `cancel` (and `edit --complete` / `--cancel`) read the item back afterwards and exit non-zero if the status did not change. Treat a non-zero exit as "the task is still open" — do not report it as done.
@@ -46,10 +46,12 @@ things areas
 things tags
 things search <query>
 
-things add <title> [--notes --when --deadline --tags --checklist --project --heading --list --strict-tags]
-things project add <title> [--notes --when --deadline --tags --area --todos --strict-tags]
-things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal --strict-tags]
-things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal --strict-tags]
+things tag add <name>...        # create tags; existing names (case-insensitive) are skipped
+
+things add <title> [--notes --when --deadline --tags --checklist --project --heading --list --strict-tags --create-tags]
+things project add <title> [--notes --when --deadline --tags --area --todos --strict-tags --create-tags]
+things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
+things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
 things complete <task>          # task or project; project completion asks to confirm
 things cancel <task>            # task or project; project cancellation asks to confirm
 things log                      # move Today → Logbook
@@ -61,7 +63,7 @@ things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
     # exactly one of <ref> / -p / -a / -t / -q is required
     # --filter narrows the opened list by tags; --background keeps focus elsewhere
 
-things import [--file F] [--reveal] [--strict-tags] < payload.json
+things import [--file F] [--reveal] [--strict-tags | --create-tags] < payload.json
     # batch create/update via the Things JSON URL scheme
     # payload is the array documented at culturedcode.com/things/support/articles/2803573/
 ```
@@ -87,7 +89,17 @@ Things applies only tags that already exist and ignores the rest without saying 
 warning: these tags do not exist in Things and will be ignored: cifas-auto-reject
 ```
 
-The write still goes ahead. Pass `--strict-tags` to fail before writing instead. There is no way to create a tag from the CLI — create it in Things first, then re-run.
+The write still goes ahead. Pass `--create-tags` to create the missing tags over AppleScript first, so the write applies all of them; pass `--strict-tags` to fail before writing instead. The two contradict each other and are rejected together.
+
+`things tag add <name>...` creates tags on their own, without a write to hang them off:
+
+```
+$ things tag add focus "deep work" Work
+created: focus, deep work
+already exists: Work
+```
+
+Both routes need Things3 running (creation goes through AppleScript) and skip names that already exist, matching case-insensitively as Things does.
 
 ### Task reference forms
 

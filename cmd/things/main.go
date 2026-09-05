@@ -35,12 +35,13 @@ type CLI struct {
 	DB      string           `help:"Override database path." type:"existingfile"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
-	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel actually landed." name:"no-verify" default:"false"`
+	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel or tag creation actually landed." name:"no-verify" default:"false"`
 
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,repeating,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
 	Areas    AreasCmd    `cmd:"" help:"List areas."`
 	Tags     TagsCmd     `cmd:"" help:"List tags."`
+	Tag      TagCmd      `cmd:"" help:"Manage tags."`
 	Show     ShowCmd     `cmd:"" help:"Show task detail."`
 	Add      AddCmd      `cmd:"" help:"Create a new task."`
 	Project  ProjectCmd  `cmd:"" help:"Manage projects."`
@@ -305,11 +306,11 @@ type AddCmd struct {
 	Heading   string `help:"Heading within project."`
 	List      string `help:"List (project or area) name."`
 
-	StrictTags
+	TagFlags
 }
 
 func (c *AddCmd) Run(d *Deps) error {
-	if err := verifyTagStrings(d, c.StrictTags.StrictTags, &c.Tags); err != nil {
+	if err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
 		return err
 	}
 	list := c.List
@@ -342,11 +343,11 @@ type ProjectAddCmd struct {
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial to-dos."`
 
-	StrictTags
+	TagFlags
 }
 
 func (c *ProjectAddCmd) Run(d *Deps) error {
-	if err := verifyTagStrings(d, c.StrictTags.StrictTags, &c.Tags); err != nil {
+	if err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
 		return err
 	}
 	return things.AddProject(things.AddProjectParams{
@@ -383,7 +384,7 @@ type ProjectEditCmd struct {
 	Duplicate bool `help:"Duplicate the project before applying edits."`
 	Reveal    bool `help:"Reveal the project in Things after editing."`
 
-	StrictTags
+	TagFlags
 }
 
 func (c *ProjectEditCmd) Run(d *Deps) error {
@@ -403,7 +404,7 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 	}
 	// After checkRepeating: no point warning about tags on an edit Things
 	// is going to refuse anyway.
-	if err := verifyTagStrings(d, c.StrictTags.StrictTags, c.Tags, c.AddTags); err != nil {
+	if err := verifyTagStrings(d, c.TagFlags, c.Tags, c.AddTags); err != nil {
 		return err
 	}
 
@@ -460,7 +461,7 @@ type EditCmd struct {
 	Duplicate bool `help:"Duplicate the task before applying edits."`
 	Reveal    bool `help:"Reveal the task in Things after editing."`
 
-	StrictTags
+	TagFlags
 }
 
 func (c *EditCmd) Run(d *Deps) error {
@@ -477,7 +478,7 @@ func (c *EditCmd) Run(d *Deps) error {
 	}
 	// After checkRepeating: no point warning about tags on an edit Things
 	// is going to refuse anyway.
-	if err := verifyTagStrings(d, c.StrictTags.StrictTags, c.Tags, c.AddTags); err != nil {
+	if err := verifyTagStrings(d, c.TagFlags, c.Tags, c.AddTags); err != nil {
 		return err
 	}
 
@@ -701,7 +702,7 @@ type ImportCmd struct {
 	File   string `help:"Read JSON payload from this file instead of stdin." short:"f" type:"existingfile"`
 	Reveal bool   `help:"Reveal the first created/updated item in Things after import."`
 
-	StrictTags
+	TagFlags
 }
 
 func (c *ImportCmd) Run(d *Deps) error {
@@ -727,7 +728,7 @@ func (c *ImportCmd) Run(d *Deps) error {
 	if err := validateImportJSON(data); err != nil {
 		return err
 	}
-	if err := verifyTags(d, c.StrictTags.StrictTags, importTags(data)); err != nil {
+	if err := verifyTags(d, c.TagFlags, importTags(data)); err != nil {
 		return err
 	}
 	token, err := database.GetAuthToken()

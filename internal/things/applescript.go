@@ -3,6 +3,7 @@ package things
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 var execCommand = exec.Command
@@ -47,4 +48,31 @@ func CancelProject(uuid string) error {
 set theProject to project id "%s"
 set status of theProject to canceled
 end tell`, uuid), "cancelling project")
+}
+
+// appleScriptString renders s as an AppleScript string literal, quotes
+// included. Every other script in this file interpolates a UUID the CLI read
+// out of the database, but a tag name comes straight from the command line, so
+// it has to be escaped: an unescaped quote or backslash would end the literal
+// early and turn the rest of the name into script.
+func appleScriptString(s string) string {
+	r := strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		"\n", `\n`,
+		"\r", `\r`,
+		"\t", `\t`,
+	)
+	return `"` + r.Replace(s) + `"`
+}
+
+// CreateTag creates a tag in Things. The URL scheme cannot create tags — it
+// applies only ones that already exist — so this is the only route.
+//
+// It does not check first: callers compare against the database (see
+// db.UnknownTags) and pass only names that are missing.
+func CreateTag(name string) error {
+	return runAppleScript(fmt.Sprintf(`tell application "Things3"
+make new tag with properties {name:%s}
+end tell`, appleScriptString(name)), "creating tag")
 }

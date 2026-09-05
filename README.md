@@ -217,6 +217,7 @@ project.
 | `--list NAME` | ✓ | — | List (project or area) name |
 | `--area NAME` | — | ✓ | Area to file the project under |
 | `--strict-tags` | ✓ | ✓ | Fail instead of writing when a tag does not exist (see [Tags must already exist](#tags-must-already-exist)) |
+| `--create-tags` | ✓ | ✓ | Create tags that do not exist before writing (see [Tags must already exist](#tags-must-already-exist)) |
 
 Examples:
 
@@ -262,6 +263,7 @@ stay untouched. An empty value clears the field (e.g. `--deadline ""`).
 | `--duplicate` | ✓ | ✓ | Duplicate before applying edits |
 | `--reveal` | ✓ | ✓ | Reveal in Things after editing |
 | `--strict-tags` | ✓ | ✓ | Fail instead of writing when a tag does not exist (see [Tags must already exist](#tags-must-already-exist)) |
+| `--create-tags` | ✓ | ✓ | Create tags that do not exist before writing (see [Tags must already exist](#tags-must-already-exist)) |
 
 > **Repeating items:** Things refuses `--when`, `--deadline`, `--complete`,
 > `--cancel`, and `--duplicate` on repeating to-dos and projects, and drops the
@@ -283,32 +285,57 @@ things project edit "Launch" --append-notes "Beta cut on Friday"
 
 Things applies only tags that already exist. A tag it doesn't recognise is
 dropped silently — the task is still created or updated, minus the tag, and
-the command exits 0. The CLI cannot create tags: the URL scheme has no way
-to, and there is no `things tag add` command.
+the command exits 0. The URL scheme cannot create tags, so the CLI creates
+them over AppleScript instead.
 
-To stop that being invisible, every write that carries tags (`add`,
+To stop the drop being invisible, every write that carries tags (`add`,
 `project add`, `edit`, `project edit`, `import`) first checks them against
 the Things database and warns on stderr about any it cannot find:
 
 ```
 $ things add "Review the flags" --tags "Work,cifas-auto-reject"
 warning: these tags do not exist in Things and will be ignored: cifas-auto-reject
-warning: Things only applies tags that already exist — create them in Things first, or use --strict-tags to fail instead of dropping them
+warning: Things only applies tags that already exist — create them with --create-tags or `things tag add`, or use --strict-tags to fail instead of dropping them
 ```
 
-The write still goes ahead. Pass `--strict-tags` to refuse it instead:
+The write still goes ahead. Pass `--create-tags` to create the missing tags
+first, so the write applies all of them:
+
+```
+$ things add "Review the flags" --tags "Work,cifas-auto-reject" --create-tags
+created in Things: cifas-auto-reject
+```
+
+Or pass `--strict-tags` to refuse the write instead:
 
 ```
 $ things add "Review the flags" --tags "Work,cifas-auto-reject" --strict-tags
-Error: these tags do not exist in Things: cifas-auto-reject — create them in Things first, or drop --strict-tags to write anyway
+Error: these tags do not exist in Things: cifas-auto-reject — create them in Things first, run `things tag add cifas-auto-reject`, or drop --strict-tags to write anyway
 ```
 
-Nothing is written in that case, and the exit status is non-zero. Tag names
-are matched case-insensitively, the way Things treats them. If the database
-can't be read, `add` and `project add` skip the check with a warning — unless
-`--strict-tags` is set, which then fails rather than write unchecked. `edit`,
-`project edit` and `import` need the database for other reasons and fail
-either way.
+Nothing is written in that case, and the exit status is non-zero. The two
+flags contradict each other and are rejected together. Tag names are matched
+case-insensitively, the way Things treats them. If the database can't be read,
+`add` and `project add` skip the check with a warning — unless `--strict-tags`
+or `--create-tags` is set, either of which then fails rather than write
+unchecked. `edit`, `project edit` and `import` need the database for other
+reasons and fail either way.
+
+### Creating tags
+
+`things tag add` creates tags without writing a task:
+
+```
+$ things tag add focus "deep work" Work
+created: focus, deep work
+already exists: Work
+```
+
+Names that already exist are skipped rather than duplicated, matched
+case-insensitively. Creation goes through AppleScript, so Things3 must be
+running. The command reads the tag list back afterwards to confirm the tags
+landed; `--no-verify` skips that. `--json` reports the two lists as
+`{"created": [...], "skipped": [...]}`.
 
 ### Completing, cancelling, logging
 
@@ -387,6 +414,7 @@ for create-only payloads).
 | `-f, --file PATH` | Read JSON payload from this file instead of stdin |
 | `--reveal` | Reveal the first created/updated item in Things after import |
 | `--strict-tags` | Fail instead of importing when a tag in the payload does not exist (see [Tags must already exist](#tags-must-already-exist)) |
+| `--create-tags` | Create tags in the payload that do not exist before importing (see [Tags must already exist](#tags-must-already-exist)) |
 
 ```sh
 things import < payload.json
