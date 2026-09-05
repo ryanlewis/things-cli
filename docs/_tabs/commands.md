@@ -17,7 +17,12 @@ things <view>          # shortcut: things inbox, things today, etc.
 ```
 
 Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
-`logbook`, `trash`, `deadlines`.
+`repeating`, `logbook`, `trash`, `deadlines`.
+
+`repeating` lists repeating to-do templates. The to-dos a template generates
+are ordinary tasks and appear in `today`, `upcoming` and the rest; the
+template itself appears only here, and in `trash` or `logbook` if it ends up
+there.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. On their
 own the filters cover every open task in the project, area, or tag; add a

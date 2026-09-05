@@ -13,7 +13,7 @@ import (
 type DB struct {
 	db *sql.DB
 
-	// repeatSQL caches the probed recurrence-column expression and
+	// repeatSQL caches the probed recurrence-column reference and
 	// repeatQuery the task query built from it; see (*DB).probeRepeating.
 	repeatOnce  sync.Once
 	repeatSQL   string

@@ -25,7 +25,7 @@ Human output is styled with colors and aligned columns. Color auto-disables when
 
 ```
 things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--include-completed]
-    # views: today, inbox, upcoming, anytime, someday, logbook, trash, deadlines
+    # views: today, inbox, upcoming, anytime, someday, repeating, logbook, trash, deadlines
     # shortcut: `things today`, `things inbox`, etc.
     # No view: bare `things` is today, but --project/--area/--tag on their own
     # list every open task in that project/area/tag. Name a view to scope the
@@ -35,7 +35,7 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # --project and the project's --area, and report projectTitle.
     # --on / --from / --to take YYYY-MM-DD (or RFC3339). They filter startDate
     # on most views and `deadline` on the `deadlines` view. Not supported on
-    # inbox/trash/logbook/someday (someday items have no start date).
+    # inbox/trash/logbook/someday/repeating (those items have no start date).
     # --on is mutually exclusive with --from/--to.
     # today shows only open tasks; --include-completed also lists completed/
     # cancelled items Things hasn't logged out of Today yet (today only).
@@ -56,7 +56,8 @@ things log                      # move Today → Logbook
 things --no-verify complete <task>   # skip the read-back (rarely needed)
 things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
     # ref: task/project UUID, numeric list index, title, or built-in list name
-    #      (today, inbox, upcoming, anytime, someday, logbook, trash, deadlines)
+    #      (today, inbox, upcoming, anytime, someday, repeating, logbook, trash,
+    #      deadlines)
     # exactly one of <ref> / -p / -a / -t / -q is required
     # --filter narrows the opened list by tags; --background keeps focus elsewhere
 
@@ -66,6 +67,8 @@ things import [--file F] [--reveal] [--strict-tags] < payload.json
 ```
 
 ### Repeating to-dos and projects
+
+A repeating to-do is stored as a template plus the to-dos it generates. `things repeating` lists the templates; they do not appear in `someday` or any other view except `trash` and `logbook`, which report what the database holds. The generated to-dos carry no recurrence rule of their own, so they list as ordinary tasks under `today`, `upcoming` and the rest.
 
 Things refuses to update `when`, `deadline`, completed/canceled status, and duplication on repeating items, and drops the request silently rather than reporting an error. The CLI checks first and fails with a non-zero exit:
 

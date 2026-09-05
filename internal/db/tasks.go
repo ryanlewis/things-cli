@@ -40,8 +40,9 @@ func DateFilterableView(view string) bool {
 	return dateFilterableViews[view]
 }
 
-// repeatingPlaceholder is substituted with the probed recurrence expression by
-// (*DB).taskQuery — the column name varies across Things schema versions.
+// repeatingPlaceholder is substituted with the probed recurrence column
+// reference by (*DB).taskQuery — the column name varies across Things schema
+// versions, and a schema carrying none resolves it to NULL.
 const repeatingPlaceholder = "{{repeating}}"
 
 // baseTaskQuery selects a task with its project, heading, area and tags.
@@ -74,7 +75,7 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	{{repeating}}
+	CASE WHEN {{repeating}} IS NOT NULL THEN 1 ELSE 0 END
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -151,6 +152,14 @@ var viewFilters = map[string]string{
 	"logbook":   "t.status = 3 AND t.trashed = 0 AND t.type = 0",
 	"trash":     "t.trashed = 1 AND t.type = 0",
 	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	// Things' Repeating list: the templates that generate to-dos, not the
+	// to-dos they generate. A template carries the recurrence rule; each
+	// generated instance is an ordinary row with no rule of its own, so
+	// "{{repeating}} IS NOT NULL" selects templates alone (issue #147).
+	// Trashing a project leaves its rows trashed = 0, so the template of a
+	// repeating to-do in a trashed project needs the same guard the today
+	// and project views apply or it outlives the project it lived in.
+	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0",
 	// The catch-all open set: also the default view for a bare --project/
 	// --area/--tag filter, so it has to exclude tasks living in a trashed
 	// project the way the today view does.
@@ -182,6 +191,18 @@ var viewOrderBy = map[string]string{
 	"project": "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.start ASC, t.\"index\" ASC",
 }
 
+// viewsIncludingTemplates lists the views that keep repeating templates in
+// their results. Everywhere else templates are filtered out: Things files a
+// template under Repeating, not under the start bucket its row happens to
+// carry, so a Someday-start template showing up in `things someday` is a leak
+// (issue #147). trash and logbook stay literal — they report what the database
+// actually holds, templates included.
+var viewsIncludingTemplates = map[string]bool{
+	"repeating": true,
+	"trash":     true,
+	"logbook":   true,
+}
+
 func ValidView(name string) bool {
 	_, ok := viewFilters[name]
 	return ok
@@ -194,6 +215,9 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	}
 	if view == "today" && opts.IncludeCompleted {
 		where = todayWhere(true)
+	}
+	if !viewsIncludingTemplates[view] {
+		where += " AND " + repeatingPlaceholder + " IS NULL"
 	}
 
 	var args []any
@@ -235,6 +259,12 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	if orderBy == "" {
 		orderBy = "ORDER BY t.\"index\" ASC"
 	}
+
+	// The recurrence column varies across Things schema versions, so the
+	// filters carry a placeholder that only a live DB can resolve. On a
+	// schema with no such column it degrades to NULL: "IS NULL" makes the
+	// exclusion a no-op and "IS NOT NULL" leaves the repeating view empty.
+	where = strings.ReplaceAll(where, repeatingPlaceholder, d.recurrenceCol())
 
 	query := d.taskQuery() + " WHERE " + where + " GROUP BY t.uuid " + orderBy
 	return d.collectTasks(query, args...)

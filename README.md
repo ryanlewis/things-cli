@@ -22,8 +22,8 @@ things open --project "Launch"         # reveal in the Things app
 What it does:
 
 - **List & inspect** every built-in view (`today`, `inbox`, `upcoming`,
-  `anytime`, `someday`, `logbook`, `trash`, `deadlines`) plus projects,
-  areas, tags, and full-text search
+  `anytime`, `someday`, `repeating`, `logbook`, `trash`, `deadlines`) plus
+  projects, areas, tags, and full-text search
 - **Create** tasks and projects with notes, schedules, deadlines, tags,
   checklists, and headings
 - **Edit** anything mutable via `things:///update` — only the flags you
@@ -76,6 +76,7 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `upcoming` | Scheduled tasks and deadlines |
 | `anytime` | Anytime list |
 | `someday` | Someday list |
+| `repeating` | Repeating to-do templates |
 | `logbook` | Completed tasks |
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks with a deadline |
@@ -107,13 +108,18 @@ Tasks filed under a project heading count as part of the project, so they
 show up under `-p` and under the project's `-a` area, and carry the project
 name in `show` and JSON output.
 
-The date filters (`--on`, `--from`,
-`--to`) apply to date-filterable views — `today`, `upcoming`, `anytime`,
-`deadlines`, and project listings (`someday` items have no start date, so
-they can't be date-filtered) — and `--on` can't be combined with
-`--from`/`--to`. `--include-completed` applies to the `today` view only, so
-with a filter it needs the view spelled out: `things today -p "Launch v2"
---include-completed`.
+A repeating to-do is stored as a template plus the to-dos it generates. Only
+the template appears in `things repeating`; the generated to-dos are ordinary
+tasks and show up in `today`, `upcoming` and the rest as usual. Templates are
+kept out of every other view except `trash` and `logbook`, which report what
+the database holds.
+
+The date filters (`--on`, `--from`, `--to`) apply to date-filterable views —
+`today`, `upcoming`, `anytime`, `deadlines`, and project listings (`someday`
+items have no start date, so they can't be date-filtered, and neither can
+`repeating` templates) — and `--on` can't be combined with `--from`/`--to`.
+`--include-completed` applies to the `today` view only, so with a filter it
+needs the view spelled out: `things today -p "Launch v2" --include-completed`.
 
 Examples:
 
