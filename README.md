@@ -165,8 +165,8 @@ wrong — is on the docs site under
 
 The file is read from `$XDG_CONFIG_HOME/things-cli/config.toml`, falling
 back to `~/.config/things-cli/config.toml`. Override the location with
-`--config PATH` or the `THINGS_CLI_CONFIG` environment variable. A missing
-file is not an error — `things` runs on its built-in defaults.
+`--config PATH` or the `THINGS_CLI_CONFIG` environment variable. The file is
+optional — without one, `things` runs on its built-in defaults.
 
 ```sh
 things config init     # write a commented template (refuses to overwrite; --force to replace)

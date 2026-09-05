@@ -23,10 +23,9 @@ nothing you put here can take an option away from you.
 | 3 | `$XDG_CONFIG_HOME/things-cli/config.toml` | Only when `XDG_CONFIG_HOME` is set |
 | 4 | `~/.config/things-cli/config.toml` | The default |
 
-> **A missing file is not an error.** With no config file at all, `things`
-> runs on its built-in defaults. That is also true of a path you named
-> yourself — run `things config path` to see which file is in use and
-> whether it exists.
+> **The config file is optional.** Without one, `things` runs on its
+> built-in defaults. The same applies to a path you name yourself; run
+> `things config path` to see which file is in use and whether it exists.
 {: .prompt-info }
 
 `~` and relative paths are expanded, so `--config ./project.toml` works.
@@ -107,7 +106,8 @@ commented out. Uncomment a line to change that default.
 #
 # Read from $XDG_CONFIG_HOME/things-cli/config.toml, or
 # ~/.config/things-cli/config.toml. Override with --config PATH or
-# $THINGS_CLI_CONFIG. A missing file is not an error.
+# $THINGS_CLI_CONFIG. The file is optional; without it, things runs on
+# its built-in defaults.
 #
 # Uncomment a line to change the default.
 
