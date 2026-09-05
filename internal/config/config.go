@@ -27,17 +27,37 @@ const (
 const (
 	dirName  = "things-cli"
 	fileName = "config.toml"
+
+	// dbKey is both the TOML key and the flag name for the database path; it
+	// is the one setting that needs validating before it reaches kong.
+	dbKey = "db"
 )
+
+// Error is a problem with the config file itself: unreadable, malformed, or
+// carrying a key or value the CLI cannot use. It is reported on its own rather
+// than through kong's usage output, because usage is not what is wrong.
+type Error struct {
+	Path string
+	Err  error
+}
+
+func (e *Error) Error() string { return fmt.Sprintf("config file %s: %v", e.Path, e.Err) }
+func (e *Error) Unwrap() error { return e.Err }
+
+func configErr(path string, format string, args ...any) *Error {
+	return &Error{Path: path, Err: fmt.Errorf(format, args...)}
+}
 
 // Key describes one setting: the TOML key it is written as, the flag it seeds,
 // and the value that applies when neither the file nor a flag supplies one.
 type Key struct {
-	Name    string   // canonical TOML key, snake_case
-	Flag    string   // kong flag name this key resolves
-	Default any      // built-in default; bool or string
-	Enum    []string // permitted values, for keys with a fixed set
-	Comment []string // template comment, one line per entry
-	Example string   // template assignment, written commented out
+	Name     string   // canonical TOML key, snake_case
+	Flag     string   // kong flag name this key resolves
+	Default  any      // built-in default; bool or string
+	Enum     []string // permitted values, for keys with a fixed set
+	Excludes []string // keys this one cannot be combined with
+	Comment  []string // template comment, one line per entry
+	Example  string   // template assignment, written commented out
 }
 
 // Keys is the full set of settings the config file may carry. Every entry must
@@ -87,14 +107,27 @@ var Keys = []Key{
 		Example: "no_verify = false",
 	},
 	{
-		Name:    "strict_tags",
-		Flag:    "strict-tags",
-		Default: false,
+		Name:     "strict_tags",
+		Flag:     "strict-tags",
+		Default:  false,
+		Excludes: []string{"create_tags"},
 		Comment: []string{
 			"Fail instead of writing when a tag does not exist in Things.",
 			"Same as --strict-tags. Off by default, which warns and writes anyway.",
+			"Mutually exclusive with create_tags.",
 		},
 		Example: "strict_tags = false",
+	},
+	{
+		Name:     "create_tags",
+		Flag:     "create-tags",
+		Default:  false,
+		Excludes: []string{"strict_tags"},
+		Comment: []string{
+			"Create tags that do not exist in Things before writing.",
+			"Same as --create-tags. Mutually exclusive with strict_tags.",
+		},
+		Example: "create_tags = false",
 	},
 }
 
@@ -169,43 +202,51 @@ func Load(path string) (*File, error) {
 		if os.IsNotExist(err) {
 			return f, nil
 		}
-		return nil, fmt.Errorf("cannot read config file %s: %w", path, err)
+		return nil, configErr(path, "cannot read: %w", err)
 	}
 	f.Exists = true
 
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("invalid config file %s: %s", path, tomlErrorText(err))
+		return nil, configErr(path, "invalid TOML: %s", tomlErrorText(err))
 	}
 
 	for name, value := range raw {
 		key, ok := lookup(name)
 		if !ok {
-			return nil, fmt.Errorf("config file %s: unknown key %q (valid keys: %s)",
-				path, name, strings.Join(KeyNames(), ", "))
+			return nil, configErr(path, "unknown key %q (valid keys: %s)",
+				name, strings.Join(KeyNames(), ", "))
+		}
+		if _, dup := f.values[key.Name]; dup {
+			return nil, configErr(path, "key %q is set twice (%q and %q name the same setting)",
+				key.Name, key.Name, key.Flag)
 		}
 		v, err := coerce(key, value)
 		if err != nil {
-			return nil, fmt.Errorf("config file %s: %w", path, err)
+			return nil, &Error{Path: path, Err: err}
 		}
 		f.values[key.Name] = v
 	}
 
-	if err := f.checkDB(); err != nil {
+	if err := f.checkExclusions(); err != nil {
 		return nil, err
 	}
 	return f, nil
 }
 
-// checkDB reports a db path that does not exist here rather than letting it
-// surface later as a bare flag error with no mention of the config file.
-func (f *File) checkDB() error {
-	v, ok := f.values["db"].(string)
-	if !ok || v == "" {
-		return nil
-	}
-	if _, err := os.Stat(kong.ExpandPath(v)); err != nil {
-		return fmt.Errorf("config file %s: db: %s", f.Path, err)
+// checkExclusions rejects two mutually exclusive settings both turned on. Kong
+// would catch it too, but only once a command that carries the flags is run,
+// and its message says nothing about the config file.
+func (f *File) checkExclusions() error {
+	for _, k := range Keys {
+		if f.values[k.Name] != true {
+			continue
+		}
+		for _, name := range k.Excludes {
+			if f.values[name] == true {
+				return configErr(f.Path, "%q and %q cannot both be true", k.Name, name)
+			}
+		}
 	}
 	return nil
 }
@@ -295,24 +336,92 @@ func (f *File) Settings() []Setting {
 	return out
 }
 
+// JSON reports the json default the file establishes. It exists for the one
+// decision that has to be made before kong parses: whether a failure is
+// rendered as JSON or as a plain line.
+func (f *File) JSON() bool {
+	if f == nil {
+		return false
+	}
+	v, _ := f.values["json"].(bool)
+	return v
+}
+
 // Resolver seeds kong's flag resolution from the file. It returns nil for any
 // flag the file does not mention, leaving kong's own default in place.
 func (f *File) Resolver() kong.Resolver {
 	values := map[string]any{}
+	excludes := map[string][]string{}
+	path := ""
 	if f != nil {
+		path = f.Path
 		for _, k := range Keys {
-			if v, ok := f.values[k.Name]; ok {
-				values[k.Flag] = v
+			v, ok := f.values[k.Name]
+			if !ok {
+				continue
 			}
+			// An empty db path is how a file says "leave it unset". Passing it
+			// on would make kong's existingfile check stat the empty string,
+			// which expands to the working directory.
+			if k.Name == dbKey && v == "" {
+				continue
+			}
+			// For a key in an exclusive pair, false means the same as absent,
+			// and kong's exclusivity check counts any resolved value as set —
+			// so `strict_tags = true` alongside `create_tags = false` would
+			// read as both flags being passed at once.
+			if len(k.Excludes) > 0 && v == false {
+				continue
+			}
+			values[k.Flag] = v
+			excludes[k.Flag] = excludingFlags(k)
 		}
 	}
-	return kong.ResolverFunc(func(_ *kong.Context, _ *kong.Path, flag *kong.Flag) (any, error) {
+	return kong.ResolverFunc(func(_ *kong.Context, parent *kong.Path, flag *kong.Flag) (any, error) {
 		v, ok := values[flag.Name]
 		if !ok {
 			return nil, nil
 		}
+		// A flag on the command line beats the file, and so does the flag it
+		// is mutually exclusive with: kong counts a resolved value as set, so
+		// answering here would turn `--strict-tags` against a file that says
+		// `create_tags = true` into "can't be used together" rather than the
+		// override it is. Only one of a pair ever reaches this map, so a set
+		// partner can only have come from the command line.
+		for _, name := range excludes[flag.Name] {
+			for _, other := range parent.Flags {
+				if other.Name == name && other.Set {
+					return nil, nil
+				}
+			}
+		}
+		// A db path that does not exist is reported here, naming the config
+		// file, rather than as a bare flag error. Kong skips resolvers for
+		// flags given on the command line, so --db still overrides a stale
+		// entry instead of tripping over it.
+		if flag.Name == dbKey {
+			if s, ok := v.(string); ok {
+				if _, err := os.Stat(kong.ExpandPath(s)); err != nil {
+					return nil, configErr(path, "db: %s", err)
+				}
+			}
+		}
 		return v, nil
 	})
+}
+
+// excludingFlags maps a key's excluded keys onto the flag names they seed.
+func excludingFlags(k Key) []string {
+	if len(k.Excludes) == 0 {
+		return nil
+	}
+	flags := make([]string, 0, len(k.Excludes))
+	for _, name := range k.Excludes {
+		if other, ok := lookup(name); ok {
+			flags = append(flags, other.Flag)
+		}
+	}
+	return flags
 }
 
 // Template is the commented file `things config init` writes: every key, its

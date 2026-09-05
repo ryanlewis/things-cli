@@ -226,11 +226,15 @@ PATH` or `THINGS_CLI_CONFIG`. A missing file is not an error.
 | `db` | `--db` | string path (must exist) | auto-detected |
 | `no_verify` | `--no-verify` | boolean | `false` |
 | `strict_tags` | `--strict-tags` | boolean | `false` |
+| `create_tags` | `--create-tags` | boolean | `false` |
 
 ```toml
 color = "always"
 strict_tags = true
 ```
+
+`strict_tags` and `create_tags` are mutually exclusive; setting both to
+`true` is an error.
 
 Unknown keys, wrong types, and malformed TOML are errors that name the
 file and the key.

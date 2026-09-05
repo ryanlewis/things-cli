@@ -123,11 +123,16 @@ snake_case form.
 | `db` | `--db` | string path (must exist) | auto-detected |
 | `no_verify` | `--no-verify` | boolean | `false` |
 | `strict_tags` | `--strict-tags` | boolean | `false` |
+| `create_tags` | `--create-tags` | boolean | `false` |
 
 ```toml
 color = "always"
 strict_tags = true
 ```
+
+`strict_tags` and `create_tags` are mutually exclusive; setting both to
+`true` is an error. Either one is still overridden by the other's flag on
+the command line.
 
 An unknown key, a value of the wrong type, or malformed TOML is an error
 that names the file and the key. Anything set here still loses to a flag,

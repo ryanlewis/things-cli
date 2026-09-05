@@ -862,7 +862,9 @@ func main() {
 	// be read before the parser is built.
 	cfg, err := loadConfig(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// Nothing is parsed yet, so --json has to come off argv. The config
+		// file cannot supply the answer here: reading it is what just failed.
+		renderError(os.Stdout, os.Stderr, jsonRequested(false, os.Args[1:]), err)
 		os.Exit(2)
 	}
 
@@ -876,11 +878,20 @@ func main() {
 
 	ctx, err := parser.Parse(os.Args[1:])
 	if err != nil {
+		asJSON := jsonRequested(cfg.JSON(), os.Args[1:])
+		// A bad value in the config file is not a usage mistake, so it is
+		// reported on its own rather than under a usage dump for a command
+		// that was typed correctly.
+		var cfgErr *config.Error
+		if errors.As(err, &cfgErr) {
+			renderError(os.Stdout, os.Stderr, asJSON, cfgErr)
+			os.Exit(2)
+		}
 		// kong's UsageOnError writes the usage block to stdout, which under
 		// --json would leave a consumer parsing help text instead of the JSON
 		// object it was promised. Render the failure as JSON instead — the
 		// flag has to come from argv because parsing is what just failed.
-		if jsonRequested(os.Args[1:]) {
+		if asJSON {
 			renderError(os.Stdout, os.Stderr, true, err)
 			os.Exit(1)
 		}
@@ -901,11 +912,12 @@ func main() {
 	}
 }
 
-// jsonRequested reports whether argv asks for --json. main needs the answer
-// before kong has parsed anything, because a parse error still has to be
-// rendered in the mode the caller asked for.
-func jsonRequested(args []string) bool {
-	asJSON := false
+// jsonRequested reports whether argv asks for --json, starting from def — the
+// default the config file establishes. main needs the answer before kong has
+// parsed anything, because a parse error still has to be rendered in the mode
+// the caller asked for.
+func jsonRequested(def bool, args []string) bool {
+	asJSON := def
 	for _, a := range args {
 		if a == "--" {
 			break

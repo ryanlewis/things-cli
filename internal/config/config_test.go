@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alecthomas/kong"
 )
 
 // isolate points the default-path lookup at a temp directory so a test never
@@ -133,8 +135,8 @@ strict_tags = true
 	if !f.Exists {
 		t.Error("Exists = false for a file that is there")
 	}
-	want := map[string]any{"json": true, "color": "never", "no_verify": true, "strict_tags": true, "db": ""}
-	source := map[string]string{"json": "config", "color": "config", "no_verify": "config", "strict_tags": "config", "db": "default"}
+	want := map[string]any{"json": true, "color": "never", "no_verify": true, "strict_tags": true, "db": "", "create_tags": false}
+	source := map[string]string{"json": "config", "color": "config", "no_verify": "config", "strict_tags": "config", "db": "default", "create_tags": "default"}
 	for _, s := range f.Settings() {
 		if s.Value != want[s.Key] {
 			t.Errorf("%s = %v, want %v", s.Key, s.Value, want[s.Key])
@@ -166,12 +168,12 @@ func TestLoadRejectsBadFiles(t *testing.T) {
 		body string
 		want []string
 	}{
-		{"unknown key", "nope = 1\n", []string{"unknown key", `"nope"`, "json, color, db, no_verify, strict_tags"}},
-		{"malformed", "json = \n", []string{"invalid config file", "line 1"}},
+		{"unknown key", "nope = 1\n", []string{"unknown key", `"nope"`, "json, color, db, no_verify, strict_tags, create_tags"}},
+		{"malformed", "json = \n", []string{"invalid TOML", "line 1"}},
 		{"wrong type", `json = "yes"` + "\n", []string{`key "json" must be a boolean`, "got string"}},
 		{"table value", "[json]\na = 1\n", []string{`key "json" must be a boolean`, "got table"}},
 		{"bad enum", `color = "pink"` + "\n", []string{`key "color" must be one of`, "auto, always, never"}},
-		{"missing db", `db = "/nonexistent/things.sqlite"` + "\n", []string{"db:", "/nonexistent/things.sqlite"}},
+		{"duplicate spelling", "no_verify = true\nno-verify = false\n", []string{`key "no_verify" is set twice`}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -192,6 +194,50 @@ func TestLoadRejectsBadFiles(t *testing.T) {
 				t.Errorf("error spans multiple lines: %q", err)
 			}
 		})
+	}
+}
+
+// resolveFlag runs a file's resolver for one flag name, the way kong does.
+func resolveFlag(t *testing.T, f *File, name string) (any, error) {
+	t.Helper()
+	return f.Resolver().Resolve(nil, nil, &kong.Flag{Value: &kong.Value{Name: name}})
+}
+
+// A db path that has gone missing must not fail until kong actually asks for
+// it, so that a --db flag on the command line still overrides it.
+func TestResolverReportsMissingDB(t *testing.T) {
+	path := write(t, `db = "/nonexistent/things.sqlite"`+"\n")
+	f, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, err := resolveFlag(t, f, "json"); err != nil {
+		t.Fatalf("resolving an unrelated flag: %v", err)
+	}
+	_, err = resolveFlag(t, f, "db")
+	if err == nil {
+		t.Fatal("resolving db: want error, got nil")
+	}
+	for _, want := range []string{path, "db:", "/nonexistent/things.sqlite"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+// An empty db is how a file says "unset". Handing "" to kong's existingfile
+// check would stat the working directory and fail.
+func TestResolverSkipsEmptyDB(t *testing.T) {
+	f, err := Load(write(t, "db = \"\"\n"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	v, err := resolveFlag(t, f, "db")
+	if err != nil {
+		t.Fatalf("resolving db: %v", err)
+	}
+	if v != nil {
+		t.Errorf("db resolved to %#v, want nil so kong keeps its own default", v)
 	}
 }
 

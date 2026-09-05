@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -151,8 +152,72 @@ func TestConfigSeedsPerCommandFlag(t *testing.T) {
 	if _, err := parser.Parse([]string{"--config", path, "add", "buy milk"}); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !cli.Add.StrictTags.StrictTags {
+	if !cli.Add.StrictTags {
 		t.Error("strict_tags = true in the config file did not reach add --strict-tags")
+	}
+}
+
+// A db path in the config that no longer exists must not stop a --db flag
+// from overriding it — the file always loses to the command line.
+func TestFlagBeatsStaleConfigDB(t *testing.T) {
+	isolateHome(t)
+	real := filepath.Join(t.TempDir(), "main.sqlite")
+	if err := os.WriteFile(real, nil, 0o600); err != nil {
+		t.Fatalf("write db: %v", err)
+	}
+	path := writeConfig(t, `db = "/nonexistent/things.sqlite"`+"\n")
+
+	var cli CLI
+	cfg, err := loadConfig([]string{"--config", path})
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	parser, err := kong.New(&cli, parserOptions(cfg)...)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	if _, err := parser.Parse([]string{"--config", path, "--db", real, "today"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if cli.DB != real {
+		t.Errorf("db = %q, want %q (the flag should beat the config file)", cli.DB, real)
+	}
+
+	// Without the flag, the stale entry is reported and names the file.
+	var bare CLI
+	parser, err = kong.New(&bare, parserOptions(cfg)...)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	_, err = parser.Parse([]string{"--config", path, "today"})
+	if err == nil {
+		t.Fatal("parse with a stale config db: want error, got nil")
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("error %q does not name the config file", err)
+	}
+}
+
+// An empty db in the config means "unset"; handing "" to kong's existingfile
+// check would stat the working directory instead.
+func TestEmptyConfigDBIsUnset(t *testing.T) {
+	isolateHome(t)
+	path := writeConfig(t, "db = \"\"\n")
+
+	var cli CLI
+	cfg, err := loadConfig([]string{"--config", path})
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	parser, err := kong.New(&cli, parserOptions(cfg)...)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	if _, err := parser.Parse([]string{"--config", path, "today"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if cli.DB != "" {
+		t.Errorf("db = %q, want empty", cli.DB)
 	}
 }
 
@@ -337,5 +402,93 @@ func TestConfigInitDefaultPathStaysUnderHome(t *testing.T) {
 	want := filepath.Join(home, ".config", "things-cli", "config.toml")
 	if _, err := os.Stat(want); err != nil {
 		t.Errorf("config init did not write %s: %v", want, err)
+	}
+}
+
+// TestConfigParseErrorIsRecognisable guards the branch in main that prints a
+// bad config value on its own instead of under a usage dump: the error kong
+// returns has to stay unwrappable to *config.Error.
+func TestConfigParseErrorIsRecognisable(t *testing.T) {
+	isolateHome(t)
+	path := writeConfig(t, `db = "/nonexistent/things.sqlite"`+"\n")
+
+	var cli CLI
+	cfg, err := loadConfig([]string{"--config", path})
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	parser, err := kong.New(&cli, parserOptions(cfg)...)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	_, err = parser.Parse([]string{"--config", path, "today"})
+	if err == nil {
+		t.Fatal("parse with a stale config db path: want error, got nil")
+	}
+	var cfgErr *config.Error
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("error %q (%T) does not unwrap to *config.Error", err, err)
+	}
+	if cfgErr.Path != path {
+		t.Errorf("cfgErr.Path = %q, want %q", cfgErr.Path, path)
+	}
+}
+
+// TestConfigTagPolicyExclusivity covers the interaction between the config
+// file and the --strict-tags / --create-tags exclusive pair. Kong counts a
+// resolved value as set, so a file that turns one on must not make the other
+// unusable on the command line.
+func TestConfigTagPolicyExclusivity(t *testing.T) {
+	cases := []struct {
+		name       string
+		body       string
+		args       []string
+		wantStrict bool
+		wantCreate bool
+	}{
+		{"config strict", "strict_tags = true\n", nil, true, false},
+		{"config create", "create_tags = true\n", nil, false, true},
+		{"flag strict beats config create", "create_tags = true\n", []string{"--strict-tags"}, true, false},
+		{"flag create beats config strict", "strict_tags = true\n", []string{"--create-tags"}, false, true},
+		{"both false", "strict_tags = false\ncreate_tags = false\n", nil, false, false},
+		{"one true one false", "strict_tags = true\ncreate_tags = false\n", nil, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateHome(t)
+			path := writeConfig(t, tc.body)
+			args := append([]string{"--config", path, "add", "buy milk"}, tc.args...)
+
+			var cli CLI
+			cfg, err := loadConfig(args)
+			if err != nil {
+				t.Fatalf("loadConfig: %v", err)
+			}
+			parser, err := kong.New(&cli, parserOptions(cfg)...)
+			if err != nil {
+				t.Fatalf("kong.New: %v", err)
+			}
+			if _, err := parser.Parse(args); err != nil {
+				t.Fatalf("parse %v: %v", args, err)
+			}
+			if got := cli.Add.StrictTags; got != tc.wantStrict {
+				t.Errorf("strict-tags = %v, want %v", got, tc.wantStrict)
+			}
+			if got := cli.Add.CreateTags; got != tc.wantCreate {
+				t.Errorf("create-tags = %v, want %v", got, tc.wantCreate)
+			}
+		})
+	}
+}
+
+func TestConfigRejectsBothTagPolicies(t *testing.T) {
+	isolateHome(t)
+	path := writeConfig(t, "strict_tags = true\ncreate_tags = true\n")
+	_, err := loadConfig([]string{"--config", path})
+	if err == nil {
+		t.Fatal("both tag policies true: want error, got nil")
+	}
+	if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "cannot both be true") {
+		t.Errorf("error = %q, want it to name the file and the conflict", err)
 	}
 }
