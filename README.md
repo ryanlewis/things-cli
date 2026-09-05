@@ -62,8 +62,9 @@ asking to confirm.
 
 A failing command prints a single JSON object to stdout and exits non-zero, so
 a consumer parsing stdout gets a structured failure either way. `error` is a
-stable token — `ambiguous task`, `not found`, or `error` for anything else —
-and `message` carries the same text plain-text mode prints.
+stable token — `ambiguous task`, `not found`, `import refused`, `import
+partially applied`, or `error` for anything else — and `message` carries the
+same text plain-text mode prints.
 
 ```console
 $ things show milk --json; echo "exit=$?"
@@ -83,6 +84,62 @@ exit=1
 Retry with one of the `matches[].uuid` values. Argument and flag errors take
 the same route, so `--json` never leaves a usage block on stdout. Without
 `--json`, errors stay a plain `Error: ...` line on stderr, unchanged.
+
+#### Batch failures: `items`
+
+`import` acts on many items at once, so its two failures add an `items` array
+naming exactly which ones failed — enough to act per item without parsing the
+message. The two are separate tokens because the recovery differs: `import
+refused` sent nothing, so the payload can be fixed and re-run whole, while
+`import partially applied` already changed things and must be re-run with only
+the items listed.
+
+A refusal ([repeating items](#repeating-items-in-an-import-payload)) sets
+`blocked`, the attributes Things will not accept on that item:
+
+```console
+$ things import --file reschedule.json --json; echo "exit=$?"
+{
+  "error": "import refused",
+  "message": "1 of 1 update items change attributes Things does not allow on repeating items, ...",
+  "items": [
+    {
+      "path": "[0]",
+      "id": "rep-1",
+      "title": "Water plants",
+      "blocked": ["when", "deadline"]
+    }
+  ]
+}
+exit=1
+```
+
+A [read-back failure](#reading-back-an-imports-status-changes) sets `wanted`
+and `got` — the status the payload asked for, and the one the item is still in:
+
+```console
+$ things import --file finish.json --json; echo "exit=$?"
+{
+  "error": "import partially applied",
+  "message": "1 of 1 requested status changes did not apply. ...",
+  "items": [
+    {
+      "path": "[0]",
+      "id": "one-1",
+      "title": "Post letter",
+      "wanted": "completed",
+      "got": "open"
+    }
+  ]
+}
+exit=1
+```
+
+`path` locates the item in the payload you sent — `[0]` at the top level,
+`[2].attributes.items[0]` for one nested in a project — so it maps back to the
+JSON you wrote. `got` is omitted when there was nothing to observe, because the
+row could not be read or no longer exists. Every other field of the payload is
+unchanged, and commands that fail on a single item carry no `items` at all.
 
 ### Global flags
 

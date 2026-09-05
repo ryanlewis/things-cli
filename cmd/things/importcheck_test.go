@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"os"
@@ -269,19 +270,37 @@ func TestImportWarnsAboutUnknownIDs(t *testing.T) {
 	}
 }
 
-// A checklist item lives outside TMTask, so looking its id up would always
-// come back empty and warn about an item that is perfectly valid.
-func TestImportDoesNotLookUpChecklistItems(t *testing.T) {
-	database, _ := seedWritable(t)
-	stubExecDropping(t)
-
-	payload := `[{"type":"checklist-item","operation":"update","id":"chk-1","attributes":{"completed":true}}]`
-	stderr, err := runImport(t, database, payload)
-	if err != nil {
-		t.Fatalf("import: %v", err)
+// Neither a checklist item nor a heading is reachable through GetTaskByUUID —
+// checklist items are in their own table, and the lookups exclude the heading
+// type (#149) — so looking either up would warn that Things does not know an
+// id it knows perfectly well.
+func TestImportDoesNotLookUpUnresolvableTypes(t *testing.T) {
+	cases := []struct {
+		name string
+		item string
+		id   string
+	}{
+		{"checklistItem", `{"type":"checklist-item","operation":"update","id":"chk-1","attributes":{"completed":true}}`, "chk-1"},
+		{"heading", `{"type":"heading","operation":"update","id":"head-1","attributes":{"title":"Phase 2"}}`, "head-1"},
 	}
-	if strings.Contains(stderr, "chk-1") {
-		t.Errorf("checklist item was looked up:\n%s", stderr)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			database, sqlDB := seedWritable(t)
+			// A real heading row: the lookup filters it out by type, not by
+			// absence, so seeding it proves the skip is what keeps us quiet.
+			if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('head-1', 'Phase 2', 2, 0, 0)`); err != nil {
+				t.Fatalf("seed heading: %v", err)
+			}
+			stubExecDropping(t)
+
+			stderr, err := runImport(t, database, "["+c.item+"]")
+			if err != nil {
+				t.Fatalf("import: %v", err)
+			}
+			if strings.Contains(stderr, c.id) {
+				t.Errorf("%s was looked up and warned about:\n%s", c.name, stderr)
+			}
+		})
 	}
 }
 
@@ -480,41 +499,164 @@ func TestImportReadsBackCanceledOverCompleted(t *testing.T) {
 	}
 }
 
-// Both import failures have to survive the --json error path (issue #152):
-// under --json the rendered object on stdout is all a consumer reads, so the
-// per-item detail must be inside it rather than on stderr.
-func TestImportFailuresRenderAsJSON(t *testing.T) {
-	t.Run("refusal", func(t *testing.T) {
-		database, _ := seedWritable(t)
-		stubExecDropping(t)
+// findItem returns the payload item at path, so an assertion names what it
+// wants instead of depending on slice order.
+func findItem(t *testing.T, items []jsonErrorItem, path string) jsonErrorItem {
+	t.Helper()
+	for _, it := range items {
+		if it.Path == path {
+			return it
+		}
+	}
+	t.Fatalf("no item at path %q in %+v", path, items)
+	return jsonErrorItem{}
+}
 
-		payload := `[{"type":"to-do","operation":"update","id":"rep-1","attributes":{"when":"today"}}]`
-		err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
-		if err == nil {
-			t.Fatal("expected a refusal")
+// A refusal carries every offending item under --json, so an agent can fix the
+// payload per item rather than parsing them back out of the message (#161).
+func TestImportRefusalJSONItems(t *testing.T) {
+	database, _ := seedWritable(t)
+	calls := stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","operation":"update","id":"one-1","attributes":{"when":"today"}},
+	  {"type":"to-do","operation":"update","id":"rep-1","attributes":{"when":"today","deadline":"2026-05-01"}},
+	  {"type":"project","operation":"update","id":"repproj-1","attributes":{"canceled":true}}
+	]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	p, raw := decodePayload(t, err)
+
+	if p.Error != "import refused" {
+		t.Errorf("error token = %q, want %q (%s)", p.Error, "import refused", raw)
+	}
+	if len(p.Items) != 2 {
+		t.Fatalf("got %d items, want 2 (%s)", len(p.Items), raw)
+	}
+
+	todo := findItem(t, p.Items, "[1]")
+	if todo.ID != "rep-1" || todo.Title != "Water plants" {
+		t.Errorf("item = %+v, want id rep-1 / Water plants", todo)
+	}
+	if strings.Join(todo.Blocked, ",") != "when,deadline" {
+		t.Errorf("blocked = %v, want [when deadline]", todo.Blocked)
+	}
+	proj := findItem(t, p.Items, "[2]")
+	if proj.ID != "repproj-1" || strings.Join(proj.Blocked, ",") != "canceled" {
+		t.Errorf("item = %+v, want id repproj-1 blocked [canceled]", proj)
+	}
+
+	// The non-repeating item is not an offender and must not appear.
+	for _, it := range p.Items {
+		if it.ID == "one-1" {
+			t.Errorf("allowed item reported as an offender: %+v", it)
 		}
-		p, raw := decodePayload(t, err)
-		if !strings.Contains(p.Message, `[0] (id rep-1): "Water plants" is a repeating to-do — when`) {
-			t.Errorf("payload lost the per-item detail: %s", raw)
+	}
+	// The message still carries everything, for a human reading the JSON.
+	if !strings.Contains(p.Message, "2 of 3 update items") {
+		t.Errorf("message lost its summary: %s", p.Message)
+	}
+	if *calls != 0 {
+		t.Errorf("payload was sent to Things anyway (%d calls)", *calls)
+	}
+}
+
+// A read-back failure names the status asked for and the one the item is
+// actually in, so a caller can tell a dropped write from an unexpected state.
+func TestImportVerifyJSONItems(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('one-2', 'File taxes', 0, 0, 0, 2)`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Things applies the first and drops the second.
+	stubExecApplyingAll(t, sqlDB, map[string]int{"one-1": int(model.StatusCompleted)})
+
+	payload := `[
+	  {"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":true}},
+	  {"type":"to-do","operation":"update","id":"one-2","attributes":{"canceled":true}}
+	]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	if err == nil {
+		t.Fatal("expected a read-back failure")
+	}
+	p, raw := decodePayload(t, err)
+
+	if p.Error != "import partially applied" {
+		t.Errorf("error token = %q, want %q (%s)", p.Error, "import partially applied", raw)
+	}
+	if len(p.Items) != 1 {
+		t.Fatalf("got %d items, want only the dropped one (%s)", len(p.Items), raw)
+	}
+	it := p.Items[0]
+	if it.Path != "[1]" || it.ID != "one-2" || it.Title != "File taxes" {
+		t.Errorf("item = %+v, want [1] / one-2 / File taxes", it)
+	}
+	if it.Wanted != "cancelled" || it.Got != "open" {
+		t.Errorf("wanted/got = %q/%q, want cancelled/open", it.Wanted, it.Got)
+	}
+	if len(it.Blocked) != 0 {
+		t.Errorf("read-back item should not carry blocked attributes: %+v", it)
+	}
+}
+
+// Nothing to observe means no `got`: the field is omitted rather than
+// reported as the zero status, which would read as "still open".
+func TestImportVerifyJSONOmitsGotWhenUnobserved(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	// Things reports success, then the row disappears before the read-back.
+	prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
+		if _, err := sqlDB.Exec(`DELETE FROM TMTask WHERE uuid = 'one-1'`); err != nil {
+			t.Errorf("simulating deletion: %v", err)
 		}
+		return exec.Command("true")
 	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
 
-	t.Run("readBack", func(t *testing.T) {
-		fastVerify(t)
-		database, sqlDB := seedWritable(t)
-		stubExecApplyingAll(t, sqlDB, nil)
+	payload := `[{"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":true}}]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	if err == nil {
+		t.Fatal("expected a read-back failure")
+	}
+	p, raw := decodePayload(t, err)
+	if len(p.Items) != 1 {
+		t.Fatalf("got %d items, want 1 (%s)", len(p.Items), raw)
+	}
+	if p.Items[0].Got != "" {
+		t.Errorf("got = %q, want it omitted when nothing was observed", p.Items[0].Got)
+	}
+	if p.Items[0].Wanted != "completed" {
+		t.Errorf("wanted = %q, want completed", p.Items[0].Wanted)
+	}
+	if !strings.Contains(raw, `"wanted"`) || strings.Contains(raw, `"got"`) {
+		t.Errorf("payload should carry wanted but not got: %s", raw)
+	}
+}
 
-		payload := `[{"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":true}}]`
-		err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
-		if err == nil {
-			t.Fatal("expected a read-back failure")
-		}
-		p, raw := decodePayload(t, err)
-		if strings.Contains(p.Message, "listed above") {
-			t.Errorf("message points at detail a JSON reader never sees: %s", raw)
-		}
-		if !strings.Contains(p.Message, `"Post letter" (one-1) is still open`) {
-			t.Errorf("payload lost the per-item detail: %s", raw)
-		}
-	})
+// Plain text is unchanged by the typed errors: same message, on stderr, with
+// nothing on stdout.
+func TestImportFailuresPlainTextUnchanged(t *testing.T) {
+	database, _ := seedWritable(t)
+	stubExecDropping(t)
+
+	payload := `[{"type":"to-do","operation":"update","id":"rep-1","attributes":{"when":"today"}}]`
+	err := runWith(t, database, "import", "--file", importPayload(t, payload))
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	var stdout, stderr bytes.Buffer
+	renderError(&stdout, &stderr, false, err)
+	if stdout.Len() != 0 {
+		t.Errorf("plain text wrote to stdout: %q", stdout.String())
+	}
+	want := `Error: 1 of 1 update items change attributes Things does not allow on repeating items`
+	if !strings.HasPrefix(stderr.String(), want) {
+		t.Errorf("stderr = %q, want prefix %q", stderr.String(), want)
+	}
+	if !strings.Contains(stderr.String(), `  [0] (id rep-1): "Water plants" is a repeating to-do — when`) {
+		t.Errorf("stderr lost the per-item line: %q", stderr.String())
+	}
 }

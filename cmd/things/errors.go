@@ -24,6 +24,25 @@ type jsonErrorPayload struct {
 	Kind    string           `json:"kind,omitempty"`
 	Query   string           `json:"query,omitempty"`
 	Matches []jsonErrorMatch `json:"matches,omitempty"`
+	Items   []jsonErrorItem  `json:"items,omitempty"`
+}
+
+// jsonErrorItem is one item of a batch failure. An import acts on many items
+// at once, so a caller needs to know which of them failed and why rather than
+// reading it back out of the message (issue #161).
+//
+// Two failures share the shape, and each fills the half that applies:
+// a refusal sets Blocked, naming the attributes Things will not accept on that
+// item; a read-back failure sets Wanted and Got, naming the status the payload
+// asked for and the one the item is still in. Got is empty when there was
+// nothing to observe — the row could not be read, or no longer exists.
+type jsonErrorItem struct {
+	Path    string   `json:"path"`
+	ID      string   `json:"id,omitempty"`
+	Title   string   `json:"title,omitempty"`
+	Blocked []string `json:"blocked,omitempty"`
+	Wanted  string   `json:"wanted,omitempty"`
+	Got     string   `json:"got,omitempty"`
 }
 
 // jsonErrorMatch is one candidate of an ambiguous reference — enough for a
@@ -84,6 +103,24 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Error = "not found"
 		payload.Kind = "task"
 		payload.Query = notFoundTask.Query
+		return payload
+	}
+
+	// Batch import failures. The two are kept apart because the recovery
+	// differs: a refusal sent nothing, so the payload can be fixed and re-run
+	// whole, while a partially applied import already changed things and must
+	// be re-run with only the items named here.
+	var refused *importRefusalError
+	if errors.As(err, &refused) {
+		payload.Error = "import refused"
+		payload.Items = refused.jsonItems()
+		return payload
+	}
+
+	var unapplied *importVerifyError
+	if errors.As(err, &unapplied) {
+		payload.Error = "import partially applied"
+		payload.Items = unapplied.jsonItems()
 		return payload
 	}
 

@@ -280,12 +280,15 @@ func TestVerifyStatusesShareOneDeadline(t *testing.T) {
 	}
 	errs := verifyStatuses(database, wants, verifyTimeout)
 
-	for i, err := range errs {
-		if err == nil {
+	for i, res := range errs {
+		if res.err == nil {
 			t.Fatalf("item %d reported as landed, but nothing changed its status", i)
 		}
-		if !strings.Contains(err.Error(), "status change did not apply") {
-			t.Errorf("item %d: unexpected error %v", i, err)
+		if !strings.Contains(res.err.Error(), "status change did not apply") {
+			t.Errorf("item %d: unexpected error %v", i, res.err)
+		}
+		if !res.observed || res.got != model.StatusOpen {
+			t.Errorf("item %d: want the observed status recorded as open, got (%v, observed=%v)", i, res.got, res.observed)
 		}
 	}
 	// One sleep per round, and rounds stop at the shared deadline: at most
