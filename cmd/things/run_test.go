@@ -430,6 +430,44 @@ func TestRunCompleteProjectRequiresConfirmation(t *testing.T) {
 	}
 }
 
+// `edit` resolves projects as well as to-dos, but things:///update cannot
+// address a project — Things shows a "does not exist" dialog and writes
+// nothing (issue #189). The reference must be refused before `open` runs, and
+// under --json with the "not a task" token so an agent can retry against
+// `project edit`.
+func TestRunEditRefusesProjectReference(t *testing.T) {
+	database, _ := seedProject(t)
+	captured := stubExec(t)
+
+	err := runWith(t, database, "--json", "edit", "Chores", "--title", "Errands")
+	if err == nil {
+		t.Fatal("expected edit to refuse a project reference")
+	}
+	if len(*captured) != 0 {
+		t.Errorf("no URL should be opened, got %v", *captured)
+	}
+	if want := `"Chores" is a project; use things project edit`; err.Error() != want {
+		t.Errorf("message = %q, want %q", err.Error(), want)
+	}
+
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "not a task" {
+		t.Errorf("error = %q, want %q (%s)", payload.Error, "not a task", raw)
+	}
+	if payload.Kind != "project" {
+		t.Errorf("kind = %q, want %q", payload.Kind, "project")
+	}
+	if payload.Query != "Chores" {
+		t.Errorf("query = %q, want %q", payload.Query, "Chores")
+	}
+	if payload.UUID != "proj-1" {
+		t.Errorf("uuid = %q, want %q", payload.UUID, "proj-1")
+	}
+	if payload.Title != "Chores" {
+		t.Errorf("title = %q, want %q", payload.Title, "Chores")
+	}
+}
+
 func TestIsInteractiveStdinPipe(t *testing.T) {
 	// In `go test`, stdin is typically not a TTY. Just call it for coverage;
 	// don't assert on the result since test runners vary.
