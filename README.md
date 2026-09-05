@@ -56,7 +56,8 @@ in follow-up commands like `show`, `edit`, `complete`, and `cancel`.
 `--json` also implies non-interactive: the CLI never prompts, so a reference
 matching several tasks returns an error listing the candidates instead of
 opening the picker, and `complete`/`cancel` on a project declines instead of
-asking to confirm.
+asking to confirm. Pass `--yes` to answer the confirmation up front, which is
+how a project completes under `--json`.
 
 ### Errors under `--json`
 
@@ -181,11 +182,17 @@ snake_case form.
 | `no_verify` | `--no-verify` | boolean | `false` |
 | `strict_tags` | `--strict-tags` | boolean | `false` |
 | `create_tags` | `--create-tags` | boolean | `false` |
+| `assume_yes` | `--yes` | boolean | `false` |
 
 ```toml
 color = "always"
 strict_tags = true
 ```
+
+`assume_yes` answers the confirmation asked before a project-wide
+`complete` or `cancel`. It does not reach the `--yes` on `skill install`
+or `skill uninstall`, which mean "overwrite" and "delete" — those still
+ask, or take the flag.
 
 `strict_tags` and `create_tags` are mutually exclusive; setting both to
 `true` is an error. Either one is still overridden by the other's flag on
@@ -505,6 +512,9 @@ landed; `--no-verify` skips that. `--json` reports the two lists as
 | `things cancel <task>` | Cancel a task or project (project cancellation is confirmed interactively) |
 | `things log` | Move today's done/cancelled items to the Logbook (Items → Log Completed) |
 
+`complete` and `cancel` also take `-y` / `--yes`, which answers the project
+confirmation up front.
+
 `log` is the housekeeping action; `logbook` (above) is the *view* of
 already-archived tasks.
 
@@ -513,6 +523,35 @@ things complete 3
 things cancel "Old idea"
 things log
 ```
+
+Completing or cancelling a *project* also completes or cancels every task in
+it, so it asks first. A run that cannot prompt — piped stdin, or `--json` —
+declines rather than guessing:
+
+```console
+$ things --json complete "Launch v2"; echo "exit=$?"
+{
+  "error": "error",
+  "message": "cancelled: complete project \"Launch v2\" needs confirmation, and this run cannot prompt — pass --yes, or re-run without --json"
+}
+exit=1
+```
+
+Without `--json` the same refusal is a plain `Error: ...` line on stderr.
+
+`--yes` (`-y`) answers that confirmation, which is what makes project
+completion work from a script or an agent:
+
+```sh
+things --json complete "Launch v2" --yes
+```
+
+Set `assume_yes = true` in the [config file](#configuration) to answer it every
+time. `--yes` still decides each run, so `--yes=false` restores the prompt for
+one invocation. Turning `assume_yes` on removes the last check before a project
+and all its tasks change status, so prefer passing the flag where you need it.
+It covers `complete` and `cancel` only — the `--yes` on `skill install` and
+`skill uninstall` is not affected.
 
 After a `complete` or `cancel` the CLI reads the item back from the database
 and exits non-zero if the status did not change. Things has no callback for

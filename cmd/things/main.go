@@ -542,6 +542,7 @@ func (c *EditCmd) Run(d *Deps) error {
 
 type CompleteCmd struct {
 	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
+	ConfirmFlags
 }
 
 func (c *CompleteCmd) Run(d *Deps) error {
@@ -558,7 +559,7 @@ func (c *CompleteCmd) Run(d *Deps) error {
 	}
 	write := func() error { return things.CompleteTask(task.UUID) }
 	if task.Type == model.TypeProject {
-		if err := confirmProjectStatusChange(d, "Complete", task.Title); err != nil {
+		if err := confirmProjectStatusChange(d, c.Yes, "Complete", task.Title); err != nil {
 			return err
 		}
 		write = func() error { return things.CompleteProject(task.UUID) }
@@ -568,6 +569,7 @@ func (c *CompleteCmd) Run(d *Deps) error {
 
 type CancelCmd struct {
 	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
+	ConfirmFlags
 }
 
 func (c *CancelCmd) Run(d *Deps) error {
@@ -584,7 +586,7 @@ func (c *CancelCmd) Run(d *Deps) error {
 	}
 	write := func() error { return things.CancelTask(task.UUID) }
 	if task.Type == model.TypeProject {
-		if err := confirmProjectStatusChange(d, "Cancel", task.Title); err != nil {
+		if err := confirmProjectStatusChange(d, c.Yes, "Cancel", task.Title); err != nil {
 			return err
 		}
 		write = func() error { return things.CancelProject(task.UUID) }
@@ -1097,13 +1099,18 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 // confirmProjectStatusChange gates a project-wide complete/cancel behind a
 // confirmation. When the run cannot prompt — piped stdin, or --json, which
 // never prompts — say so instead of returning a bare "cancelled" the caller
-// has no way to interpret.
-func confirmProjectStatusChange(d *Deps, verb, title string) error {
+// has no way to interpret. assumeYes is the caller's --yes: it answers the
+// question up front, which is the only way a machine caller can get through
+// this at all.
+func confirmProjectStatusChange(d *Deps, assumeYes bool, verb, title string) error {
+	if assumeYes {
+		return nil
+	}
 	action := strings.ToLower(verb)
 	if !d.interactive() {
-		reason := "re-run in a terminal"
+		reason := "pass --yes, or re-run in a terminal"
 		if d.JSON {
-			reason = "re-run without --json"
+			reason = "pass --yes, or re-run without --json"
 		}
 		return fmt.Errorf("cancelled: %s project %q needs confirmation, and this run cannot prompt — %s", action, title, reason)
 	}

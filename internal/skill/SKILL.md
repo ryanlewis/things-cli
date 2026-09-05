@@ -7,6 +7,7 @@ today, upcoming, projects, or areas on macOS.
 
 - Reads (`list`, `show`, `projects`, `areas`, `tags`, `search`) are safe — use freely.
 - Writes (`add`, `project add`, `edit`, `tag add`, `complete`, `cancel`, `log`, `open`) modify the user's real data. Confirm before destructive ones (`complete`, `cancel`, bulk `edit`).
+- `complete`/`cancel` on a *project* also changes every task in it, so the CLI asks first and `--yes` is what skips that. Ask the user before passing it — the flag is there so a non-interactive run can proceed, not so the check can be dropped.
 - `edit`, `project edit`, and `import` payloads with `operation: update` require *Things → Settings → General → Enable Things URLs*. The error to recognise: `update: auth token is required — enable Things URLs in Things → Settings → General …`.
 - `--complete` and `--cancel` are mutually exclusive on `edit` and `project edit`.
 - `complete` and `cancel` (and `edit --complete` / `--cancel`) read the item back afterwards and exit non-zero if the status did not change. Treat a non-zero exit as "the task is still open" — do not report it as done.
@@ -19,7 +20,7 @@ Tasks and projects carry `"repeating": true` in JSON when Things treats them as 
 
 In JSON, `status` is a string enum — `"open"`, `"cancelled"`, or `"completed"` (not the raw Things integer) — on tasks, projects, and checklist items. Filter with e.g. `jq 'select(.status=="open")'`.
 
-`--json` also means "never prompt": a reference that matches several tasks returns an error listing the candidates instead of dropping into the interactive picker, and a project `complete`/`cancel` declines rather than asking for confirmation.
+`--json` also means "never prompt": a reference that matches several tasks returns an error listing the candidates instead of dropping into the interactive picker, and a project `complete`/`cancel` declines rather than asking for confirmation. Pass `--yes` to answer that confirmation up front — under `--json` it is the only way a project completes at all.
 
 Under `--json`, a failure prints a single JSON object to **stdout** and exits non-zero, so branch on the exit status and read the failure off stdout rather than parsing stderr. (On success the read commands print their JSON result there; the write commands — `add`, `edit`, `complete`, `cancel`, `log`, `open` — print nothing.) The `error` field is a stable token; `message` is the human text.
 
@@ -47,9 +48,9 @@ Human output is styled with colors and aligned columns. Color auto-disables when
 
 ## Config file changes the defaults
 
-The user may have a TOML config file (`~/.config/things-cli/config.toml`, or `$XDG_CONFIG_HOME/things-cli/config.toml`) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `db`, `no_verify`, `strict_tags`, `create_tags`.
+The user may have a TOML config file (`~/.config/things-cli/config.toml`, or `$XDG_CONFIG_HOME/things-cli/config.toml`) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `db`, `no_verify`, `strict_tags`, `create_tags`, `assume_yes`.
 
-This means the defaults you would otherwise assume may not hold — `json = true` makes every command emit JSON, and `no_verify = true` turns off the read-back that confirms a `complete`/`cancel` landed.
+This means the defaults you would otherwise assume may not hold — `json = true` makes every command emit JSON, `no_verify = true` turns off the read-back that confirms a `complete`/`cancel` landed, and `assume_yes = true` removes the confirmation before a project and all its tasks change status (it covers `complete` and `cancel` only).
 
 - Pass the flags you depend on explicitly. Use `--json` when you want JSON and `--json=false` when you want the plain listing; do not infer the format from a bare invocation.
 - `things config show` prints the file in use and the defaults it establishes (`--json` for machine-readable). `things config path` prints just the path and whether it exists.
@@ -89,8 +90,10 @@ things add <title> [--notes --when --deadline --tags --checklist --project --hea
 things project add <title> [--notes --when --deadline --tags --area --todos --strict-tags --create-tags]
 things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
 things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
-things complete <task>          # task or project; project completion asks to confirm
-things cancel <task>            # task or project; project cancellation asks to confirm
+things complete <task> [-y|--yes]  # task or project; project completion asks to confirm
+things cancel <task> [-y|--yes]   # task or project; project cancellation asks to confirm
+    # --yes answers the project confirmation; required under --json, which
+    # never prompts. It has no effect on a plain to-do, which is not confirmed.
 things log                      # move Today → Logbook
 things --no-verify complete <task>   # skip the read-back (rarely needed; also applies to import)
 things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
@@ -239,3 +242,4 @@ things --json list today | jq '.[] | .title'
 - After a `list`/`search`, numeric indices stay valid until the next one.
 - Use `things open` when the user wants to *see* something in the app rather than read data back.
 - Check `things config show` before assuming a default. Pass `--json` explicitly rather than relying on the config file.
+- Completing or cancelling a project also completes or cancels every task in it. Confirm with the user first, then pass `--yes` — under `--json` the command declines without it.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -56,6 +57,7 @@ type Key struct {
 	Default  any      // built-in default; bool or string
 	Enum     []string // permitted values, for keys with a fixed set
 	Excludes []string // keys this one cannot be combined with
+	Commands []string // commands whose flags this key may seed; empty means all
 	Comment  []string // template comment, one line per entry
 	Example  string   // template assignment, written commented out
 }
@@ -128,6 +130,21 @@ var Keys = []Key{
 			"Same as --create-tags. Mutually exclusive with strict_tags.",
 		},
 		Example: "create_tags = false",
+	},
+	{
+		Name:     "assume_yes",
+		Flag:     "yes",
+		Default:  false,
+		Commands: []string{"complete", "cancel"},
+		Comment: []string{
+			"Answer the confirmation asked before a project-wide complete or",
+			"cancel, instead of prompting. Same as --yes / -y on those two",
+			"commands; the --yes on `skill install` and `skill uninstall` is",
+			"deliberately not covered, so this cannot delete an installed skill.",
+			"Turning this on removes the last check before a project and every",
+			"task in it changes status.",
+		},
+		Example: "assume_yes = false",
 	},
 }
 
@@ -352,6 +369,7 @@ func (f *File) JSON() bool {
 func (f *File) Resolver() kong.Resolver {
 	values := map[string]any{}
 	excludes := map[string][]string{}
+	commands := map[string][]string{}
 	path := ""
 	if f != nil {
 		path = f.Path
@@ -375,11 +393,18 @@ func (f *File) Resolver() kong.Resolver {
 			}
 			values[k.Flag] = v
 			excludes[k.Flag] = excludingFlags(k)
+			commands[k.Flag] = k.Commands
 		}
 	}
 	return kong.ResolverFunc(func(_ *kong.Context, parent *kong.Path, flag *kong.Flag) (any, error) {
 		v, ok := values[flag.Name]
 		if !ok {
+			return nil, nil
+		}
+		// A key restricted to certain commands must not seed a same-named flag
+		// elsewhere: `--yes` also means "overwrite" and "delete" on the skill
+		// commands, and assume_yes is not asking for either.
+		if cmds := commands[flag.Name]; len(cmds) > 0 && !slices.Contains(cmds, parent.Node().Path()) {
 			return nil, nil
 		}
 		// A flag on the command line beats the file, and so does the flag it
