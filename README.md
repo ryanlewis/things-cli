@@ -158,7 +158,10 @@ unchanged, and commands that fail on a single item carry no `items` at all.
 
 A TOML file supplies defaults for the flags below, so you can set them once
 instead of typing them every time. Precedence is flag > config file >
-built-in default.
+built-in default. The full reference — an annotated example file, the
+`config` subcommands with sample output, and what happens when the file is
+wrong — is on the docs site under
+[Configuration](https://things.rlew.io/configuration/).
 
 The file is read from `$XDG_CONFIG_HOME/things-cli/config.toml`, falling
 back to `~/.config/things-cli/config.toml`. Override the location with

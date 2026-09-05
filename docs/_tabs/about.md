@@ -1,7 +1,7 @@
 ---
 title: About
 icon: fas fa-info-circle
-order: 3
+order: 4
 ---
 
 `things-cli` is a small Go CLI for [Things3](https://culturedcode.com/things/)
