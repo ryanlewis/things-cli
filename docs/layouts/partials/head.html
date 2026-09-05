@@ -28,4 +28,6 @@
 {{- with resources.Get "css/site.css" }}
   {{- $css := . | minify | fingerprint }}
   <link rel="stylesheet" href="{{ $css.RelPermalink }}" integrity="{{ $css.Data.Integrity }}">
+{{- else }}
+  {{- errorf "assets/css/site.css is missing — the site would ship unstyled" }}
 {{- end }}
