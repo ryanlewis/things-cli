@@ -149,9 +149,10 @@ things import < payload.json  # batch create/update via the Things JSON URL sche
 [documented by Cultured Code](https://culturedcode.com/things/support/articles/2803573/).
 
 Items with `"operation": "update"` go through the same repeating check as
-`edit`: if any of them sets `when`, `deadline`, `completed` or `canceled` on a
-repeating to-do or project, the whole import is refused before anything is
-sent, and the error names every offending item. Update items that set
+`edit`: if any of them carries `when`, `deadline`, `completed` or `canceled`
+for a repeating to-do or project, the whole import is refused before anything
+is sent, and the error names every offending item. The status fields are
+two-way, so `false` is refused as readily as `true`. Update items that set
 `completed` or `canceled` are read back from the database afterwards, and any
 that Things dropped are reported one per line with a non-zero exit.
 

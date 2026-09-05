@@ -98,8 +98,10 @@ func TestRestrictedImportAttrs(t *testing.T) {
 			[]string{"when", "deadline", "completed", "canceled"}},
 		{"clearedDeadline", `{"deadline":""}`, []string{"deadline"}},
 		{"nullWhen", `{"when":null}`, []string{"when"}},
-		{"statusFalse", `{"completed":false,"canceled":false}`, nil},
-		{"statusNull", `{"completed":null}`, nil},
+		// The docs say the status fields "cannot be updated on repeating
+		// to-dos" — setting one to false is still updating it.
+		{"statusFalse", `{"completed":false,"canceled":false}`, []string{"completed", "canceled"}},
+		{"statusNull", `{"completed":null}`, []string{"completed"}},
 		{"statusNonBool", `{"completed":"true"}`, []string{"completed"}},
 	}
 	for _, c := range cases {
@@ -118,29 +120,39 @@ func TestRestrictedImportAttrs(t *testing.T) {
 
 func TestWantedStatus(t *testing.T) {
 	cases := []struct {
+		name  string
 		attrs string
 		want  model.Status
 		ok    bool
 	}{
-		{`{"completed":true}`, model.StatusCompleted, true},
-		{`{"canceled":true}`, model.StatusCancelled, true},
-		{`{"completed":true,"canceled":true}`, model.StatusCompleted, true},
-		{`{"title":"x"}`, model.StatusOpen, false},
-		// An explicit false is not read back: see the note on wantedStatus.
-		{`{"completed":false}`, model.StatusOpen, false},
-		{`{"canceled":false}`, model.StatusOpen, false},
-		// A true still wins over a false alongside it.
-		{`{"completed":false,"canceled":true}`, model.StatusCancelled, true},
+		{"completed", `{"completed":true}`, model.StatusCompleted, true},
+		{"canceled", `{"canceled":true}`, model.StatusCancelled, true},
+		{"neither", `{"title":"x"}`, model.StatusOpen, false},
+		// Both status fields are two-way: false asks for incomplete.
+		{"completedFalse", `{"completed":false}`, model.StatusOpen, true},
+		{"canceledFalse", `{"canceled":false}`, model.StatusOpen, true},
+		// "canceled … Takes priority over completed", and completed is
+		// "Ignored if canceled is also set to true".
+		{"bothTrue", `{"completed":true,"canceled":true}`, model.StatusCancelled, true},
+		{"bothFalse", `{"completed":false,"canceled":false}`, model.StatusOpen, true},
+		{"canceledTrueCompletedFalse", `{"completed":false,"canceled":true}`, model.StatusCancelled, true},
+		// The two doc entries disagree about this one; left unverified rather
+		// than guessed.
+		{"canceledFalseCompletedTrue", `{"completed":true,"canceled":false}`, model.StatusOpen, false},
+		// A non-bool is a payload error for Things to report, not a request.
+		{"nonBool", `{"completed":"true"}`, model.StatusOpen, false},
 	}
 	for _, c := range cases {
-		var attrs map[string]any
-		if err := json.Unmarshal([]byte(c.attrs), &attrs); err != nil {
-			t.Fatalf("unmarshal: %v", err)
-		}
-		got, ok := wantedStatus(attrs)
-		if got != c.want || ok != c.ok {
-			t.Errorf("wantedStatus(%s) = (%v, %v), want (%v, %v)", c.attrs, got, ok, c.want, c.ok)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			var attrs map[string]any
+			if err := json.Unmarshal([]byte(c.attrs), &attrs); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			got, ok := wantedStatus(attrs)
+			if got != c.want || ok != c.ok {
+				t.Errorf("wantedStatus(%s) = (%v, %v), want (%v, %v)", c.attrs, got, ok, c.want, c.ok)
+			}
+		})
 	}
 }
 
@@ -154,6 +166,10 @@ func TestImportRefusesRepeatingUpdates(t *testing.T) {
 		{"deadline", `{"type":"to-do","operation":"update","id":"rep-1","attributes":{"deadline":"2026-05-01"}}`, "deadline"},
 		{"completed", `{"type":"to-do","operation":"update","id":"rep-1","attributes":{"completed":true}}`, "completed"},
 		{"canceled", `{"type":"to-do","operation":"update","id":"rep-1","attributes":{"canceled":true}}`, "canceled"},
+		// Setting a repeating item to incomplete is still updating a field the
+		// docs say cannot be updated on repeating items.
+		{"completedFalse", `{"type":"to-do","operation":"update","id":"rep-1","attributes":{"completed":false}}`, "completed"},
+		{"canceledFalse", `{"type":"to-do","operation":"update","id":"rep-1","attributes":{"canceled":false}}`, "canceled"},
 		{"project", `{"type":"project","operation":"update","id":"repproj-1","attributes":{"canceled":true}}`, "canceled"},
 	}
 	for _, c := range cases {
@@ -230,7 +246,7 @@ func TestImportAllowsUnrestrictedEditsOnRepeatingItems(t *testing.T) {
 	database, _ := seedWritable(t)
 	calls := stubExecDropping(t)
 
-	payload := `[{"type":"to-do","operation":"update","id":"rep-1","attributes":{"title":"New title","completed":false}}]`
+	payload := `[{"type":"to-do","operation":"update","id":"rep-1","attributes":{"title":"New title","notes":"n","tags":["urgent"]}}]`
 	if err := runWith(t, database, "import", "--file", importPayload(t, payload)); err != nil {
 		t.Fatalf("import refused an allowed edit: %v", err)
 	}
@@ -387,5 +403,74 @@ func TestImportRefusalDoesNotWarnAboutUnknownIDs(t *testing.T) {
 	}
 	if *calls != 0 {
 		t.Errorf("payload was sent to Things anyway (%d calls)", *calls)
+	}
+}
+
+// `"completed": false` asks Things to set an item to incomplete — the `update`
+// command documents both status fields as two-way. A reopen Things drops is as
+// invisible as a completion it drops, so it is read back the same way.
+func TestImportReadsBackAReopen(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('done-1', 'File taxes', 0, 3, 0, 2)`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	payload := `[{"type":"to-do","operation":"update","id":"done-1","attributes":{"completed":false}}]`
+
+	t.Run("dropped", func(t *testing.T) {
+		stubExecApplyingAll(t, sqlDB, nil)
+		stderr, err := runImport(t, database, payload)
+		if err == nil {
+			t.Fatal("expected a non-zero exit for a dropped reopen, got nil")
+		}
+		if !strings.Contains(stderr, `"File taxes" (done-1) is still completed`) {
+			t.Errorf("stderr missing the dropped reopen:\n%s", stderr)
+		}
+	})
+
+	t.Run("applied", func(t *testing.T) {
+		stubExecApplyingAll(t, sqlDB, map[string]int{"done-1": int(model.StatusOpen)})
+		stderr, err := runImport(t, database, payload)
+		if err != nil {
+			t.Fatalf("import: %v (stderr: %s)", err, stderr)
+		}
+		if stderr != "" {
+			t.Errorf("unexpected stderr: %s", stderr)
+		}
+	})
+}
+
+// `"completed": false` on an item that is already open asks for a status it is
+// already in, so the read-back is satisfied at once rather than reporting a
+// failure against a payload Things had nothing to do with.
+func TestImportReopenOfAnOpenItemIsNotAFailure(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecApplyingAll(t, sqlDB, nil)
+
+	payload := `[{"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":false}}]`
+	stderr, err := runImport(t, database, payload)
+	if err != nil {
+		t.Fatalf("import: %v (stderr: %s)", err, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("unexpected stderr: %s", stderr)
+	}
+}
+
+// canceled takes priority over completed, so a payload setting both is read
+// back against cancelled — not completed, which Things ignores.
+func TestImportReadsBackCanceledOverCompleted(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecApplyingAll(t, sqlDB, map[string]int{"one-1": int(model.StatusCancelled)})
+
+	payload := `[{"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":true,"canceled":true}}]`
+	stderr, err := runImport(t, database, payload)
+	if err != nil {
+		t.Fatalf("import treated a cancelled item as a failed completion: %v (stderr: %s)", err, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("unexpected stderr: %s", stderr)
 	}
 }

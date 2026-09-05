@@ -94,54 +94,54 @@ func walkImportUpdates(node any, path string, updates *[]importUpdate) {
 // that Things refuses on a repeating item, in the order the docs list them. It
 // is the payload-shaped counterpart of restrictedEdits, which does the same
 // job for the `edit` flags.
+//
+// Presence is enough, whatever the value. The URL scheme docs say of both
+// status fields that "this field cannot be updated on repeating to-dos" (and
+// the same for repeating projects), so `"completed": false` is refused exactly
+// like `"completed": true` — setting a repeating item to incomplete is as much
+// an update of that field as completing it.
 func restrictedImportAttrs(attrs map[string]any) []string {
 	var blocked []string
-	for _, name := range []string{"when", "deadline"} {
+	for _, name := range []string{"when", "deadline", "completed", "canceled"} {
 		if _, ok := attrs[name]; ok {
-			blocked = append(blocked, name)
-		}
-	}
-	for _, name := range []string{"completed", "canceled"} {
-		if requestsStatusChange(attrs, name) {
 			blocked = append(blocked, name)
 		}
 	}
 	return blocked
 }
 
-// requestsStatusChange reports whether a status attribute asks Things to move
-// the item. An explicit `false` says "leave it as it is", which leaves Things
-// nothing to drop, so it is not treated as a restricted edit. A non-boolean
-// value is treated as a request: Things decides what to make of it, and
-// guessing it means nothing would put the silent drop back.
-func requestsStatusChange(attrs map[string]any, name string) bool {
-	v, ok := attrs[name]
-	if !ok || v == nil {
-		return false
-	}
-	b, isBool := v.(bool)
-	return !isBool || b
-}
-
 // wantedStatus reports the status an update item asks Things to move the item
-// to. Only a literal `true` counts, and `completed` wins over `canceled` when
-// a payload sets both — the same precedence `edit` applies to --complete over
-// --cancel.
+// to. Both status fields are two-way, per the `update` command's parameter
+// table at repeatingDocsURL: `completed` is "Complete a to-do or set a to-do
+// to incomplete", `canceled` likewise, and each documents that setting the
+// other one to false on an item in that state also marks it incomplete. So a
+// literal `false` is a real request for `open`, not a no-op, and a dropped
+// reopen is as invisible as a dropped completion.
 //
-// An explicit `false` is deliberately not treated as a request. Whether
-// `"completed": false` reopens a completed item is not something this
-// repository or the Things documentation establishes, and the CLI itself never
-// sends it (setBool drops a false). If Things ignores it, reading it back
-// would fail an import that fully succeeded — a worse outcome than the missed
-// detection, since the read-back's whole job is to be trustworthy. If Things
-// does honour it, a dropped reopen stays invisible; see issue #145 for the
-// note, and confirm the behaviour against Things before changing this.
+// `canceled` "Takes priority over `completed`", so it decides the outcome
+// whenever it is present — with one exception. The two entries disagree about
+// `canceled: false` alongside `completed: true`: `canceled` claims priority
+// outright, while `completed` says it is ignored only "if `canceled` is also
+// set to `true`". Rather than guess, that one combination is left unverified;
+// guessing wrong would fail an import that Things applied correctly. It is
+// still refused up front on a repeating target, where the outcome does not
+// matter because neither field may be updated at all.
 func wantedStatus(attrs map[string]any) (model.Status, bool) {
-	if b, ok := attrs["completed"].(bool); ok && b {
-		return model.StatusCompleted, true
-	}
-	if b, ok := attrs["canceled"].(bool); ok && b {
-		return model.StatusCancelled, true
+	completed, hasCompleted := attrs["completed"].(bool)
+	canceled, hasCanceled := attrs["canceled"].(bool)
+	switch {
+	case hasCanceled && hasCompleted && !canceled && completed:
+		return model.StatusOpen, false
+	case hasCanceled:
+		if canceled {
+			return model.StatusCancelled, true
+		}
+		return model.StatusOpen, true
+	case hasCompleted:
+		if completed {
+			return model.StatusCompleted, true
+		}
+		return model.StatusOpen, true
 	}
 	return model.StatusOpen, false
 }

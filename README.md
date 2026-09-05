@@ -462,7 +462,7 @@ Note: macOS `open` has a URL length limit; split very large payloads.
 
 #### Repeating items in an import payload
 
-An `operation: update` item goes through the same repeating check as `edit`. If any item in the payload sets `when`, `deadline`, `completed` or `canceled` on a repeating to-do or project, the whole import is refused and nothing is sent:
+An `operation: update` item goes through the same repeating check as `edit`. If any item in the payload carries `when`, `deadline`, `completed` or `canceled` for a repeating to-do or project, the whole import is refused and nothing is sent. The value does not matter: the URL scheme documents both status fields as two-way ("Complete a to-do or set a to-do to incomplete") and says of each that it "cannot be updated on repeating to-dos", so `"completed": false` is refused exactly like `"completed": true`.
 
 ```text
 $ things import --file reschedule.json
@@ -477,7 +477,7 @@ Update items whose `id` is not in the database get a stderr warning; Things repo
 
 #### Reading back an import's status changes
 
-After the payload is sent, every update item that set `completed` or `canceled` is re-read from the database, for the same reason `complete` and `cancel` are (below). Every item is checked before anything is reported, and the whole batch shares one timeout budget rather than one per item:
+After the payload is sent, every update item that set `completed` or `canceled` is re-read from the database, for the same reason `complete` and `cancel` are (below). That includes setting either to `false`, which asks Things to mark the item incomplete — a reopen it drops is as invisible as a completion it drops. `canceled` takes priority over `completed` when a payload sets both, so the read-back expects what Things actually applies. Every item is checked before anything is reported, and the whole batch shares one timeout budget rather than one per item:
 
 ```text
 $ things import --file finish.json

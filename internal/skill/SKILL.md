@@ -96,11 +96,11 @@ on repeating to-dos and drops the request silently (…). Change it in the Thing
 
 There is no CLI workaround — the user has to make the change in the Things app. Every other attribute (`--title`, `--notes`, `--tags`, `--list`, …) edits normally.
 
-`import` applies the same check per item. If any `operation: update` item sets `when`, `deadline`, `completed` or `canceled` on a repeating to-do or project, the whole import is refused before anything is sent — the URL scheme takes one payload and reports nothing per item, so there is no way to send the rest and say what was skipped. The error names each offending item by its position in the payload (nested items included, e.g. `[2].attributes.items[0]`), its id, its title and the blocked attributes. Fix or drop those items and run the import again.
+`import` applies the same check per item. If any `operation: update` item carries `when`, `deadline`, `completed` or `canceled` for a repeating to-do or project, the whole import is refused before anything is sent. The value is irrelevant — the status fields are two-way and neither can be updated on a repeating item, so `"completed": false` is refused like `"completed": true` — the URL scheme takes one payload and reports nothing per item, so there is no way to send the rest and say what was skipped. The error names each offending item by its position in the payload (nested items included, e.g. `[2].attributes.items[0]`), its id, its title and the blocked attributes. Fix or drop those items and run the import again.
 
 ### Confirming a status change landed
 
-Things has no callback for writes, so after a `complete`, a `cancel`, or an `import` item that sets `completed`/`canceled`, the CLI re-reads the item from the database and exits non-zero if the status never changed. An import checks every such item before reporting, one stderr line each, and the whole batch shares one timeout budget:
+Things has no callback for writes, so after a `complete`, a `cancel`, or an `import` item that sets `completed`/`canceled`, the CLI re-reads the item from the database and exits non-zero if the status never changed. Setting either field to `false` asks for incomplete and is read back too; `canceled` takes priority over `completed` when both are set. An import checks every such item before reporting, one stderr line each, and the whole batch shares one timeout budget:
 
 ```
 import: [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. …
