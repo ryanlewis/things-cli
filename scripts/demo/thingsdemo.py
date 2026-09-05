@@ -102,8 +102,12 @@ def seed(db_path, schema_path):
 
     launch = task("Launch v2", type=1, start_date=td, area=areas["Work"], index=3,
                   notes="Ship the redesign and the new billing flow.")
-    task("Cut the release candidate", start_date=td, deadline=things_date(today + dt.timedelta(days=4)),
-         project=launch, tags_=("release",), index=1, today_index=3)
+    rc = task("Cut the release candidate", start_date=td, deadline=things_date(today + dt.timedelta(days=4)),
+              project=launch, tags_=("release",), index=1, today_index=3,
+              notes="Tag from main once CI is green. Check with marketing before announcing.")
+    for i, (item, done) in enumerate([("Bump the version", 1), ("Run the release checklist", 0), ("Tag and push", 0)]):
+        cur.execute('INSERT INTO TMChecklistItem (uuid, title, status, stopDate, "index", task) VALUES (?, ?, ?, ?, ?, ?)',
+                    (new_uuid(), item, 3 if done else 0, created if done else None, i, rc))
     task("Write the release notes", start_date=td, project=launch, index=2, today_index=4,
          notes="Cover the redesign, billing, and the migration steps.")
     task("Update the changelog", start_date=td, project=launch, index=3, today_index=5)
@@ -128,7 +132,14 @@ def connect():
     path = os.environ.get("THINGS_DEMO_DB")
     if not path:
         sys.exit("THINGS_DEMO_DB is not set")
-    return sqlite3.connect(path)
+    conn = sqlite3.connect(path)
+    # Each shim invocation is a fresh process, so the fixed seed would hand out
+    # the same UUIDs every time. Advance it by what is already in the database:
+    # still deterministic for a re-record, but no collisions between writes.
+    rows = sum(conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+               for t in ("TMTask", "TMChecklistItem", "TMArea", "TMTag"))
+    _rng.seed(50 + rows)
+    return conn
 
 
 def tag_ids(cur, csv):
@@ -165,6 +176,12 @@ def apply_when(cur, uuid, when):
 def set_status(cur, uuid, status):
     cur.execute("UPDATE TMTask SET status = ?, stopDate = ? WHERE uuid = ?",
                 (status, now_unix() if status else None, uuid))
+
+
+def insert_checklist(cur, task, items, start):
+    for i, item in enumerate(filter(None, items.split("\n"))):
+        cur.execute('INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES (?, ?, 0, ?, ?)',
+                    (new_uuid(), item, start + i, task))
 
 
 def handle_open(args):
@@ -207,9 +224,7 @@ def handle_open(args):
             apply_when(cur, uuid, q["when"])
         for t in tag_ids(cur, q.get("tags", "")):
             cur.execute("INSERT INTO TMTaskTag (tasks, tags) VALUES (?, ?)", (uuid, t))
-        for i, item in enumerate(filter(None, q.get("checklist-items", "").split("\n"))):
-            cur.execute('INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES (?, ?, 0, ?, ?)',
-                        (new_uuid(), item, i, uuid))
+        insert_checklist(cur, uuid, q.get("checklist-items", ""), 0)
         if q.get("completed") == "true":
             set_status(cur, uuid, 3)
     elif command in ("update", "update-project"):
@@ -232,6 +247,17 @@ def handle_open(args):
             for t in tag_ids(cur, q["add-tags"]):
                 cur.execute("INSERT INTO TMTaskTag (tasks, tags) SELECT ?, ? WHERE NOT EXISTS "
                             "(SELECT 1 FROM TMTaskTag WHERE tasks = ? AND tags = ?)", (uuid, t, uuid, t))
+        if "checklist-items" in q:
+            cur.execute("DELETE FROM TMChecklistItem WHERE task = ?", (uuid,))
+            insert_checklist(cur, uuid, q["checklist-items"], 0)
+        if "prepend-checklist-items" in q:
+            items = [i for i in q["prepend-checklist-items"].split("\n") if i]
+            cur.execute('UPDATE TMChecklistItem SET "index" = "index" + ? WHERE task = ?', (len(items), uuid))
+            insert_checklist(cur, uuid, q["prepend-checklist-items"], 0)
+        if "append-checklist-items" in q:
+            start = cur.execute('SELECT COALESCE(MAX("index"), -1) + 1 FROM TMChecklistItem WHERE task = ?',
+                                (uuid,)).fetchone()[0]
+            insert_checklist(cur, uuid, q["append-checklist-items"], start)
         if q.get("completed") == "true":
             set_status(cur, uuid, 3)
         if q.get("canceled") == "true":

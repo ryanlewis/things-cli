@@ -1,7 +1,7 @@
 ---
 title: Configuration
 icon: fas fa-cog
-order: 3
+order: 4
 ---
 
 Every flag `things` accepts has a built-in default. A TOML config file lets

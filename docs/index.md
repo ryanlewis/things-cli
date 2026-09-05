@@ -60,5 +60,6 @@ things upcoming --json | jq '.[] | select(.deadline)'
 
 - [**Install**]({{ '/install/' | relative_url }}) — one-line script, `go install`, or prebuilt binaries
 - [**Commands**]({{ '/commands/' | relative_url }}) — full command reference
+- [**Working with agents**]({{ '/agents/' | relative_url }}) — the bundled skill, `--agent` briefs, and `--json` for scripts
 - [**About**]({{ '/about/' | relative_url }}) — how it works, design, AI-friendly story
 - [GitHub](https://github.com/{{ site.repository }}) · [Issues](https://github.com/{{ site.repository }}/issues) · [Releases](https://github.com/{{ site.repository }}/releases/latest)
