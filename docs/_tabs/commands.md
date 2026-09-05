@@ -94,6 +94,20 @@ things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
 `--area`/`--area-id` to move the project. It has no checklist or
 heading flags.
 
+## Tags must already exist
+
+Things applies only tags that already exist and drops the rest without
+saying so. Every write that carries tags (`add`, `project add`, `edit`,
+`project edit`, `import`) checks them against the database first and warns:
+
+```sh
+things add "Review the flags" --tags "Work,cifas-auto-reject"
+# warning: these tags do not exist in Things and will be ignored: cifas-auto-reject
+```
+
+The write still happens. Add `--strict-tags` to fail and write nothing
+instead. The CLI cannot create tags — create them in Things first.
+
 ## Completing and cancelling
 
 ```sh

@@ -713,3 +713,29 @@ func TestAddTaskCommandFails(t *testing.T) {
 		t.Errorf("error should mention URL scheme: %v", err)
 	}
 }
+
+func TestSplitTags(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", nil},
+		{"   ", nil},
+		{"work", []string{"work"}},
+		{"work,urgent", []string{"work", "urgent"}},
+		{" work , urgent ", []string{"work", "urgent"}},
+		{"work,,urgent", []string{"work", "urgent"}},
+		{"two words,x", []string{"two words", "x"}},
+	}
+	for _, c := range cases {
+		got := SplitTags(c.in)
+		if len(got) != len(c.want) {
+			t.Fatalf("SplitTags(%q) = %v, want %v", c.in, got, c.want)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("SplitTags(%q)[%d] = %q, want %q", c.in, i, got[i], c.want[i])
+			}
+		}
+	}
+}

@@ -210,6 +210,7 @@ project.
 | `--heading NAME` | ✓ | — | Heading within the project |
 | `--list NAME` | ✓ | — | List (project or area) name |
 | `--area NAME` | — | ✓ | Area to file the project under |
+| `--strict-tags` | ✓ | ✓ | Fail instead of writing when a tag does not exist (see [Tags must already exist](#tags-must-already-exist)) |
 
 Examples:
 
@@ -254,6 +255,7 @@ stay untouched. An empty value clears the field (e.g. `--deadline ""`).
 | `--cancel` | ✓ | ✓ | Mark as canceled (not with `--complete`) |
 | `--duplicate` | ✓ | ✓ | Duplicate before applying edits |
 | `--reveal` | ✓ | ✓ | Reveal in Things after editing |
+| `--strict-tags` | ✓ | ✓ | Fail instead of writing when a tag does not exist (see [Tags must already exist](#tags-must-already-exist)) |
 
 > **Repeating items:** Things refuses `--when`, `--deadline`, `--complete`,
 > `--cancel`, and `--duplicate` on repeating to-dos and projects, and drops the
@@ -270,6 +272,37 @@ things edit "Buy milk" --add-tags urgent --deadline 2026-05-01
 things edit "Old idea" --deadline ""              # clear the deadline
 things project edit "Launch" --append-notes "Beta cut on Friday"
 ```
+
+### Tags must already exist
+
+Things applies only tags that already exist. A tag it doesn't recognise is
+dropped silently — the task is still created or updated, minus the tag, and
+the command exits 0. The CLI cannot create tags: the URL scheme has no way
+to, and there is no `things tag add` command.
+
+To stop that being invisible, every write that carries tags (`add`,
+`project add`, `edit`, `project edit`, `import`) first checks them against
+the Things database and warns on stderr about any it cannot find:
+
+```
+$ things add "Review the flags" --tags "Work,cifas-auto-reject"
+warning: these tags do not exist in Things and will be ignored: cifas-auto-reject
+warning: Things only applies tags that already exist — create them in Things first, or use --strict-tags to fail instead of dropping them
+```
+
+The write still goes ahead. Pass `--strict-tags` to refuse it instead:
+
+```
+$ things add "Review the flags" --tags "Work,cifas-auto-reject" --strict-tags
+Error: these tags do not exist in Things: cifas-auto-reject — create them in Things first, or drop --strict-tags to write anyway
+```
+
+Nothing is written in that case, and the exit status is non-zero. Tag names
+are matched case-insensitively, the way Things treats them. If the database
+can't be read, `add` and `project add` skip the check with a warning — unless
+`--strict-tags` is set, which then fails rather than write unchecked. `edit`,
+`project edit` and `import` need the database for other reasons and fail
+either way.
 
 ### Completing, cancelling, logging
 
@@ -347,6 +380,7 @@ for create-only payloads).
 | --- | --- |
 | `-f, --file PATH` | Read JSON payload from this file instead of stdin |
 | `--reveal` | Reveal the first created/updated item in Things after import |
+| `--strict-tags` | Fail instead of importing when a tag in the payload does not exist (see [Tags must already exist](#tags-must-already-exist)) |
 
 ```sh
 things import < payload.json

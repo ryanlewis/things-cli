@@ -55,8 +55,7 @@ func validateTags(field, v string) error {
 	if v == "" {
 		return nil
 	}
-	for _, t := range strings.Split(v, ",") {
-		t = strings.TrimSpace(t)
+	for _, t := range SplitTags(v) {
 		if c := utf8.RuneCountInString(t); c > MaxStringLen {
 			return fmt.Errorf("%s: tag %q (%d characters) exceeds the %d-character limit", field, truncate(t), c, MaxStringLen)
 		}

@@ -62,6 +62,13 @@ func seedFullDB(t *testing.T) *db.DB {
 		t.Fatalf("seed project: %v", err)
 	}
 
+	// URL-scheme auth token, required by the update/update-project commands.
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'test-token')`,
+	); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+
 	// Tag
 	if _, err := sqlDB.Exec(
 		`INSERT INTO TMTag (uuid, title, "index") VALUES ('tag-1', 'urgent', 0)`,
@@ -128,6 +135,22 @@ func runWith(t *testing.T, database *db.DB, args ...string) error {
 // the handler wrote to Deps.Stdout.
 func runOut(t *testing.T, database *db.DB, args ...string) (string, error) {
 	t.Helper()
+	stdout, _, err := runStreams(t, database, args...)
+	return stdout, err
+}
+
+// runCapturingStderr is runOut for the warning stream — what the handler wrote
+// to Deps.Stderr — instead of stdout.
+func runCapturingStderr(t *testing.T, database *db.DB, args ...string) (string, error) {
+	t.Helper()
+	_, stderr, err := runStreams(t, database, args...)
+	return stderr, err
+}
+
+// runStreams parses args, runs the command against database, and returns both
+// of the handler's output streams.
+func runStreams(t *testing.T, database *db.DB, args ...string) (string, string, error) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 
 	var cli CLI
@@ -144,13 +167,13 @@ func runOut(t *testing.T, database *db.DB, args ...string) (string, error) {
 	if err != nil {
 		t.Fatalf("parse %v: %v", args, err)
 	}
-	var buf bytes.Buffer
-	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &buf, NoVerify: cli.NoVerify}
+	var stdout, stderr bytes.Buffer
+	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify}
 	var runErr error
 	withSilentStdout(t, func() {
 		runErr = ctx.Run(deps)
 	})
-	return buf.String(), runErr
+	return stdout.String(), stderr.String(), runErr
 }
 
 func TestRunDispatchReadOnly(t *testing.T) {
