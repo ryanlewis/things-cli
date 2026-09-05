@@ -11,6 +11,9 @@ import (
 const (
 	TypeTask    = 0
 	TypeProject = 1
+	// TypeHeading is a project heading — a TMTask row that groups to-dos
+	// inside a project. It is never a to-do itself, so lookups exclude it.
+	TypeHeading = 2
 
 	StatusOpen      Status = 0
 	StatusCancelled Status = 2

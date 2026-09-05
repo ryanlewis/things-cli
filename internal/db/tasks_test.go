@@ -720,3 +720,146 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 		}
 	}
 }
+
+// --- heading exclusion from lookups (issue #146) ---
+
+// seedLookupHeadings adds two headings on top of the seedTasks fixture: one
+// with a title of its own, and one whose title collides exactly with an open
+// to-do so a lookup that failed to filter would either return the wrong row or
+// report the pair as ambiguous.
+func seedLookupHeadings(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, notes, type, status, trashed, project, "index") VALUES
+		('head-phase', 'Phase one',  'heading notes', 2, 0, 0, 'proj-1', 20),
+		('head-dupe',  'Inbox task', '',              2, 0, 0, 'proj-1', 21)`)
+}
+
+func TestGetTaskByUUIDExcludesHeading(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	got, err := d.GetTaskByUUID("head-phase")
+	if err != nil {
+		t.Fatalf("GetTaskByUUID: %v", err)
+	}
+	if got != nil {
+		t.Errorf("heading returned as a task: %+v", got)
+	}
+}
+
+// Projects still resolve — show, edit, complete, cancel and open all rely on
+// GetTaskByUUID returning a project row.
+func TestGetTaskByUUIDKeepsProject(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	got, err := d.GetTaskByUUID("proj-1")
+	if err != nil {
+		t.Fatalf("GetTaskByUUID: %v", err)
+	}
+	if got == nil || got.Type != model.TypeProject {
+		t.Fatalf("project lookup: got %+v", got)
+	}
+}
+
+// A heading sharing a to-do's exact title must neither win the exact-title
+// match nor make it ambiguous.
+func TestGetTaskExactTitleSkipsHeading(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	got, err := d.GetTask("Inbox task")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.UUID != "t-inbox" {
+		t.Errorf("got %q, want t-inbox", got.UUID)
+	}
+}
+
+func TestGetTaskLikeMatchSkipsHeading(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	// "Phase" matches only the heading, so the lookup should not find a task.
+	if _, err := d.GetTask("Phase"); err == nil {
+		t.Fatal("expected not-found error for a heading-only title")
+	}
+
+	// A single to-do plus a same-named heading resolves to the to-do rather
+	// than raising AmbiguousTaskError.
+	got, err := d.GetTask("nbox tas")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.UUID != "t-inbox" {
+		t.Errorf("got %q, want t-inbox", got.UUID)
+	}
+}
+
+func TestFindTasksByTitleExcludesHeadings(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	got, err := d.FindTasksByTitle("Phase")
+	if err != nil {
+		t.Fatalf("FindTasksByTitle: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want no matches", uuidsOf(got))
+	}
+
+	dupes, err := d.FindTasksByTitle("Inbox task")
+	if err != nil {
+		t.Fatalf("FindTasksByTitle: %v", err)
+	}
+	if !sameSet(uuidsOf(dupes), []string{"t-inbox"}) {
+		t.Errorf("got %v, want [t-inbox]", uuidsOf(dupes))
+	}
+}
+
+func TestSearchTasksExcludesHeadings(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	byTitle, err := d.SearchTasks("Phase")
+	if err != nil {
+		t.Fatalf("SearchTasks: %v", err)
+	}
+	if len(byTitle) != 0 {
+		t.Errorf("title search: got %v, want no matches", uuidsOf(byTitle))
+	}
+
+	byNotes, err := d.SearchTasks("heading notes")
+	if err != nil {
+		t.Fatalf("SearchTasks: %v", err)
+	}
+	if len(byNotes) != 0 {
+		t.Errorf("notes search: got %v, want no matches", uuidsOf(byNotes))
+	}
+
+	// The to-do sharing the heading's title still comes back, alone.
+	shared, err := d.SearchTasks("Inbox task")
+	if err != nil {
+		t.Fatalf("SearchTasks: %v", err)
+	}
+	if !sameSet(uuidsOf(shared), []string{"t-inbox"}) {
+		t.Errorf("got %v, want [t-inbox]", uuidsOf(shared))
+	}
+
+	// Projects remain searchable.
+	proj, err := d.SearchTasks("Ship MVP")
+	if err != nil {
+		t.Fatalf("SearchTasks: %v", err)
+	}
+	if !sameSet(uuidsOf(proj), []string{"proj-1"}) {
+		t.Errorf("project search: got %v, want [proj-1]", uuidsOf(proj))
+	}
+}

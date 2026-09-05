@@ -518,6 +518,31 @@ func TestRunListJSONIsUnlabelled(t *testing.T) {
 	}
 }
 
+// A project heading is a TMTask row, but it is not a to-do: search must not
+// list it (and so must not cache it as a numeric index), and show must not
+// resolve it by uuid or by title (issue #146).
+func TestHeadingNotReachableFromLookups(t *testing.T) {
+	database := seedFullDB(t)
+
+	out, err := runOut(t, database, "--json", "search", "Weekly")
+	if err != nil {
+		t.Fatalf("run search Weekly: %v", err)
+	}
+	var found []model.Task
+	if err := json.Unmarshal([]byte(out), &found); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if len(found) != 0 {
+		t.Errorf("search returned the heading: %+v", found)
+	}
+
+	for _, ref := range []string{"head-1", "Weekly"} {
+		if err := runWith(t, database, "show", ref); err == nil {
+			t.Errorf("show %q: expected an error, got none", ref)
+		}
+	}
+}
+
 // A heading-nested task reports the project it sits in, so `things show` and
 // listings don't present it as a standalone task (issue #139).
 func TestRunListHeadingTaskShowsProject(t *testing.T) {
