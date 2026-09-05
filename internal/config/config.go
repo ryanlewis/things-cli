@@ -209,8 +209,8 @@ func ResolvePath(explicit string) (path, source string, err error) {
 	return p, SourceDefault, nil
 }
 
-// File is a loaded config file. A file that does not exist loads fine with
-// Exists false and no values; a missing config file is not an error.
+// File is a loaded config file. The file is optional: one that is not there
+// loads fine, with Exists false and no values.
 type File struct {
 	Path   string
 	Source string
@@ -226,8 +226,8 @@ type File struct {
 	values map[string]any
 }
 
-// Load reads and validates the config file at path. A file that is not there
-// yields an empty File rather than an error.
+// Load reads and validates the config file at path. The file is optional, so
+// one that is not there yields an empty File rather than an error.
 //
 // The File is never nil, even when the error is not: a file that cannot be
 // read still has a path and an existence, which is what `things config path`
@@ -492,7 +492,8 @@ func Template() string {
 	b.WriteString("#\n")
 	b.WriteString("# Read from $XDG_CONFIG_HOME/things-cli/config.toml, or\n")
 	b.WriteString("# ~/.config/things-cli/config.toml. Override with --config PATH or\n")
-	b.WriteString("# $" + EnvVar + ". A missing file is not an error.\n")
+	b.WriteString("# $" + EnvVar + ". The file is optional; without it, things runs on\n")
+	b.WriteString("# its built-in defaults.\n")
 	b.WriteString("#\n")
 	b.WriteString("# Uncomment a line to change the default.\n")
 	for _, k := range Keys {
