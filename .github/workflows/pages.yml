@@ -7,6 +7,10 @@ on:
     paths:
       - "docs/**"
       - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -23,6 +27,9 @@ defaults:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # renovate: datasource=github-releases depName=gohugoio/hugo
+      HUGO_VERSION: 0.165.0
     defaults:
       run:
         working-directory: ./docs
@@ -32,29 +39,35 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
-        with:
-          ruby-version: "3.4.10"
-          bundler-cache: true
-          working-directory: ./docs
+      - name: Install Hugo
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          deb="hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          checksums="hugo_${HUGO_VERSION}_checksums.txt"
+          base_url="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
+          curl -sSLO "${base_url}/${deb}"
+          curl -sSLO "${base_url}/${checksums}"
+          sha256sum --ignore-missing -c "${checksums}"
+          sudo dpkg -i "${deb}"
 
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Build site
-        run: bundle exec jekyll build -d "_site${BASE_PATH}"
+        run: hugo --minify --gc --baseURL "${PAGES_ORIGIN}${BASE_PATH}/"
         env:
-          JEKYLL_ENV: production
+          PAGES_ORIGIN: ${{ steps.pages.outputs.origin }}
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: "docs/_site${{ steps.pages.outputs.base_path }}"
+          path: "docs/public"
 
   deploy:
+    if: github.event_name == 'push'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
