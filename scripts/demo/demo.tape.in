@@ -1,0 +1,45 @@
+# VHS tape for the README demo. Template: scripts/demo/record.sh fills in
+# @DEADLINE@ (a date a few days out) and runs the result from the repo root.
+# Re-record with `make demo`; see scripts/demo/README.md.
+
+Output docs/assets/img/demo.gif
+
+Set Shell bash
+Set Theme "Catppuccin Mocha"
+Set FontSize 15
+Set Width 1000
+Set Height 640
+Set Padding 20
+Set WindowBar Colorful
+Set BorderRadius 8
+Set TypingSpeed 45ms
+Set Framerate 24
+Set CursorBlink false
+
+# Seed the demo database and swap in the write shims (invisible).
+Hide
+Type "source scripts/demo/env.sh && clear" Enter
+Sleep 1.5s
+Show
+
+Sleep 800ms
+Type "things" Enter
+Sleep 2.8s
+
+Type `things add "Book a dentist appointment" --when today --tags errand` Enter
+Sleep 900ms
+Type "things" Enter
+Sleep 2.8s
+
+Type "things edit 3 --deadline @DEADLINE@ --add-tags urgent" Enter
+Sleep 900ms
+Type "things show 3" Enter
+Sleep 3s
+
+Type "things complete 3" Enter
+Sleep 900ms
+Type "things search dentist" Enter
+Sleep 2.8s
+
+Type "things deadlines -j | jq '.[0]'" Enter
+Sleep 4s

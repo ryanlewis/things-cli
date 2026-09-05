@@ -1,0 +1,3 @@
+#!/bin/sh
+# Demo shim: stands in for macOS `open` while recording the README demo.
+exec python3 "$(dirname "$0")/../thingsdemo.py" open "$@"
