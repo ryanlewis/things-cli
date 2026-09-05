@@ -1,0 +1,38 @@
+# VHS tape for the "Working with agents" demo: print a brief, pipe it into
+# `claude -p`, and confirm the result. The Claude turn is real, so it needs a
+# logged-in `claude` CLI and makes one API call per recording; its reply and
+# timing vary between takes. Recorded by scripts/demo/record.sh, which also
+# clamps the wait for the model; see scripts/demo/README.md.
+
+Output docs/assets/img/demo-agent.gif
+
+Set Shell bash
+Set Theme "Catppuccin Mocha"
+Set FontSize 14
+Set Width 1000
+Set Height 840
+Set Padding 20
+Set WindowBar Colorful
+Set BorderRadius 8
+Set TypingSpeed 45ms
+Set Framerate 24
+Set CursorBlink false
+
+# Keep the real HOME so `claude` finds its login; the demo database is wired
+# through XDG_CONFIG_HOME instead. Run from the sandbox so Claude's working
+# directory holds nothing but its permission settings.
+Hide
+Type `THINGS_DEMO_KEEP_HOME=1 source scripts/demo/env.sh && cd "$DEMO_HOME" && clear` Enter
+Sleep 1.5s
+Show
+
+Sleep 800ms
+Type `things show "release candidate" --agent` Enter
+Sleep 3s
+
+Type `things show "release candidate" --agent | claude -p "mark it done" --allowedTools "Bash(things:*)"` Enter
+# Generous: record.sh clamps the idle stretch to 3s afterwards.
+Sleep 60s
+
+Type "things search release" Enter
+Sleep 4s

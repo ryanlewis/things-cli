@@ -67,35 +67,9 @@ one.
 
 ## Handing a to-do to an agent
 
-`things show <ref> --agent` prints a self-contained Markdown brief rather
-than the aligned detail view: title, UUID, status, project/area, tags,
-schedule, notes, checklist, and a "Closing out" section with the commands
-that act on the item. Those commands all name the UUID, because a title can
-match several to-dos and a numeric index only holds until the next listing.
-
-```sh
-things show 3 --agent | claude -p "action this"
-claude "$(things show 3 --agent)"
-```
-
-Point it at a project and the brief lists the project's open to-dos with
-their UUIDs, and its closing commands carry `--yes` — a project-wide
-`complete`/`cancel` asks for confirmation, and it changes every to-do under
-the project. `--agent` cannot be combined with `--json`; a config file that
-sets `json = true` is only a default, so the explicit flag still wins.
-
-Notes are reproduced inside a fence wide enough that nothing in them can
-close it, so a note cannot forge the closing-out section the agent acts on.
-
-A plain listing from `things list` or `things search`, printed to a terminal,
-ends with a pointer to this:
-
-```text
-hint: things show <n> --agent hands a to-do to an agent (disable with hints = false in the config file)
-```
-
-It is suppressed under `--json`, when stdout is not a terminal, for an empty
-listing, and by `--no-hints` or `hints = false` in the config file.
+`things show <ref> --agent` prints a Markdown brief written for an agent,
+with the commands that act on the item. See
+[Working with agents]({{ '/agents/' | relative_url }}).
 
 ## Searching
 
@@ -220,20 +194,8 @@ things open --tag urgent             # a tag
 
 ## Agent skill
 
-The CLI ships a neutral, agent-readable description of itself.
-
-```sh
-things skill install claude    # writes to ~/.claude/skills/things-cli/
-things skill install codex     # writes to ~/.codex/skills/things-cli/
-things skill install pi        # writes to ~/.pi/agent/skills/things-cli/
-things skill list              # show install status across agents
-things skill show              # print the neutral source to stdout
-things skill show claude       # print the rendered output for one agent
-things skill uninstall claude  # remove the installed copy
-```
-
-The skill is bundled into the binary, so a plain `things` upgrade
-refreshes every installed copy on next `install`.
+`things skill install <agent>` installs the bundled skill for Claude Code,
+Codex or Pi. See [Working with agents]({{ '/agents/' | relative_url }}).
 
 ## Shell completions
 

@@ -17,6 +17,7 @@ tabs:
   about: About
   install: Install
   commands: Commands
+  agents: Working with agents
   configuration: Configuration
 
 # the text displayed in the search bar & search results
