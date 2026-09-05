@@ -17,8 +17,9 @@ import (
 // still prints nothing — only the read commands emit JSON on success.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
-// "not a project", or "error" for a failure with no structure worth naming. Message is the same
-// text the plain-text path prints, for a human reading the JSON.
+// "not a project", or "error" for a failure with no structure worth naming.
+// Message is the same text the plain-text path prints, for a human reading
+// the JSON.
 type jsonErrorPayload struct {
 	Error   string           `json:"error"`
 	Message string           `json:"message"`
@@ -154,7 +155,12 @@ func errorPayload(err error) jsonErrorPayload {
 
 	var wrongKind *wrongKindError
 	if errors.As(err, &wrongKind) {
-		payload.Error = wrongKind.Token
+		// Token is what a caller branches on, so an unset one would ship
+		// `"error": ""` — a value no consumer can match. Fall back to the
+		// generic token instead.
+		if wrongKind.Token != "" {
+			payload.Error = wrongKind.Token
+		}
 		payload.Kind = wrongKind.Kind
 		payload.Query = wrongKind.Query
 		payload.UUID = wrongKind.UUID
