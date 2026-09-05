@@ -132,7 +132,15 @@ afterwards to confirm it landed, which `--no-verify` skips.
 ```sh
 things complete 3
 things cancel 3
+things complete "Launch v2" --yes    # skip the project confirmation
 ```
+
+Completing or cancelling a project also completes or cancels every task
+in it, so it asks first. A run that cannot prompt — piped stdin, or
+`--json` — declines instead of guessing; `--yes` (`-y`) answers the
+question up front, which is how project completion works from a script.
+`assume_yes = true` in the config file sets it every time, and `--yes`
+still decides each run.
 
 Both go through AppleScript so Things3 records the change in its
 activity log. Task creation (`add`) and edits go through the
@@ -227,11 +235,15 @@ PATH` or `THINGS_CLI_CONFIG`. A missing file is not an error.
 | `no_verify` | `--no-verify` | boolean | `false` |
 | `strict_tags` | `--strict-tags` | boolean | `false` |
 | `create_tags` | `--create-tags` | boolean | `false` |
+| `assume_yes` | `--yes` | boolean | `false` |
 
 ```toml
 color = "always"
 strict_tags = true
 ```
+
+`assume_yes` answers every confirmation prompt: the project-wide
+`complete`/`cancel` question, and overwriting an installed agent skill.
 
 `strict_tags` and `create_tags` are mutually exclusive; setting both to
 `true` is an error.

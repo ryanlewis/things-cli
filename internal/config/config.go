@@ -129,6 +129,19 @@ var Keys = []Key{
 		},
 		Example: "create_tags = false",
 	},
+	{
+		Name:    "assume_yes",
+		Flag:    "yes",
+		Default: false,
+		Comment: []string{
+			"Answer yes to confirmation prompts instead of asking. Same as",
+			"--yes / -y. Covers the project-wide complete and cancel prompts,",
+			"and overwriting an installed agent skill.",
+			"Turning this on removes the last check before a project and every",
+			"task in it is completed or cancelled.",
+		},
+		Example: "assume_yes = false",
+	},
 }
 
 // KeyNames lists the canonical key names in declaration order.

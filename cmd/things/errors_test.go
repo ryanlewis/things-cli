@@ -342,7 +342,7 @@ func TestJSONRequested(t *testing.T) {
 func TestConfirmProjectStatusChangeNonInteractiveExplains(t *testing.T) {
 	stubTTY(t, true)
 
-	err := confirmProjectStatusChange(&Deps{JSON: true}, "Complete", "Chores")
+	err := confirmProjectStatusChange(&Deps{JSON: true}, false, "Complete", "Chores")
 	if err == nil {
 		t.Fatal("--json must decline")
 	}
@@ -359,7 +359,7 @@ func TestConfirmProjectStatusChangeNonInteractiveExplains(t *testing.T) {
 	// Piped stdin without --json hits the same branch; the advice there is to
 	// use a terminal, not to drop a flag that was never passed.
 	stubTTY(t, false)
-	err = confirmProjectStatusChange(&Deps{}, "Cancel", "Chores")
+	err = confirmProjectStatusChange(&Deps{}, false, "Cancel", "Chores")
 	if err == nil {
 		t.Fatal("a non-terminal run must decline")
 	}
