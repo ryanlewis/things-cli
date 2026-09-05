@@ -105,10 +105,19 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 		// Read the clock once per round so every item in it is judged against
 		// the same deadline.
 		expired := !time.Now().Before(deadline)
+
+		// One query per round for every item still pending, rather than one
+		// per item per round (issue #167).
+		uuids := make([]string, len(pending))
+		for n, i := range pending {
+			uuids[n] = wants[i].uuid
+		}
+		found, err := database.GetTasksByUUIDs(uuids)
+
 		var next []int
 		for _, i := range pending {
 			w := wants[i]
-			current, err := database.GetTaskByUUID(w.uuid)
+			current := found[w.uuid]
 			switch {
 			case err != nil:
 				if expired {

@@ -310,6 +310,66 @@ func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 	return &t, nil
 }
 
+// uuidChunkSize caps how many uuids go into one IN (...) clause, so a caller
+// passing an arbitrarily long list can never trip SQLITE_MAX_VARIABLE_NUMBER —
+// the bound parameter limit is a property of the SQLite build, not something
+// this package can rely on, and hitting it would surface as an opaque query
+// error. 500 sits well under every plausible limit — the modernc.org/sqlite
+// build this module pins accepts 32766 (the modern SQLITE_MAX_VARIABLE_NUMBER)
+// and refuses 40000 with "too many SQL variables" — and the per-chunk cost is
+// flat, so nothing is lost by staying conservative. Import payloads are
+// bounded by the macOS URL length limit anyway, so in practice one chunk
+// covers them and the loop never runs twice.
+const uuidChunkSize = 500
+
+// GetTasksByUUIDs looks up many tasks in one query instead of one query per
+// uuid, and returns them keyed by uuid. An id that matches nothing is simply
+// absent from the map — the caller decides whether that is an error, the same
+// way GetTaskByUUID returns a nil task rather than failing.
+//
+// It shares taskQuery and the notHeading filter with GetTaskByUUID so the two
+// agree on what a lookup can see: headings stay excluded (issue #146) and the
+// repeating column is resolved the same way. Duplicate and empty ids are
+// dropped before querying, so callers can pass a raw list.
+func (d *DB) GetTasksByUUIDs(uuids []string) (map[string]*model.Task, error) {
+	found := make(map[string]*model.Task, len(uuids))
+
+	unique := make([]string, 0, len(uuids))
+	seen := make(map[string]struct{}, len(uuids))
+	for _, u := range uuids {
+		if u == "" {
+			continue
+		}
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		unique = append(unique, u)
+	}
+
+	for start := 0; start < len(unique); start += uuidChunkSize {
+		end := min(start+uuidChunkSize, len(unique))
+		chunk := unique[start:end]
+
+		args := make([]any, len(chunk))
+		for i, u := range chunk {
+			args[i] = u
+		}
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
+		query := d.taskQuery() + " WHERE t.uuid IN (" + placeholders + ") AND " + notHeading + " GROUP BY t.uuid"
+
+		tasks, err := d.collectTasks(query, args...)
+		if err != nil {
+			return nil, err
+		}
+		for i := range tasks {
+			task := tasks[i]
+			found[task.UUID] = &task
+		}
+	}
+	return found, nil
+}
+
 func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	t, err := d.GetTaskByUUID(uuidOrTitle)
 	if err != nil {
