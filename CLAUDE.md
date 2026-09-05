@@ -11,6 +11,7 @@ CLI for Things3 on macOS. Reads from the Things3 SQLite database (read-only) and
 - **NEVER** `git push` to `main`. It only moves via PR merge or release tag (`/release`).
 - **DO** use Conventional Commits.
 - **DO** update `internal/skill/SKILL.md` when adding, removing, or changing a subcommand's surface — the bundled agent skill is shipped in-binary and drifts silently otherwise.
+- **DO** update the matching page under `docs/content/` in the same change — `commands.md` for commands and flags, `configuration.md` for config keys, `agents.md` for agent-facing behaviour, `install.md` for install methods. The site (things.rlew.io) is the reference docs, so it drifts silently too. A warning-only PreToolUse hook reminds you at commit time; it does not block.
 
 ## Commands
 
