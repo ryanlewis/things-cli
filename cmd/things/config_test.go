@@ -158,7 +158,8 @@ func TestConfigSeedsPerCommandFlag(t *testing.T) {
 }
 
 // A db path in the config that no longer exists must not stop a --db flag
-// from overriding it — the file always loses to the command line.
+// from overriding it — the file always loses to the command line — and it
+// must not be reported until something actually opens the database.
 func TestFlagBeatsStaleConfigDB(t *testing.T) {
 	isolateHome(t)
 	real := filepath.Join(t.TempDir(), "main.sqlite")
@@ -182,24 +183,59 @@ func TestFlagBeatsStaleConfigDB(t *testing.T) {
 	if cli.DB != real {
 		t.Errorf("db = %q, want %q (the flag should beat the config file)", cli.DB, real)
 	}
+	if _, err := (&Deps{DBPath: cli.DB, Config: cfg}).Database(); err != nil {
+		t.Errorf("opening the database named by --db: %v", err)
+	}
 
-	// Without the flag, the stale entry is reported and names the file.
+	// Without the flag, parsing still succeeds — the stale entry only bites
+	// when the database is opened, and then it names the file.
 	var bare CLI
 	parser, err = kong.New(&bare, parserOptions(cfg)...)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}
-	_, err = parser.Parse([]string{"--config", path, "today"})
-	if err == nil {
-		t.Fatal("parse with a stale config db: want error, got nil")
+	if _, err := parser.Parse([]string{"--config", path, "today"}); err != nil {
+		t.Fatalf("parse with a stale config db must not fail: %v", err)
 	}
-	if !strings.Contains(err.Error(), path) {
-		t.Errorf("error %q does not name the config file", err)
+	_, err = (&Deps{DBPath: bare.DB, Config: cfg}).Database()
+	if err == nil {
+		t.Fatal("opening a stale config db: want error, got nil")
+	}
+	var cfgErr *config.Error
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("error %q (%T) does not unwrap to *config.Error", err, err)
+	}
+	if cfgErr.Path != path {
+		t.Errorf("cfgErr.Path = %q, want %q", cfgErr.Path, path)
+	}
+	for _, want := range []string{path, "db:", "/nonexistent/things.sqlite"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
 	}
 }
 
-// An empty db in the config means "unset"; handing "" to kong's existingfile
-// check would stat the working directory instead.
+// A path that no config file supplied is reported on its own terms — blaming
+// a file that never mentioned it would send the user to the wrong place.
+func TestMissingDBWithoutConfigAttribution(t *testing.T) {
+	isolateHome(t)
+	cfg, err := loadConfig(nil)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	_, err = (&Deps{DBPath: "/nonexistent/things.sqlite", Config: cfg}).Database()
+	if err == nil {
+		t.Fatal("opening a missing database: want error, got nil")
+	}
+	if strings.Contains(err.Error(), "config file") {
+		t.Errorf("error %q blames a config file that never set this path", err)
+	}
+	if !strings.Contains(err.Error(), "/nonexistent/things.sqlite") {
+		t.Errorf("error %q does not name the path", err)
+	}
+}
+
+// An empty db in the config means "unset", not a path of its own.
 func TestEmptyConfigDBIsUnset(t *testing.T) {
 	isolateHome(t)
 	path := writeConfig(t, "db = \"\"\n")
@@ -405,35 +441,6 @@ func TestConfigInitDefaultPathStaysUnderHome(t *testing.T) {
 	}
 }
 
-// TestConfigParseErrorIsRecognisable guards the branch in main that prints a
-// bad config value on its own instead of under a usage dump: the error kong
-// returns has to stay unwrappable to *config.Error.
-func TestConfigParseErrorIsRecognisable(t *testing.T) {
-	isolateHome(t)
-	path := writeConfig(t, `db = "/nonexistent/things.sqlite"`+"\n")
-
-	var cli CLI
-	cfg, err := loadConfig([]string{"--config", path})
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	parser, err := kong.New(&cli, parserOptions(cfg)...)
-	if err != nil {
-		t.Fatalf("kong.New: %v", err)
-	}
-	_, err = parser.Parse([]string{"--config", path, "today"})
-	if err == nil {
-		t.Fatal("parse with a stale config db path: want error, got nil")
-	}
-	var cfgErr *config.Error
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("error %q (%T) does not unwrap to *config.Error", err, err)
-	}
-	if cfgErr.Path != path {
-		t.Errorf("cfgErr.Path = %q, want %q", cfgErr.Path, path)
-	}
-}
-
 // TestConfigTagPolicyExclusivity covers the interaction between the config
 // file and the --strict-tags / --create-tags exclusive pair. Kong counts a
 // resolved value as set, so a file that turns one on must not make the other
@@ -490,5 +497,163 @@ func TestConfigRejectsBothTagPolicies(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "cannot both be true") {
 		t.Errorf("error = %q, want it to name the file and the conflict", err)
+	}
+}
+
+// runDiag is runStreams for the diagnostic commands: no database, and the
+// returned error is whatever the command reported.
+func runDiag(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return runStreams(t, nil, args...)
+}
+
+// The point of issue #179: a config file the CLI cannot use must not disable
+// the commands that exist to tell you so.
+func TestDiagnosticsSurviveABrokenConfig(t *testing.T) {
+	broken := map[string]struct {
+		body string
+		want string
+	}{
+		"stale db":       {`db = "/nonexistent/things.sqlite"` + "\n", "no such file"},
+		"unknown key":    {"verbose = true\n", `unknown key "verbose"`},
+		"malformed toml": {"color = \"always\n", "invalid TOML"},
+		"wrong type":     {`json = "yes"` + "\n", "must be a boolean"},
+		"both spellings": {"no_verify = true\nno-verify = false\n", "set twice"},
+	}
+
+	for name, tc := range broken {
+		t.Run(name, func(t *testing.T) {
+			isolateHome(t)
+			path := writeConfig(t, tc.body)
+
+			t.Run("config path", func(t *testing.T) {
+				stdout, stderr, err := runDiag(t, "--config", path, "config", "path")
+				if err != nil {
+					t.Fatalf("config path must still report the file: %v", err)
+				}
+				if !strings.Contains(stdout, path) {
+					t.Errorf("stdout %q does not name the file", stdout)
+				}
+				// A stale db is a usable file; the others are not, and say so.
+				if name != "stale db" && !strings.Contains(stderr, tc.want) {
+					t.Errorf("stderr %q does not explain the problem (%q)", stderr, tc.want)
+				}
+			})
+
+			t.Run("config show", func(t *testing.T) {
+				stdout, _, err := runDiag(t, "--config", path, "config", "show")
+				if !strings.Contains(stdout, path) {
+					t.Errorf("stdout %q does not name the file", stdout)
+				}
+				if name == "stale db" {
+					// The file is fine; only the path it points at is gone.
+					if err != nil {
+						t.Fatalf("config show with a stale db: %v", err)
+					}
+					if !strings.Contains(stdout, "/nonexistent/things.sqlite") {
+						t.Errorf("stdout %q does not show the configured db", stdout)
+					}
+					return
+				}
+				if err == nil {
+					t.Fatal("config show on an unreadable file: want an error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), path) {
+					t.Errorf("error %q should name the file and the problem (%q)", err, tc.want)
+				}
+			})
+
+			t.Run("config init refuses but explains", func(t *testing.T) {
+				_, _, err := runDiag(t, "--config", path, "config", "init")
+				if err == nil {
+					t.Fatal("config init over an existing file: want an error, got nil")
+				}
+				if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "--force") {
+					t.Errorf("error %q should name the file and the way out", err)
+				}
+				body, readErr := os.ReadFile(path)
+				if readErr != nil {
+					t.Fatalf("read config: %v", readErr)
+				}
+				if string(body) != tc.body {
+					t.Errorf("config init changed the file: %q", body)
+				}
+			})
+
+			t.Run("config init --force repairs", func(t *testing.T) {
+				if _, _, err := runDiag(t, "--config", path, "config", "init", "--force"); err != nil {
+					t.Fatalf("config init --force: %v", err)
+				}
+				cfg, err := loadConfig([]string{"--config", path})
+				if err != nil {
+					t.Fatalf("the repaired file still does not load: %v", err)
+				}
+				if cfg.Err != nil {
+					t.Errorf("repaired file carries an error: %v", cfg.Err)
+				}
+			})
+		})
+	}
+}
+
+// --help has to survive a broken file too: kong answers it during Parse, so
+// the gate that stops other commands must sit after parsing, not before.
+func TestBrokenConfigStillParses(t *testing.T) {
+	isolateHome(t)
+	path := writeConfig(t, "verbose = true\n")
+
+	cfg, cfgErr := loadConfig([]string{"--config", path})
+	if cfgErr == nil {
+		t.Fatal("loadConfig: want an error for an unknown key")
+	}
+	if cfg == nil || cfg.Path != path {
+		t.Fatalf("loadConfig dropped the file it failed on: %+v", cfg)
+	}
+
+	var cli CLI
+	parser, err := kong.New(&cli, parserOptions(cfg)...)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	ctx, err := parser.Parse([]string{"--config", path, "today"})
+	if err != nil {
+		t.Fatalf("parsing must not fail on a broken config: %v", err)
+	}
+	if cli.JSON || cli.Color != "auto" {
+		t.Error("a file that failed to load seeded a default anyway")
+	}
+	if diagnosesConfig(ctx) {
+		t.Error("`today` is not a config diagnostic")
+	}
+}
+
+func TestDiagnosesConfigMarksOnlyTheConfigCommands(t *testing.T) {
+	cases := []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"config", "path"}, true},
+		{[]string{"config", "show"}, true},
+		{[]string{"config", "init"}, true},
+		{[]string{"today"}, false},
+		{[]string{"projects"}, false},
+		{[]string{"skill", "list"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			isolateHome(t)
+			var cli CLI
+			parser, err := kong.New(&cli, parserOptions(nil)...)
+			if err != nil {
+				t.Fatalf("kong.New: %v", err)
+			}
+			ctx, err := parser.Parse(tc.args)
+			if err != nil {
+				t.Fatalf("parse %v: %v", tc.args, err)
+			}
+			if got := diagnosesConfig(ctx); got != tc.want {
+				t.Errorf("diagnosesConfig(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
 	}
 }

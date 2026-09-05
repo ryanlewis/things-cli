@@ -78,9 +78,10 @@ Two constraints the CLI enforces:
 - `strict_tags` and `create_tags` are mutually exclusive. Setting both to
   `true` is an error, reported as soon as the file is read — they are two
   different answers to the same question.
-- `db` must point at a file that exists. The check runs while the flags
-  are being resolved, so a stale path is reported against the config file
-  rather than surfacing later as a puzzling flag error.
+- `db` must point at a file that exists. The check runs when a command
+  opens the database, so a stale path is reported against the config file
+  rather than as a puzzling flag error — and the commands that never read
+  the database keep working, which is how you find out the path is stale.
 
 `strict_tags` and `create_tags` also override each other from the command
 line: `--create-tags` on a run whose file says `strict_tags = true` is
@@ -263,26 +264,55 @@ $ things config path
 Error: config file /Users/me/.config/things-cli/config.toml: key "color" must be one of auto, always, never, got "pink"
 ```
 
-A `db` path that no longer exists is caught while the flags are resolved,
-which is before any command runs — including `config path` and `config
-show`, which never open the database. A `--db` on the command line still
-overrides a stale entry instead of tripping over it, because kong skips
-the resolver for a flag you passed:
+A `db` path that no longer exists is caught when a command opens the
+database, not before, so the commands that never read it still run — and
+a `--db` on the command line still overrides a stale entry rather than
+tripping over it:
 
 ```console
 $ things today
 Error: config file /Users/me/.config/things-cli/config.toml: db: stat /Users/me/old/main.sqlite: no such file or directory
 
-$ things config path
-Error: config file /Users/me/.config/things-cli/config.toml: db: stat /Users/me/old/main.sqlite: no such file or directory
+$ things config path                        # tells you which file to fix
+/Users/me/.config/things-cli/config.toml (exists)
 
 $ things --db ~/current/main.sqlite today   # works
 ```
 
-> Because the file supplies the defaults the parser needs, a file it
-> cannot read stops every command, `--help` included. Fix the file, or
-> delete it — the error names both the file and the problem.
-{: .prompt-warning }
+### The diagnostic commands always run
+
+A file the CLI cannot use stops every command that would have read it,
+but not the ones that exist to tell you about it. `things config path`,
+`things config show`, `things config init` and `--help` all work against
+a broken file:
+
+```console
+$ things config path
+/Users/me/.config/things-cli/config.toml (exists)
+warning: this file cannot be used: config file /Users/me/.config/things-cli/config.toml: invalid TOML: line 1, column 16: basic strings cannot have new lines
+```
+
+`config path` still exits `0` — which file is in use is a fact about the
+path, not its contents — and puts the warning on stderr. `config show`
+names the file and then reports the problem, because there are no values
+to show:
+
+```console
+$ things config show
+config: /Users/me/.config/things-cli/config.toml (exists)
+Error: config file /Users/me/.config/things-cli/config.toml: invalid TOML: line 1, column 16: basic strings cannot have new lines
+```
+
+`config init` refuses to overwrite as usual, but says why the file is
+unusable, and `--force` replaces it with a fresh template:
+
+```console
+$ things config init
+Error: config file already exists: /Users/me/.config/things-cli/config.toml (unusable as it stands: invalid TOML: line 1, column 16: basic strings cannot have new lines) — pass --force to overwrite
+
+$ things config init --force
+Wrote config template to /Users/me/.config/things-cli/config.toml
+```
 
 Under `--json` these come out as a JSON object on stdout like any other
 failure, so a script sees a structured error either way.

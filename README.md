@@ -204,8 +204,15 @@ ask, or take the flag.
 the command line.
 
 An unknown key, a value of the wrong type, or malformed TOML is an error
-that names the file and the key. Anything set here still loses to a flag,
-so `things --color never today` wins over `color = "always"`.
+that names the file and the key. It stops the commands that would have
+read the file, but not `things config path`, `things config show`,
+`things config init` or `--help` — those are how you find out which file
+is at fault, so they keep working. A `db` path that no longer exists is
+reported when a command opens the database, so it does not disable them
+either.
+
+Anything set here still loses to a flag, so `things --color never today`
+wins over `color = "always"`.
 
 Note for scripts and agents: `json = true` changes the output of every
 command. Pass `--json` (or `--json=false`) explicitly rather than relying

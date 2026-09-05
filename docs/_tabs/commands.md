@@ -268,7 +268,8 @@ things config show     # the defaults it establishes
 
 See [Configuration]({{ site.baseurl }}/configuration/) for the full key
 table, an annotated example file, and what happens when the file is
-wrong.
+wrong. The three `config` subcommands keep working against a file the
+CLI cannot use — they are how you find out what is wrong with it.
 
 ## Caching
 
