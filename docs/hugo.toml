@@ -14,6 +14,10 @@ disableKinds = ["taxonomy", "term", "RSS"]
   version = "0.7.0"
   repo = "ryanlewis/things-cli"
   author = "Ryan Lewis"
+  # Umami analytics. Emitted only in production builds, so `hugo server`
+  # does not record visits. Clear either value to turn it off.
+  umami_script = "https://arloo-stats.exe.xyz/script.js"
+  umami_website_id = "ca6a5ba0-17fd-4ec8-94a0-67a3c71e288f"
 
 [markup]
   [markup.goldmark.renderer]

@@ -31,3 +31,11 @@
 {{- else }}
   {{- errorf "assets/css/site.css is missing — the site would ship unstyled" }}
 {{- end }}
+
+{{- /* Umami analytics: production builds only, so a local `hugo server`
+       never records visits. Both params must be set for the tag to appear. */}}
+{{- $umamiScript := site.Params.umami_script }}
+{{- $umamiSite := site.Params.umami_website_id }}
+{{- if and hugo.IsProduction $umamiScript $umamiSite }}
+  <script defer src="{{ $umamiScript }}" data-website-id="{{ $umamiSite }}"></script>
+{{- end }}
