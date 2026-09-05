@@ -462,8 +462,19 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
+	// The mirror of the guard in EditCmd.Run: a to-do here would go to
+	// things:///update-project, which cannot address one (issue #191). Same
+	// structured error, so an agent can branch on the token in either
+	// direction rather than string-matching the message.
 	if project.Type != model.TypeProject {
-		return fmt.Errorf("not a project: %s", project.Title)
+		return &wrongKindError{
+			Token: "not a project",
+			Kind:  "to-do",
+			Query: c.Project,
+			UUID:  project.UUID,
+			Title: project.Title,
+			Retry: "things edit",
+		}
 	}
 	if err := checkRepeating(project, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
 		return err
@@ -545,7 +556,14 @@ func (c *EditCmd) Run(d *Deps) error {
 	// rather than routing to update-project, which would silently drop the
 	// task-only flags (checklist, list, heading).
 	if task.Type == model.TypeProject {
-		return &notATaskError{Kind: "project", Query: c.Task, UUID: task.UUID, Title: task.Title, Retry: "things project edit"}
+		return &wrongKindError{
+			Token: "not a task",
+			Kind:  "project",
+			Query: c.Task,
+			UUID:  task.UUID,
+			Title: task.Title,
+			Retry: "things project edit",
+		}
 	}
 	if err := checkRepeating(task, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
 		return err

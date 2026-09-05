@@ -468,6 +468,42 @@ func TestRunEditRefusesProjectReference(t *testing.T) {
 	}
 }
 
+// The mirror of the above (issue #191): a to-do handed to `project edit` must
+// be refused the same way, so an agent branching on the token handles both
+// directions of the mistake rather than only one.
+func TestRunProjectEditRefusesTodoReference(t *testing.T) {
+	database, _ := seedWritable(t)
+	captured := stubExec(t)
+
+	err := runWith(t, database, "--json", "project", "edit", "Post letter", "--title", "Post the letter")
+	if err == nil {
+		t.Fatal("expected project edit to refuse a to-do reference")
+	}
+	if len(*captured) != 0 {
+		t.Errorf("no URL should be opened, got %v", *captured)
+	}
+	if want := `"Post letter" is a to-do; use things edit`; err.Error() != want {
+		t.Errorf("message = %q, want %q", err.Error(), want)
+	}
+
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "not a project" {
+		t.Errorf("error = %q, want %q (%s)", payload.Error, "not a project", raw)
+	}
+	if payload.Kind != "to-do" {
+		t.Errorf("kind = %q, want %q", payload.Kind, "to-do")
+	}
+	if payload.Query != "Post letter" {
+		t.Errorf("query = %q, want %q", payload.Query, "Post letter")
+	}
+	if payload.UUID != "one-1" {
+		t.Errorf("uuid = %q, want %q", payload.UUID, "one-1")
+	}
+	if payload.Title != "Post letter" {
+		t.Errorf("title = %q, want %q", payload.Title, "Post letter")
+	}
+}
+
 func TestIsInteractiveStdinPipe(t *testing.T) {
 	// In `go test`, stdin is typically not a TTY. Just call it for coverage;
 	// don't assert on the result since test runners vary.

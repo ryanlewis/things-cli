@@ -183,11 +183,13 @@ $ things show milk --json; echo "exit=$?"
 exit=1
 ```
 
-The tokens are `ambiguous task`, `not found`, `import refused`, `import
-partially applied`, and `error` for everything else. The two import
-failures carry an `items` array naming which payload items were blocked or
-did not land; the [Commands](/commands/) page has the
-detail.
+The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
+`import refused`, `import partially applied`, and `error` for everything else.
+`not a task` is a project handed to `edit`, and `not a project` a to-do handed
+to `project edit`; both refuse before anything is written and name the command
+to retry with. The two import failures carry an `items` array naming which
+payload items were blocked or did not land; the [Commands](/commands/) page
+has the detail.
 
 Some patterns that fall out of this:
 

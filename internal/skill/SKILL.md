@@ -44,10 +44,12 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 {"error": "not found", "message": "task not found: milk", "kind": "task", "query": "milk"}
 {"error": "not a task", "message": "\"Chores\" is a project; use things project edit",
  "kind": "project", "query": "Chores", "uuid": "...", "title": "Chores"}
+{"error": "not a project", "message": "\"Post letter\" is a to-do; use things edit",
+ "kind": "to-do", "query": "Post letter", "uuid": "...", "title": "Post letter"}
 {"error": "error", "message": "..."}
 ```
 
-On `ambiguous task`, retry with one of `matches[].uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`. This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
+On `ambiguous task`, retry with one of `matches[].uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
 
 `import` fails per item, so its two failures add an `items` array — act on that rather than parsing `message`:
 
@@ -166,6 +168,7 @@ things project add <title> [--notes --when --deadline --tags --area --todos --st
 things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
     # to-dos only; a project reference is refused — edit projects with `things project edit`
 things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
+    # projects only; a to-do reference is refused — edit to-dos with `things edit`
 things complete <task> [-y|--yes]   # task or project; a project asks first (rule 4)
 things cancel <task> [-y|--yes]
 things log                          # move Today → Logbook

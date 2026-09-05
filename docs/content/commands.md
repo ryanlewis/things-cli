@@ -114,7 +114,8 @@ things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
 
 `edit` is for to-dos only. A reference that resolves to a project is refused
 before anything is written, because `things:///update` cannot address one —
-use `things project edit` instead.
+use `things project edit` instead. `project edit` refuses a to-do the same
+way, pointing back at `things edit`.
 
 `things project edit` takes most of the same flags (`--title`, `--notes`,
 `--prepend-notes`/`--append-notes`, `--when`, `--deadline`, `--tags`,
