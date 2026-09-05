@@ -9,7 +9,7 @@ tasks, projects, areas and tags straight from the Things3 SQLite database
 (read-only) and writes via the `things:///` URL scheme and AppleScript — so the
 app stays the source of truth and your data never leaves the machine.
 
-![things-cli demo: listing today, adding, editing, completing and searching tasks, then JSON output piped to jq](docs/assets/img/demo.gif)
+![things-cli demo: listing today, adding, editing, completing and searching tasks, then JSON output piped to jq](docs/static/img/demo.gif)
 
 ```sh
 things                                 # today's tasks

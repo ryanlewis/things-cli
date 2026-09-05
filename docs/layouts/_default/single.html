@@ -1,0 +1,100 @@
+{{ define "main" }}
+{{- $ordered := sort site.RegularPages "Weight" -}}
+{{- $prev := false -}}
+{{- $next := false -}}
+{{- range $i, $p := $ordered -}}
+  {{- if eq $p.RelPermalink $.RelPermalink -}}
+    {{- if gt $i 0 }}{{ $prev = index $ordered (sub $i 1) }}{{ end -}}
+    {{- if lt (add $i 1) (len $ordered) }}{{ $next = index $ordered (add $i 1) }}{{ end -}}
+  {{- end -}}
+{{- end -}}
+<div class="docs">
+
+  {{ partial "sidebar.html" . }}
+
+  <main id="content" class="prose">
+    <div class="doc-head">
+      {{- with .Params.eyebrow }}<span class="eyebrow">{{ . }}</span>{{ end }}
+      <h1 class="display">{{ .Title }}</h1>
+    </div>
+
+    {{ .Content }}
+
+    {{- if or $prev $next }}
+    <nav class="pager" aria-label="Pagination">
+      {{- if $prev }}
+      <a class="pager__prev" href="{{ $prev.RelPermalink }}"><span>Previous</span><span>{{ $prev.Title }}</span></a>
+      {{- end }}
+      {{- if $next }}
+      <a class="pager__next" href="{{ $next.RelPermalink }}"><span>Next</span><span>{{ $next.Title }}</span></a>
+      {{- end }}
+    </nav>
+    {{- end }}
+  </main>
+
+  {{- if partial "page-h2s.html" . }}
+  <aside class="onpage" aria-label="On this page">
+    <span class="onpage__label">On this page</span>
+    <a href="#content" class="on">{{ .Title }}</a>
+    {{ .TableOfContents }}
+  </aside>
+  {{- end }}
+
+</div>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+  (function () {
+    var nav = document.querySelector(".side-nav");
+    if (nav) {
+      var narrow = window.matchMedia("(max-width: 900px)");
+      var sync = function () { nav.open = !narrow.matches; };
+      sync();
+      narrow.addEventListener("change", sync);
+    }
+
+    var heads = Array.prototype.slice.call(document.querySelectorAll(".prose h2[id]"));
+    if (!heads.length) return;
+
+    var groups = {};
+    var register = function (a) {
+      var href = a.getAttribute("href") || "";
+      var hash = href.indexOf("#");
+      var id;
+      if (hash < 0) {
+        if (href !== location.pathname) return;
+        id = "content";
+      } else {
+        if (href.slice(0, hash) && href.slice(0, hash) !== location.pathname) return;
+        id = href.slice(hash + 1) || "content";
+      }
+      (groups[id] = groups[id] || []).push(a);
+    };
+    document.querySelectorAll(".onpage a, .side a").forEach(register);
+
+    var current = null;
+    var update = function () {
+      var active = "content";
+      for (var i = 0; i < heads.length; i++) {
+        if (heads[i].getBoundingClientRect().top <= 120) active = heads[i].id;
+      }
+      if (active === current) return;
+      current = active;
+      Object.keys(groups).forEach(function (id) {
+        groups[id].forEach(function (a) { a.classList.toggle("on", id === active); });
+      });
+    };
+
+    var queued = false;
+    var onScroll = function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; update(); });
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+  })();
+</script>
+{{ end }}

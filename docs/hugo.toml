@@ -1,0 +1,29 @@
+baseURL = "https://things.rlew.io/"
+locale = "en-GB"
+title = "things-cli"
+enableRobotsTXT = true
+disableKinds = ["taxonomy", "term", "RSS"]
+
+[params]
+  tagline = "A small, AI-friendly CLI for Things3 on macOS"
+  description = "List, add, edit and complete your Things 3 tasks from the shell. Every read command speaks JSON, and a bundled agent skill teaches Claude Code, Codex and Pi to drive it."
+  version = "0.7.0"
+  repo = "ryanlewis/things-cli"
+  author = "Ryan Lewis"
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = false
+  [markup.highlight]
+    noClasses = false
+    lineNos = false
+    tabWidth = 2
+    guessSyntax = false
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 2
+    ordered = false
+
+[minify]
+  [minify.tdewolff.html]
+    keepQuotes = true
