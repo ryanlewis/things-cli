@@ -39,7 +39,7 @@ Human output is styled with colors and aligned columns. Color auto-disables when
 
 The user may have a TOML config file (`~/.config/things-cli/config.toml`, or `$XDG_CONFIG_HOME/things-cli/config.toml`) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `db`, `no_verify`, `strict_tags`, `create_tags`, `assume_yes`.
 
-This means the defaults you would otherwise assume may not hold — `json = true` makes every command emit JSON, `no_verify = true` turns off the read-back that confirms a `complete`/`cancel` landed, and `assume_yes = true` removes the confirmation before a project and all its tasks change status.
+This means the defaults you would otherwise assume may not hold — `json = true` makes every command emit JSON, `no_verify = true` turns off the read-back that confirms a `complete`/`cancel` landed, and `assume_yes = true` removes the confirmation before a project and all its tasks change status (it covers `complete` and `cancel` only).
 
 - Pass the flags you depend on explicitly. Use `--json` when you want JSON and `--json=false` when you want the plain listing; do not infer the format from a bare invocation.
 - `things config show` prints the file in use and the defaults it establishes (`--json` for machine-readable). `things config path` prints just the path and whether it exists.

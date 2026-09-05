@@ -158,28 +158,66 @@ func TestConfigAssumeYesSeedsTheFlag(t *testing.T) {
 	}
 }
 
-// assume_yes seeds every --yes on the CLI, not just complete/cancel — the
-// skill commands share the flag name, and the docs say so.
-func TestConfigAssumeYesReachesSkillOverwrite(t *testing.T) {
-	isolateHome(t)
-	path := writeConfig(t, "assume_yes = true\n")
-	args := []string{"--config", path, "skill", "install", "claude", "--path", filepath.Join(t.TempDir(), "skills")}
+// The skill commands have a --yes of their own that means "overwrite" and
+// "delete". assume_yes is about the project confirmation and must not reach
+// them, or a config file written to automate `complete` would also make
+// `skill uninstall` delete without asking.
+func TestConfigAssumeYesDoesNotReachSkillCommands(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		got  func(*CLI) bool
+	}{
+		{"install", []string{"skill", "install", "claude"}, func(c *CLI) bool { return c.Skill.Install.Yes }},
+		{"uninstall", []string{"skill", "uninstall", "claude"}, func(c *CLI) bool { return c.Skill.Uninstall.Yes }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateHome(t)
+			path := writeConfig(t, "assume_yes = true\n")
+			args := append([]string{"--config", path}, tc.args...)
+			args = append(args, "--path", filepath.Join(t.TempDir(), "skills"))
 
-	var cli CLI
-	cfg, err := loadConfig(args)
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
+			var cli CLI
+			cfg, err := loadConfig(args)
+			if err != nil {
+				t.Fatalf("loadConfig: %v", err)
+			}
+			parser, err := kong.New(&cli, parserOptions(cfg)...)
+			if err != nil {
+				t.Fatalf("kong.New: %v", err)
+			}
+			if _, err := parser.Parse(args); err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if tc.got(&cli) {
+				t.Errorf("assume_yes = true reached skill %s --yes", tc.name)
+			}
+		})
 	}
-	parser, err := kong.New(&cli, parserOptions(cfg)...)
-	if err != nil {
-		t.Fatalf("kong.New: %v", err)
-	}
-	if _, err := parser.Parse(args); err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if !cli.Skill.Install.Yes {
-		t.Error("assume_yes = true did not reach skill install --yes")
-	}
+
+	// The flag itself still works there, which is what makes the config key's
+	// silence the deliberate part.
+	t.Run("flag still works", func(t *testing.T) {
+		isolateHome(t)
+		path := writeConfig(t, "")
+		args := []string{"--config", path, "skill", "uninstall", "claude", "--yes"}
+		var cli CLI
+		cfg, err := loadConfig(args)
+		if err != nil {
+			t.Fatalf("loadConfig: %v", err)
+		}
+		parser, err := kong.New(&cli, parserOptions(cfg)...)
+		if err != nil {
+			t.Fatalf("kong.New: %v", err)
+		}
+		if _, err := parser.Parse(args); err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if !cli.Skill.Uninstall.Yes {
+			t.Error("--yes on skill uninstall should still work")
+		}
+	})
 }
 
 // The template has to keep loading cleanly now that it carries assume_yes.

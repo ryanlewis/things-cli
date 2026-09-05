@@ -242,8 +242,10 @@ color = "always"
 strict_tags = true
 ```
 
-`assume_yes` answers every confirmation prompt: the project-wide
-`complete`/`cancel` question, and overwriting an installed agent skill.
+`assume_yes` answers the confirmation asked before a project-wide
+`complete` or `cancel`. It does not reach the `--yes` on `skill install`
+or `skill uninstall`, which mean "overwrite" and "delete" — those still
+ask, or take the flag.
 
 `strict_tags` and `create_tags` are mutually exclusive; setting both to
 `true` is an error.
