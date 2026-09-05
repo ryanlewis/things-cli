@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,11 +63,26 @@ func verifyTags(d *Deps, flags TagFlags, names []string) error {
 
 	list := strings.Join(unknown, ", ")
 	if flags.StrictTags {
-		return fmt.Errorf("these tags do not exist in Things: %s — create them in Things first, run `things tag add %s`, or drop --strict-tags to write anyway", list, list)
+		return fmt.Errorf("these tags do not exist in Things: %s — create them in Things first, run `%s`, or drop --strict-tags to write anyway", list, tagAddHint(unknown))
 	}
 	fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things and will be ignored: %s\n", list)
 	fmt.Fprintf(d.errOut(), "warning: Things only applies tags that already exist — create them with --create-tags or `things tag add`, or use --strict-tags to fail instead of dropping them\n")
 	return nil
+}
+
+// tagAddHint renders a copy-pastable `things tag add` command for names.
+// `tag add` takes names as separate positional arguments and does not split on
+// commas, so joining with ", " would suggest a command that creates a tag
+// literally named "foo," — hence a space-separated, quoted list.
+func tagAddHint(names []string) string {
+	parts := make([]string, 0, len(names))
+	for _, n := range names {
+		if strings.ContainsAny(n, " \t\"'\\`$") {
+			n = strconv.Quote(n)
+		}
+		parts = append(parts, n)
+	}
+	return "things tag add " + strings.Join(parts, " ")
 }
 
 // createTags makes each missing tag in Things over AppleScript. It runs before
@@ -177,14 +193,17 @@ type tagAddResult struct {
 }
 
 func (c *TagAddCmd) Run(d *Deps) error {
-	database, err := d.Database()
-	if err != nil {
-		return err
-	}
-
+	// Validate the arguments before opening the database, so a blank name
+	// reports itself rather than surfacing as "cannot find the Things
+	// database" on a machine where the database is missing.
 	names := dedupeTagNames(c.Names)
 	if len(names) == 0 {
 		return fmt.Errorf("tag add: no tag names given")
+	}
+
+	database, err := d.Database()
+	if err != nil {
+		return err
 	}
 
 	// UnknownTags matches case-insensitively, so "work" is reported as
@@ -218,6 +237,9 @@ func (c *TagAddCmd) Run(d *Deps) error {
 
 	if len(created) > 0 && !d.NoVerify {
 		if err := verifyTagsCreated(database, created); err != nil {
+			// The creations were sent, so say which ones — otherwise a
+			// verification failure looks like nothing happened.
+			fmt.Fprintf(d.errOut(), "sent to Things before the failure: %s\n", strings.Join(created, ", "))
 			return err
 		}
 	}

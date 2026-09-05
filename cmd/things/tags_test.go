@@ -288,3 +288,37 @@ func TestRunImportWarnsOnUnknownTag(t *testing.T) {
 		t.Error("expected the import to still be dispatched")
 	}
 }
+
+// The strict-tags error suggests a `things tag add` command. `tag add` takes
+// names as separate positional arguments and does not split on commas, so a
+// comma-joined suggestion would create a tag literally named "focus,".
+func TestTagAddHint(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want string
+	}{
+		{"one", []string{"focus"}, "things tag add focus"},
+		{"many", []string{"focus", "cifas-auto-reject"}, "things tag add focus cifas-auto-reject"},
+		{"spaces", []string{"deep work", "focus"}, `things tag add "deep work" focus`},
+		{"quote", []string{`ev"il`}, `things tag add "ev\"il"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := tagAddHint(c.in); got != c.want {
+				t.Errorf("tagAddHint(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestStrictTagsErrorSuggestsAUsableCommand(t *testing.T) {
+	deps, _ := newTagDeps(t)
+	err := verifyTags(deps, TagFlags{StrictTags: true}, []string{"cifas-auto-reject", "deep work"})
+	if err == nil {
+		t.Fatal("expected an error under --strict-tags")
+	}
+	if !strings.Contains(err.Error(), "`things tag add cifas-auto-reject \"deep work\"`") {
+		t.Errorf("error does not suggest a usable command: %v", err)
+	}
+}

@@ -35,7 +35,7 @@ type CLI struct {
 	DB      string           `help:"Override database path." type:"existingfile"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
-	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel actually landed." name:"no-verify" default:"false"`
+	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel or tag creation actually landed." name:"no-verify" default:"false"`
 
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
