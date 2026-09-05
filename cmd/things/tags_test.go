@@ -300,8 +300,18 @@ func TestTagAddHint(t *testing.T) {
 	}{
 		{"one", []string{"focus"}, "things tag add focus"},
 		{"many", []string{"focus", "cifas-auto-reject"}, "things tag add focus cifas-auto-reject"},
-		{"spaces", []string{"deep work", "focus"}, `things tag add "deep work" focus`},
-		{"quote", []string{`ev"il`}, `things tag add "ev\"il"`},
+		{"spaces", []string{"deep work", "focus"}, `things tag add 'deep work' focus`},
+		{"quote", []string{`ev"il`}, `things tag add 'ev"il'`},
+		// Metacharacters bash would act on: & splits the command, $ and `
+		// expand inside double quotes. Single quotes suppress all of it.
+		{"ampersand", []string{"R&D"}, `things tag add 'R&D'`},
+		{"dollar", []string{"a$HOME"}, `things tag add 'a$HOME'`},
+		{"apostrophe", []string{"Ryan's"}, `things tag add 'Ryan'\''s'`},
+		{"empty", []string{""}, `things tag add ''`},
+		// Quoting stops the shell splitting a leading-dash name, but the CLI
+		// would still read it as a flag, so the hint has to end flag parsing.
+		{"leading dash", []string{"-p"}, "things tag add -- -p"},
+		{"dash later", []string{"focus", "--json"}, "things tag add -- focus --json"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -318,7 +328,7 @@ func TestStrictTagsErrorSuggestsAUsableCommand(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error under --strict-tags")
 	}
-	if !strings.Contains(err.Error(), "`things tag add cifas-auto-reject \"deep work\"`") {
+	if !strings.Contains(err.Error(), "`things tag add cifas-auto-reject 'deep work'`") {
 		t.Errorf("error does not suggest a usable command: %v", err)
 	}
 }

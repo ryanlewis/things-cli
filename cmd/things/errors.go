@@ -12,8 +12,9 @@ import (
 
 // jsonErrorPayload is the machine-readable form of a command failure. Under
 // --json a failing command prints one of these to stdout and exits non-zero,
-// so a consumer reading stdout always gets JSON — success or failure — and can
-// branch on the "error" token instead of parsing English (issue #152).
+// so a consumer reading stdout sees a JSON failure rather than English prose,
+// and can branch on the "error" token (issue #152). A successful write command
+// still prints nothing — only the read commands emit JSON on success.
 //
 // Error is a stable token: "ambiguous task", "not found", or "error" for a
 // failure with no structure worth naming. Message is the same text the
@@ -116,6 +117,11 @@ func renderError(stdout, stderr io.Writer, asJSON bool, err error) {
 	}
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
+	// Message is meant to read as the plain-text error does. The default
+	// encoder escapes the three HTML-significant characters into \u00xx
+	// sequences, which turns a message like `expected "<task>"` into line
+	// noise for anyone reading the JSON.
+	enc.SetEscapeHTML(false)
 	if encErr := enc.Encode(errorPayload(err)); encErr != nil {
 		// Encoding a struct of strings can't realistically fail, but a broken
 		// stdout can — fall back to the plain line so the failure isn't silent.

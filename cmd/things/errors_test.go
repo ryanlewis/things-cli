@@ -10,8 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alecthomas/kong"
+
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/skill"
+	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // stubTTY makes isInteractive report that stdin is a terminal for the duration
@@ -237,6 +241,17 @@ func TestRenderErrorGeneric(t *testing.T) {
 	}
 }
 
+// The message is meant to read as the plain-text line does, so the encoder
+// must not turn <, > and & into escape sequences.
+func TestRenderErrorDoesNotEscapeHTML(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	renderError(&stdout, &stderr, true, fmt.Errorf(`expected "<task>" & more`))
+
+	if !strings.Contains(stdout.String(), `expected \"<task>\" & more`) {
+		t.Errorf("message was escaped: %s", stdout.String())
+	}
+}
+
 // Plain-text mode is untouched: the line still goes to stderr, and stdout stays
 // empty so a `things ... > file` redirect is unaffected.
 func TestRenderErrorPlainTextUnchanged(t *testing.T) {
@@ -329,10 +344,127 @@ func TestJSONRequested(t *testing.T) {
 		{[]string{"--json=false", "show"}, false},
 		{[]string{"--json", "--json=false", "show"}, false},
 		{[]string{"add", "--", "--json"}, false},
+		// kong's bool mapper takes true/1/yes and false/0/no, case
+		// insensitively, so these are the same flag spelled differently.
+		{[]string{"--json=1", "show"}, true},
+		{[]string{"--json=yes", "show"}, true},
+		{[]string{"--json=YES", "show"}, true},
+		{[]string{"--json", "--json=0", "show"}, false},
+		{[]string{"--json", "--json=no", "show"}, false},
+		{[]string{"--json", "--json=No", "show"}, false},
+		// Values kong rejects: it will fail the parse, so the mode is left
+		// alone rather than guessed at. "T" is one of these — strconv.ParseBool
+		// would take it, kong does not.
+		{[]string{"--json=T", "show"}, false},
+		{[]string{"--json=maybe", "show"}, false},
+		// kong clusters boolean shorts, so -j can arrive inside one. Scanning
+		// stops at the first short that takes a value, because that one takes
+		// the rest of the cluster as its value.
+		{[]string{"-jv"}, true},
+		{[]string{"-vj", "show"}, true},
+		{[]string{"list", "-pj"}, false},
+		{[]string{"import", "-fj"}, false},
+		{[]string{"-j=false", "show"}, false},
+		{[]string{"-vj=false", "show"}, false},
+		{[]string{"-jv=false", "show"}, true},
+		{[]string{"-", "show"}, false},
+		{[]string{"--jsonish", "show"}, false},
 	}
 	for _, tc := range cases {
 		if got := jsonRequested(false, tc.args); got != tc.want {
-			t.Errorf("jsonRequested(%v) = %v, want %v", tc.args, got, tc.want)
+			t.Errorf("jsonRequested(false, %v) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+
+	// The config file supplies the starting value, so argv has to be able to
+	// turn it off — and a value kong will reject leaves it alone rather than
+	// silently flipping the mode.
+	if !jsonRequested(true, []string{"show"}) {
+		t.Error("config default should carry through")
+	}
+	if jsonRequested(true, []string{"--json=false", "show"}) {
+		t.Error("argv should be able to turn the config default off")
+	}
+	if jsonRequested(true, []string{"--json=no", "show"}) {
+		t.Error("argv should be able to turn the config default off with =no")
+	}
+	if !jsonRequested(true, []string{"--json=maybe", "show"}) {
+		t.Error("a value kong would reject should leave the mode alone")
+	}
+}
+
+// kongBool has to agree with kong's own bool mapper: the pre-parse read of
+// --json decides how a parse failure is rendered, so a value kong accepts must
+// not be ignored here, and one it rejects must not flip the mode.
+func TestKongBoolMatchesKong(t *testing.T) {
+	for _, v := range []string{"true", "1", "yes", "TRUE", "Yes", "false", "0", "no", "No", "t", "T", "f", "maybe", ""} {
+		var cli CLI
+		parser, err := kong.New(&cli, kong.Name("things"),
+			kong.Vars{
+				"builtin_lists": strings.Join(things.BuiltinLists, ", "),
+				"skill_agents":  skill.AgentNames(),
+			},
+		)
+		if err != nil {
+			t.Fatalf("kong.New: %v", err)
+		}
+		_, parseErr := parser.Parse([]string{"--json=" + v, "projects"})
+
+		got, ok := kongBool(v)
+		if ok != (parseErr == nil) {
+			t.Errorf("kongBool(%q) accepted = %v, but kong parse error = %v", v, ok, parseErr)
+			continue
+		}
+		if ok && got != cli.JSON {
+			t.Errorf("kongBool(%q) = %v, kong parsed %v", v, got, cli.JSON)
+		}
+	}
+}
+
+// boolShorts is hand-maintained, so check it still describes the real grammar:
+// every letter in it must be boolean on every command that uses it, and no
+// value-taking flag may share a letter with it.
+func TestBoolShortsMatchesGrammar(t *testing.T) {
+	var cli CLI
+	parser, err := kong.New(&cli, kong.Name("things"),
+		kong.Vars{
+			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
+			"skill_agents":  skill.AgentNames(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+
+	// letter -> whether every flag spelled with it takes no value.
+	allBool := map[byte]bool{}
+	var walk func(n *kong.Node)
+	walk = func(n *kong.Node) {
+		for _, f := range n.Flags {
+			if f.Short == 0 {
+				continue
+			}
+			c := byte(f.Short)
+			isBool := f.IsBool()
+			if prev, seen := allBool[c]; seen {
+				isBool = isBool && prev
+			}
+			allBool[c] = isBool
+		}
+		for _, child := range n.Children {
+			walk(child)
+		}
+	}
+	walk(parser.Model.Node)
+
+	for c := range boolShorts {
+		if !allBool[c] {
+			t.Errorf("boolShorts has %q, but the grammar has a value-taking flag spelled -%c", c, c)
+		}
+	}
+	for c, isBool := range allBool {
+		if isBool && !boolShorts[c] && c != 'h' {
+			t.Errorf("-%c is a boolean short the grammar knows and boolShorts does not — a cluster like -%cj would be missed", c, c)
 		}
 	}
 }
