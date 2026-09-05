@@ -5,8 +5,10 @@ enableRobotsTXT = true
 disableKinds = ["taxonomy", "term", "RSS"]
 
 [params]
-  tagline = "A small, AI-friendly CLI for Things3 on macOS"
-  description = "List, add, edit and complete your Things 3 tasks from the shell. Every read command speaks JSON, and a bundled agent skill teaches Claude Code, Codex and Pi to drive it."
+  tagline = "A small, AI-friendly CLI for Things 3 on macOS"
+  # Also drawn into the social image by scripts/og/generate.py.
+  headline = "Things 3 from your terminal, or from your agent"
+  description = "List, add, edit and complete your Things 3 tasks from the shell. Pipe JSON into scripts. Hand your coding agent the bundled skill and it can do the same."
   # Shown in the landing page hero badge. This value is the local-dev
   # fallback only: the Pages workflow derives the real one from the newest
   # v* tag and passes it in as HUGO_PARAMS_VERSION, so a release updates the
