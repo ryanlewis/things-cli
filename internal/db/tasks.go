@@ -157,6 +157,13 @@ var viewFilters = map[string]string{
 	"project": "t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0",
 }
 
+// notHeading excludes project headings (TMTask type 2) from the lookup
+// queries. The list views restrict to t.type = 0 outright, but a lookup has to
+// keep returning projects as well as to-dos — show, edit, complete, cancel and
+// open all resolve projects through GetTask/GetTaskByUUID — so it excludes the
+// heading type rather than pinning the task type (issue #146).
+var notHeading = fmt.Sprintf("COALESCE(t.type, 0) != %d", model.TypeHeading)
+
 var viewOrderBy = map[string]string{
 	"logbook":   "ORDER BY t.stopDate DESC",
 	"deadlines": "ORDER BY t.deadline ASC",
@@ -234,7 +241,7 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 }
 
 func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
-	query := d.taskQuery() + " WHERE t.uuid = ? GROUP BY t.uuid"
+	query := d.taskQuery() + " WHERE t.uuid = ? AND " + notHeading + " GROUP BY t.uuid"
 	row := d.db.QueryRow(query, uuid)
 	t, err := scanTask(row)
 	if err == sql.ErrNoRows {
@@ -256,7 +263,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	}
 
 	// Try exact title match
-	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 GROUP BY t.uuid LIMIT 1"
+	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading + " GROUP BY t.uuid LIMIT 1"
 	row := d.db.QueryRow(query, uuidOrTitle)
 	task, err := scanTask(row)
 	if err == nil {
@@ -282,7 +289,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 }
 
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 GROUP BY t.uuid ORDER BY t.\"index\" ASC"
+	query := d.taskQuery() + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading + " GROUP BY t.uuid ORDER BY t.\"index\" ASC"
 	return d.collectTasks(query, "%"+substr+"%")
 }
 
@@ -297,7 +304,7 @@ func (e *AmbiguousTaskError) Error() string {
 
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 	pattern := "%" + query + "%"
-	q := d.taskQuery() + " WHERE (t.title LIKE ? OR t.notes LIKE ?) AND t.trashed = 0 GROUP BY t.uuid ORDER BY t.\"index\" ASC"
+	q := d.taskQuery() + " WHERE (t.title LIKE ? OR t.notes LIKE ?) AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid ORDER BY t.\"index\" ASC"
 	return d.collectTasks(q, pattern, pattern)
 }
 
