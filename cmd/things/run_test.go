@@ -182,6 +182,9 @@ func TestRunDispatchReadOnly(t *testing.T) {
 	cases := [][]string{
 		{"list", "inbox"},
 		{"list", "today"},
+		{"list", "someday"},
+		{"list", "repeating"},
+		{"list", "repeating", "--tag", "urgent"},
 		{"projects"},
 		{"areas"},
 		{"tags"},

@@ -80,8 +80,9 @@ func SplitTags(s string) []string {
 }
 
 // BuiltinLists are the navigable list IDs the Things URL scheme accepts
-// verbatim as `id=…`. Some (e.g. repeating, all-projects) have no direct
-// DB equivalent — they're app-side views only.
+// verbatim as `id=…`. Some (e.g. all-projects, logged-projects) have no direct
+// DB equivalent — they're app-side views only. "repeating" does have one:
+// `things repeating` lists the same templates.
 var BuiltinLists = []string{
 	"inbox", "today", "anytime", "upcoming", "someday", "logbook",
 	"tomorrow", "deadlines", "repeating", "all-projects", "logged-projects",

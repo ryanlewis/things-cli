@@ -39,6 +39,8 @@ func seedTasks(t *testing.T, d *DB) {
 	//   t-trashed     → trashed
 	//   t-deadline    → has deadline
 	//   t-in-proj     → open task inside proj-1
+	//   t-repeat      → repeating template; shaped like t-someday but belongs
+	//                   to the repeating view, not someday (issue #147)
 	tomorrow := today + (1 << 7)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, notes, type, status, trashed, start, startBucket,
@@ -56,6 +58,12 @@ func seedTasks(t *testing.T, d *DB) {
 		('t-in-proj',   'Project task',  '',       0, 0, 0, 0, 0, NULL, NULL, NULL, 'proj-1', 'area-work', 19, 0)`,
 		today, today, today, tomorrow, tomorrow) // last arg is the deadline
 
+	// Templates carry the recurrence rule; Things files them under Repeating
+	// while their row otherwise looks exactly like a Someday to-do.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, area, "index", rt1_recurrenceRule) VALUES
+		('t-repeat', 'Water plants', 0, 0, 0, 2, 0, 'proj-1', 'area-work', 20, x'0102')`)
+
 	// Tag the today task with urgent + home
 	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES
 		('t-today', 'tg-urgent'),
@@ -67,7 +75,7 @@ func seedTasks(t *testing.T, d *DB) {
 }
 
 func TestValidView(t *testing.T) {
-	known := []string{"today", "inbox", "upcoming", "anytime", "someday", "logbook", "trash", "deadlines", "project"}
+	known := []string{"today", "inbox", "upcoming", "anytime", "someday", "repeating", "logbook", "trash", "deadlines", "project"}
 	for _, v := range known {
 		if !ValidView(v) {
 			t.Errorf("%q should be valid", v)
@@ -102,7 +110,10 @@ func TestListTasksViews(t *testing.T) {
 		{"upcoming", []string{"t-upcoming"}},
 		// Anytime is everything with start=1 — Today, Evening, and undated.
 		{"anytime", []string{"t-today", "t-evening", "t-anytime", "t-deadline"}},
+		// t-repeat has the same start/startDate shape as t-someday but is a
+		// template, so it belongs to repeating and nowhere else (issue #147).
 		{"someday", []string{"t-someday"}},
+		{"repeating", []string{"t-repeat"}},
 		{"logbook", []string{"t-done"}},
 		{"trash", []string{"t-trashed"}},
 		{"deadlines", []string{"t-deadline"}},

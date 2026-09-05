@@ -49,16 +49,12 @@ func TestGetTaskByUUIDReportsRepeating(t *testing.T) {
 func TestListAndSearchReportRepeating(t *testing.T) {
 	d := seedRepeatingPair(t)
 
-	tasks, err := d.ListTasks("someday", TaskFilter{})
+	tasks, err := d.ListTasks("repeating", TaskFilter{})
 	if err != nil {
-		t.Fatalf("ListTasks(someday): %v", err)
+		t.Fatalf("ListTasks(repeating): %v", err)
 	}
-	got := map[string]bool{}
-	for _, task := range tasks {
-		got[task.UUID] = task.Repeating
-	}
-	if !got["rep-1"] || got["one-1"] {
-		t.Errorf("someday repeating flags = %v, want rep-1 true and one-1 false", got)
+	if len(tasks) != 1 || tasks[0].UUID != "rep-1" || !tasks[0].Repeating {
+		t.Errorf("ListTasks(repeating) = %+v, want just rep-1 flagged repeating", tasks)
 	}
 
 	found, err := d.SearchTasks("plants")
@@ -67,6 +63,46 @@ func TestListAndSearchReportRepeating(t *testing.T) {
 	}
 	if len(found) != 1 || !found[0].Repeating {
 		t.Errorf("SearchTasks(plants) = %+v, want one repeating task", found)
+	}
+}
+
+// rep-1 and one-1 differ only by the recurrence rule, so someday keeping the
+// one-off and dropping the template is the whole of issue #147. The catch-all
+// "project" view backs `things --project/--area/--tag`, so it has to drop the
+// template too or the leak just moves.
+func TestTemplatesExcludedFromOpenViews(t *testing.T) {
+	d := seedRepeatingPair(t)
+
+	for _, view := range []string{"someday", "project"} {
+		tasks, err := d.ListTasks(view, TaskFilter{})
+		if err != nil {
+			t.Fatalf("ListTasks(%q): %v", view, err)
+		}
+		if len(tasks) != 1 || tasks[0].UUID != "one-1" {
+			t.Errorf("ListTasks(%q) = %+v, want just one-1", view, uuidsOf(tasks))
+		}
+	}
+}
+
+// A template is a valid target for the same filters as any other view.
+func TestRepeatingViewHonoursFilters(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+
+	got, err := d.ListTasks("repeating", TaskFilter{Area: "Work"})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating, area=Work): %v", err)
+	}
+	if !sameSet(uuidsOf(got), []string{"t-repeat"}) {
+		t.Errorf("repeating --area Work = %v, want [t-repeat]", uuidsOf(got))
+	}
+
+	got, err = d.ListTasks("repeating", TaskFilter{Project: "Nonexistent"})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating, project=Nonexistent): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("repeating --project Nonexistent = %v, want none", uuidsOf(got))
 	}
 }
 
@@ -94,6 +130,24 @@ func TestRepeatingColumnAbsentDegradesGracefully(t *testing.T) {
 	}
 	if task == nil || task.Repeating {
 		t.Errorf("got %+v, want a task with Repeating false", task)
+	}
+
+	// With nothing identifiable as a template, the repeating view is empty
+	// and the exclusion the other views apply is a no-op rather than a
+	// filter that hides everything.
+	rep, err := d.ListTasks("repeating", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating): %v", err)
+	}
+	if len(rep) != 0 {
+		t.Errorf("ListTasks(repeating) = %+v, want none", rep)
+	}
+	open, err := d.ListTasks("project", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(project): %v", err)
+	}
+	if len(open) != 1 || open[0].UUID != "t1" {
+		t.Errorf("ListTasks(project) = %v, want just t1", uuidsOf(open))
 	}
 }
 

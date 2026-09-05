@@ -37,7 +37,7 @@ type CLI struct {
 
 	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel actually landed." name:"no-verify" default:"false"`
 
-	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
+	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,repeating,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
 	Areas    AreasCmd    `cmd:"" help:"List areas."`
 	Tags     TagsCmd     `cmd:"" help:"List tags."`
@@ -117,7 +117,7 @@ func (c *VersionCmd) Run(d *Deps) error {
 }
 
 type ListCmd struct {
-	Args    []string `arg:"" optional:"" help:"View or project name. Views: today,inbox,upcoming,anytime,someday,logbook,trash,deadlines."`
+	Args    []string `arg:"" optional:"" help:"View or project name. Views: today,inbox,upcoming,anytime,someday,repeating,logbook,trash,deadlines."`
 	Project string   `help:"Filter by project name or UUID." short:"p"`
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`

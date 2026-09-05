@@ -151,6 +151,11 @@ var viewFilters = map[string]string{
 	"logbook":   "t.status = 3 AND t.trashed = 0 AND t.type = 0",
 	"trash":     "t.trashed = 1 AND t.type = 0",
 	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	// Things' Repeating list: the templates that generate to-dos, not the
+	// to-dos they generate. A template carries the recurrence rule; each
+	// generated instance is an ordinary row with no rule of its own, so
+	// {{repeating}} = 1 selects templates alone (issue #147).
+	"repeating": repeatingPlaceholder + " = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	// The catch-all open set: also the default view for a bare --project/
 	// --area/--tag filter, so it has to exclude tasks living in a trashed
 	// project the way the today view does.
@@ -175,6 +180,18 @@ var viewOrderBy = map[string]string{
 	"project": "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.start ASC, t.\"index\" ASC",
 }
 
+// viewsIncludingTemplates lists the views that keep repeating templates in
+// their results. Everywhere else templates are filtered out: Things files a
+// template under Repeating, not under the start bucket its row happens to
+// carry, so a Someday-start template showing up in `things someday` is a leak
+// (issue #147). trash and logbook stay literal — they report what the database
+// actually holds, templates included.
+var viewsIncludingTemplates = map[string]bool{
+	"repeating": true,
+	"trash":     true,
+	"logbook":   true,
+}
+
 func ValidView(name string) bool {
 	_, ok := viewFilters[name]
 	return ok
@@ -187,6 +204,9 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	}
 	if view == "today" && opts.IncludeCompleted {
 		where = todayWhere(true)
+	}
+	if !viewsIncludingTemplates[view] {
+		where += " AND " + repeatingPlaceholder + " = 0"
 	}
 
 	var args []any
@@ -228,6 +248,12 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	if orderBy == "" {
 		orderBy = "ORDER BY t.\"index\" ASC"
 	}
+
+	// The recurrence column varies across Things schema versions, so the
+	// filters carry a placeholder that only a live DB can resolve. On a
+	// schema with no such column the expression degrades to 0: the exclusion
+	// becomes a no-op and the repeating view returns nothing.
+	where = strings.ReplaceAll(where, repeatingPlaceholder, d.repeatingExpr())
 
 	query := d.taskQuery() + " WHERE " + where + " GROUP BY t.uuid " + orderBy
 	return d.collectTasks(query, args...)
