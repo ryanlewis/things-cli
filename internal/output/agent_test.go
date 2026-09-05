@@ -142,6 +142,26 @@ func TestPrintAgentBriefRepeating(t *testing.T) {
 	}
 }
 
+// A repeating project template is refused the same status writes a repeating
+// to-do is, so its brief must not offer them — the note at the end says there
+// are none above, and handing over `things complete <uuid> --yes` would both
+// contradict that and always exit non-zero.
+func TestPrintAgentBriefRepeatingProject(t *testing.T) {
+	project := &model.Task{UUID: "proj-uuid", Title: "Weekly review", Type: model.TypeProject, Repeating: true}
+	got := briefText(t, AgentBrief{Task: project})
+	if !strings.Contains(got, "This is a repeating project.") {
+		t.Errorf("brief does not warn that status writes are refused\n%s", got)
+	}
+	for _, unwanted := range []string{"things complete proj-uuid", "things cancel proj-uuid"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("brief offers %q on a repeating project the CLI refuses\n%s", unwanted, got)
+		}
+	}
+	if strings.Contains(got, "`--yes` answers that question in advance") {
+		t.Errorf("brief explains --yes for commands it no longer offers\n%s", got)
+	}
+}
+
 func TestPrintAgentBriefProject(t *testing.T) {
 	project := &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusOpen}
 	todos := []model.Task{

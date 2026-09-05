@@ -143,16 +143,23 @@ func closingOut(b AgentBrief, kind string) string {
 		// by an agent cannot answer; --yes is that confirmation. Say so, rather
 		// than leave the commands out and have the agent find --yes on its own
 		// without the sentence explaining what it takes with it.
-		cmds = append(cmds,
-			command{
-				fmt.Sprintf("things complete %s --yes", t.UUID),
-				"complete it AND every to-do under it",
-			},
-			command{
-				fmt.Sprintf("things cancel %s --yes", t.UUID),
-				"cancel it AND every to-do under it",
-			},
-		)
+		//
+		// A repeating project template is the exception: Things refuses status
+		// writes on it and the CLI declines them up front, so offering the
+		// commands would hand the agent something that always exits non-zero
+		// — and contradict the repeating note below.
+		if !t.Repeating {
+			cmds = append(cmds,
+				command{
+					fmt.Sprintf("things complete %s --yes", t.UUID),
+					"complete it AND every to-do under it",
+				},
+				command{
+					fmt.Sprintf("things cancel %s --yes", t.UUID),
+					"cancel it AND every to-do under it",
+				},
+			)
+		}
 	} else {
 		cmds = append(cmds, command{
 			fmt.Sprintf("things edit %s --notes \"...\"", t.UUID),
@@ -171,7 +178,7 @@ func closingOut(b AgentBrief, kind string) string {
 	}
 	s.WriteString(codeBlock(cmds))
 
-	if t.Type == model.TypeProject {
+	if t.Type == model.TypeProject && !t.Repeating {
 		s.WriteString("\nCompleting or cancelling a project changes the status of every to-do under\n")
 		s.WriteString("it, so the CLI asks first and refuses outright when it cannot prompt — as a\n")
 		s.WriteString("command run by an agent cannot. `--yes` answers that question in advance;\n")
