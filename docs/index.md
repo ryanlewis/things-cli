@@ -9,6 +9,8 @@ database (read-only) and writes via the `things:///` URL scheme and
 AppleScript — so the app stays the source of truth and your data never
 leaves the machine.
 
+![things-cli demo: listing today, adding, editing, completing and searching tasks, then JSON output piped to jq]({{ '/assets/img/demo.gif' | relative_url }})
+
 [![Release](https://img.shields.io/github/v/release/{{ site.repository }}?logo=github&color=blue)](https://github.com/{{ site.repository }}/releases/latest)
 [![Go version](https://img.shields.io/github/go-mod/go-version/{{ site.repository }}?logo=go)](https://github.com/{{ site.repository }}/blob/main/go.mod)
 [![License](https://img.shields.io/github/license/{{ site.repository }})](https://github.com/{{ site.repository }}/blob/main/LICENSE)

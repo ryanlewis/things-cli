@@ -1,4 +1,4 @@
-.PHONY: build install lint test cover fmt tidy clean release-snapshot release-check test-install
+.PHONY: build install lint test cover fmt tidy clean release-snapshot release-check test-install demo
 
 BINARY := things
 
@@ -44,3 +44,7 @@ release-snapshot:
 
 test-install:
 	./scripts/test-install.sh
+
+# Re-record the README demo GIF (needs vhs, python3, jq). See scripts/demo/README.md.
+demo:
+	./scripts/demo/record.sh
