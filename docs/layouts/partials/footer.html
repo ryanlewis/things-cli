@@ -1,0 +1,10 @@
+{{- $repo := printf "https://github.com/%s" site.Params.repo -}}
+<div class="footer">
+  <span>MIT licensed. Built by {{ site.Params.author }}.</span>
+  <span>An independent tool, not affiliated with Cultured Code.</span>
+  <div class="footer__links">
+    <a href="{{ $repo }}">GitHub</a>
+    <a href="{{ $repo }}/releases/latest">Releases</a>
+    <a href="{{ $repo }}/issues">Issues</a>
+  </div>
+</div>

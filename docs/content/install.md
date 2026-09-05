@@ -1,19 +1,22 @@
 ---
 title: Install
-icon: fas fa-download
-order: 1
+url: /install/
+weight: 1
+eyebrow: Start
+description: "Install things-cli on macOS with Homebrew, the one-line script, go install, or a prebuilt binary."
 ---
 
 `things-cli` runs on macOS and ships as a single static Go binary. Pick
 whichever install method fits your workflow.
 
-> **You'll need Things3.** This CLI talks to the
-> [Things3 app by Cultured Code](https://culturedcode.com/things/) —
-> a paid task manager for macOS, iPad, iPhone, and Apple Watch. It must
-> be installed and have been launched at least once for the database
-> to exist. `things-cli` is an independent third-party tool and is not
-> affiliated with Cultured Code.
-{: .prompt-info }
+{{< note >}}
+**You'll need Things3.** This CLI talks to the
+[Things3 app by Cultured Code](https://culturedcode.com/things/) —
+a paid task manager for macOS, iPad, iPhone, and Apple Watch. It must
+be installed and have been launched at least once for the database
+to exist. `things-cli` is an independent third-party tool and is not
+affiliated with Cultured Code.
+{{< /note >}}
 
 ## Homebrew
 
@@ -34,7 +37,7 @@ The cask is auto-published from each tagged release into
 ## One-line install script
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
 ```
 
 Downloads the latest release for your architecture, verifies the
@@ -45,13 +48,13 @@ The script reads three optional environment variables:
 
 ```sh
 # Install somewhere other than /usr/local/bin
-INSTALL_DIR=$HOME/.local/bin curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
+INSTALL_DIR=$HOME/.local/bin curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
 
 # Pin a specific version (defaults to the latest release)
-VERSION=vX.Y.Z curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
+VERSION=vX.Y.Z curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
 
 # Override the asset download base URL (for mirrors / testing)
-RELEASE_BASE_URL=https://example.com/things curl -fsSL https://raw.githubusercontent.com/{{ site.repository }}/main/install.sh | sh
+RELEASE_BASE_URL=https://example.com/things curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
 ```
 
 ## go install
@@ -59,7 +62,7 @@ RELEASE_BASE_URL=https://example.com/things curl -fsSL https://raw.githubusercon
 If you have a recent Go toolchain:
 
 ```sh
-go install github.com/{{ site.repository }}/cmd/things@latest
+go install github.com/ryanlewis/things-cli/cmd/things@latest
 ```
 
 The binary lands in `$GOBIN` (or `$GOPATH/bin`) as `things`.
@@ -67,7 +70,7 @@ The binary lands in `$GOBIN` (or `$GOPATH/bin`) as `things`.
 ## Prebuilt binary
 
 Grab a `.tar.gz` from the
-[latest release](https://github.com/{{ site.repository }}/releases/latest):
+[latest release](https://github.com/ryanlewis/things-cli/releases/latest):
 
 - `things_<version>_darwin_arm64.tar.gz` — Apple Silicon
 - `things_<version>_darwin_amd64.tar.gz` — Intel
@@ -91,3 +94,31 @@ The first invocation reads the Things3 database from
 `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-*/Things Database.thingsdatabase/main.sqlite`
 in read-only mode. Things3 must be installed and have been launched at
 least once for the database to exist.
+
+## Quickstart
+
+```sh
+# What's on today
+things
+
+# Inbox, upcoming, anytime — all built-in views
+things inbox
+things upcoming -t urgent
+
+# Capture a task
+things add "Buy milk" --when today --tags errand,shopping
+
+# Show, edit, complete
+things show 3
+things edit 3 --add-tags urgent --deadline 2026-05-01
+things complete 3
+
+# Reveal in the Things app
+things open today
+```
+
+Every read command takes `-j` / `--json` for structured output:
+
+```sh
+things upcoming --json | jq '.[] | select(.deadline)'
+```

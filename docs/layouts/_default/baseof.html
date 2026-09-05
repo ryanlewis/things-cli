@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="{{ or site.Language.Locale "en" }}">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="page{{ if .IsHome }} page--home{{ end }}">
+    {{ partial "nav.html" . }}
+    {{ block "main" . }}{{ end }}
+    {{ partial "footer.html" . }}
+  </div>
+  {{ block "scripts" . }}{{ end }}
+</body>
+</html>

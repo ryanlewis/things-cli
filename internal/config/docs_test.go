@@ -10,7 +10,7 @@ import (
 // docsPage is the configuration page on the docs site. It reproduces the
 // `config init` template and the key table, both of which go stale silently
 // unless something checks them.
-const docsPage = "../../docs/_tabs/configuration.md"
+const docsPage = "../../docs/content/configuration.md"
 
 func readDocsPage(t *testing.T) string {
 	t.Helper()

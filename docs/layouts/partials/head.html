@@ -1,0 +1,33 @@
+{{- $title := .Title -}}
+{{- $isHome := .IsHome -}}
+{{- $desc := .Description | default site.Params.description -}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0e0e10">
+<title>{{ if $isHome }}{{ site.Title }} — {{ site.Params.tagline }}{{ else }}{{ $title }} | {{ site.Title }}{{ end }}</title>
+<meta name="description" content="{{ $desc }}">
+<link rel="canonical" href="{{ .Permalink }}">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ site.Title }}">
+<meta property="og:title" content="{{ if $isHome }}{{ site.Title }}{{ else }}{{ $title }}{{ end }}">
+<meta property="og:description" content="{{ $desc }}">
+<meta property="og:url" content="{{ .Permalink }}">
+<meta name="twitter:card" content="summary">
+
+<link rel="icon" type="image/svg+xml" href="/favicons/favicon.svg">
+<link rel="icon" type="image/png" sizes="96x96" href="/favicons/favicon-96x96.png">
+<link rel="shortcut icon" href="/favicons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+{{- with resources.Get "css/site.css" }}
+  {{- $css := . | minify | fingerprint }}
+  <link rel="stylesheet" href="{{ $css.RelPermalink }}" integrity="{{ $css.Data.Integrity }}">
+{{- else }}
+  {{- errorf "assets/css/site.css is missing — the site would ship unstyled" }}
+{{- end }}

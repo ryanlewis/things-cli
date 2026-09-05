@@ -1,0 +1,27 @@
+{{- /* The documentation sidebar, built from the real content.
+       Anchor entries point at H2s that exist on the pages they name. */ -}}
+{{- $skip := slice "shell-completions" "configuration" -}}
+
+{{- $groups := slice -}}
+
+{{- $groups = $groups | append (dict "name" "Start" "items" (slice
+    (dict "title" "Install" "url" "/install/")
+    (dict "title" "Quickstart" "url" "/install/#quickstart")
+    (dict "title" "Working with agents" "url" "/agents/"))) -}}
+
+{{- $commands := slice -}}
+{{- with site.GetPage "/commands" -}}
+  {{- range partial "page-h2s.html" . -}}
+    {{- if not (in $skip .ID) -}}
+      {{- $commands = $commands | append (dict "title" .Title "url" (printf "/commands/#%s" .ID)) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $groups = $groups | append (dict "name" "Commands" "items" $commands) -}}
+
+{{- $groups = $groups | append (dict "name" "Reference" "items" (slice
+    (dict "title" "Configuration" "url" "/configuration/")
+    (dict "title" "Shell completions" "url" "/commands/#shell-completions")
+    (dict "title" "About" "url" "/about/"))) -}}
+
+{{- return $groups -}}

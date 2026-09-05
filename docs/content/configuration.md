@@ -1,7 +1,9 @@
 ---
 title: Configuration
-icon: fas fa-cog
-order: 4
+url: /configuration/
+weight: 4
+eyebrow: Reference
+description: "The optional TOML config file: where it lives, every key it accepts, and what happens when it is wrong."
 ---
 
 Every flag `things` accepts has a built-in default. A TOML config file lets
@@ -23,10 +25,11 @@ nothing you put here can take an option away from you.
 | 3 | `$XDG_CONFIG_HOME/things-cli/config.toml` | Only when `XDG_CONFIG_HOME` is set |
 | 4 | `~/.config/things-cli/config.toml` | The default |
 
-> **The config file is optional.** Without one, `things` runs on its
-> built-in defaults. The same applies to a path you name yourself; run
-> `things config path` to see which file is in use and whether it exists.
-{: .prompt-info }
+{{< note >}}
+**The config file is optional.** Without one, `things` runs on its
+built-in defaults. The same applies to a path you name yourself; run
+`things config path` to see which file is in use and whether it exists.
+{{< /note >}}
 
 `~` and relative paths are expanded, so `--config ./project.toml` works.
 
@@ -152,9 +155,10 @@ commented out. Uncomment a line to change that default.
 # assume_yes = false
 ```
 
-> This block is checked against the real template by a test in the
-> repository, so it cannot drift from what `things config init` writes.
-{: .prompt-tip }
+{{< note >}}
+This block is checked against the real template by a test in the
+repository, so it cannot drift from what `things config init` writes.
+{{< /note >}}
 
 ## The `config` commands
 

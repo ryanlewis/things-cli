@@ -1,7 +1,9 @@
 ---
 title: About
-icon: fas fa-info-circle
-order: 5
+url: /about/
+weight: 5
+eyebrow: Reference
+description: "How things-cli works, why it is AI-friendly, and its relationship to Things 3 by Cultured Code."
 ---
 
 `things-cli` is a small Go CLI for [Things3](https://culturedcode.com/things/)
@@ -44,7 +46,7 @@ interfaces Cultured Code expose to Shortcuts and other automation.
 ## Source
 
 The full command reference and contributing guide live on
-[GitHub](https://github.com/{{ site.repository }}). Issues and pull
+[GitHub](https://github.com/ryanlewis/things-cli). Issues and pull
 requests welcome.
 
-[MIT licensed](https://github.com/{{ site.repository }}/blob/main/LICENSE).
+[MIT licensed](https://github.com/ryanlewis/things-cli/blob/main/LICENSE).

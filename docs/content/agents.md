@@ -1,7 +1,9 @@
 ---
 title: Working with agents
-icon: fas fa-robot
-order: 3
+url: /agents/
+weight: 3
+eyebrow: Start
+description: "How to drive things-cli from an agent: the bundled skill, the --agent brief, JSON output, and how writes fail loudly."
 ---
 
 `things` is built to be driven by an agent as readily as by a person. Three
@@ -10,7 +12,7 @@ pieces do the work: a bundled **skill** that teaches the agent the CLI, an
 anything scripted. Underneath all three, the writes fail loudly rather than
 report a success that did not happen.
 
-![Printing an agent brief for a to-do, piping it into claude -p, and searching to confirm the to-do is done]({{ '/assets/img/demo-agent.gif' | relative_url }})
+![Printing an agent brief for a to-do, piping it into claude -p, and searching to confirm the to-do is done](/img/demo-agent.gif)
 
 ## Teach your agent the CLI
 
@@ -44,7 +46,7 @@ write for one agent.
 The skill is embedded in the binary, so upgrading `things` brings the new
 version along; re-run `skill install` to refresh an installed copy. The
 source is
-[`internal/skill/SKILL.md`](https://github.com/{{ site.repository }}/blob/main/internal/skill/SKILL.md).
+[`internal/skill/SKILL.md`](https://github.com/ryanlewis/things-cli/blob/main/internal/skill/SKILL.md).
 
 ## Hand a to-do to an agent
 
@@ -134,7 +136,7 @@ hint: things show <n> --agent hands a to-do to an agent (disable with hints = fa
 
 It never appears under `--json`, when stdout is not a terminal, or for an
 empty listing, so nothing that parses output will meet it. `--no-hints` or
-`hints = false` in the [config file]({{ '/configuration/' | relative_url }})
+`hints = false` in the [config file](/configuration/)
 turns it off for good.
 
 ### With Claude Code
@@ -184,7 +186,7 @@ exit=1
 The tokens are `ambiguous task`, `not found`, `import refused`, `import
 partially applied`, and `error` for everything else. The two import
 failures carry an `items` array naming which payload items were blocked or
-did not land; the [Commands]({{ '/commands/' | relative_url }}) page has the
+did not land; the [Commands](/commands/) page has the
 detail.
 
 Some patterns that fall out of this:
@@ -233,7 +235,7 @@ instead of assuming:
   is the answer, not a formality.
 
 One caveat the skill spells out: a
-[config file]({{ '/configuration/' | relative_url }}) can change the
+[config file](/configuration/) can change the
 defaults an agent would otherwise assume (`json = true`, `no_verify =
 true`, `assume_yes = true`). An agent that depends on a behaviour should
 pass the flag for it explicitly.

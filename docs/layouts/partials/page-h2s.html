@@ -1,0 +1,6 @@
+{{- /* The page's H2 headings. Hugo nests them under a synthetic level-0 root. */ -}}
+{{- $tops := .Fragments.Headings -}}
+{{- if and (eq (len $tops) 1) (eq (index $tops 0).Level 0) -}}
+  {{- $tops = (index $tops 0).Headings -}}
+{{- end -}}
+{{- return $tops -}}

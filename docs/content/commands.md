@@ -1,7 +1,9 @@
 ---
 title: Commands
-icon: fas fa-list
-order: 2
+url: /commands/
+weight: 2
+eyebrow: Commands
+description: "Full command reference for things-cli: listing, searching, capturing, editing, completing and the bundled agent skill."
 ---
 
 Read commands (`list`/views, `projects`, `areas`, `tags`, `show`, `search`)
@@ -69,7 +71,7 @@ one.
 
 `things show <ref> --agent` prints a Markdown brief written for an agent,
 with the commands that act on the item. See
-[Working with agents]({{ '/agents/' | relative_url }}).
+[Working with agents](/agents/).
 
 ## Searching
 
@@ -195,7 +197,7 @@ things open --tag urgent             # a tag
 ## Agent skill
 
 `things skill install <agent>` installs the bundled skill for Claude Code,
-Codex or Pi. See [Working with agents]({{ '/agents/' | relative_url }}).
+Codex or Pi. See [Working with agents](/agents/).
 
 ## Shell completions
 
@@ -228,7 +230,7 @@ things config path     # the file in use, and whether it exists
 things config show     # the defaults it establishes
 ```
 
-See [Configuration]({{ site.baseurl }}/configuration/) for the full key
+See [Configuration](/configuration/) for the full key
 table, an annotated example file, and what happens when the file is
 wrong. The three `config` subcommands keep working against a file the
 CLI cannot use — they are how you find out what is wrong with it.

@@ -1,0 +1,11 @@
+<details class="side-nav" open>
+  <summary>Docs</summary>
+  <nav class="side" aria-label="Documentation">
+    {{- range partial "nav-tree.html" . }}
+      <div class="grp">{{ .name }}</div>
+      {{- range .items }}
+        <a href="{{ .url }}"{{ if eq .url $.RelPermalink }} class="on" aria-current="page"{{ end }}>{{ .title }}</a>
+      {{- end }}
+    {{- end }}
+  </nav>
+</details>

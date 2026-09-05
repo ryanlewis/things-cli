@@ -1,0 +1,155 @@
+{{ define "main" }}
+{{- $repo := printf "https://github.com/%s" site.Params.repo -}}
+<main id="content">
+
+  <div class="hero">
+    <div class="hero__badge mono">
+      <span class="hero__dot"></span>
+      v{{ site.Params.version }} · macOS · single binary
+    </div>
+    <h1 class="hero__title display">
+      Things 3 from your terminal,<br><em>or from your agent.</em>
+    </h1>
+    <p class="hero__sub">
+      List, add, edit and complete your Things tasks from the shell. Pipe JSON into scripts. Hand your coding agent the bundled skill and it can do the same.
+    </p>
+    <div class="hero__actions">
+      <button type="button" class="copy" data-copy="brew install ryanlewis/tap/things" aria-label="Copy: brew install ryanlewis/tap/things">
+        <span class="copy__prompt">$</span>
+        <span class="copy__cmd">brew install ryanlewis/tap/things</span>
+        {{ partial "copy-icon.html" . }}
+      </button>
+      <a class="hero__cta" href="{{ $repo }}">
+        View on GitHub
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"></path></svg>
+      </a>
+    </div>
+  </div>
+
+  <div class="terminal-wrap">
+    <div class="terminal">
+      <div class="terminal__bar">
+        <span class="terminal__dot"></span>
+        <span class="terminal__dot"></span>
+        <span class="terminal__dot"></span>
+        <span class="terminal__shell">zsh</span>
+      </div>
+      <pre><span class="t-prompt">$</span> things
+    <span class="t-group">Home</span>
+1.  [ ]  <span class="t-star">★</span> Book the car in for its MOT
+2.  [ ]  Renew passport                                     <span class="t-meta">⚑ 12 Sep</span>
+
+    <span class="t-group">Launch</span>
+3.  [ ]  <span class="t-star">★</span> Write the release notes for v0.7
+4.  [ ]  Record the demo GIF
+
+<span class="t-prompt">$</span> things add <span class="t-str">"Reply to Sam about the deck"</span> --when today --tags work
+<span class="t-prompt">$</span> things complete 3
+<span class="t-prompt">$</span> things --json today | jq <span class="t-str">'.[] | select(.projectTitle == "Launch") | .title'</span>
+<span class="t-str">"Record the demo GIF"</span>
+<span class="t-str">"Reply to Sam about the deck"</span></pre>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      <h3 class="display">Your tasks stay on the Mac</h3>
+      <p>Reads open the Things database read-only. Writes go through the same URL scheme Things gives Shortcuts. The CLI adds no server or account of its own. Things Cloud keeps syncing your devices exactly as before.</p>
+    </div>
+    <div class="card">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"></path></svg>
+      <h3 class="display">JSON everywhere</h3>
+      <p>Every command takes <code class="mono">--json</code>. Failures come back as one object with a stable error token, and the CLI never blocks on a prompt. Safe in scripts, cron, Raycast and Alfred.</p>
+    </div>
+    <div class="card">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M5 8h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z"></path><path d="M9 13h.01M15 13h.01M9 16h6"></path></svg>
+      <h3 class="display">Your agent already knows it</h3>
+      <p>One command teaches Claude Code, Codex or any agent to use it. Ask in plain words and your agent adds, edits and completes tasks in Things for you.</p>
+    </div>
+  </div>
+
+  <div class="agent">
+    <div class="agent__copy">
+      <span class="eyebrow">For agents</span>
+      <h2 class="display">Teach your agent to drive it in one command.</h2>
+      <p>The bundled skill tells the agent what is safe to run freely, what changes real data, and how to read a failure. Prefer UUIDs, never trust an index you did not just list, confirm before completing anything.</p>
+      <p class="agent__note">Any other agent: <code class="mono">things skill show</code> prints the neutral source for your AGENTS.md.</p>
+    </div>
+    <div class="agent__demo">
+      <pre><span class="t-prompt">$</span> things skill install claude
+<span class="t-ok">✓</span> installed ~/.claude/skills/things-cli/SKILL.md</pre>
+      <div class="agent__chat">
+        <div class="agent__turn">
+          <span class="agent__who">you</span>
+          <span>chase the invoice on Friday, tag it finance</span>
+        </div>
+        <div class="agent__turn agent__turn--cmd">
+          <span class="agent__who agent__who--agent">agent</span>
+          <span>things add "Chase the invoice" --when 2026-09-11 --tags finance</span>
+        </div>
+        <div class="agent__turn">
+          <span class="agent__who agent__who--agent">agent</span>
+          <span>Added to Upcoming for Friday 11 September, tagged finance.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="install">
+    <h2 class="display">Ten seconds to your first <code class="mono">things</code>.</h2>
+    <div class="install__grid">
+      <button type="button" class="install__card" data-copy="brew install ryanlewis/tap/things" aria-label="Copy the Homebrew install command">
+        <div>
+          <span class="install__label">Homebrew</span>
+          <span class="install__cmd">brew install ryanlewis/tap/things</span>
+        </div>
+        {{ partial "copy-icon.html" . }}
+      </button>
+      <button type="button" class="install__card" data-copy="go install github.com/{{ site.Params.repo }}/cmd/things@latest" aria-label="Copy the go install command">
+        <div>
+          <span class="install__label">Go</span>
+          <span class="install__cmd">go install github.com/{{ site.Params.repo }}/cmd/things@latest</span>
+        </div>
+        {{ partial "copy-icon.html" . }}
+      </button>
+      <button type="button" class="install__card" data-copy="curl -fsSL https://raw.githubusercontent.com/{{ site.Params.repo }}/main/install.sh | sh" aria-label="Copy the install script command">
+        <div>
+          <span class="install__label">Script</span>
+          <span class="install__cmd">curl -fsSL raw.githubusercontent.com/{{ site.Params.repo }}/main/install.sh | sh</span>
+        </div>
+        {{ partial "copy-icon.html" . }}
+      </button>
+    </div>
+    <p class="install__foot">Needs Things 3 by Cultured Code, launched at least once. The script verifies the download against checksums.txt before installing.</p>
+  </div>
+
+</main>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+  document.querySelectorAll("[data-copy]").forEach(function (el) {
+    el.addEventListener("click", function () {
+      var text = el.getAttribute("data-copy");
+      var done = function () {
+        el.setAttribute("data-copied", "true");
+        setTimeout(function () { el.removeAttribute("data-copied"); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+        return;
+      }
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    });
+  });
+</script>
+{{ end }}

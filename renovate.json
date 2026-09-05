@@ -3,12 +3,5 @@
   "extends": [
     "github>ryanlewis/renovate-config",
     ":preserveSemverRanges"
-  ],
-  "packageRules": [
-    {
-      "description": "Pin Ruby to 3.x while jekyll-theme-chirpy 7.x requires Ruby ~> 3.1",
-      "matchPackageNames": ["ruby"],
-      "allowedVersions": "<4"
-    }
   ]
 }
