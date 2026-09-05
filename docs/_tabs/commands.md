@@ -27,6 +27,10 @@ report what the database holds. Both are to-do lists, so a project template
 never shows in them. Project templates are marked `(project)` in plain output
 and carry `"type": 1` in JSON.
 
+The to-dos inside a project template are hidden along with it, since they
+would otherwise list against a project `things projects` does not report.
+`trash` and `logbook` still show them once they are trashed or logged.
+
 `things search` is a lookup rather than a view, so it returns templates too.
 Results carry `"repeating": true`.
 
