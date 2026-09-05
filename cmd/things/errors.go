@@ -83,10 +83,14 @@ type notATaskError struct {
 	Query string
 	UUID  string
 	Title string
+	// Retry is the command that does handle this kind, spelled out rather
+	// than derived from Kind — "project" happens to read as a command name,
+	// but a second kind would silently name a command that does not exist.
+	Retry string
 }
 
 func (e *notATaskError) Error() string {
-	return fmt.Sprintf("%q is a %s; use things %s edit", e.Title, e.Kind, e.Kind)
+	return fmt.Sprintf("%q is a %s; use %s", e.Title, e.Kind, e.Retry)
 }
 
 // ambiguousRefError carries a *db.AmbiguousTaskError alongside the multi-line
