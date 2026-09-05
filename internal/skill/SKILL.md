@@ -34,6 +34,16 @@ This covers argument and flag errors too — `things --json show` with no argume
 
 Human output is styled with colors and aligned columns. Color auto-disables when piping or when `NO_COLOR` is set. Override with `--color=always|never` (default `auto`). JSON output is unaffected.
 
+## Config file changes the defaults
+
+The user may have a TOML config file (`~/.config/things-cli/config.toml`, or `$XDG_CONFIG_HOME/things-cli/config.toml`) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `db`, `no_verify`, `strict_tags`.
+
+This means the defaults you would otherwise assume may not hold — `json = true` makes every command emit JSON, and `no_verify = true` turns off the read-back that confirms a `complete`/`cancel` landed.
+
+- Pass the flags you depend on explicitly. Use `--json` when you want JSON and `--json=false` when you want the plain listing; do not infer the format from a bare invocation.
+- `things config show` prints the file in use and the defaults it establishes (`--json` for machine-readable). `things config path` prints just the path and whether it exists.
+- `things config init` writes a commented template. It refuses to overwrite an existing file unless given `--force` — do not run it on a user's behalf without asking.
+
 ## Core commands
 
 ```
@@ -81,6 +91,10 @@ things import [--file F] [--reveal] [--strict-tags | --create-tags] < payload.js
     # payload is the array documented at culturedcode.com/things/support/articles/2803573/
     # update items on repeating to-dos/projects are refused up front (see below)
     # update items setting completed/canceled are read back afterwards
+
+things config path              # config file in use, and whether it exists
+things config show              # the defaults that file establishes
+things config init [--force]    # write a commented template
 ```
 
 ### Repeating to-dos and projects
@@ -204,3 +218,4 @@ things --json list today | jq '.[] | .title'
 - Prefer `--json` in scripted contexts — it also guarantees the command never blocks on a prompt.
 - After a `list`/`search`, numeric indices stay valid until the next one.
 - Use `things open` when the user wants to *see* something in the app rather than read data back.
+- Check `things config show` before assuming a default. Pass `--json` explicitly rather than relying on the config file.

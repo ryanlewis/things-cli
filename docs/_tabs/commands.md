@@ -203,6 +203,38 @@ things version       # or: things --version / things -v
 
 Prints the version, commit, and build date.
 
+## Configuration
+
+A TOML file supplies defaults for global and per-command flags. Precedence
+is flag > config file > built-in default.
+
+```sh
+things config init     # write a commented template (--force to overwrite)
+things config path     # print the file in use and whether it exists
+things config show     # print the defaults the file establishes
+things config show -j  # the same, as JSON
+```
+
+The file is read from `$XDG_CONFIG_HOME/things-cli/config.toml`, falling
+back to `~/.config/things-cli/config.toml`. Override it with `--config
+PATH` or `THINGS_CLI_CONFIG`. A missing file is not an error.
+
+| Key | Flag it sets | Type | Default |
+| --- | --- | --- | --- |
+| `json` | `--json` | boolean | `false` |
+| `color` | `--color` | `"auto"`, `"always"`, `"never"` | `"auto"` |
+| `db` | `--db` | string path (must exist) | auto-detected |
+| `no_verify` | `--no-verify` | boolean | `false` |
+| `strict_tags` | `--strict-tags` | boolean | `false` |
+
+```toml
+color = "always"
+strict_tags = true
+```
+
+Unknown keys, wrong types, and malformed TOML are errors that name the
+file and the key.
+
 ## Caching
 
 `things` caches the last list it printed in

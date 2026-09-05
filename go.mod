@@ -7,6 +7,7 @@ require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/mattn/go-isatty v0.0.24
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/willabides/kongplete v0.4.0
 	golang.org/x/term v0.45.0
 	modernc.org/sqlite v1.57.0

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,11 +13,10 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
+	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
-	"github.com/ryanlewis/things-cli/internal/skill"
-	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // withSilentStdout replaces os.Stdout for the duration of fn with a pipe that
@@ -147,19 +147,39 @@ func runCapturingStderr(t *testing.T, database *db.DB, args ...string) (string, 
 	return stderr, err
 }
 
+// testHomeEnv marks a HOME that isolateHome has already redirected, so a test
+// that isolates first and then calls a run helper keeps the same directory
+// instead of being moved to a second temp dir mid-test.
+const testHomeEnv = "THINGS_CLI_TEST_HOME"
+
+// isolateHome points HOME and the config lookup at a temp directory, so a test
+// never reads or writes the developer's real cache or config file. Calling it
+// twice in one test is a no-op.
+func isolateHome(t *testing.T) string {
+	t.Helper()
+	if home := os.Getenv(testHomeEnv); home != "" {
+		return home
+	}
+	home := t.TempDir()
+	t.Setenv(testHomeEnv, home)
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv(config.EnvVar, "")
+	return home
+}
+
 // runStreams parses args, runs the command against database, and returns both
 // of the handler's output streams.
 func runStreams(t *testing.T, database *db.DB, args ...string) (string, string, error) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	isolateHome(t)
 
 	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("things"),
-		kong.Vars{
-			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skill.AgentNames(),
-		},
-	)
+	cfg, err := loadConfig(args)
+	if err != nil {
+		t.Fatalf("load config %v: %v", args, err)
+	}
+	parser, err := kong.New(&cli, parserOptions(cfg)...)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}
@@ -168,7 +188,7 @@ func runStreams(t *testing.T, database *db.DB, args ...string) (string, string, 
 		t.Fatalf("parse %v: %v", args, err)
 	}
 	var stdout, stderr bytes.Buffer
-	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify}
+	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify, Config: cfg}
 	var runErr error
 	withSilentStdout(t, func() {
 		runErr = ctx.Run(deps)

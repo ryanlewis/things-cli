@@ -16,6 +16,7 @@ import (
 	"github.com/willabides/kongplete"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
+	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -33,6 +34,7 @@ type CLI struct {
 	JSON    bool             `help:"Output as JSON." short:"j" default:"false"`
 	Color   string           `help:"Color mode (auto|always|never)." enum:"auto,always,never" default:"auto"`
 	DB      string           `help:"Override database path." type:"existingfile"`
+	Config  string           `help:"Path to the TOML config file (default ~/.config/things-cli/config.toml)." placeholder:"PATH"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
 	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
@@ -53,6 +55,7 @@ type CLI struct {
 	Open     OpenCmd     `cmd:"" help:"Reveal a task, project, area, tag, or built-in list in Things3."`
 	Import   ImportCmd   `cmd:"" help:"Batch create/update via the Things JSON URL scheme. Reads JSON from stdin or --file."`
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
+	Conf     ConfigCmd   `cmd:"" name:"config" help:"Inspect and create the config file that supplies flag defaults."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 
 	Completions CompletionsCmd `cmd:"" help:"Print a shell completion script (bash|zsh|fish)."`
@@ -70,6 +73,25 @@ type Deps struct {
 
 	// NoVerify skips the post-write read-back on complete/cancel.
 	NoVerify bool
+
+	// Config is the config file that seeded the flag defaults. `things config`
+	// reports on it; every other command has already had its defaults applied
+	// by the time it runs.
+	Config *config.File
+}
+
+// config returns the loaded config file, falling back to an unread file at the
+// default location so a Deps built without one (tests, direct construction)
+// still reports a sensible path.
+func (d *Deps) config() *config.File {
+	if d.Config == nil {
+		path, source, err := config.ResolvePath("")
+		if err != nil {
+			source = config.SourceDefault
+		}
+		d.Config = &config.File{Path: path, Source: source}
+	}
+	return d.Config
 }
 
 // errOut is where warnings go. Tests leave Stderr nil and capture os.Stderr,
@@ -835,16 +857,16 @@ func (c *OpenCmd) Run(d *Deps) error {
 
 func main() {
 	var cli CLI
-	parser := kong.Must(&cli,
-		kong.Name("things"),
-		kong.Description("CLI for Things3"),
-		kong.UsageOnError(),
-		kong.Vars{
-			"version":       fmt.Sprintf("things %s (commit %s, built %s)", version, commit, date),
-			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skill.AgentNames(),
-		},
-	)
+
+	// The config file supplies the defaults kong parses against, so it has to
+	// be read before the parser is built.
+	cfg, err := loadConfig(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(2)
+	}
+
+	parser := kong.Must(&cli, parserOptions(cfg)...)
 
 	// Answer shell completion requests. When the shell invokes us with COMP_LINE
 	// set — via the script emitted by `things completions <shell>` — this
@@ -870,7 +892,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify}
+	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify, Config: cfg}
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {
