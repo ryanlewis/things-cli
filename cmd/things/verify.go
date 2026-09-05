@@ -68,9 +68,20 @@ type statusWant struct {
 	want  model.Status
 }
 
+// statusResult is the outcome for one item of a batch read-back. err is nil
+// when the change landed. got is the status actually seen on the final read,
+// which exists only when the item was read successfully and simply never
+// changed — observed says whether it does, since a read error or a deleted row
+// leaves nothing to report.
+type statusResult struct {
+	err      error
+	got      model.Status
+	observed bool
+}
+
 // verifyStatuses re-reads each item until its status matches the one requested,
 // and reports per item whether the change landed. The returned slice is
-// parallel to wants; a nil entry means that item is confirmed. Without this a
+// parallel to wants; a nil err means that item is confirmed. Without this a
 // write Things ignored is indistinguishable from one it applied.
 //
 // One budget covers the whole batch and items are polled in rounds, so an
@@ -82,8 +93,8 @@ type statusWant struct {
 // database while we poll, and a transient SQLITE_BUSY there must not turn a
 // write that landed into a reported failure. A read that keeps failing is
 // surfaced once the deadline passes.
-func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) []error {
-	results := make([]error, len(wants))
+func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) []statusResult {
+	results := make([]statusResult, len(wants))
 	pending := make([]int, len(wants))
 	for i := range wants {
 		pending[i] = i
@@ -101,17 +112,21 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 			switch {
 			case err != nil:
 				if expired {
-					results[i] = fmt.Errorf("verifying status change: %w", err)
+					results[i].err = fmt.Errorf("verifying status change: %w", err)
 					continue
 				}
 			case current == nil:
-				results[i] = fmt.Errorf("verifying status change: %s no longer exists in the Things database", w.uuid)
+				results[i].err = fmt.Errorf("verifying status change: %s no longer exists in the Things database", w.uuid)
 				continue
 			case current.Status == w.want:
 				continue
 			case expired:
-				results[i] = fmt.Errorf("status change did not apply: %q (%s) is still %s after %s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app",
-					w.title, w.uuid, current.Status, budget)
+				results[i] = statusResult{
+					err: fmt.Errorf("status change did not apply: %q (%s) is still %s after %s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app",
+						w.title, w.uuid, current.Status, budget),
+					got:      current.Status,
+					observed: true,
+				}
 				continue
 			}
 			next = append(next, i)
@@ -132,7 +147,7 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 // verifyStatus re-reads a single item until its status matches want, and
 // reports an error if it never does.
 func verifyStatus(database *db.DB, task *model.Task, want model.Status) error {
-	return verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, verifyTimeout)[0]
+	return verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, verifyTimeout)[0].err
 }
 
 // applyStatusWrite runs a status-changing write and confirms it landed, unless

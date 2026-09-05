@@ -32,6 +32,17 @@ Under `--json`, a failure prints a single JSON object to **stdout** and exits no
 
 This covers argument and flag errors too — `things --json show` with no argument returns the JSON object rather than a usage block. On `ambiguous task`, retry with one of the `matches[].uuid`. Without `--json`, errors stay as a plain `Error: ...` line on stderr.
 
+`import` fails per item, so its two failures add an `items` array — act on that rather than parsing `message`:
+
+```json
+{"error": "import refused", "message": "...",
+ "items": [{"path": "[0]", "id": "rep-1", "title": "Water plants", "blocked": ["when", "deadline"]}]}
+{"error": "import partially applied", "message": "...",
+ "items": [{"path": "[0]", "id": "one-1", "title": "Post letter", "wanted": "completed", "got": "open"}]}
+```
+
+The tokens differ because the recovery does. `import refused` sent nothing to Things: fix the named items and re-run the whole payload. `import partially applied` already wrote: re-run with **only** the items listed, or the ones that landed get re-applied. `path` locates the item in the payload you sent (`[0]`, or `[2].attributes.items[0]` when nested in a project), `blocked` names the attributes Things will not accept on a repeating item, and `wanted`/`got` are the status asked for versus the one still there. `got` is absent when the row could not be read or no longer exists.
+
 Human output is styled with colors and aligned columns. Color auto-disables when piping or when `NO_COLOR` is set. Override with `--color=always|never` (default `auto`). JSON output is unaffected.
 
 ## Core commands

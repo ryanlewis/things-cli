@@ -146,6 +146,64 @@ func wantedStatus(attrs map[string]any) (model.Status, bool) {
 	return model.StatusOpen, false
 }
 
+// importRefusalItem is one payload item the pre-write check refused, and one
+// entry of the `items` array a --json consumer reads (issue #161).
+type importRefusalItem struct {
+	Path    string
+	ID      string
+	Title   string
+	Kind    string // "to-do" or "project", as the message names it
+	Blocked []string
+}
+
+// importRefusalError is the whole-payload refusal. It carries the offending
+// items so --json can hand them over one by one instead of a consumer having
+// to parse them back out of the message.
+type importRefusalError struct {
+	items []importRefusalItem
+	total int // update items in the payload, offending or not
+}
+
+func (e *importRefusalError) Error() string {
+	lines := make([]string, len(e.items))
+	for i, it := range e.items {
+		lines[i] = fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
+			it.Path, it.ID, it.Title, it.Kind, strings.Join(it.Blocked, ", "))
+	}
+	return fmt.Sprintf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:\n%s",
+		len(e.items), e.total, repeatingDocsURL, strings.Join(lines, "\n"))
+}
+
+// importVerifyItem is one status change that never landed. wanted and got name
+// the statuses either side of the failure; got is absent when there was
+// nothing to observe, because the row could not be read or no longer exists.
+type importVerifyItem struct {
+	Path     string
+	ID       string
+	Title    string
+	Wanted   model.Status
+	Got      model.Status
+	Observed bool
+
+	err error // the read-back error, verbatim, for the plain-text message
+}
+
+// importVerifyError is a partially applied import: the payload reached Things,
+// and some of the status changes it asked for did not take.
+type importVerifyError struct {
+	items []importVerifyItem
+	total int // status changes the payload requested, landed or not
+}
+
+func (e *importVerifyError) Error() string {
+	lines := make([]string, len(e.items))
+	for i, it := range e.items {
+		lines[i] = fmt.Sprintf("  %s: %v", it.Path, it.err)
+	}
+	return fmt.Sprintf("%d of %d requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n%s",
+		len(e.items), e.total, strings.Join(lines, "\n"))
+}
+
 // prepareImport is the pre-write pass over an import payload. It refuses the
 // whole import when any `operation: update` item would change an attribute
 // Things drops silently on a repeating to-do or project — the same check
@@ -158,7 +216,8 @@ func wantedStatus(attrs map[string]any) (model.Status, bool) {
 func prepareImport(d *Deps, database *db.DB, data []byte) (*importPlan, error) {
 	plan := &importPlan{updates: importUpdates(data), tasks: map[string]*model.Task{}}
 
-	var refusals, missing []string
+	var refusals []importRefusalItem
+	var missing []string
 	for _, u := range plan.updates {
 		if !u.resolvable() {
 			continue
@@ -184,16 +243,16 @@ func prepareImport(d *Deps, database *db.DB, data []byte) (*importPlan, error) {
 		if task.Type == model.TypeProject {
 			kind = "project"
 		}
-		refusals = append(refusals, fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
-			u.path, u.id, task.Title, kind, strings.Join(blocked, ", ")))
+		refusals = append(refusals, importRefusalItem{
+			Path: u.path, ID: u.id, Title: task.Title, Kind: kind, Blocked: blocked,
+		})
 	}
 
 	// Refuse first: the warnings below promise that Things will report the
 	// unknown ids itself, which is only true when the payload is actually
 	// sent. A refused import never reaches Things.
 	if len(refusals) > 0 {
-		return nil, fmt.Errorf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:\n%s",
-			len(refusals), len(plan.updates), repeatingDocsURL, strings.Join(refusals, "\n"))
+		return nil, &importRefusalError{items: refusals, total: len(plan.updates)}
 	}
 
 	for _, m := range missing {
@@ -216,7 +275,7 @@ func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
 	}
 
 	var wants []statusWant
-	var paths []string
+	var items []importVerifyItem
 	for _, u := range plan.updates {
 		if !u.resolvable() {
 			continue
@@ -232,7 +291,7 @@ func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
 			continue
 		}
 		wants = append(wants, statusWant{uuid: u.id, title: task.Title, want: want})
-		paths = append(paths, u.path)
+		items = append(items, importVerifyItem{Path: u.path, ID: u.id, Title: task.Title, Wanted: want})
 	}
 	if len(wants) == 0 {
 		return nil
@@ -243,16 +302,50 @@ func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
 	// anything written to stderr never reaches the reader, so a summary
 	// pointing at a list printed elsewhere would name detail the consumer
 	// cannot see.
-	var failures []string
-	for i, err := range verifyStatuses(database, wants, verifyTimeout) {
-		if err == nil {
+	var failures []importVerifyItem
+	for i, res := range verifyStatuses(database, wants, verifyTimeout) {
+		if res.err == nil {
 			continue
 		}
-		failures = append(failures, fmt.Sprintf("  %s: %v", paths[i], err))
+		failed := items[i]
+		failed.Got, failed.Observed, failed.err = res.got, res.observed, res.err
+		failures = append(failures, failed)
 	}
 	if len(failures) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d of %d requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n%s",
-		len(failures), len(wants), strings.Join(failures, "\n"))
+	return &importVerifyError{items: failures, total: len(wants)}
+}
+
+// jsonItems renders the refused items for the --json error payload. Blocked is
+// copied rather than shared: the payload outlives the error only in tests, but
+// aliasing a slice into the wire format invites a caller to mutate it.
+func (e *importRefusalError) jsonItems() []jsonErrorItem {
+	out := make([]jsonErrorItem, len(e.items))
+	for i, it := range e.items {
+		out[i] = jsonErrorItem{
+			Path:    it.Path,
+			ID:      it.ID,
+			Title:   it.Title,
+			Blocked: append([]string(nil), it.Blocked...),
+		}
+	}
+	return out
+}
+
+// jsonItems renders the unapplied status changes for the --json error payload.
+func (e *importVerifyError) jsonItems() []jsonErrorItem {
+	out := make([]jsonErrorItem, len(e.items))
+	for i, it := range e.items {
+		out[i] = jsonErrorItem{
+			Path:   it.Path,
+			ID:     it.ID,
+			Title:  it.Title,
+			Wanted: it.Wanted.String(),
+		}
+		if it.Observed {
+			out[i].Got = it.Got.String()
+		}
+	}
+	return out
 }
