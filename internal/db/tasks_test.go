@@ -662,3 +662,61 @@ func TestListTasksTagFilterIncludesHeadingTasks(t *testing.T) {
 		t.Errorf("tag filter: got %v, want [t-nested]", uuidsOf(got))
 	}
 }
+
+// The project view is the default for a bare --project/--area/--tag filter, so
+// it must hide tasks living in a trashed project the way the today view does.
+func TestListTasksProjectViewExcludesTrashedProject(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg-u', 'urgent', 1)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('proj-gone', 'Trashed project', 1, 0, 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
+		('t-orphan', 'Child of trashed', 0, 0, 0, 1, 0, 'proj-gone', 1)`)
+	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('t-orphan', 'tg-u')`)
+
+	got, err := d.ListTasks("project", TaskFilter{Tag: "urgent"})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want no tasks from a trashed project", uuidsOf(got))
+	}
+}
+
+// A filter spanning several projects must keep each project's tasks contiguous,
+// otherwise the rendered group headers repeat as rows interleave by index.
+func TestListTasksProjectViewGroupsByProject(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('ar-h', 'Home', 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
+		('proj-a', 'Project A', 1, 0, 0, 'ar-h', 1),
+		('proj-b', 'Project B', 1, 0, 0, 'ar-h', 2)`)
+	// Interleaved task indexes: index order alone would alternate A, B, A, B.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
+		('a1', 'A one', 0, 0, 0, 1, 0, 'proj-a', 1),
+		('b1', 'B one', 0, 0, 0, 1, 0, 'proj-b', 2),
+		('a2', 'A two', 0, 0, 0, 1, 0, 'proj-a', 3),
+		('b2', 'B two', 0, 0, 0, 1, 0, 'proj-b', 4)`)
+
+	got, err := d.ListTasks("project", TaskFilter{Area: "Home"})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	var order []string
+	for _, task := range got {
+		order = append(order, task.UUID)
+	}
+	want := []string{"a1", "a2", "b1", "b2"}
+	if len(order) != len(want) {
+		t.Fatalf("got %v, want %v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("got %v, want %v", order, want)
+		}
+	}
+}

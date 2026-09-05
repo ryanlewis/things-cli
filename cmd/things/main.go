@@ -146,7 +146,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	// (including when a filter defaults today → project) rather than silently
 	// ignoring it, matching how --on/--from/--to reject views.
 	if c.IncludeCompleted && view != "today" {
-		return fmt.Errorf("--include-completed is only supported on the %q view", "today")
+		return fmt.Errorf("--include-completed is only supported on the %q view, not %q; name the view explicitly, e.g. `things today --project NAME`", "today", view)
 	}
 
 	filter := db.TaskFilter{
