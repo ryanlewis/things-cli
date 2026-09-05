@@ -105,8 +105,22 @@ things add "Review the flags" --tags "Work,cifas-auto-reject"
 # warning: these tags do not exist in Things and will be ignored: cifas-auto-reject
 ```
 
-The write still happens. Add `--strict-tags` to fail and write nothing
-instead. The CLI cannot create tags — create them in Things first.
+The write still happens. Add `--create-tags` to create the missing tags
+first so the write applies them all, or `--strict-tags` to fail and write
+nothing instead. The two contradict each other and are rejected together.
+
+## Creating tags
+
+```sh
+things tag add focus "deep work"
+things tag add Work                 # skipped, it already exists
+things tag add focus --json         # {"created": [...], "skipped": [...]}
+```
+
+Names that already exist are skipped rather than duplicated, matched
+case-insensitively as Things matches them. Creation goes through
+AppleScript, so Things3 must be running; the tag list is read back
+afterwards to confirm it landed, which `--no-verify` skips.
 
 ## Completing and cancelling
 

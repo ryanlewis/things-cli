@@ -128,3 +128,71 @@ func TestAppleScriptErrorIncludesOutput(t *testing.T) {
 		t.Errorf("error missing stderr output: %v", err)
 	}
 }
+
+func TestAppleScriptString(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"plain", "Work", `"Work"`},
+		{"quote", `say "hi"`, `"say \"hi\""`},
+		{"backslash", `a\b`, `"a\\b"`},
+		{"backslashQuote", `a\"b`, `"a\\\"b"`},
+		{"newline", "a\nb", `"a\nb"`},
+		{"carriageReturn", "a\rb", `"a\rb"`},
+		{"tab", "a\tb", `"a\tb"`},
+		{"unicode", "café ✅", `"café ✅"`},
+		{"empty", "", `""`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := appleScriptString(c.in); got != c.want {
+				t.Errorf("appleScriptString(%q) = %s, want %s", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestCreateTagScript(t *testing.T) {
+	script := applescriptStub(t, "")
+
+	if err := CreateTag("urgent"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	want := `tell application "Things3"
+make new tag with properties {name:"urgent"}
+end tell`
+	if *script != want {
+		t.Errorf("script =\n%s\nwant:\n%s", *script, want)
+	}
+}
+
+// A tag name is user input, so it must not be able to close the AppleScript
+// string literal and have the remainder run as script.
+func TestCreateTagEscapesName(t *testing.T) {
+	script := applescriptStub(t, "")
+
+	if err := CreateTag(`ev"il\ tag`); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	want := `tell application "Things3"
+make new tag with properties {name:"ev\"il\\ tag"}
+end tell`
+	if *script != want {
+		t.Errorf("script =\n%s\nwant:\n%s", *script, want)
+	}
+}
+
+func TestCreateTagError(t *testing.T) {
+	applescriptStub(t, "no tag for you")
+
+	err := CreateTag("urgent")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "creating tag") {
+		t.Errorf("error lacks context: %v", err)
+	}
+	if !strings.Contains(err.Error(), "no tag for you") {
+		t.Errorf("error drops osascript output: %v", err)
+	}
+}
