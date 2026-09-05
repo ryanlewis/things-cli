@@ -55,7 +55,9 @@ things --json=false today     # even with json = true in the file
 
 ## Keys
 
-Keys are named after the flag they set, in `snake_case`. The hyphenated
+Keys are named after the flag they set, in `snake_case` — except
+`assume_yes`, which is deliberately narrower than the `--yes` it seeds
+(see [below](#assume_yes-and-the-skill-commands)). The flag's own
 spelling is accepted too, so `no-verify` works as well as `no_verify` —
 but pick one: setting the same option under both spellings in one file is
 an error rather than a coin toss.
@@ -66,18 +68,23 @@ an error rather than a coin toss.
 | `color` | — | `"auto"` \| `"always"` \| `"never"` | `"auto"` | every command | When to colour output; `auto` means only on a terminal |
 | `hints` | — | boolean | `true` | every command | Print the hint line under a plain task listing |
 | `db` | — | path | auto-detected | every command | Where the Things3 SQLite database is; the file must exist |
-| `no_verify` | `no-verify` | boolean | `false` | `complete`, `cancel`, `edit`, `import` | Skip the read-back that confirms a status change landed |
+| `no_verify` | `no-verify` | boolean | `false` | `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a status change or a tag creation landed |
 | `strict_tags` | `strict-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Fail instead of writing when a tag does not exist |
 | `create_tags` | `create-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Create missing tags before writing |
 | `assume_yes` | `yes` | boolean | `false` | `complete`, `cancel` | Answer the confirmation before a project-wide status change |
 
-Two constraints the CLI enforces when it reads the file:
+Two constraints the CLI enforces:
 
 - `strict_tags` and `create_tags` are mutually exclusive. Setting both to
-  `true` is an error — they are two different answers to the same
-  question.
-- `db` must point at a file that exists. A stale path is reported against
-  the config file rather than surfacing later as a puzzling flag error.
+  `true` is an error, reported as soon as the file is read — they are two
+  different answers to the same question.
+- `db` must point at a file that exists. The check runs while the flags
+  are being resolved, so a stale path is reported against the config file
+  rather than surfacing later as a puzzling flag error.
+
+`strict_tags` and `create_tags` also override each other from the command
+line: `--create-tags` on a run whose file says `strict_tags = true` is
+the override it looks like, not a "can't be used together" error.
 
 A short file setting two things:
 
@@ -191,7 +198,8 @@ These apply when no flag overrides them.
   assume_yes   true     config
 ```
 
-`--json` gives the same thing as a `settings` array:
+`--json` gives the same thing as a `settings` array — one entry per key,
+in the order above, abridged here:
 
 ```console
 $ things --json config show
@@ -255,12 +263,17 @@ $ things config path
 Error: config file /Users/me/.config/things-cli/config.toml: key "color" must be one of auto, always, never, got "pink"
 ```
 
-A `db` path that no longer exists is caught when the CLI actually needs
-it, so a `--db` on the command line still overrides a stale entry instead
-of tripping over it:
+A `db` path that no longer exists is caught while the flags are resolved,
+which is before any command runs — including `config path` and `config
+show`, which never open the database. A `--db` on the command line still
+overrides a stale entry instead of tripping over it, because kong skips
+the resolver for a flag you passed:
 
 ```console
 $ things today
+Error: config file /Users/me/.config/things-cli/config.toml: db: stat /Users/me/old/main.sqlite: no such file or directory
+
+$ things config path
 Error: config file /Users/me/.config/things-cli/config.toml: db: stat /Users/me/old/main.sqlite: no such file or directory
 
 $ things --db ~/current/main.sqlite today   # works
@@ -278,9 +291,13 @@ failure, so a script sees a structured error either way.
 
 Completing or cancelling a *project* also completes or cancels every task
 inside it, so `things complete` asks first. A run that cannot prompt —
-piped output, or `--json`, which never prompts — declines. `assume_yes`
-answers that question ahead of time, which is what lets a script or an
-agent complete a project.
+stdin is not a terminal (cron, a CI job, `< /dev/null`), or `--json`,
+which never prompts whatever stdin is — declines. `assume_yes` answers
+that question ahead of time, which is what lets a script or an agent
+complete a project.
+
+Piping *output* does not turn the prompt off: `things complete "Roof" |
+tee log` still asks on stderr and reads the answer from the terminal.
 
 `--yes` also exists on `skill install` and `skill uninstall`, where it
 means "overwrite" and "delete". `assume_yes` deliberately does **not**
