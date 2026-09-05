@@ -246,6 +246,13 @@ func Load(path string) (*File, error) {
 		if os.IsNotExist(err) {
 			return f, nil
 		}
+		// Something is at the path, it just cannot be read — a directory, or
+		// a file the user has no read permission on. Say so: reporting it as
+		// "not found" would have `things config init` overwrite it without
+		// --force, and `things config path` deny it is there at all.
+		if _, statErr := os.Lstat(path); statErr == nil {
+			f.Exists = true
+		}
 		return fail(configErr(path, "cannot read: %w", err))
 	}
 	f.Exists = true
@@ -415,8 +422,8 @@ func (f *File) Resolver() kong.Resolver {
 				continue
 			}
 			// An empty db path is how a file says "leave it unset". Passing it
-			// on would make kong's existingfile check stat the empty string,
-			// which expands to the working directory.
+			// on would have kong's path mapper expand the empty string to the
+			// working directory and hand that over as the database.
 			if k.Name == dbKey && v == "" {
 				continue
 			}

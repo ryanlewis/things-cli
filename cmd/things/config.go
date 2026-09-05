@@ -104,6 +104,15 @@ func (*ConfigPathCmd) diagnosesConfig() {}
 
 func (c *ConfigPathCmd) Run(d *Deps) error {
 	cfg := d.config()
+	if cfg.Path == "" {
+		// No path was resolved at all, so there is no file to name. Printing
+		// " (not found)" here would claim we looked somewhere and came up
+		// empty, which is not what happened.
+		if cfg.Err != nil {
+			return cfg.Err
+		}
+		return fmt.Errorf("no config file path was resolved for this run")
+	}
 	if d.JSON {
 		problem := ""
 		if cfg.Err != nil {
@@ -137,7 +146,7 @@ func (c *ConfigShowCmd) Run(d *Deps) error {
 	// Under --json the error alone carries the path: a plain header on stdout
 	// would sit in front of the JSON object and break the consumer parsing it.
 	if cfg.Err != nil {
-		if !d.JSON {
+		if !d.JSON && cfg.Path != "" {
 			fmt.Fprintf(d.Stdout, "config: %s (%s)\n", cfg.Path, existence(cfg))
 		}
 		return cfg.Err

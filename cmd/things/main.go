@@ -134,7 +134,14 @@ func (d *Deps) Database() (*db.DB, error) {
 	// The check lives here rather than on the --db flag so that a stale path in
 	// the config file does not break the commands that never read the database
 	// — `config path` and `config show` are how you find out it is stale.
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Stat(path)
+	if err == nil && info.IsDir() {
+		// SQLite would take a directory too and fail much later with an opaque
+		// "unable to open database file"; kong's existingfile check used to
+		// catch this before the check moved here.
+		err = fmt.Errorf("%s is a directory, not a database file", path)
+	}
+	if err != nil {
 		if cfg := d.config(); cfg.SetsDB(path) {
 			return nil, &config.Error{Path: cfg.Path, Err: fmt.Errorf("db: %s", err)}
 		}
@@ -945,8 +952,10 @@ func main() {
 		renderError(os.Stdout, os.Stderr, cli.JSON, err)
 		var runCfgErr *config.Error
 		if errors.As(err, &runCfgErr) {
-			// A broken config file always exits 2, whether it was caught
-			// before, during, or after parsing.
+			// Bad content in the config file exits 2 wherever it was caught —
+			// here, or before the command ran. Failures around the file rather
+			// than in it (nowhere to look for one, a refusal to overwrite) are
+			// ordinary command errors and exit 1.
 			os.Exit(2)
 		}
 		os.Exit(1)

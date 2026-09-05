@@ -121,6 +121,29 @@ func TestLoadMissingFileIsNotAnError(t *testing.T) {
 	}
 }
 
+func TestLoadMarksAnUnreadableFileAsExisting(t *testing.T) {
+	// A directory at the config path is the portable stand-in for a file that
+	// is there but cannot be read: os.ReadFile fails with something other than
+	// "not exist". Reporting Exists false would let `config init` overwrite it.
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	f, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: want an error for a file that cannot be read")
+	}
+	if f == nil {
+		t.Fatal("Load returned a nil File alongside its error")
+	}
+	if !f.Exists {
+		t.Error("Exists = false for a file that is there but cannot be read")
+	}
+	if f.Err == nil {
+		t.Error("Err = nil on a File that failed to load")
+	}
+}
+
 func TestLoadReadsEveryKey(t *testing.T) {
 	path := write(t, `
 json = true
