@@ -10,11 +10,17 @@ import (
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
-// checklistItemType is the one payload item type that does not live in TMTask.
-// Checklist items have their own table and cannot repeat, so the repeating
-// check and the read-back both skip them rather than look up an id that
-// GetTaskByUUID could never resolve.
-const checklistItemType = "checklist-item"
+// unresolvableItemTypes are the payload item types GetTaskByUUID will never
+// return a row for, so the repeating check and the read-back skip them rather
+// than warn that Things does not know an id it knows perfectly well.
+//
+// Checklist items live in their own table, not TMTask. Headings are TMTask
+// rows but the lookups exclude the heading type (issue #146). Neither can
+// repeat or carry a status, so nothing is lost by skipping them.
+var unresolvableItemTypes = map[string]bool{
+	"checklist-item": true,
+	"heading":        true,
+}
 
 // importUpdate is one `operation: update` item found in an import payload,
 // reduced to the parts the repeating check and the status read-back need.
@@ -29,10 +35,10 @@ type importUpdate struct {
 }
 
 // resolvable reports whether the item names a row the CLI can look up. Items
-// without an id are Things' problem to report, and checklist items are not in
-// TMTask.
+// without an id are Things' problem to report, and checklist items and
+// headings are not reachable through GetTaskByUUID.
 func (u importUpdate) resolvable() bool {
-	return u.id != "" && u.itemType != checklistItemType
+	return u.id != "" && !unresolvableItemTypes[u.itemType]
 }
 
 // importPlan is what the pre-write pass learned about a payload: the update
@@ -112,11 +118,20 @@ func restrictedImportAttrs(attrs map[string]any) []string {
 
 // wantedStatus reports the status an update item asks Things to move the item
 // to. Both status fields are two-way, per the `update` command's parameter
-// table at repeatingDocsURL: `completed` is "Complete a to-do or set a to-do
-// to incomplete", `canceled` likewise, and each documents that setting the
-// other one to false on an item in that state also marks it incomplete. So a
-// literal `false` is a real request for `open`, not a no-op, and a dropped
-// reopen is as invisible as a dropped completion.
+// table at repeatingDocsURL, which is worth quoting because the cross-status
+// cases are the surprising ones:
+//
+//	completed: "Complete a to-do or set a to-do to incomplete. […] Setting
+//	           completed=false on a canceled to-do will also mark it as
+//	           incomplete."
+//	canceled:  "Cancel a to-do or set a to-do to incomplete. […] Setting
+//	           canceled=false on a completed to-do will also mark it as
+//	           incomplete."
+//
+// So a literal `false` asks for `open` whichever status the item is in — the
+// two sentences above cover the mismatched pairs explicitly — and a dropped
+// reopen is as invisible as a dropped completion. The item's current status is
+// therefore not needed here.
 //
 // `canceled` "Takes priority over `completed`", so it decides the outcome
 // whenever it is present — with one exception. The two entries disagree about

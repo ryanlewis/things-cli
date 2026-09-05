@@ -270,19 +270,37 @@ func TestImportWarnsAboutUnknownIDs(t *testing.T) {
 	}
 }
 
-// A checklist item lives outside TMTask, so looking its id up would always
-// come back empty and warn about an item that is perfectly valid.
-func TestImportDoesNotLookUpChecklistItems(t *testing.T) {
-	database, _ := seedWritable(t)
-	stubExecDropping(t)
-
-	payload := `[{"type":"checklist-item","operation":"update","id":"chk-1","attributes":{"completed":true}}]`
-	stderr, err := runImport(t, database, payload)
-	if err != nil {
-		t.Fatalf("import: %v", err)
+// Neither a checklist item nor a heading is reachable through GetTaskByUUID —
+// checklist items are in their own table, and the lookups exclude the heading
+// type (#149) — so looking either up would warn that Things does not know an
+// id it knows perfectly well.
+func TestImportDoesNotLookUpUnresolvableTypes(t *testing.T) {
+	cases := []struct {
+		name string
+		item string
+		id   string
+	}{
+		{"checklistItem", `{"type":"checklist-item","operation":"update","id":"chk-1","attributes":{"completed":true}}`, "chk-1"},
+		{"heading", `{"type":"heading","operation":"update","id":"head-1","attributes":{"title":"Phase 2"}}`, "head-1"},
 	}
-	if strings.Contains(stderr, "chk-1") {
-		t.Errorf("checklist item was looked up:\n%s", stderr)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			database, sqlDB := seedWritable(t)
+			// A real heading row: the lookup filters it out by type, not by
+			// absence, so seeding it proves the skip is what keeps us quiet.
+			if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('head-1', 'Phase 2', 2, 0, 0)`); err != nil {
+				t.Fatalf("seed heading: %v", err)
+			}
+			stubExecDropping(t)
+
+			stderr, err := runImport(t, database, "["+c.item+"]")
+			if err != nil {
+				t.Fatalf("import: %v", err)
+			}
+			if strings.Contains(stderr, c.id) {
+				t.Errorf("%s was looked up and warned about:\n%s", c.name, stderr)
+			}
+		})
 	}
 }
 
