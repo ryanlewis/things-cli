@@ -55,10 +55,43 @@ collections themselves. `things projects` accepts `--area` and
 things show 3                 # by index from the last list
 things show <uuid>            # by Things3 UUID
 things show "Buy milk"        # by title (interactive disambiguation)
+things show 3 --agent         # Markdown brief for handing to an agent
 ```
 
 After any list or `search`, numeric indices stay valid until the next
 one.
+
+## Handing a to-do to an agent
+
+`things show <ref> --agent` prints a self-contained Markdown brief rather
+than the aligned detail view: title, UUID, status, project/area, tags,
+schedule, notes, checklist, and a "Closing out" section with the commands
+that act on the item. Those commands all name the UUID, because a title can
+match several to-dos and a numeric index only holds until the next listing.
+
+```sh
+things show 3 --agent | claude -p "action this"
+claude "$(things show 3 --agent)"
+```
+
+Point it at a project and the brief lists the project's open to-dos with
+their UUIDs, and its closing commands carry `--yes` — a project-wide
+`complete`/`cancel` asks for confirmation, and it changes every to-do under
+the project. `--agent` cannot be combined with `--json`; a config file that
+sets `json = true` is only a default, so the explicit flag still wins.
+
+Notes are reproduced inside a fence wide enough that nothing in them can
+close it, so a note cannot forge the closing-out section the agent acts on.
+
+A plain listing from `things list` or `things search`, printed to a terminal,
+ends with a pointer to this:
+
+```text
+hint: things show <n> --agent hands a to-do to an agent (disable with hints = false in the config file)
+```
+
+It is suppressed under `--json`, when stdout is not a terminal, for an empty
+listing, and by `--no-hints` or `hints = false` in the config file.
 
 ## Searching
 
@@ -237,6 +270,7 @@ PATH` or `THINGS_CLI_CONFIG`. A missing file is not an error.
 | --- | --- | --- | --- |
 | `json` | `--json` | boolean | `false` |
 | `color` | `--color` | `"auto"`, `"always"`, `"never"` | `"auto"` |
+| `hints` | `--hints` / `--no-hints` | boolean | `true` |
 | `db` | `--db` | string path (must exist) | auto-detected |
 | `no_verify` | `--no-verify` | boolean | `false` |
 | `strict_tags` | `--strict-tags` | boolean | `false` |

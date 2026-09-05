@@ -88,6 +88,17 @@ var Keys = []Key{
 		Example: `color = "auto"`,
 	},
 	{
+		Name:    "hints",
+		Flag:    "hints",
+		Default: true,
+		Comment: []string{
+			"Print the hint line under a plain task listing. Same as --hints /",
+			"--no-hints. The hint only ever appears when stdout is a terminal and",
+			"the output is not JSON, so turning it off is for terminal use.",
+		},
+		Example: "hints = true",
+	},
+	{
 		Name:    "db",
 		Flag:    "db",
 		Default: "",
