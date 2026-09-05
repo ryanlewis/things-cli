@@ -481,13 +481,15 @@ After the payload is sent, every update item that set `completed` or `canceled` 
 
 ```text
 $ things import --file finish.json
-import: [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
-Error: 1 of 2 requested status changes did not apply (listed above). The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app
+Error: 1 of 2 requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:
+  [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
 $ echo $?
 1
 ```
 
 Unlike the refusal above, this happens after the write: the items that did land stay landed. `--no-verify` skips it.
+
+Both the refusal and the read-back failure carry their per-item detail in the error itself rather than on a separate stream, so under `--json` the whole thing arrives in the `message` field of the [error object](#errors-under---json).
 
 ### Date values
 

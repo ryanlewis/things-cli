@@ -238,17 +238,21 @@ func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
 		return nil
 	}
 
-	failed := 0
+	// The failures go in the error rather than straight to stderr: under
+	// --json the error is rendered as one object on stdout (issue #152) and
+	// anything written to stderr never reaches the reader, so a summary
+	// pointing at a list printed elsewhere would name detail the consumer
+	// cannot see.
+	var failures []string
 	for i, err := range verifyStatuses(database, wants, verifyTimeout) {
 		if err == nil {
 			continue
 		}
-		failed++
-		fmt.Fprintf(d.errOut(), "import: %s: %v\n", paths[i], err)
+		failures = append(failures, fmt.Sprintf("  %s: %v", paths[i], err))
 	}
-	if failed == 0 {
+	if len(failures) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d of %d requested status changes did not apply (listed above). The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app",
-		failed, len(wants))
+	return fmt.Errorf("%d of %d requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n%s",
+		len(failures), len(wants), strings.Join(failures, "\n"))
 }

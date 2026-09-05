@@ -100,11 +100,11 @@ There is no CLI workaround — the user has to make the change in the Things app
 
 ### Confirming a status change landed
 
-Things has no callback for writes, so after a `complete`, a `cancel`, or an `import` item that sets `completed`/`canceled`, the CLI re-reads the item from the database and exits non-zero if the status never changed. Setting either field to `false` asks for incomplete and is read back too; `canceled` takes priority over `completed` when both are set. An import checks every such item before reporting, one stderr line each, and the whole batch shares one timeout budget:
+Things has no callback for writes, so after a `complete`, a `cancel`, or an `import` item that sets `completed`/`canceled`, the CLI re-reads the item from the database and exits non-zero if the status never changed. Setting either field to `false` asks for incomplete and is read back too; `canceled` takes priority over `completed` when both are set. An import checks every such item before reporting, and the whole batch shares one timeout budget. The per-item detail is part of the error, so it survives `--json`:
 
 ```
-import: [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. …
-Error: 1 of 2 requested status changes did not apply (listed above). …
+Error: 1 of 2 requested status changes did not apply. …:
+  [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. …
 ```
 
 The rest of the import is already applied at that point — re-run with only the failed items. `--no-verify` skips the read-back; it does not skip the repeating refusal above, which is a documented rule rather than a guess about what Things did.

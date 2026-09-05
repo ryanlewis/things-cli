@@ -343,14 +343,19 @@ func TestImportReportsEveryDroppedStatusChange(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a non-zero exit, got nil")
 	}
+	// The detail belongs in the error, not on stderr: under --json the error
+	// is the only thing the consumer reads.
 	if !strings.Contains(err.Error(), "1 of 2 requested status changes did not apply") {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if !strings.Contains(stderr, `import: [1]: status change did not apply: "File taxes" (one-2) is still open`) {
-		t.Errorf("stderr missing the failing item:\n%s", stderr)
+	if !strings.Contains(err.Error(), `[1]: status change did not apply: "File taxes" (one-2) is still open`) {
+		t.Errorf("error missing the failing item:\n%v", err)
 	}
-	if strings.Contains(stderr, "one-1") {
-		t.Errorf("the item that landed was reported as a failure:\n%s", stderr)
+	if strings.Contains(err.Error(), "one-1") {
+		t.Errorf("the item that landed was reported as a failure:\n%v", err)
+	}
+	if stderr != "" {
+		t.Errorf("per-item detail should be in the error, not stderr:\n%s", stderr)
 	}
 }
 
@@ -419,12 +424,12 @@ func TestImportReadsBackAReopen(t *testing.T) {
 
 	t.Run("dropped", func(t *testing.T) {
 		stubExecApplyingAll(t, sqlDB, nil)
-		stderr, err := runImport(t, database, payload)
+		_, err := runImport(t, database, payload)
 		if err == nil {
 			t.Fatal("expected a non-zero exit for a dropped reopen, got nil")
 		}
-		if !strings.Contains(stderr, `"File taxes" (done-1) is still completed`) {
-			t.Errorf("stderr missing the dropped reopen:\n%s", stderr)
+		if !strings.Contains(err.Error(), `"File taxes" (done-1) is still completed`) {
+			t.Errorf("error missing the dropped reopen:\n%v", err)
 		}
 	})
 
@@ -473,4 +478,43 @@ func TestImportReadsBackCanceledOverCompleted(t *testing.T) {
 	if stderr != "" {
 		t.Errorf("unexpected stderr: %s", stderr)
 	}
+}
+
+// Both import failures have to survive the --json error path (issue #152):
+// under --json the rendered object on stdout is all a consumer reads, so the
+// per-item detail must be inside it rather than on stderr.
+func TestImportFailuresRenderAsJSON(t *testing.T) {
+	t.Run("refusal", func(t *testing.T) {
+		database, _ := seedWritable(t)
+		stubExecDropping(t)
+
+		payload := `[{"type":"to-do","operation":"update","id":"rep-1","attributes":{"when":"today"}}]`
+		err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+		if err == nil {
+			t.Fatal("expected a refusal")
+		}
+		p, raw := decodePayload(t, err)
+		if !strings.Contains(p.Message, `[0] (id rep-1): "Water plants" is a repeating to-do — when`) {
+			t.Errorf("payload lost the per-item detail: %s", raw)
+		}
+	})
+
+	t.Run("readBack", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		stubExecApplyingAll(t, sqlDB, nil)
+
+		payload := `[{"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":true}}]`
+		err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+		if err == nil {
+			t.Fatal("expected a read-back failure")
+		}
+		p, raw := decodePayload(t, err)
+		if strings.Contains(p.Message, "listed above") {
+			t.Errorf("message points at detail a JSON reader never sees: %s", raw)
+		}
+		if !strings.Contains(p.Message, `"Post letter" (one-1) is still open`) {
+			t.Errorf("payload lost the per-item detail: %s", raw)
+		}
+	})
 }
