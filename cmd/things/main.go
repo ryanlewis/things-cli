@@ -39,6 +39,8 @@ type CLI struct {
 
 	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
 
+	Hints bool `help:"Print the hint line under a plain task listing. Use --no-hints to turn it off." negatable:"" default:"true"`
+
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,repeating,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
 	Areas    AreasCmd    `cmd:"" help:"List areas."`
@@ -73,6 +75,11 @@ type Deps struct {
 
 	// NoVerify skips the post-write read-back on complete/cancel.
 	NoVerify bool
+
+	// Hints allows the pointer line printed under a plain listing. Off means
+	// the user has said they know the CLI; see printAgentHint for the other
+	// conditions that suppress it.
+	Hints bool
 
 	// Config is the config file that seeded the flag defaults. `things config`
 	// reports on it; every other command has already had its defaults applied
@@ -217,7 +224,10 @@ func (c *ListCmd) Run(d *Deps) error {
 	if filtered && view != "project" {
 		viewLabel = view
 	}
-	return output.PrintTaskList(d.Stdout, tasks, d.JSON, viewLabel)
+	if err := output.PrintTaskList(d.Stdout, tasks, d.JSON, viewLabel); err != nil {
+		return err
+	}
+	return printAgentHint(d, len(tasks))
 }
 
 func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
@@ -305,10 +315,18 @@ func (c *TagsCmd) Run(d *Deps) error {
 }
 
 type ShowCmd struct {
-	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
+	Task  string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
+	Agent bool   `help:"Print a self-contained Markdown brief for handing the item to an agent. Not combinable with --json."`
 }
 
 func (c *ShowCmd) Run(d *Deps) error {
+	// Before the lookup: an output format the CLI cannot serve is a mistake in
+	// the invocation, not something to report after the work is done.
+	if c.Agent {
+		if err := checkAgentFormat(d); err != nil {
+			return err
+		}
+	}
 	database, err := d.Database()
 	if err != nil {
 		return err
@@ -320,6 +338,9 @@ func (c *ShowCmd) Run(d *Deps) error {
 	items, err := database.GetChecklistItems(task.UUID)
 	if err != nil {
 		return err
+	}
+	if c.Agent {
+		return showAgentBrief(d, database, task, items)
 	}
 	return output.PrintTaskWithChecklist(d.Stdout, task, items, d.JSON)
 }
@@ -608,7 +629,12 @@ func (c *SearchCmd) Run(d *Deps) error {
 		return err
 	}
 	cacheTaskUUIDs(tasks)
-	return output.Print(d.Stdout, tasks, d.JSON)
+	if err := output.Print(d.Stdout, tasks, d.JSON); err != nil {
+		return err
+	}
+	// Search results are a numbered listing backed by the same cache as `list`,
+	// so the hint applies here too.
+	return printAgentHint(d, len(tasks))
 }
 
 type LogCmd struct{}
@@ -905,7 +931,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify, Config: cfg}
+	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify, Hints: cli.Hints, Config: cfg}
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {

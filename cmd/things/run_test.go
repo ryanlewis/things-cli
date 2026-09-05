@@ -188,7 +188,7 @@ func runStreams(t *testing.T, database *db.DB, args ...string) (string, string, 
 		t.Fatalf("parse %v: %v", args, err)
 	}
 	var stdout, stderr bytes.Buffer
-	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify, Config: cfg}
+	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify, Hints: cli.Hints, Config: cfg}
 	var runErr error
 	withSilentStdout(t, func() {
 		runErr = ctx.Run(deps)
