@@ -331,7 +331,7 @@ func TestJSONRequested(t *testing.T) {
 		{[]string{"add", "--", "--json"}, false},
 	}
 	for _, tc := range cases {
-		if got := jsonRequested(tc.args); got != tc.want {
+		if got := jsonRequested(false, tc.args); got != tc.want {
 			t.Errorf("jsonRequested(%v) = %v, want %v", tc.args, got, tc.want)
 		}
 	}

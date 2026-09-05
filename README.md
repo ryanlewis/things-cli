@@ -89,9 +89,58 @@ the same route, so `--json` never leaves a usage block on stdout. Without
 | Flag | Description | Default |
 | --- | --- | --- |
 | `-j, --json` | Output as JSON instead of plain text | `false` |
+| `--color MODE` | Colour output: `auto`, `always`, or `never` | `auto` |
 | `--db PATH` | Override the Things3 SQLite database path | auto-detected |
+| `--config PATH` | Read defaults from this config file instead of the default location | see [Configuration](#configuration) |
 | `--no-verify` | Skip the read-back that confirms a `complete`/`cancel` actually landed | `false` |
 | `-v, --version` | Print version, commit, and build date and exit (same as `things version`) | — |
+
+### Configuration
+
+A TOML file supplies defaults for the flags below, so you can set them once
+instead of typing them every time. Precedence is flag > config file >
+built-in default.
+
+The file is read from `$XDG_CONFIG_HOME/things-cli/config.toml`, falling
+back to `~/.config/things-cli/config.toml`. Override the location with
+`--config PATH` or the `THINGS_CLI_CONFIG` environment variable. A missing
+file is not an error — `things` runs on its built-in defaults.
+
+```sh
+things config init     # write a commented template (refuses to overwrite; --force to replace)
+things config path     # print the file in use and whether it exists
+things config show     # print the defaults the file establishes
+```
+
+Keys are the flag name in snake_case. The hyphenated spelling
+(`no-verify`) is accepted too, but `things config init` writes the
+snake_case form.
+
+| Key | Flag it sets | Type | Default |
+| --- | --- | --- | --- |
+| `json` | `--json` | boolean | `false` |
+| `color` | `--color` | `"auto"`, `"always"`, `"never"` | `"auto"` |
+| `db` | `--db` | string path (must exist) | auto-detected |
+| `no_verify` | `--no-verify` | boolean | `false` |
+| `strict_tags` | `--strict-tags` | boolean | `false` |
+| `create_tags` | `--create-tags` | boolean | `false` |
+
+```toml
+color = "always"
+strict_tags = true
+```
+
+`strict_tags` and `create_tags` are mutually exclusive; setting both to
+`true` is an error. Either one is still overridden by the other's flag on
+the command line.
+
+An unknown key, a value of the wrong type, or malformed TOML is an error
+that names the file and the key. Anything set here still loses to a flag,
+so `things --color never today` wins over `color = "always"`.
+
+Note for scripts and agents: `json = true` changes the output of every
+command. Pass `--json` (or `--json=false`) explicitly rather than relying
+on whatever the config file happens to say.
 
 ### Listing tasks
 
