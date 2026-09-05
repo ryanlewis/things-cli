@@ -34,6 +34,21 @@ func Print(w io.Writer, v any, asJSON bool) error {
 	}
 }
 
+// PrintTaskList renders a task listing. When view is non-empty it prefixes a
+// line naming the view the listing was drawn from, so a filtered slice of a
+// view is not mistaken for the filter target's full contents (issue #140).
+// JSON output is the plain task array either way.
+func PrintTaskList(w io.Writer, tasks []model.Task, asJSON bool, view string) error {
+	if asJSON {
+		return printJSON(w, tasks)
+	}
+	tw := newWriter(w)
+	if view != "" {
+		fmt.Fprintf(tw, "    %s\n", dimStyle.Render("view: "+view))
+	}
+	return printTasks(tw, tasks)
+}
+
 func PrintTaskWithChecklist(w io.Writer, t *model.Task, items []model.ChecklistItem, asJSON bool) error {
 	if asJSON {
 		type taskWithChecklist struct {

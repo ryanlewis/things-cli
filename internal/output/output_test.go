@@ -305,3 +305,56 @@ func TestProjectIconBuckets(t *testing.T) {
 		}
 	}
 }
+
+func TestPrintTaskListViewLabel(t *testing.T) {
+	tasks := []model.Task{{
+		UUID: "u1", Title: "Buy milk", Status: model.StatusOpen,
+		ProjectUUID: "p1", ProjectTitle: "Chores",
+	}}
+
+	var labelled bytes.Buffer
+	if err := PrintTaskList(&labelled, tasks, false, "today"); err != nil {
+		t.Fatalf("PrintTaskList: %v", err)
+	}
+	out := labelled.String()
+	if !strings.Contains(out, "view: today") {
+		t.Errorf("missing view label:\n%s", out)
+	}
+	if !strings.Contains(out, "Chores") || !strings.Contains(out, "Buy milk") {
+		t.Errorf("missing task rows:\n%s", out)
+	}
+
+	var plain bytes.Buffer
+	if err := PrintTaskList(&plain, tasks, false, ""); err != nil {
+		t.Fatalf("PrintTaskList: %v", err)
+	}
+	if strings.Contains(plain.String(), "view:") {
+		t.Errorf("unexpected view label:\n%s", plain.String())
+	}
+
+	// An empty listing still says which view it came from.
+	var empty bytes.Buffer
+	if err := PrintTaskList(&empty, nil, false, "today"); err != nil {
+		t.Fatalf("PrintTaskList: %v", err)
+	}
+	if !strings.Contains(empty.String(), "view: today") {
+		t.Errorf("empty listing lost its label:\n%s", empty.String())
+	}
+}
+
+// The view label is human output only — JSON stays a bare task array so
+// existing consumers keep parsing it.
+func TestPrintTaskListJSONIgnoresViewLabel(t *testing.T) {
+	tasks := []model.Task{{UUID: "u1", Title: "Buy milk", Status: model.StatusOpen}}
+	var buf bytes.Buffer
+	if err := PrintTaskList(&buf, tasks, true, "today"); err != nil {
+		t.Fatalf("PrintTaskList: %v", err)
+	}
+	var got []model.Task
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", buf.String(), err)
+	}
+	if len(got) != 1 || got[0].UUID != "u1" {
+		t.Errorf("got %+v, want one task u1", got)
+	}
+}

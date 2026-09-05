@@ -19,13 +19,20 @@ things <view>          # shortcut: things inbox, things today, etc.
 Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
 `logbook`, `trash`, `deadlines`.
 
-Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`:
+Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. On their
+own the filters cover every open task in the project, area, or tag; add a
+view and the filter applies within it, with the view named in the output:
 
 ```sh
+things -p "Launch v2"                # every open task in the project
+things today -p "Launch v2"          # today's slice of it, labelled "view: today"
 things upcoming -t urgent
 things anytime --area "Side projects"
 things --json list today | jq '.[] | .title'
 ```
+
+Tasks filed under a project heading belong to that project, so they appear
+under `-p` and under the project's area.
 
 `things projects`, `things areas`, and `things tags` list the
 collections themselves. `things projects` accepts `--area` and

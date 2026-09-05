@@ -120,25 +120,33 @@ func (c *ListCmd) Run(d *Deps) error {
 	}
 
 	view := "today"
+	explicitView := false
 	project := c.Project
 	args := c.Args
 
 	if len(args) > 0 && db.ValidView(args[0]) {
 		view = args[0]
+		explicitView = true
 		args = args[1:]
 	}
 	if project == "" && len(args) > 0 {
 		project = strings.Join(args, " ")
-		if view == "today" {
-			view = "project"
-		}
+	}
+
+	// A filter names what to list, so on its own it covers every open task
+	// rather than the Today slice the bare `things` default would apply
+	// (issue #140). An explicit view still wins: `things today --project X`
+	// is today within X, and says so in the output.
+	filtered := project != "" || c.Area != "" || c.Tag != ""
+	if filtered && !explicitView {
+		view = "project"
 	}
 
 	// --include-completed only changes the today view. Reject it elsewhere
-	// (including when a trailing project name promotes today → project) rather
-	// than silently ignoring it, matching how --on/--from/--to reject views.
+	// (including when a filter defaults today → project) rather than silently
+	// ignoring it, matching how --on/--from/--to reject views.
 	if c.IncludeCompleted && view != "today" {
-		return fmt.Errorf("--include-completed is only supported on the %q view", "today")
+		return fmt.Errorf("--include-completed is only supported on the %q view, not %q; name the view explicitly, e.g. `things today --project NAME`", "today", view)
 	}
 
 	filter := db.TaskFilter{
@@ -156,7 +164,15 @@ func (c *ListCmd) Run(d *Deps) error {
 		return err
 	}
 	cacheTaskUUIDs(tasks)
-	return output.Print(d.Stdout, tasks, d.JSON)
+
+	// A filtered listing off a view is a slice of that view, not the whole
+	// project/area/tag — label it so the group header can't be read as the
+	// full set. The "project" view is that full set, so it needs no label.
+	viewLabel := ""
+	if filtered && view != "project" {
+		viewLabel = view
+	}
+	return output.PrintTaskList(d.Stdout, tasks, d.JSON, viewLabel)
 }
 
 func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {

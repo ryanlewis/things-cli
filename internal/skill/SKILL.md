@@ -23,6 +23,12 @@ Human output is styled with colors and aligned columns. Color auto-disables when
 things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--include-completed]
     # views: today, inbox, upcoming, anytime, someday, logbook, trash, deadlines
     # shortcut: `things today`, `things inbox`, etc.
+    # No view: bare `things` is today, but --project/--area/--tag on their own
+    # list every open task in that project/area/tag. Name a view to scope the
+    # filter to it (`things today --project X`); human output then prints a
+    # `view: <name>` line so a slice isn't read as the whole project.
+    # Tasks under a project heading belong to that project — they match
+    # --project and the project's --area, and report projectTitle.
     # --on / --from / --to take YYYY-MM-DD (or RFC3339). They filter startDate
     # on most views and `deadline` on the `deadlines` view. Not supported on
     # inbox/trash/logbook/someday (someday items have no start date).
