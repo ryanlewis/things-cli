@@ -893,7 +893,7 @@ func main() {
 		// flag has to come from argv because parsing is what just failed.
 		if asJSON {
 			renderError(os.Stdout, os.Stderr, true, err)
-			os.Exit(1)
+			os.Exit(parseExitCode(err))
 		}
 		parser.FatalIfErrorf(err)
 	}
@@ -912,6 +912,28 @@ func main() {
 	}
 }
 
+// parseExitCode is the status kong would have exited with for a parse
+// failure: 80 for a usage error, 1 for one of the errors it raises without a
+// code of its own (a resolver or a hook). The --json branch above reports the
+// same failure kong would, so it has to exit the same way.
+func parseExitCode(err error) int {
+	var coder kong.ExitCoder
+	if errors.As(err, &coder) {
+		return coder.ExitCode()
+	}
+	return 1
+}
+
+// boolShorts are the single-letter flags that take no value. Only these can be
+// followed by more flags in a cluster: kong lets the first short that takes a
+// value swallow the rest of the cluster as that value. "f" is deliberately
+// absent — it is boolean on `config init` but a value flag on `import`, and
+// treating an ambiguous letter as value-taking only costs a fallback to kong's
+// plain-text usage, while the reverse would misread a filename.
+//
+// TestBoolShortsMatchesGrammar keeps this in step with the CLI struct.
+var boolShorts = map[byte]bool{'j': true, 'v': true, 'y': true}
+
 // jsonRequested reports whether argv asks for --json, starting from def — the
 // default the config file establishes. main needs the answer before kong has
 // parsed anything, because a parse error still has to be rendered in the mode
@@ -922,14 +944,67 @@ func jsonRequested(def bool, args []string) bool {
 		if a == "--" {
 			break
 		}
-		switch a {
-		case "-j", "--json", "--json=true":
-			asJSON = true
-		case "--json=false":
-			asJSON = false
+		flag, value, hasValue := strings.Cut(a, "=")
+		asks, takesValue := flagAsksJSON(flag)
+		if !asks {
+			continue
 		}
+		// --json=1 and --json=yes mean the same as --json. A value kong
+		// would not accept is kong's to complain about — leave the mode as
+		// it was rather than guess at what was meant.
+		on := true
+		if hasValue && takesValue {
+			b, ok := kongBool(value)
+			if !ok {
+				continue
+			}
+			on = b
+		}
+		asJSON = on
 	}
 	return asJSON
+}
+
+// kongBool parses an explicit flag value the way kong's bool mapper does:
+// true/1/yes and false/0/no, case-insensitively. strconv.ParseBool is a
+// different set — it takes "t" and "T" and rejects "yes" — so using it here
+// would disagree with the parser about what the caller asked for.
+func kongBool(v string) (value, ok bool) {
+	switch strings.ToLower(v) {
+	case "true", "1", "yes":
+		return true, true
+	case "false", "0", "no":
+		return false, true
+	}
+	return false, false
+}
+
+// flagAsksJSON reports whether one argv token names --json, and whether an
+// "=value" on it would belong to --json rather than to another flag in the
+// same cluster. Only a long flag really carries a value that way — kong does
+// not split a short on "=" at all, so `-j=false` is a parse error either way
+// — but answering for the cluster keeps a token like -vj=false from being
+// read as plain -j.
+//
+// kong clusters boolean shorts, so -vj is two flags and asks for JSON just as
+// -j does. Scanning stops at the first short that is not boolean, because that
+// one takes the rest of the cluster as its value: -pj is --project=j.
+func flagAsksJSON(flag string) (asks, takesValue bool) {
+	if flag == "--json" {
+		return true, true
+	}
+	if len(flag) < 2 || flag[0] != '-' || flag[1] == '-' {
+		return false, false
+	}
+	for i := 1; i < len(flag); i++ {
+		if flag[i] == 'j' {
+			return true, i == len(flag)-1
+		}
+		if !boolShorts[flag[i]] {
+			return false, false
+		}
+	}
+	return false, false
 }
 
 // isInteractive reports whether stdin is a terminal. It is a var so tests can

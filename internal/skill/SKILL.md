@@ -21,7 +21,7 @@ In JSON, `status` is a string enum — `"open"`, `"cancelled"`, or `"completed"`
 
 `--json` also means "never prompt": a reference that matches several tasks returns an error listing the candidates instead of dropping into the interactive picker, and a project `complete`/`cancel` declines rather than asking for confirmation.
 
-Under `--json`, a failure prints a single JSON object to **stdout** and exits non-zero, so parse stdout whether the command succeeded or not. The `error` field is a stable token; `message` is the human text.
+Under `--json`, a failure prints a single JSON object to **stdout** and exits non-zero, so branch on the exit status and read the failure off stdout rather than parsing stderr. (On success the read commands print their JSON result there; the write commands — `add`, `edit`, `complete`, `cancel`, `log`, `open` — print nothing.) The `error` field is a stable token; `message` is the human text.
 
 ```json
 {"error": "ambiguous task", "message": "...", "kind": "task", "query": "milk",

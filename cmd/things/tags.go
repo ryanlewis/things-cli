@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -75,14 +75,45 @@ func verifyTags(d *Deps, flags TagFlags, names []string) error {
 // commas, so joining with ", " would suggest a command that creates a tag
 // literally named "foo," — hence a space-separated, quoted list.
 func tagAddHint(names []string) string {
-	parts := make([]string, 0, len(names))
+	parts := make([]string, 0, len(names)+1)
 	for _, n := range names {
-		if strings.ContainsAny(n, " \t\"'\\`$") {
-			n = strconv.Quote(n)
+		// A name that starts with a dash would be read as a flag, not a
+		// positional — quoting stops the shell eating it but not the CLI, so
+		// the hint has to end flag parsing first.
+		if strings.HasPrefix(n, "-") {
+			parts = append(parts, "--")
+			break
 		}
-		parts = append(parts, n)
+	}
+	for _, n := range names {
+		parts = append(parts, shellQuote(n))
 	}
 	return "things tag add " + strings.Join(parts, " ")
+}
+
+// shellQuote makes name safe to paste into a POSIX shell. A tag name is
+// arbitrary user text, so the hint has to survive `R&D` (which bash would
+// split into two commands) and `$HOME` (which double quotes would expand) —
+// single quotes are the only form that suppresses every expansion, with the
+// usual '\” dance for an embedded quote.
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsFunc(s, needsShellQuoting) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// needsShellQuoting reports whether r has any meaning to a shell. It is an
+// allow-list: anything outside it gets quoted, so a character the list forgot
+// is merely quoted unnecessarily rather than left live.
+func needsShellQuoting(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return false
+	case r > unicode.MaxASCII:
+		return false
+	}
+	return !strings.ContainsRune("-_./:@+,%", r)
 }
 
 // createTags makes each missing tag in Things over AppleScript. It runs before
