@@ -100,3 +100,28 @@ jobs:
           subject-path: |
             dist/*.tar.gz
             dist/checksums.txt
+
+  # The site's version badge is derived from the newest v* tag, so the release
+  # has to exist before the site is rebuilt. goreleaser creates it with this
+  # workflow's own token, and a release made that way does not trigger other
+  # workflows — so ask for the rebuild explicitly. Dispatch on main rather than
+  # the tag: that is the ref Pages deploys from.
+  #
+  # A separate job on purpose: `actions: write` is scoped to a job, not a step,
+  # so granting it alongside the signing keys and the tap token would hand it
+  # to goreleaser and everything goreleaser downloads. Splitting it also keeps
+  # a failed dispatch from failing the release job itself — the artifacts are
+  # already published by then, and re-running that job would re-run goreleaser
+  # against a release that already exists.
+  rebuild-site:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Rebuild the site for the new version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No checkout in this job, so gh cannot infer the repo from a remote.
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run pages.yml --ref main
