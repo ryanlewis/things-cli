@@ -37,7 +37,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # `git describe` below needs both the tags and the commits
+          # connecting HEAD to them. The default shallow checkout has neither:
+          # actions/checkout passes --no-tags at depth 1, and adding
+          # fetch-tags: true brings the tag refs but not the history describe
+          # has to walk to reach them. Depth 0 fetches both, so describe
+          # resolves instead of silently falling back on every build.
+          fetch-depth: 0
           persist-credentials: false
+
+      # The landing page shows the current version. Take it from the newest v*
+      # tag reachable from this ref so a release updates the badge on its own;
+      # docs/hugo.toml keeps the value used for local builds.
+      - name: Resolve the released version
+        run: |
+          set -euo pipefail
+          if tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null); then
+            echo "HUGO_PARAMS_VERSION=${tag#v}" >> "$GITHUB_ENV"
+            echo "Building the site as version ${tag#v} (from tag ${tag})."
+          else
+            echo "No v* tag reachable from HEAD — keeping the version set in docs/hugo.toml."
+          fi
 
       - name: Install Hugo
         run: |
