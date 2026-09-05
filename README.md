@@ -250,8 +250,8 @@ stay untouched. An empty value clears the field (e.g. `--deadline ""`).
 | `--heading-id UUID` | ✓ | — | Set heading within project by UUID |
 | `--area NAME` | — | ✓ | Move project to area by name |
 | `--area-id UUID` | — | ✓ | Move project to area by UUID |
-| `--complete` | ✓ | ✓ | Mark as completed |
-| `--cancel` | ✓ | ✓ | Mark as canceled |
+| `--complete` | ✓ | ✓ | Mark as completed (not with `--cancel`) |
+| `--cancel` | ✓ | ✓ | Mark as canceled (not with `--complete`) |
 | `--duplicate` | ✓ | ✓ | Duplicate before applying edits |
 | `--reveal` | ✓ | ✓ | Reveal in Things after editing |
 

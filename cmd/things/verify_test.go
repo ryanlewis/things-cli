@@ -7,8 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/kong"
+
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/skill"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -61,7 +64,7 @@ func stubExecApplying(t *testing.T, sqlDB *sql.DB, uuid string, status int) {
 	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
 }
 
-// stubExecFailing mocks a write that reports success but changes nothing —
+// stubExecDropping mocks a write that reports success but changes nothing —
 // exactly what Things does when it drops a status update (issue #129).
 func stubExecDropping(t *testing.T) *int {
 	t.Helper()
@@ -202,5 +205,51 @@ func TestVerifyStatusTaskDisappeared(t *testing.T) {
 	err = verifyStatus(database, task, 3)
 	if err == nil || !strings.Contains(err.Error(), "no longer exists") {
 		t.Fatalf("verifyStatus after delete = %v, want a not-found error", err)
+	}
+}
+
+// A read that keeps failing has to surface once the deadline passes rather
+// than loop forever — the retry only covers transient errors.
+func TestVerifyStatusPersistentReadErrorSurfaces(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	task, err := database.GetTaskByUUID("one-1")
+	if err != nil {
+		t.Fatalf("GetTaskByUUID: %v", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	err = verifyStatus(database, task, 3)
+	if err == nil || !strings.Contains(err.Error(), "verifying status change") {
+		t.Fatalf("verifyStatus with an unreadable database = %v, want a read error", err)
+	}
+}
+
+// --complete and --cancel ask for two different end states, so the read-back
+// could not know which one to wait for. Kong rejects the pair at parse time.
+func TestEditRejectsCompleteAndCancelTogether(t *testing.T) {
+	cases := [][]string{
+		{"edit", "one-1", "--complete", "--cancel"},
+		{"project", "edit", "repproj-1", "--complete", "--cancel"},
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var cli CLI
+			parser, err := kong.New(&cli, kong.Name("things"),
+				kong.Vars{
+					"builtin_lists": strings.Join(things.BuiltinLists, ", "),
+					"skill_agents":  skill.AgentNames(),
+				},
+			)
+			if err != nil {
+				t.Fatalf("kong.New: %v", err)
+			}
+			_, err = parser.Parse(args)
+			if err == nil || !strings.Contains(err.Error(), "can't be used together") {
+				t.Fatalf("parse %v = %v, want a mutual-exclusion error", args, err)
+			}
+		})
 	}
 }

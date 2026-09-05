@@ -64,20 +64,25 @@ func restrictedEdits(when, deadline *string, complete, cancel, duplicate bool) [
 // verifyStatus re-reads the item until its status matches want, and reports an
 // error if it never does. Without this a write Things ignored is
 // indistinguishable from one it applied.
+//
+// A failed read is retried rather than returned: Things is writing to the same
+// database while we poll, and a transient SQLITE_BUSY there must not turn a
+// write that landed into a reported failure. A read that keeps failing is
+// surfaced once the deadline passes.
 func verifyStatus(database *db.DB, task *model.Task, want model.Status) error {
 	deadline := time.Now().Add(verifyTimeout)
 	for {
 		current, err := database.GetTaskByUUID(task.UUID)
-		if err != nil {
-			return fmt.Errorf("verifying status change: %w", err)
-		}
-		if current == nil {
+		switch {
+		case err != nil:
+			if !time.Now().Before(deadline) {
+				return fmt.Errorf("verifying status change: %w", err)
+			}
+		case current == nil:
 			return fmt.Errorf("verifying status change: %s no longer exists in the Things database", task.UUID)
-		}
-		if current.Status == want {
+		case current.Status == want:
 			return nil
-		}
-		if !time.Now().Before(deadline) {
+		case !time.Now().Before(deadline):
 			return fmt.Errorf("status change did not apply: %q (%s) is still %s after %s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app",
 				task.Title, task.UUID, current.Status, verifyTimeout)
 		}

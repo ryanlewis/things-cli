@@ -358,8 +358,8 @@ type ProjectEditCmd struct {
 	Area   *string `help:"Move to area by name."`
 	AreaID *string `help:"Move to area by UUID." name:"area-id"`
 
-	Complete  bool `help:"Mark the project as completed."`
-	Cancel    bool `help:"Mark the project as canceled."`
+	Complete  bool `help:"Mark the project as completed." xor:"status"`
+	Cancel    bool `help:"Mark the project as canceled." xor:"status"`
 	Duplicate bool `help:"Duplicate the project before applying edits."`
 	Reveal    bool `help:"Reveal the project in Things after editing."`
 }
@@ -429,8 +429,8 @@ type EditCmd struct {
 	Heading   *string `help:"Set heading within project by name."`
 	HeadingID *string `help:"Set heading by UUID." name:"heading-id"`
 
-	Complete  bool `help:"Mark the task as completed."`
-	Cancel    bool `help:"Mark the task as canceled."`
+	Complete  bool `help:"Mark the task as completed." xor:"status"`
+	Cancel    bool `help:"Mark the task as canceled." xor:"status"`
 	Duplicate bool `help:"Duplicate the task before applying edits."`
 	Reveal    bool `help:"Reveal the task in Things after editing."`
 }
@@ -494,17 +494,14 @@ func (c *CompleteCmd) Run(d *Deps) error {
 	if err := checkRepeating(task, []string{"completed"}); err != nil {
 		return err
 	}
+	write := func() error { return things.CompleteTask(task.UUID) }
 	if task.Type == model.TypeProject {
 		if !confirmAction(fmt.Sprintf("Complete project %q? This will also complete all its tasks.", task.Title)) {
 			return fmt.Errorf("cancelled")
 		}
-		return applyStatusWrite(d, database, task, model.StatusCompleted, func() error {
-			return things.CompleteProject(task.UUID)
-		})
+		write = func() error { return things.CompleteProject(task.UUID) }
 	}
-	return applyStatusWrite(d, database, task, model.StatusCompleted, func() error {
-		return things.CompleteTask(task.UUID)
-	})
+	return applyStatusWrite(d, database, task, model.StatusCompleted, write)
 }
 
 type CancelCmd struct {
@@ -523,17 +520,14 @@ func (c *CancelCmd) Run(d *Deps) error {
 	if err := checkRepeating(task, []string{"canceled"}); err != nil {
 		return err
 	}
+	write := func() error { return things.CancelTask(task.UUID) }
 	if task.Type == model.TypeProject {
 		if !confirmAction(fmt.Sprintf("Cancel project %q? This will also cancel all its tasks.", task.Title)) {
 			return fmt.Errorf("cancelled")
 		}
-		return applyStatusWrite(d, database, task, model.StatusCancelled, func() error {
-			return things.CancelProject(task.UUID)
-		})
+		write = func() error { return things.CancelProject(task.UUID) }
 	}
-	return applyStatusWrite(d, database, task, model.StatusCancelled, func() error {
-		return things.CancelTask(task.UUID)
-	})
+	return applyStatusWrite(d, database, task, model.StatusCancelled, write)
 }
 
 type SearchCmd struct {

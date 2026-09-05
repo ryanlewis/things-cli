@@ -13,10 +13,11 @@ import (
 type DB struct {
 	db *sql.DB
 
-	// repeatSQL caches the probed recurrence-column expression; see
-	// (*DB).repeatingExpr.
-	repeatOnce sync.Once
-	repeatSQL  string
+	// repeatSQL caches the probed recurrence-column expression and
+	// repeatQuery the task query built from it; see (*DB).probeRepeating.
+	repeatOnce  sync.Once
+	repeatSQL   string
+	repeatQuery string
 }
 
 // FindDBPath locates the Things3 SQLite database.

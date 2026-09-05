@@ -8,6 +8,7 @@ today, upcoming, projects, or areas on macOS.
 - Reads (`list`, `show`, `projects`, `areas`, `tags`, `search`) are safe — use freely.
 - Writes (`add`, `project add`, `edit`, `complete`, `cancel`, `log`, `open`) modify the user's real data. Confirm before destructive ones (`complete`, `cancel`, bulk `edit`).
 - `edit`, `project edit`, and `import` payloads with `operation: update` require *Things → Settings → General → Enable Things URLs*. The error to recognise: `update: auth token is required — enable Things URLs in Things → Settings → General …`.
+- `--complete` and `--cancel` are mutually exclusive on `edit` and `project edit`.
 - `complete` and `cancel` (and `edit --complete` / `--cancel`) read the item back afterwards and exit non-zero if the status did not change. Treat a non-zero exit as "the task is still open" — do not report it as done.
 
 ## Output

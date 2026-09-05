@@ -15,8 +15,18 @@ var recurrenceColumns = []string{"rt1_recurrenceRule", "recurrenceRule"}
 // and 0 otherwise, aliased against the `t` TMTask row. The probe runs once per
 // DB and the result is cached.
 func (d *DB) repeatingExpr() string {
+	d.probeRepeating()
+	return d.repeatSQL
+}
+
+// probeRepeating resolves the recurrence expression and the assembled task
+// query once per DB.
+func (d *DB) probeRepeating() {
 	d.repeatOnce.Do(func() {
 		d.repeatSQL = "0"
+		defer func() {
+			d.repeatQuery = strings.Replace(baseTaskQuery, repeatingPlaceholder, d.repeatSQL, 1)
+		}()
 		cols, err := d.tableColumns("TMTask")
 		if err != nil {
 			return
@@ -28,7 +38,6 @@ func (d *DB) repeatingExpr() string {
 			}
 		}
 	})
-	return d.repeatSQL
 }
 
 // tableColumns returns the column names of table. The name is interpolated
@@ -61,7 +70,8 @@ func (d *DB) tableColumns(table string) (map[string]bool, error) {
 	return cols, nil
 }
 
-// taskQuery fills the repeating placeholder in baseTaskQuery.
+// taskQuery returns baseTaskQuery with the repeating placeholder filled in.
 func (d *DB) taskQuery() string {
-	return strings.Replace(baseTaskQuery, repeatingPlaceholder, d.repeatingExpr(), 1)
+	d.probeRepeating()
+	return d.repeatQuery
 }
