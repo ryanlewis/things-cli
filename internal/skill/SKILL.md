@@ -68,7 +68,7 @@ things edit <task> [--title --notes --prepend-notes --append-notes --when --dead
 things complete <task>          # task or project; project completion asks to confirm
 things cancel <task>            # task or project; project cancellation asks to confirm
 things log                      # move Today → Logbook
-things --no-verify complete <task>   # skip the read-back (rarely needed)
+things --no-verify complete <task>   # skip the read-back (rarely needed; also applies to import)
 things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
     # ref: task/project UUID, numeric list index, title, or built-in list name
     #      (today, inbox, upcoming, anytime, someday, repeating, logbook, trash,
@@ -79,6 +79,8 @@ things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
 things import [--file F] [--reveal] [--strict-tags | --create-tags] < payload.json
     # batch create/update via the Things JSON URL scheme
     # payload is the array documented at culturedcode.com/things/support/articles/2803573/
+    # update items on repeating to-dos/projects are refused up front (see below)
+    # update items setting completed/canceled are read back afterwards
 ```
 
 ### Repeating to-dos and projects
@@ -93,6 +95,19 @@ on repeating to-dos and drops the request silently (…). Change it in the Thing
 ```
 
 There is no CLI workaround — the user has to make the change in the Things app. Every other attribute (`--title`, `--notes`, `--tags`, `--list`, …) edits normally.
+
+`import` applies the same check per item. If any `operation: update` item sets `when`, `deadline`, `completed` or `canceled` on a repeating to-do or project, the whole import is refused before anything is sent — the URL scheme takes one payload and reports nothing per item, so there is no way to send the rest and say what was skipped. The error names each offending item by its position in the payload (nested items included, e.g. `[2].attributes.items[0]`), its id, its title and the blocked attributes. Fix or drop those items and run the import again.
+
+### Confirming a status change landed
+
+Things has no callback for writes, so after a `complete`, a `cancel`, or an `import` item that sets `completed`/`canceled`, the CLI re-reads the item from the database and exits non-zero if the status never changed. An import checks every such item before reporting, one stderr line each, and the whole batch shares one timeout budget:
+
+```
+import: [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. …
+Error: 1 of 2 requested status changes did not apply (listed above). …
+```
+
+The rest of the import is already applied at that point — re-run with only the failed items. `--no-verify` skips the read-back; it does not skip the repeating refusal above, which is a documented rule rather than a guess about what Things did.
 
 ### Tags must already exist
 

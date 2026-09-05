@@ -61,33 +61,78 @@ func restrictedEdits(when, deadline *string, complete, cancel, duplicate bool) [
 	return blocked
 }
 
-// verifyStatus re-reads the item until its status matches want, and reports an
-// error if it never does. Without this a write Things ignored is
-// indistinguishable from one it applied.
+// statusWant pairs an item with the status a write asked Things to move it to.
+type statusWant struct {
+	uuid  string
+	title string
+	want  model.Status
+}
+
+// verifyStatuses re-reads each item until its status matches the one requested,
+// and reports per item whether the change landed. The returned slice is
+// parallel to wants; a nil entry means that item is confirmed. Without this a
+// write Things ignored is indistinguishable from one it applied.
+//
+// One budget covers the whole batch and items are polled in rounds, so an
+// import asking for ten completions waits the same as a single one rather than
+// ten times as long. Things applies a payload's items together, so a round is
+// also the shape that matches how the changes actually show up.
 //
 // A failed read is retried rather than returned: Things is writing to the same
 // database while we poll, and a transient SQLITE_BUSY there must not turn a
 // write that landed into a reported failure. A read that keeps failing is
 // surfaced once the deadline passes.
-func verifyStatus(database *db.DB, task *model.Task, want model.Status) error {
-	deadline := time.Now().Add(verifyTimeout)
-	for {
-		current, err := database.GetTaskByUUID(task.UUID)
-		switch {
-		case err != nil:
-			if !time.Now().Before(deadline) {
-				return fmt.Errorf("verifying status change: %w", err)
-			}
-		case current == nil:
-			return fmt.Errorf("verifying status change: %s no longer exists in the Things database", task.UUID)
-		case current.Status == want:
-			return nil
-		case !time.Now().Before(deadline):
-			return fmt.Errorf("status change did not apply: %q (%s) is still %s after %s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app",
-				task.Title, task.UUID, current.Status, verifyTimeout)
-		}
-		verifySleep(verifyInterval)
+func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) []error {
+	results := make([]error, len(wants))
+	pending := make([]int, len(wants))
+	for i := range wants {
+		pending[i] = i
 	}
+
+	deadline := time.Now().Add(budget)
+	for len(pending) > 0 {
+		// Read the clock once per round so every item in it is judged against
+		// the same deadline.
+		expired := !time.Now().Before(deadline)
+		var next []int
+		for _, i := range pending {
+			w := wants[i]
+			current, err := database.GetTaskByUUID(w.uuid)
+			switch {
+			case err != nil:
+				if expired {
+					results[i] = fmt.Errorf("verifying status change: %w", err)
+					continue
+				}
+			case current == nil:
+				results[i] = fmt.Errorf("verifying status change: %s no longer exists in the Things database", w.uuid)
+				continue
+			case current.Status == w.want:
+				continue
+			case expired:
+				results[i] = fmt.Errorf("status change did not apply: %q (%s) is still %s after %s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app",
+					w.title, w.uuid, current.Status, budget)
+				continue
+			}
+			next = append(next, i)
+		}
+		pending = next
+		if expired {
+			// Every item was judged in this round; anything still listed would
+			// only spin.
+			break
+		}
+		if len(pending) > 0 {
+			verifySleep(verifyInterval)
+		}
+	}
+	return results
+}
+
+// verifyStatus re-reads a single item until its status matches want, and
+// reports an error if it never does.
+func verifyStatus(database *db.DB, task *model.Task, want model.Status) error {
+	return verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, verifyTimeout)[0]
 }
 
 // applyStatusWrite runs a status-changing write and confirms it landed, unless

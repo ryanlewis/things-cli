@@ -301,7 +301,9 @@ stay untouched. An empty value clears the field (e.g. `--deadline ""`).
 > request silently instead of reporting an error
 > ([docs](https://culturedcode.com/things/support/articles/2803573/)). The CLI
 > checks first and exits non-zero with an explanation. Every other flag works
-> normally; the restricted changes have to be made in the Things app.
+> normally; the restricted changes have to be made in the Things app. `import`
+> makes the same check per `operation: update` item — see [Repeating items in an
+> import payload](#repeating-items-in-an-import-payload).
 
 Examples:
 
@@ -390,7 +392,9 @@ and exits non-zero if the status did not change. Things has no callback for
 writes, so without this check a request it silently dropped is
 indistinguishable from one it applied. Repeating items are refused up front
 (see the note under [Editing](#editing-tasks-and-projects)); the read-back
-catches anything else — for example Things not running.
+catches anything else — for example Things not running. `import` does both, per
+item — see [Reading back an import's status
+changes](#reading-back-an-imports-status-changes).
 
 ```text
 $ things cancel W1gBDJPFpwUQrdP5Am5K7J
@@ -399,7 +403,9 @@ $ echo $?
 1
 ```
 
-Pass `--no-verify` to skip the check when you do not want to wait for it.
+Pass `--no-verify` to skip the check when you do not want to wait for it. It
+skips read-backs only; the up-front refusal of a restricted change on a
+repeating item is not affected.
 
 ### Revealing items in Things3
 
@@ -453,6 +459,35 @@ things import --file payload.json --reveal
 ```
 
 Note: macOS `open` has a URL length limit; split very large payloads.
+
+#### Repeating items in an import payload
+
+An `operation: update` item goes through the same repeating check as `edit`. If any item in the payload sets `when`, `deadline`, `completed` or `canceled` on a repeating to-do or project, the whole import is refused and nothing is sent:
+
+```text
+$ things import --file reschedule.json
+Error: 2 of 3 update items change attributes Things does not allow on repeating items, and drops the request silently (https://culturedcode.com/things/support/articles/2803573/). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:
+  [1] (id abc…): "Water plants" is a repeating to-do — when, deadline
+  [2].attributes.items[0] (id def…): "Weekly review" is a repeating project — canceled
+```
+
+The refusal is all-or-nothing because the URL scheme takes one payload and gives no per-item result: there is no way to send the rest and report what was skipped. Each offending item is named by its position in the payload (nested items included), its id, its title and the blocked attributes, so a payload can be fixed in one pass. `--no-verify` does not lift the refusal — it is a documented restriction, not a read-back.
+
+Update items whose `id` is not in the database get a stderr warning; Things reports those itself, and the import still goes ahead.
+
+#### Reading back an import's status changes
+
+After the payload is sent, every update item that set `completed` or `canceled` is re-read from the database, for the same reason `complete` and `cancel` are (below). Every item is checked before anything is reported, and the whole batch shares one timeout budget rather than one per item:
+
+```text
+$ things import --file finish.json
+import: [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
+Error: 1 of 2 requested status changes did not apply (listed above). The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app
+$ echo $?
+1
+```
+
+Unlike the refusal above, this happens after the write: the items that did land stay landed. `--no-verify` skips it.
 
 ### Date values
 

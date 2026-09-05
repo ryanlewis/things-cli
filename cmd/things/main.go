@@ -35,7 +35,7 @@ type CLI struct {
 	DB      string           `help:"Override database path." type:"existingfile"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
-	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel or tag creation actually landed." name:"no-verify" default:"false"`
+	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
 
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,repeating,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`
@@ -738,6 +738,12 @@ func (c *ImportCmd) Run(d *Deps) error {
 	if err := verifyTags(d, c.TagFlags, importTags(data)); err != nil {
 		return err
 	}
+	// Refuse before anything is sent if any `operation: update` item would
+	// change an attribute Things drops silently on a repeating item.
+	plan, err := prepareImport(d, database, data)
+	if err != nil {
+		return err
+	}
 	token, err := database.GetAuthToken()
 	if err != nil {
 		// Don't fail the import — the payload may be create-only and not need
@@ -745,7 +751,10 @@ func (c *ImportCmd) Run(d *Deps) error {
 		// `operation: update` failure aren't left guessing.
 		fmt.Fprintf(d.errOut(), "warning: could not read Things auth token: %v\n", err)
 	}
-	return things.ImportJSON(string(data), token, c.Reveal)
+	if err := things.ImportJSON(string(data), token, c.Reveal); err != nil {
+		return err
+	}
+	return verifyImportStatuses(d, database, plan)
 }
 
 type OpenCmd struct {
