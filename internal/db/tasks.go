@@ -292,8 +292,10 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 		return t, nil
 	}
 
-	// Try exact title match
-	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading + " GROUP BY t.uuid LIMIT 1"
+	// Try exact title match. Only one row comes back, so the ordering is the
+	// whole decision: templates last (issue #156).
+	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+		" GROUP BY t.uuid " + d.templatesLastOrder() + " LIMIT 1"
 	row := d.db.QueryRow(query, uuidOrTitle)
 	task, err := scanTask(row)
 	if err == nil {
@@ -319,8 +321,28 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 }
 
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading + " GROUP BY t.uuid ORDER BY t.\"index\" ASC"
+	query := d.taskQuery() + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, "%"+substr+"%")
+}
+
+// templatesLastOrder orders a title lookup so repeating templates sort after
+// ordinary to-dos, keeping t."index" as the tiebreak the lookups have always
+// used.
+//
+// A repeating to-do exists twice: the template carrying the recurrence rule,
+// and the instance Things generated from it, sharing its title. The template
+// is never what "complete Water plants" means — writes to it are refused
+// outright (issue #143) — so a lookup that picked it stranded the user on an
+// error while an actionable instance sat next to it (issue #156). Ordering
+// rather than filtering keeps the template reachable when it is the only match,
+// which is what `things show` on a template-only title should still do.
+//
+// "<col> IS NOT NULL" yields 0 for instances and 1 for templates, so ASC puts
+// instances first. On a schema with no recurrence column the expression is
+// "NULL IS NOT NULL" — 0 for every row, leaving the index order untouched.
+func (d *DB) templatesLastOrder() string {
+	return `ORDER BY ` + d.recurrenceCol() + ` IS NOT NULL ASC, t."index" ASC`
 }
 
 // TaskNotFoundError reports a reference that matched no task. It is typed so

@@ -566,3 +566,36 @@ func TestRunListHeadingTaskShowsProject(t *testing.T) {
 		t.Errorf("headingTitle = %q, want Weekly", task.HeadingTitle)
 	}
 }
+
+// A repeating template and the to-do it generated share a title. `things show
+// "Water plants"` has to land on the generated to-do — the template refuses
+// completes and cancels, so resolving to it strands the user (issue #156).
+func TestRunShowPrefersGeneratedTodoOverTemplate(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask
+			(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule) VALUES
+			('tpl-water',  'Water plants', 0, 0, 0, 2, 0, NULL, 1, x'0102'),
+			('inst-water', 'Water plants', 0, 0, 0, 1, 0, ?,    2, NULL)`,
+		today,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	database := db.NewFromSQL(sqlDB)
+
+	out, err := runOut(t, database, "--json", "show", "Water plants")
+	if err != nil {
+		t.Fatalf("run show: %v", err)
+	}
+	var task model.Task
+	if err := json.Unmarshal([]byte(out), &task); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if task.UUID != "inst-water" {
+		t.Errorf("uuid = %q, want inst-water", task.UUID)
+	}
+	if task.Repeating {
+		t.Error("resolved the template, not the generated to-do")
+	}
+}

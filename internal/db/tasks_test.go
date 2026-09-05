@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -883,5 +884,126 @@ func TestSearchTasksExcludesHeadings(t *testing.T) {
 	}
 	if !sameSet(uuidsOf(proj), []string{"proj-1"}) {
 		t.Errorf("project search: got %v, want [proj-1]", uuidsOf(proj))
+	}
+}
+
+// --- repeating template vs. its instance in title lookups (issue #156) ---
+
+// seedTemplateAndInstance creates a repeating to-do the way Things stores one:
+// a template carrying the recurrence rule (start=2/someday-ish, no startDate)
+// and the instance generated from it (start=1, scheduled, no rule), sharing a
+// title. The template is given the lower "index" so index order alone would
+// pick it — the ordering under test is what puts the instance first.
+func seedTemplateAndInstance(t *testing.T, d *DB) {
+	t.Helper()
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule) VALUES
+		('tpl-water',  'Water plants', 0, 0, 0, 2, 0, NULL, 1, x'0102'),
+		('inst-water', 'Water plants', 0, 0, 0, 1, 0, ?,    2, NULL)`,
+		today)
+}
+
+// `things complete "Water plants"` must land on the instance: the template
+// refuses writes (issue #143), so resolving to it strands the user.
+func TestGetTaskExactTitlePrefersInstance(t *testing.T) {
+	d := newTestDB(t)
+	seedTemplateAndInstance(t, d)
+
+	got, err := d.GetTask("Water plants")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.UUID != "inst-water" {
+		t.Errorf("got %q (repeating=%v), want inst-water", got.UUID, got.Repeating)
+	}
+	if got.Repeating {
+		t.Error("resolved row should not be the template")
+	}
+}
+
+// The template is still reachable when nothing else matches — ordering, not
+// filtering, so `things show` on a template-only title keeps working.
+func TestGetTaskExactTitleTemplateOnly(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, "index", rt1_recurrenceRule) VALUES
+		('tpl-only', 'Pay rent', 0, 0, 0, 2, 1, x'0102')`)
+
+	got, err := d.GetTask("Pay rent")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.UUID != "tpl-only" || !got.Repeating {
+		t.Errorf("got %+v, want the template", got)
+	}
+}
+
+// The LIKE path feeds the disambiguation picker, so the instance has to be the
+// first thing offered there too.
+func TestFindTasksByTitleOrdersTemplatesLast(t *testing.T) {
+	d := newTestDB(t)
+	seedTemplateAndInstance(t, d)
+
+	got, err := d.FindTasksByTitle("Water")
+	if err != nil {
+		t.Fatalf("FindTasksByTitle: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %v, want both rows", uuidsOf(got))
+	}
+	if got[0].UUID != "inst-water" || got[1].UUID != "tpl-water" {
+		t.Errorf("order = %v, want [inst-water tpl-water]", uuidsOf(got))
+	}
+}
+
+// A partial title matching only the pair resolves through the LIKE path's
+// ambiguity branch; the candidates it reports are ordered the same way.
+func TestGetTaskAmbiguousListsInstanceFirst(t *testing.T) {
+	d := newTestDB(t)
+	seedTemplateAndInstance(t, d)
+
+	_, err := d.GetTask("ater plant")
+	var ambig *AmbiguousTaskError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if len(ambig.Matches) != 2 || ambig.Matches[0].UUID != "inst-water" {
+		t.Errorf("matches = %v, want inst-water first", uuidsOf(ambig.Matches))
+	}
+}
+
+// With no recurrence column the ordering expression is a constant, so title
+// lookups fall back to plain index order rather than failing.
+func TestTitleLookupsWithoutRecurrenceColumn(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	if _, err := sqlDB.Exec(`ALTER TABLE TMTask DROP COLUMN rt1_recurrenceRule`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+			('a', 'Water plants', 0, 0, 0, 1),
+			('b', 'Water plants', 0, 0, 0, 2)`,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	d := &DB{db: sqlDB}
+
+	got, err := d.GetTask("Water plants")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.UUID != "a" {
+		t.Errorf("got %q, want the lowest index", got.UUID)
+	}
+
+	matches, err := d.FindTasksByTitle("Water")
+	if err != nil {
+		t.Fatalf("FindTasksByTitle: %v", err)
+	}
+	if !sameSet(uuidsOf(matches), []string{"a", "b"}) {
+		t.Errorf("got %v", uuidsOf(matches))
 	}
 }

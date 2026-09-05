@@ -85,6 +85,8 @@ things import [--file F] [--reveal] [--strict-tags | --create-tags] < payload.js
 
 A repeating to-do is stored as a template plus the to-dos it generates. `things repeating` lists the templates; they do not appear in `someday` or any other view except `trash` and `logbook`, which report what the database holds. The generated to-dos carry no recurrence rule of their own, so they list as ordinary tasks under `today`, `upcoming` and the rest.
 
+A template and its generated to-do share a title, so a title lookup — `things show/edit/complete/cancel <title>` — resolves to the generated to-do, the one that can actually be completed. To reach the template, use its UUID or the numeric index from `things repeating`.
+
 Things refuses to update `when`, `deadline`, completed/canceled status, and duplication on repeating items, and drops the request silently rather than reporting an error. The CLI checks first and fails with a non-zero exit:
 
 ```

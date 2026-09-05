@@ -145,6 +145,11 @@ tasks and show up in `today`, `upcoming` and the rest as usual. Templates are
 kept out of every other view except `trash` and `logbook`, which report what
 the database holds.
 
+A template and the to-do it generated share a title, so a title lookup —
+`things show`, `edit`, `complete`, `cancel` — resolves to the generated to-do,
+which is the one that can be completed. Reach the template by UUID, or by the
+numeric index from `things repeating`.
+
 The date filters (`--on`, `--from`, `--to`) apply to date-filterable views —
 `today`, `upcoming`, `anytime`, `deadlines`, and project listings (`someday`
 items have no start date, so they can't be date-filtered, and neither can
