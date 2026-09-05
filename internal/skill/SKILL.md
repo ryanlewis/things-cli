@@ -19,6 +19,19 @@ Tasks and projects carry `"repeating": true` in JSON when Things treats them as 
 
 In JSON, `status` is a string enum — `"open"`, `"cancelled"`, or `"completed"` (not the raw Things integer) — on tasks, projects, and checklist items. Filter with e.g. `jq 'select(.status=="open")'`.
 
+`--json` also means "never prompt": a reference that matches several tasks returns an error listing the candidates instead of dropping into the interactive picker, and a project `complete`/`cancel` declines rather than asking for confirmation.
+
+Under `--json`, a failure prints a single JSON object to **stdout** and exits non-zero, so parse stdout whether the command succeeded or not. The `error` field is a stable token; `message` is the human text.
+
+```json
+{"error": "ambiguous task", "message": "...", "kind": "task", "query": "milk",
+ "matches": [{"uuid": "...", "title": "Buy milk", "project": "Chores"}]}
+{"error": "not found", "message": "task not found: milk", "kind": "task", "query": "milk"}
+{"error": "error", "message": "..."}
+```
+
+This covers argument and flag errors too — `things --json show` with no argument returns the JSON object rather than a usage block. On `ambiguous task`, retry with one of the `matches[].uuid`. Without `--json`, errors stay as a plain `Error: ...` line on stderr.
+
 Human output is styled with colors and aligned columns. Color auto-disables when piping or when `NO_COLOR` is set. Override with `--color=always|never` (default `auto`). JSON output is unaffected.
 
 ## Core commands
@@ -158,6 +171,6 @@ things --json list today | jq '.[] | .title'
 
 ## Tips
 
-- Prefer `--json` in scripted contexts.
+- Prefer `--json` in scripted contexts — it also guarantees the command never blocks on a prompt.
 - After a `list`/`search`, numeric indices stay valid until the next one.
 - Use `things open` when the user wants to *see* something in the app rather than read data back.

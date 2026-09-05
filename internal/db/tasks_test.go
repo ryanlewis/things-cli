@@ -454,6 +454,17 @@ func TestGetTaskNotFound(t *testing.T) {
 	if errors.As(err, &ambig) {
 		t.Errorf("should not be ambiguous: %v", err)
 	}
+	// Typed so callers can render it as structured output (issue #152).
+	var notFound *TaskNotFoundError
+	if !errors.As(err, &notFound) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if notFound.Query != "zzz-does-not-exist-xyz" {
+		t.Errorf("Query = %q", notFound.Query)
+	}
+	if notFound.Error() != "task not found: zzz-does-not-exist-xyz" {
+		t.Errorf("Error() = %q", notFound.Error())
+	}
 }
 
 func TestSearchTasksTitleAndNotes(t *testing.T) {

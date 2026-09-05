@@ -80,6 +80,13 @@ func (d *Deps) errOut() io.Writer {
 	return d.Stderr
 }
 
+// interactive reports whether the process may prompt the user. --json means a
+// machine is reading stdout, so a prompt would hang it — the flag implies
+// non-interactive regardless of whether stdin is a terminal (issue #152).
+func (d *Deps) interactive() bool {
+	return !d.JSON && isInteractive()
+}
+
 // Database returns the lazily-opened DB. Subsequent calls return the same
 // handle. Callers must call (*Deps).Close to release it.
 func (d *Deps) Database() (*db.DB, error) {
@@ -283,7 +290,7 @@ func (c *ShowCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	task, err := resolveTask(c.Task, database)
+	task, err := resolveTask(d, c.Task, database)
 	if err != nil {
 		return err
 	}
@@ -391,7 +398,7 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	project, err := resolveTask(c.Project, database)
+	project, err := resolveTask(d, c.Project, database)
 	if err != nil {
 		return err
 	}
@@ -468,7 +475,7 @@ func (c *EditCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	task, err := resolveTask(c.Task, database)
+	task, err := resolveTask(d, c.Task, database)
 	if err != nil {
 		return err
 	}
@@ -519,7 +526,7 @@ func (c *CompleteCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	task, err := resolveTask(c.Task, database)
+	task, err := resolveTask(d, c.Task, database)
 	if err != nil {
 		return err
 	}
@@ -528,8 +535,8 @@ func (c *CompleteCmd) Run(d *Deps) error {
 	}
 	write := func() error { return things.CompleteTask(task.UUID) }
 	if task.Type == model.TypeProject {
-		if !confirmAction(fmt.Sprintf("Complete project %q? This will also complete all its tasks.", task.Title)) {
-			return fmt.Errorf("cancelled")
+		if err := confirmProjectStatusChange(d, "Complete", task.Title); err != nil {
+			return err
 		}
 		write = func() error { return things.CompleteProject(task.UUID) }
 	}
@@ -545,7 +552,7 @@ func (c *CancelCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	task, err := resolveTask(c.Task, database)
+	task, err := resolveTask(d, c.Task, database)
 	if err != nil {
 		return err
 	}
@@ -554,8 +561,8 @@ func (c *CancelCmd) Run(d *Deps) error {
 	}
 	write := func() error { return things.CancelTask(task.UUID) }
 	if task.Type == model.TypeProject {
-		if !confirmAction(fmt.Sprintf("Cancel project %q? This will also cancel all its tasks.", task.Title)) {
-			return fmt.Errorf("cancelled")
+		if err := confirmProjectStatusChange(d, "Cancel", task.Title); err != nil {
+			return err
 		}
 		write = func() error { return things.CancelProject(task.UUID) }
 	}
@@ -608,10 +615,10 @@ func (c *SkillInstallCmd) Run(d *Deps) error {
 		return err
 	}
 	if skill.Exists(agent, dir) && !c.Yes {
-		if !isInteractive() {
+		if !d.interactive() {
 			return fmt.Errorf("skill already installed at %s — pass -y to overwrite", dir)
 		}
-		if !confirmAction(fmt.Sprintf("Skill already installed at %s. Overwrite?", dir)) {
+		if !confirmAction(d, fmt.Sprintf("Skill already installed at %s. Overwrite?", dir)) {
 			return fmt.Errorf("cancelled")
 		}
 	}
@@ -646,10 +653,10 @@ func (c *SkillUninstallCmd) Run(d *Deps) error {
 		fmt.Fprintf(os.Stderr, "  - %s\n", f)
 	}
 	if !c.Yes {
-		if !isInteractive() {
+		if !d.interactive() {
 			return fmt.Errorf("refusing to uninstall non-interactively — pass -y to confirm")
 		}
-		if !confirmAction(fmt.Sprintf("Remove %s skill at %s?", agent.Name(), dir)) {
+		if !confirmAction(d, fmt.Sprintf("Remove %s skill at %s?", agent.Name(), dir)) {
 			return fmt.Errorf("cancelled")
 		}
 	}
@@ -777,7 +784,7 @@ func (c *OpenCmd) Run(d *Deps) error {
 			return "", err
 		}
 		if uuid == "" {
-			return "", fmt.Errorf("%s not found: %s", kind, name)
+			return "", &notFoundError{Kind: kind, Query: name}
 		}
 		return uuid, nil
 	}
@@ -798,7 +805,7 @@ func (c *OpenCmd) Run(d *Deps) error {
 		}
 		params.ID = uuid
 	case c.Project != "":
-		task, err := resolveTask(c.Project, database)
+		task, err := resolveTask(d, c.Project, database)
 		if err != nil {
 			return err
 		}
@@ -806,7 +813,7 @@ func (c *OpenCmd) Run(d *Deps) error {
 	case things.IsBuiltinList(c.Ref):
 		params.ID = c.Ref
 	default:
-		task, err := resolveTask(c.Ref, database)
+		task, err := resolveTask(d, c.Ref, database)
 		if err != nil {
 			return err
 		}
@@ -836,10 +843,20 @@ func main() {
 	kongplete.Complete(parser)
 
 	ctx, err := parser.Parse(os.Args[1:])
-	parser.FatalIfErrorf(err)
+	if err != nil {
+		// kong's UsageOnError writes the usage block to stdout, which under
+		// --json would leave a consumer parsing help text instead of the JSON
+		// object it was promised. Render the failure as JSON instead — the
+		// flag has to come from argv because parsing is what just failed.
+		if jsonRequested(os.Args[1:]) {
+			renderError(os.Stdout, os.Stderr, true, err)
+			os.Exit(1)
+		}
+		parser.FatalIfErrorf(err)
+	}
 
 	if err := output.SetColorMode(cli.Color); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		renderError(os.Stdout, os.Stderr, cli.JSON, err)
 		os.Exit(2)
 	}
 
@@ -847,12 +864,34 @@ func main() {
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		renderError(os.Stdout, os.Stderr, cli.JSON, err)
 		os.Exit(1)
 	}
 }
 
-func isInteractive() bool {
+// jsonRequested reports whether argv asks for --json. main needs the answer
+// before kong has parsed anything, because a parse error still has to be
+// rendered in the mode the caller asked for.
+func jsonRequested(args []string) bool {
+	asJSON := false
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		switch a {
+		case "-j", "--json", "--json=true":
+			asJSON = true
+		case "--json=false":
+			asJSON = false
+		}
+	}
+	return asJSON
+}
+
+// isInteractive reports whether stdin is a terminal. It is a var so tests can
+// stub the terminal check — see (*Deps).interactive, which is what callers
+// should use.
+var isInteractive = func() bool {
 	fd := os.Stdin.Fd()
 	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
 }
@@ -872,7 +911,7 @@ func expandNewlinesPtr(p *string) *string {
 	return &v
 }
 
-func resolveTask(ref string, database *db.DB) (*model.Task, error) {
+func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// Try numeric index from last list
 	if n, err := strconv.Atoi(ref); err == nil && n >= 1 {
 		uuids, cacheErr := cache.ReadLastList()
@@ -884,7 +923,11 @@ func resolveTask(ref string, database *db.DB) (*model.Task, error) {
 			if t != nil {
 				return t, nil
 			}
-			return nil, fmt.Errorf("task #%d no longer exists (stale list cache — re-run list)", n)
+			return nil, &notFoundError{
+				Kind:  "task",
+				Query: ref,
+				msg:   fmt.Sprintf("task #%d no longer exists (stale list cache — re-run list)", n),
+			}
 		}
 	}
 
@@ -898,14 +941,16 @@ func resolveTask(ref string, database *db.DB) (*model.Task, error) {
 		return nil, err
 	}
 
-	if !isInteractive() {
+	if !d.interactive() {
 		var b strings.Builder
 		fmt.Fprintf(&b, "ambiguous task %q — matches %d tasks:\n", ambig.Query, len(ambig.Matches))
 		for i, m := range ambig.Matches {
 			fmt.Fprintf(&b, "  %d. %s  (%s)\n", i+1, m.Title, m.UUID)
 		}
 		fmt.Fprint(&b, "Re-run with a UUID or more specific string.")
-		return nil, fmt.Errorf("%s", b.String())
+		// Wrap rather than replace: the plain-text message stays exactly as
+		// it was, while --json still sees the candidates (issue #152).
+		return nil, &ambiguousRefError{msg: b.String(), inner: ambig}
 	}
 
 	// Interactive: prompt user to pick
@@ -930,8 +975,27 @@ func resolveTask(ref string, database *db.DB) (*model.Task, error) {
 	return &ambig.Matches[choice-1], nil
 }
 
-func confirmAction(msg string) bool {
-	if !isInteractive() {
+// confirmProjectStatusChange gates a project-wide complete/cancel behind a
+// confirmation. When the run cannot prompt — piped stdin, or --json, which
+// never prompts — say so instead of returning a bare "cancelled" the caller
+// has no way to interpret.
+func confirmProjectStatusChange(d *Deps, verb, title string) error {
+	action := strings.ToLower(verb)
+	if !d.interactive() {
+		reason := "re-run in a terminal"
+		if d.JSON {
+			reason = "re-run without --json"
+		}
+		return fmt.Errorf("cancelled: %s project %q needs confirmation, and this run cannot prompt — %s", action, title, reason)
+	}
+	if !confirmAction(d, fmt.Sprintf("%s project %q? This will also %s all its tasks.", verb, title, action)) {
+		return fmt.Errorf("cancelled")
+	}
+	return nil
+}
+
+func confirmAction(d *Deps, msg string) bool {
+	if !d.interactive() {
 		return false
 	}
 	fmt.Fprintf(os.Stderr, "%s [y/N]: ", msg)

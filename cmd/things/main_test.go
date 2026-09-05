@@ -200,7 +200,7 @@ func TestResolveTaskNumericFromCache(t *testing.T) {
 	}
 	database := seedResolveTaskDB(t)
 
-	got, err := resolveTask("1", database)
+	got, err := resolveTask(&Deps{}, "1", database)
 	if err != nil {
 		t.Fatalf("resolveTask: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestResolveTaskStaleCacheIndex(t *testing.T) {
 	}
 	database := seedResolveTaskDB(t)
 
-	_, err := resolveTask("1", database)
+	_, err := resolveTask(&Deps{}, "1", database)
 	if err == nil {
 		t.Fatal("expected stale cache error")
 	}

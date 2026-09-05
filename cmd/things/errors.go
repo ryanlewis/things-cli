@@ -1,0 +1,124 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/ryanlewis/things-cli/internal/db"
+	"github.com/ryanlewis/things-cli/internal/model"
+)
+
+// jsonErrorPayload is the machine-readable form of a command failure. Under
+// --json a failing command prints one of these to stdout and exits non-zero,
+// so a consumer reading stdout always gets JSON — success or failure — and can
+// branch on the "error" token instead of parsing English (issue #152).
+//
+// Error is a stable token: "ambiguous task", "not found", or "error" for a
+// failure with no structure worth naming. Message is the same text the
+// plain-text path prints, for a human reading the JSON.
+type jsonErrorPayload struct {
+	Error   string           `json:"error"`
+	Message string           `json:"message"`
+	Kind    string           `json:"kind,omitempty"`
+	Query   string           `json:"query,omitempty"`
+	Matches []jsonErrorMatch `json:"matches,omitempty"`
+}
+
+// jsonErrorMatch is one candidate of an ambiguous reference — enough for a
+// caller to pick one and retry with the UUID.
+type jsonErrorMatch struct {
+	UUID    string `json:"uuid"`
+	Title   string `json:"title"`
+	Project string `json:"project,omitempty"`
+}
+
+// notFoundError is a lookup that resolved to nothing. Kind names what was
+// looked up ("task", "area", "tag") and Query is the reference the user gave.
+// msg overrides the rendered text where the caller has something more specific
+// to say than "<kind> not found: <query>".
+type notFoundError struct {
+	Kind  string
+	Query string
+	msg   string
+}
+
+func (e *notFoundError) Error() string {
+	if e.msg != "" {
+		return e.msg
+	}
+	return fmt.Sprintf("%s not found: %s", e.Kind, e.Query)
+}
+
+// ambiguousRefError carries a *db.AmbiguousTaskError alongside the multi-line
+// "pick one" text resolveTask prints in non-interactive mode. Error() returns
+// that text unchanged so the plain-text path is untouched, while errors.As
+// still reaches the candidates for the JSON payload.
+type ambiguousRefError struct {
+	msg   string
+	inner *db.AmbiguousTaskError
+}
+
+func (e *ambiguousRefError) Error() string { return e.msg }
+
+func (e *ambiguousRefError) Unwrap() error { return e.inner }
+
+// errorPayload classifies err into the JSON shape. It is the single place that
+// maps Go error types onto the wire format — add a case here rather than
+// formatting JSON at a call site.
+func errorPayload(err error) jsonErrorPayload {
+	payload := jsonErrorPayload{Error: "error", Message: err.Error()}
+
+	var ambig *db.AmbiguousTaskError
+	if errors.As(err, &ambig) {
+		payload.Error = "ambiguous task"
+		payload.Kind = "task"
+		payload.Query = ambig.Query
+		payload.Matches = matchList(ambig.Matches)
+		return payload
+	}
+
+	var notFoundTask *db.TaskNotFoundError
+	if errors.As(err, &notFoundTask) {
+		payload.Error = "not found"
+		payload.Kind = "task"
+		payload.Query = notFoundTask.Query
+		return payload
+	}
+
+	var notFound *notFoundError
+	if errors.As(err, &notFound) {
+		payload.Error = "not found"
+		payload.Kind = notFound.Kind
+		payload.Query = notFound.Query
+		return payload
+	}
+
+	return payload
+}
+
+func matchList(tasks []model.Task) []jsonErrorMatch {
+	out := make([]jsonErrorMatch, len(tasks))
+	for i, t := range tasks {
+		out[i] = jsonErrorMatch{UUID: t.UUID, Title: t.Title, Project: t.ProjectTitle}
+	}
+	return out
+}
+
+// renderError writes a failed command's error. Under --json it goes to stdout
+// as a single JSON object so the consumer parsing stdout sees the failure;
+// otherwise it keeps the plain "Error: ..." line on stderr unchanged.
+func renderError(stdout, stderr io.Writer, asJSON bool, err error) {
+	if !asJSON {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return
+	}
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	if encErr := enc.Encode(errorPayload(err)); encErr != nil {
+		// Encoding a struct of strings can't realistically fail, but a broken
+		// stdout can — fall back to the plain line so the failure isn't silent.
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+	}
+}
