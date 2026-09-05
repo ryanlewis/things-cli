@@ -52,7 +52,9 @@ jobs:
       - name: Resolve the released version
         run: |
           set -euo pipefail
-          if tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null); then
+          # --exclude skips pre-releases (v0.8.0-rc.1): release.yml fires on
+          # v* too, so without it an rc would put itself on the public badge.
+          if tag=$(git describe --tags --abbrev=0 --match 'v*' --exclude 'v*-*' 2>/dev/null); then
             echo "HUGO_PARAMS_VERSION=${tag#v}" >> "$GITHUB_ENV"
             echo "Building the site as version ${tag#v} (from tag ${tag})."
           else
