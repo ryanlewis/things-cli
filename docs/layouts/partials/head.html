@@ -15,7 +15,7 @@
 <meta property="og:description" content="{{ $desc }}">
 <meta property="og:url" content="{{ .Permalink }}">
 <meta property="og:locale" content="en_GB">
-{{- /* The social image is rendered by scripts/og/generate.py; re-run it when
+{{- /* The social image is rendered by tools/og (`make og`); re-run it when
        the headline changes. */}}
 <meta property="og:image" content="{{ "img/og.png" | absURL }}">
 <meta property="og:image:width" content="1200">
