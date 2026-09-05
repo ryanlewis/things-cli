@@ -468,7 +468,7 @@ An `operation: update` item goes through the same repeating check as `edit`. If 
 $ things import --file reschedule.json
 Error: 2 of 3 update items change attributes Things does not allow on repeating items, and drops the request silently (https://culturedcode.com/things/support/articles/2803573/). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:
   [1] (id abc…): "Water plants" is a repeating to-do — when, deadline
-  [2].attributes.items[0] (id def…): "Weekly review" is a repeating project — canceled
+  [2].attributes.items[0] (id def…): "Take the bins out" is a repeating to-do — canceled
 ```
 
 The refusal is all-or-nothing because the URL scheme takes one payload and gives no per-item result: there is no way to send the rest and report what was skipped. Each offending item is named by its position in the payload (nested items included), its id, its title and the blocked attributes, so a payload can be fixed in one pass. `--no-verify` does not lift the refusal — it is a documented restriction, not a read-back.

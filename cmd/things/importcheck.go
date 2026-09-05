@@ -124,10 +124,18 @@ func requestsStatusChange(attrs map[string]any, name string) bool {
 }
 
 // wantedStatus reports the status an update item asks Things to move the item
-// to. Only a literal `true` counts: anything else either leaves the status
-// alone or is a payload error for Things to report. `completed` wins over
-// `canceled` when a payload sets both, which is the same precedence `edit`
-// applies to --complete over --cancel.
+// to. Only a literal `true` counts, and `completed` wins over `canceled` when
+// a payload sets both — the same precedence `edit` applies to --complete over
+// --cancel.
+//
+// An explicit `false` is deliberately not treated as a request. Whether
+// `"completed": false` reopens a completed item is not something this
+// repository or the Things documentation establishes, and the CLI itself never
+// sends it (setBool drops a false). If Things ignores it, reading it back
+// would fail an import that fully succeeded — a worse outcome than the missed
+// detection, since the read-back's whole job is to be trustworthy. If Things
+// does honour it, a dropped reopen stays invisible; see issue #145 for the
+// note, and confirm the behaviour against Things before changing this.
 func wantedStatus(attrs map[string]any) (model.Status, bool) {
 	if b, ok := attrs["completed"].(bool); ok && b {
 		return model.StatusCompleted, true
@@ -180,14 +188,18 @@ func prepareImport(d *Deps, database *db.DB, data []byte) (*importPlan, error) {
 			u.path, u.id, task.Title, kind, strings.Join(blocked, ", ")))
 	}
 
+	// Refuse first: the warnings below promise that Things will report the
+	// unknown ids itself, which is only true when the payload is actually
+	// sent. A refused import never reaches Things.
+	if len(refusals) > 0 {
+		return nil, fmt.Errorf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:\n%s",
+			len(refusals), len(plan.updates), repeatingDocsURL, strings.Join(refusals, "\n"))
+	}
+
 	for _, m := range missing {
 		fmt.Fprintf(d.errOut(), "warning: %s is not in the Things database — Things will report this itself\n", m)
 	}
-	if len(refusals) == 0 {
-		return plan, nil
-	}
-	return nil, fmt.Errorf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:\n%s",
-		len(refusals), len(plan.updates), repeatingDocsURL, strings.Join(refusals, "\n"))
+	return plan, nil
 }
 
 // verifyImportStatuses re-reads every item the payload asked to complete or

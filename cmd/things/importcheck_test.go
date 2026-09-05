@@ -125,8 +125,12 @@ func TestWantedStatus(t *testing.T) {
 		{`{"completed":true}`, model.StatusCompleted, true},
 		{`{"canceled":true}`, model.StatusCancelled, true},
 		{`{"completed":true,"canceled":true}`, model.StatusCompleted, true},
-		{`{"completed":false}`, model.StatusOpen, false},
 		{`{"title":"x"}`, model.StatusOpen, false},
+		// An explicit false is not read back: see the note on wantedStatus.
+		{`{"completed":false}`, model.StatusOpen, false},
+		{`{"canceled":false}`, model.StatusOpen, false},
+		// A true still wins over a false alongside it.
+		{`{"completed":false,"canceled":true}`, model.StatusCancelled, true},
 	}
 	for _, c := range cases {
 		var attrs map[string]any
@@ -358,6 +362,28 @@ func TestImportNoVerifyStillRefusesRepeating(t *testing.T) {
 	payload := `[{"type":"to-do","operation":"update","id":"rep-1","attributes":{"completed":true}}]`
 	if err := runWith(t, database, "import", "--file", importPayload(t, payload), "--no-verify"); err == nil {
 		t.Fatal("expected a refusal, got nil")
+	}
+	if *calls != 0 {
+		t.Errorf("payload was sent to Things anyway (%d calls)", *calls)
+	}
+}
+
+// A refused import never reaches Things, so the unknown-id warning — which
+// tells the user Things will report the id itself — must not be printed.
+func TestImportRefusalDoesNotWarnAboutUnknownIDs(t *testing.T) {
+	database, _ := seedWritable(t)
+	calls := stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","operation":"update","id":"nope-1","attributes":{"title":"x"}},
+	  {"type":"to-do","operation":"update","id":"rep-1","attributes":{"completed":true}}
+	]`
+	stderr, err := runImport(t, database, payload)
+	if err == nil {
+		t.Fatal("expected a refusal, got nil")
+	}
+	if strings.Contains(stderr, "nope-1") {
+		t.Errorf("refused import still warned that Things would report the id:\n%s", stderr)
 	}
 	if *calls != 0 {
 		t.Errorf("payload was sent to Things anyway (%d calls)", *calls)
