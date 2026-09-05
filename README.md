@@ -53,6 +53,37 @@ for structured JSON suitable for piping into `jq` or another tool. List
 commands assign each result a stable index (`1`, `2`, `3`, …) you can use
 in follow-up commands like `show`, `edit`, `complete`, and `cancel`.
 
+`--json` also implies non-interactive: the CLI never prompts, so a reference
+matching several tasks returns an error listing the candidates instead of
+opening the picker, and `complete`/`cancel` on a project declines instead of
+asking to confirm.
+
+### Errors under `--json`
+
+A failing command prints a single JSON object to stdout and exits non-zero, so
+a consumer parsing stdout gets a structured failure either way. `error` is a
+stable token — `ambiguous task`, `not found`, or `error` for anything else —
+and `message` carries the same text plain-text mode prints.
+
+```console
+$ things show milk --json; echo "exit=$?"
+{
+  "error": "ambiguous task",
+  "message": "ambiguous task \"milk\" — matches 2 tasks: ...",
+  "kind": "task",
+  "query": "milk",
+  "matches": [
+    { "uuid": "A1B2...", "title": "Buy milk", "project": "Chores" },
+    { "uuid": "C3D4...", "title": "Buy oat milk" }
+  ]
+}
+exit=1
+```
+
+Retry with one of the `matches[].uuid` values. Argument and flag errors take
+the same route, so `--json` never leaves a usage block on stdout. Without
+`--json`, errors stay a plain `Error: ...` line on stderr, unchanged.
+
 ### Global flags
 
 | Flag | Description | Default |

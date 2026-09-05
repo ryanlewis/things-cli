@@ -310,7 +310,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	}
 	switch len(matches) {
 	case 0:
-		return nil, fmt.Errorf("task not found: %s", uuidOrTitle)
+		return nil, &TaskNotFoundError{Query: uuidOrTitle}
 	case 1:
 		return &matches[0], nil
 	default:
@@ -321,6 +321,16 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
 	query := d.taskQuery() + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading + " GROUP BY t.uuid ORDER BY t.\"index\" ASC"
 	return d.collectTasks(query, "%"+substr+"%")
+}
+
+// TaskNotFoundError reports a reference that matched no task. It is typed so
+// callers can render it as structured output instead of matching on the text.
+type TaskNotFoundError struct {
+	Query string
+}
+
+func (e *TaskNotFoundError) Error() string {
+	return fmt.Sprintf("task not found: %s", e.Query)
 }
 
 type AmbiguousTaskError struct {

@@ -313,7 +313,7 @@ func TestResolveTaskAmbiguousNonInteractive(t *testing.T) {
 	database := db.NewFromSQL(sqlDB)
 
 	// Ensure stdin is not a TTY in the test process — it shouldn't be.
-	_, err := resolveTask("Shared", database)
+	_, err := resolveTask(&Deps{}, "Shared", database)
 	if err == nil {
 		t.Fatal("expected ambiguity error")
 	}
@@ -325,7 +325,7 @@ func TestResolveTaskAmbiguousNonInteractive(t *testing.T) {
 func TestResolveTaskNotFound(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	database := db.NewFromSQL(sqlDB)
-	_, err := resolveTask("nope", database)
+	_, err := resolveTask(&Deps{}, "nope", database)
 	if err == nil {
 		t.Fatal("expected not-found error")
 	}
@@ -343,7 +343,7 @@ func TestResolveTaskNumericWithoutCache(t *testing.T) {
 
 	// "1" has no cache — falls through to treating "1" as a title, which
 	// should return not-found.
-	_, err := resolveTask("1", database)
+	_, err := resolveTask(&Deps{}, "1", database)
 	if err == nil {
 		t.Fatal("expected not-found when no cache and no title match")
 	}
@@ -382,7 +382,7 @@ func TestRunOpenTagNotFound(t *testing.T) {
 }
 
 func TestConfirmActionNonInteractive(t *testing.T) {
-	if confirmAction("Really?") {
+	if confirmAction(&Deps{}, "Really?") {
 		t.Error("expected false in non-interactive test run")
 	}
 }
