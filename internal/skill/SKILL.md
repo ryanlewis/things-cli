@@ -60,6 +60,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # on most views and `deadline` on the `deadlines` view. Not supported on
     # inbox/trash/logbook/someday/repeating (those items have no start date).
     # --on is mutually exclusive with --from/--to.
+    # Trashing a project leaves its to-dos untrashed in the database; every
+    # view hides them anyway, except trash and logbook.
     # today shows only open tasks; --include-completed also lists completed/
     # cancelled items Things hasn't logged out of Today yet (today only).
 

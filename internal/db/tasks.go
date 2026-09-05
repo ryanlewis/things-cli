@@ -140,7 +140,7 @@ func todayWhere(includeCompleted bool) string {
 	if includeCompleted {
 		status = "(t.status = 0 OR (t.status IN (2, 3) AND t.stopDate > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0)))"
 	}
-	return "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND " + status + " AND t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.type = 0"
+	return "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND " + status + " AND t.trashed = 0 AND t.type = 0"
 }
 
 var viewFilters = map[string]string{
@@ -156,14 +156,10 @@ var viewFilters = map[string]string{
 	// to-dos they generate. A template carries the recurrence rule; each
 	// generated instance is an ordinary row with no rule of its own, so
 	// "{{repeating}} IS NOT NULL" selects templates alone (issue #147).
-	// Trashing a project leaves its rows trashed = 0, so the template of a
-	// repeating to-do in a trashed project needs the same guard the today
-	// and project views apply or it outlives the project it lived in.
-	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0",
+	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	// The catch-all open set: also the default view for a bare --project/
-	// --area/--tag filter, so it has to exclude tasks living in a trashed
-	// project the way the today view does.
-	"project": "t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0",
+	// --area/--tag filter.
+	"project": "t.status = 0 AND t.trashed = 0 AND t.type = 0",
 }
 
 // notHeading excludes project headings (TMTask type 2) from the lookup
@@ -191,6 +187,17 @@ var viewOrderBy = map[string]string{
 	"project": "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.start ASC, t.\"index\" ASC",
 }
 
+// viewsIncludingTrashedProjects lists the views that keep to-dos whose project
+// is in the trash. Trashing a project in Things leaves its child rows at
+// trashed = 0, so without a guard they outlive the project and go on listing
+// as ordinary open tasks (issue #155, the same class as #142/#143). trash and
+// logbook are the exceptions: they report what the database holds, and a to-do
+// whose project was trashed belongs in trash.
+var viewsIncludingTrashedProjects = map[string]bool{
+	"trash":   true,
+	"logbook": true,
+}
+
 // viewsIncludingTemplates lists the views that keep repeating templates in
 // their results. Everywhere else templates are filtered out: Things files a
 // template under Repeating, not under the start bucket its row happens to
@@ -215,6 +222,9 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	}
 	if view == "today" && opts.IncludeCompleted {
 		where = todayWhere(true)
+	}
+	if !viewsIncludingTrashedProjects[view] {
+		where += " AND COALESCE(p.trashed, 0) = 0"
 	}
 	if !viewsIncludingTemplates[view] {
 		where += " AND " + repeatingPlaceholder + " IS NULL"
