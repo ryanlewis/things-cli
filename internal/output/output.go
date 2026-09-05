@@ -82,6 +82,13 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		if t.Start == model.StartAnytime && t.StartBucket == 0 && t.StartDate != nil {
 			title = starStyle.Render("★") + " " + title
 		}
+		// A task list is normally to-dos only, but `things repeating` carries
+		// project templates too and `things search` can turn up a project, so
+		// say which rows are projects rather than letting them read as
+		// to-dos. Text, not just colour, so it survives --color never.
+		if t.Type == model.TypeProject {
+			title += " " + dimStyle.Render("(project)")
+		}
 
 		var date string
 		switch {
@@ -196,6 +203,13 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 	fmt.Fprintf(w, "%s%s\n", label("Title:"), t.Title)
 	fmt.Fprintf(w, "%s%s\n", label("UUID:"), t.UUID)
 	fmt.Fprintf(w, "%s%s\n", label("Status:"), statusText(t.Status))
+	// A lookup resolves projects as well as to-dos, and `things repeating`
+	// hands out indexes for project templates, so say when the thing being
+	// shown is a project rather than leaving its detail block reading as a
+	// to-do's. To-do output is unchanged.
+	if t.Type == model.TypeProject {
+		fmt.Fprintf(w, "%s%s\n", label("Type:"), "project")
+	}
 	if t.ProjectTitle != "" {
 		fmt.Fprintf(w, "%s%s\n", label("Project:"), projectStyle.Render(t.ProjectTitle))
 	}

@@ -358,3 +358,54 @@ func TestPrintTaskListJSONIgnoresViewLabel(t *testing.T) {
 		t.Errorf("got %+v, want one task u1", got)
 	}
 }
+
+// `things repeating` lists project templates alongside to-do templates, and
+// `things search` can turn up a project, so a project row has to say so in
+// plain output rather than reading as a to-do (issue #165). The marker is
+// text, not colour, so it survives --color never and a pipe.
+func TestPrintTasksMarksProjects(t *testing.T) {
+	tasks := []model.Task{
+		{UUID: "t1", Title: "Water plants", Type: model.TypeTask, Status: model.StatusOpen},
+		{UUID: "p1", Title: "Weekly review", Type: model.TypeProject, Status: model.StatusOpen},
+	}
+	var buf bytes.Buffer
+	if err := Print(&buf, tasks, false); err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+	out := buf.String()
+
+	for _, line := range strings.Split(out, "\n") {
+		switch {
+		case strings.Contains(line, "Weekly review"):
+			if !strings.Contains(line, "(project)") {
+				t.Errorf("project row not marked:\n%s", line)
+			}
+		case strings.Contains(line, "Water plants"):
+			if strings.Contains(line, "(project)") {
+				t.Errorf("to-do row marked as a project:\n%s", line)
+			}
+		}
+	}
+}
+
+// `things show` on a project template must not print a block indistinguishable
+// from a to-do's (issue #165). To-do detail output stays as it was.
+func TestPrintTaskDetailMarksProjects(t *testing.T) {
+	var buf bytes.Buffer
+	project := &model.Task{UUID: "p1", Title: "Weekly review", Type: model.TypeProject, Status: model.StatusOpen}
+	if err := PrintTaskWithChecklist(&buf, project, nil, false); err != nil {
+		t.Fatalf("PrintTaskWithChecklist: %v", err)
+	}
+	if out := buf.String(); !strings.Contains(out, "project") {
+		t.Errorf("project detail does not say it is a project:\n%s", out)
+	}
+
+	buf.Reset()
+	todo := &model.Task{UUID: "t1", Title: "Water plants", Type: model.TypeTask, Status: model.StatusOpen}
+	if err := PrintTaskWithChecklist(&buf, todo, nil, false); err != nil {
+		t.Fatalf("PrintTaskWithChecklist: %v", err)
+	}
+	if out := buf.String(); strings.Contains(out, "Type:") {
+		t.Errorf("to-do detail gained a Type line:\n%s", out)
+	}
+}

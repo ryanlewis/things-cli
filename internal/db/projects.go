@@ -27,6 +27,13 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 	`
 	var args []any
 
+	// A repeating project is stored as a template plus the projects it
+	// generates. Things files the template under Repeating, not under
+	// Projects, so `things repeating` lists it and this does not (issue
+	// #165). On a schema with no recurrence column the reference degrades to
+	// NULL and the clause is a no-op.
+	query += " AND " + d.recurrenceCol() + " IS NULL"
+
 	if !includeCompleted {
 		query += " AND t.status = 0"
 	}

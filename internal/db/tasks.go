@@ -152,11 +152,15 @@ var viewFilters = map[string]string{
 	"logbook":   "t.status = 3 AND t.trashed = 0 AND t.type = 0",
 	"trash":     "t.trashed = 1 AND t.type = 0",
 	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	// Things' Repeating list: the templates that generate to-dos, not the
-	// to-dos they generate. A template carries the recurrence rule; each
-	// generated instance is an ordinary row with no rule of its own, so
-	// "{{repeating}} IS NOT NULL" selects templates alone (issue #147).
-	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	// Things' Repeating list: the templates that generate to-dos and
+	// projects, not the items they generate. A template carries the
+	// recurrence rule; each generated instance is an ordinary row with no
+	// rule of its own, so "{{repeating}} IS NOT NULL" selects templates
+	// alone (issue #147). Unlike every other view this one is not pinned to
+	// t.type = 0: a project can repeat too, and the app's Repeating list
+	// shows both kinds, so the view carries project templates as well and
+	// `things projects` leaves them out (issue #165).
+	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type IN (0, 1)",
 	// The catch-all open set: also the default view for a bare --project/
 	// --area/--tag filter.
 	"project": "t.status = 0 AND t.trashed = 0 AND t.type = 0",
@@ -172,6 +176,10 @@ var notHeading = fmt.Sprintf("COALESCE(t.type, 0) != %d", model.TypeHeading)
 var viewOrderBy = map[string]string{
 	"logbook":   "ORDER BY t.stopDate DESC",
 	"deadlines": "ORDER BY t.deadline ASC",
+	// Repeating holds both to-dos and projects. Ordering by type first keeps
+	// the two kinds in contiguous blocks instead of interleaving them by an
+	// index that is only meaningful within a kind.
+	"repeating": "ORDER BY t.type ASC, t.\"index\" ASC",
 	// Today view: top-level items (no project, no area) come first, then
 	// everything else sorted by area then project index. Project tasks and
 	// area-only tasks interleave by area.index — so projects in a low-index
