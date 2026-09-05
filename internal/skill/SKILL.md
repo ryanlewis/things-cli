@@ -60,6 +60,7 @@ This means the defaults you would otherwise assume may not hold — `json = true
 ```
 things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--include-completed]
     # views: today, inbox, upcoming, anytime, someday, repeating, logbook, trash, deadlines
+    # repeating holds to-do AND project templates; every other view is to-dos only
     # shortcut: `things today`, `things inbox`, etc.
     # No view: bare `things` is today, but --project/--area/--tag on their own
     # list every open task in that project/area/tag. Name a view to scope the
@@ -113,6 +114,10 @@ things config init [--force]    # write a commented template
 ### Repeating to-dos and projects
 
 A repeating to-do is stored as a template plus the to-dos it generates. `things repeating` lists the templates; they do not appear in `someday` or any other view except `trash` and `logbook`, which report what the database holds. The generated to-dos carry no recurrence rule of their own, so they list as ordinary tasks under `today`, `upcoming` and the rest.
+
+Projects repeat the same way. `things repeating` lists project templates too — marked `(project)` in plain output, `"type": 1` in JSON, to-dos first then projects — and `things projects` leaves them out. `trash` and `logbook` are to-do lists, so a project template never shows there. `things show` on a project prints a `Type: project` line. `trash` and `logbook` are to-do lists, so a project template never shows there.
+
+`things search` is a lookup, not a view: it searches the database as it stands and returns templates like anything else. Results carry `"repeating": true`, so check that field before trying to write to a search hit.
 
 A template and its generated to-do share a title, so a title lookup — `things show/edit/complete/cancel <title>` — resolves to the generated to-do, the one that can actually be completed. To reach the template, use its UUID or the numeric index from `things repeating`.
 

@@ -3,6 +3,7 @@ package db
 import (
 	"testing"
 
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -106,5 +107,53 @@ func TestListProjectsCarriesTagsAndCounts(t *testing.T) {
 	}
 	if p.AreaTitle != "Work" {
 		t.Errorf("area title: got %q", p.AreaTitle)
+	}
+}
+
+// A repeating project is stored as a template plus the projects it generates.
+// Things files the template under Repeating, so `things projects` must not
+// list it — the same leak #147 fixed for to-dos (issue #165).
+func TestListProjectsExcludesRepeatingTemplates(t *testing.T) {
+	d := newTestDB(t)
+	seedProjects(t, d)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, area, "index",
+		 untrashedLeafActionsCount, openUntrashedLeafActionsCount, rt1_recurrenceRule) VALUES
+		('p-tmpl', 'Weekly review', 1, 0, 0, 'area-work', 3, 0, 0, x'0102'),
+		('p-done', 'Old repeat',    1, 3, 0, 'area-work', 4, 0, 0, x'0102')`)
+
+	for _, includeCompleted := range []bool{false, true} {
+		projects, err := d.ListProjects("", includeCompleted)
+		if err != nil {
+			t.Fatalf("ListProjects(includeCompleted=%v): %v", includeCompleted, err)
+		}
+		for _, p := range projects {
+			if p.UUID == "p-tmpl" || p.UUID == "p-done" {
+				t.Errorf("includeCompleted=%v: template %s listed, want it excluded", includeCompleted, p.UUID)
+			}
+		}
+		// The ordinary projects are untouched.
+		if !includeCompleted && len(projects) != 3 {
+			t.Errorf("got %d open projects, want the same 3 as without templates: %+v", len(projects), projects)
+		}
+	}
+}
+
+// A schema carrying no recurrence column must still list projects rather than
+// failing the query outright.
+func TestListProjectsWithoutRecurrenceColumn(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	if _, err := sqlDB.Exec(`ALTER TABLE TMTask DROP COLUMN rt1_recurrenceRule`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	d := &DB{db: sqlDB}
+	seedProjects(t, d)
+
+	projects, err := d.ListProjects("", false)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(projects) != 3 {
+		t.Errorf("got %d, want 3: %+v", len(projects), projects)
 	}
 }

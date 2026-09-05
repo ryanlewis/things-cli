@@ -1,9 +1,11 @@
 package db
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/model"
 )
 
 func seedRepeatingPair(t *testing.T) *DB {
@@ -191,5 +193,57 @@ func TestTableColumnsUnknownTable(t *testing.T) {
 	}
 	if len(cols) != 0 {
 		t.Errorf("tableColumns(NoSuchTable) = %v, want empty", cols)
+	}
+}
+
+// A project can repeat too, and the app's Repeating list shows both kinds, so
+// the view is the one place that is not pinned to t.type = 0 (issue #165).
+// Ordering by type keeps to-dos and projects in contiguous blocks.
+func TestRepeatingViewIncludesProjectTemplates(t *testing.T) {
+	d := newTestDB(t)
+
+	// The project carries the lower "index", so index order alone would put it
+	// first: only the type-first ORDER BY yields the order asserted below.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index", rt1_recurrenceRule) VALUES
+		('p-tmpl',   'Weekly review', 1, 0, 0, 2, 0, 1, x'0102'),
+		('t-tmpl',   'Water plants',  0, 0, 0, 2, 0, 2, x'0102')`)
+
+	// Neither an ordinary project nor an ordinary to-do belongs here.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
+		('p-plain', 'Ship it',    1, 0, 0, 1, 0, 3),
+		('t-plain', 'Post letter', 0, 0, 0, 2, 0, 4)`)
+
+	got, err := d.ListTasks("repeating", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating): %v", err)
+	}
+	if want := []string{"t-tmpl", "p-tmpl"}; !slices.Equal(uuidsOf(got), want) {
+		t.Fatalf("ListTasks(repeating) = %v, want %v (to-dos before projects)", uuidsOf(got), want)
+	}
+	if got[1].Type != model.TypeProject {
+		t.Errorf("project template Type = %d, want %d", got[1].Type, model.TypeProject)
+	}
+	if !got[0].Repeating || !got[1].Repeating {
+		t.Errorf("both rows should carry Repeating = true, got %v and %v", got[0].Repeating, got[1].Repeating)
+	}
+}
+
+// Headings carry no recurrence rule, but the view no longer pins t.type = 0,
+// so a heading must not be able to reach it.
+func TestRepeatingViewExcludesHeadings(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index", rt1_recurrenceRule) VALUES
+		('h-odd', 'A heading', 2, 0, 0, 1, 0, 1, x'0102')`)
+
+	got, err := d.ListTasks("repeating", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ListTasks(repeating) = %v, want no headings", uuidsOf(got))
 	}
 }

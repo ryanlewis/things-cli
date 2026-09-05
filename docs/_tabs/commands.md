@@ -19,10 +19,16 @@ things <view>          # shortcut: things inbox, things today, etc.
 Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
 `repeating`, `logbook`, `trash`, `deadlines`.
 
-`repeating` lists repeating to-do templates. The to-dos a template generates
-are ordinary tasks and appear in `today`, `upcoming` and the rest; the
-template itself appears only here, and in `trash` or `logbook` if it ends up
-there.
+`repeating` lists repeating to-do and project templates. The items a template
+generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
+`things projects` and the rest; the template itself appears only here — plus
+`trash` or `logbook` for a to-do template that ends up there, since those two
+report what the database holds. Both are to-do lists, so a project template
+never shows in them. Project templates are marked `(project)` in plain output
+and carry `"type": 1` in JSON.
+
+`things search` is a lookup rather than a view, so it returns templates too.
+Results carry `"repeating": true`.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. On their
 own the filters cover every open task in the project, area, or tag; add a

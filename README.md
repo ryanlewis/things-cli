@@ -213,7 +213,7 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `upcoming` | Scheduled tasks and deadlines |
 | `anytime` | Anytime list |
 | `someday` | Someday list |
-| `repeating` | Repeating to-do templates |
+| `repeating` | Repeating to-do and project templates |
 | `logbook` | Completed tasks |
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks with a deadline |
@@ -254,6 +254,18 @@ the template appears in `things repeating`; the generated to-dos are ordinary
 tasks and show up in `today`, `upcoming` and the rest as usual. Templates are
 kept out of every other view except `trash` and `logbook`, which report what
 the database holds.
+
+Projects repeat the same way, so `things repeating` lists project templates
+too — marked `(project)` in plain output, `"type": 1` in JSON — and
+`things projects` leaves them out. To-do templates come first, then project
+templates. `trash` and `logbook` are to-do lists, so a project template never
+shows there.
+
+`things search` is a lookup rather than a view: it searches the database as
+it stands and returns templates along with everything else, so a title you
+can see in the Things app is always findable. Search results carry
+`"repeating": true`, and `things show` prints a `Repeats:` line, so a
+template is identifiable when one comes back.
 
 A template and the to-do it generated share a title, so a title lookup —
 `things show`, `edit`, `complete`, `cancel` — resolves to the generated to-do,
