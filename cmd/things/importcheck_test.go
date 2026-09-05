@@ -660,3 +660,83 @@ func TestImportFailuresPlainTextUnchanged(t *testing.T) {
 		t.Errorf("stderr lost the per-item line: %q", stderr.String())
 	}
 }
+
+// The batched lookup (#167) has to leave the checks behaving exactly as the
+// per-item one did, including when a payload mixes a repeating target, a
+// duplicate id, an unknown id and a heading in a single pass.
+func TestImportBatchedLookupKeepsCheckBehaviour(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('head-1', 'Phase 2', 2, 0, 0)`); err != nil {
+		t.Fatalf("seed heading: %v", err)
+	}
+	calls := stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","operation":"update","id":"one-1","attributes":{"title":"a"}},
+	  {"type":"to-do","operation":"update","id":"rep-1","attributes":{"when":"today"}},
+	  {"type":"to-do","operation":"update","id":"rep-1","attributes":{"deadline":"2026-05-01"}},
+	  {"type":"to-do","operation":"update","id":"nope-1","attributes":{"title":"b"}},
+	  {"type":"heading","operation":"update","id":"head-1","attributes":{"title":"c"}}
+	]`
+	err := runWith(t, database, "import", "--file", importPayload(t, payload))
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	// The same repeating item named twice is refused twice, once per payload
+	// position, even though it was only looked up once.
+	for _, want := range []string{
+		"2 of 5 update items",
+		`[1] (id rep-1): "Water plants" is a repeating to-do — when`,
+		`[2] (id rep-1): "Water plants" is a repeating to-do — deadline`,
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error missing %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "head-1") || strings.Contains(err.Error(), "nope-1") {
+		t.Errorf("a heading or unknown id was treated as an offender:\n%v", err)
+	}
+	if *calls != 0 {
+		t.Errorf("payload was sent to Things anyway (%d calls)", *calls)
+	}
+}
+
+// A read-back over several items resolves each one from the shared round
+// query, so the per-item verdicts stay independent.
+func TestImportBatchedReadBackKeepsPerItemVerdicts(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	for _, seed := range []string{
+		`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('one-2', 'File taxes', 0, 0, 0, 2)`,
+		`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('one-3', 'Call bank', 0, 0, 0, 2)`,
+	} {
+		if _, err := sqlDB.Exec(seed); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	// Things applies the first and third, drops the middle one.
+	stubExecApplyingAll(t, sqlDB, map[string]int{
+		"one-1": int(model.StatusCompleted),
+		"one-3": int(model.StatusCancelled),
+	})
+
+	payload := `[
+	  {"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":true}},
+	  {"type":"to-do","operation":"update","id":"one-2","attributes":{"canceled":true}},
+	  {"type":"to-do","operation":"update","id":"one-3","attributes":{"canceled":true}}
+	]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	if err == nil {
+		t.Fatal("expected a read-back failure for the dropped item")
+	}
+	p, raw := decodePayload(t, err)
+	if len(p.Items) != 1 {
+		t.Fatalf("got %d items, want only the dropped one (%s)", len(p.Items), raw)
+	}
+	if p.Items[0].ID != "one-2" || p.Items[0].Wanted != "cancelled" || p.Items[0].Got != "open" {
+		t.Errorf("item = %+v, want one-2 cancelled/open", p.Items[0])
+	}
+	if !strings.Contains(p.Message, "1 of 3 requested status changes") {
+		t.Errorf("summary lost the batch counts: %s", p.Message)
+	}
+}

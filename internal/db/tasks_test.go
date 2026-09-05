@@ -3,6 +3,8 @@ package db
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -1104,4 +1106,128 @@ func TestTitleLookupsWithoutRecurrenceColumn(t *testing.T) {
 	if !sameSet(uuidsOf(matches), []string{"a", "b"}) {
 		t.Errorf("got %v", uuidsOf(matches))
 	}
+}
+
+// --- batched uuid lookups (issue #167) ---
+
+func TestGetTasksByUUIDs(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	// A duplicate, an empty string, an unknown id and a heading all go in
+	// alongside the real ones: callers pass a raw list built from a payload.
+	got, err := d.GetTasksByUUIDs([]string{
+		"t-today", "proj-1", "t-today", "", "nope", "head-phase",
+	})
+	if err != nil {
+		t.Fatalf("GetTasksByUUIDs: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2 (to-do + project): %v", len(got), keysOf(got))
+	}
+	if task := got["t-today"]; task == nil || task.Title != "Today task" {
+		t.Errorf("t-today = %+v", task)
+	}
+	if task := got["proj-1"]; task == nil {
+		t.Error("a project should resolve, as it does through GetTaskByUUID")
+	}
+	// Absent, not a nil entry: the caller distinguishes the two.
+	if _, present := got["nope"]; present {
+		t.Error("an unknown id should be absent from the map")
+	}
+	if _, present := got["head-phase"]; present {
+		t.Error("a heading should be excluded, as it is from GetTaskByUUID (#146)")
+	}
+	if _, present := got[""]; present {
+		t.Error("an empty id should never be queried")
+	}
+}
+
+// The batch must agree with the single lookup field for field, or the import
+// checks would see different tasks depending on which path ran.
+func TestGetTasksByUUIDsMatchesGetTaskByUUID(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+	seedLookupHeadings(t, d)
+
+	ids := []string{"t-today", "t-inbox", "proj-1", "head-phase", "nope"}
+	batch, err := d.GetTasksByUUIDs(ids)
+	if err != nil {
+		t.Fatalf("GetTasksByUUIDs: %v", err)
+	}
+	for _, id := range ids {
+		single, err := d.GetTaskByUUID(id)
+		if err != nil {
+			t.Fatalf("GetTaskByUUID(%s): %v", id, err)
+		}
+		one, ok := batch[id]
+		if single == nil {
+			if ok {
+				t.Errorf("%s: batch returned %+v where the single lookup found nothing", id, one)
+			}
+			continue
+		}
+		if !ok {
+			t.Errorf("%s: batch found nothing where the single lookup found %+v", id, single)
+			continue
+		}
+		if !reflect.DeepEqual(*one, *single) {
+			t.Errorf("%s: batch = %+v, single = %+v", id, *one, *single)
+		}
+	}
+}
+
+// More ids than fit in one chunk, and not a whole multiple of one either, so
+// the loop has to reassemble three chunks — two full and a short tail —
+// without dropping a row at a boundary or double-counting one.
+func TestGetTasksByUUIDsChunksLargeInput(t *testing.T) {
+	d := newTestDB(t)
+
+	const n = uuidChunkSize*2 + 7
+	ids := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		uuid := fmt.Sprintf("bulk-%04d", i)
+		ids = append(ids, uuid)
+		mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES (?, ?, 0, 0, 0)`,
+			uuid, fmt.Sprintf("Bulk %d", i))
+	}
+
+	got, err := d.GetTasksByUUIDs(ids)
+	if err != nil {
+		t.Fatalf("GetTasksByUUIDs across %d ids: %v", n, err)
+	}
+	if len(got) != n {
+		t.Fatalf("got %d rows, want %d — a chunk went missing", len(got), n)
+	}
+	for _, id := range ids {
+		if got[id] == nil {
+			t.Fatalf("%s missing from the batch result", id)
+		}
+	}
+}
+
+func TestGetTasksByUUIDsEmptyInput(t *testing.T) {
+	d := newTestDB(t)
+	seedTasks(t, d)
+
+	for _, ids := range [][]string{nil, {}, {"", ""}} {
+		got, err := d.GetTasksByUUIDs(ids)
+		if err != nil {
+			t.Fatalf("GetTasksByUUIDs(%v): %v", ids, err)
+		}
+		if len(got) != 0 {
+			t.Errorf("GetTasksByUUIDs(%v) = %v, want empty", ids, keysOf(got))
+		}
+	}
+}
+
+func keysOf(m map[string]*model.Task) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

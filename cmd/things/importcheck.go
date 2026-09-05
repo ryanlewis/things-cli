@@ -231,21 +231,30 @@ func (e *importVerifyError) Error() string {
 func prepareImport(d *Deps, database *db.DB, data []byte) (*importPlan, error) {
 	plan := &importPlan{updates: importUpdates(data), tasks: map[string]*model.Task{}}
 
+	// One query for the whole payload rather than one per item (issue #167).
+	var ids []string
+	for _, u := range plan.updates {
+		if u.resolvable() {
+			ids = append(ids, u.id)
+		}
+	}
+	found, err := database.GetTasksByUUIDs(ids)
+	if err != nil {
+		return nil, fmt.Errorf("checking the payload against the Things database: %w", err)
+	}
+	// An id with no row maps to a nil task, which is what the loop below and
+	// the read-back afterwards both read as "not in the database".
+	for _, id := range ids {
+		plan.tasks[id] = found[id]
+	}
+
 	var refusals []importRefusalItem
 	var missing []string
 	for _, u := range plan.updates {
 		if !u.resolvable() {
 			continue
 		}
-		task, ok := plan.tasks[u.id]
-		if !ok {
-			var err error
-			task, err = database.GetTaskByUUID(u.id)
-			if err != nil {
-				return nil, fmt.Errorf("checking %s (id %s) against the Things database: %w", u.path, u.id, err)
-			}
-			plan.tasks[u.id] = task
-		}
+		task := plan.tasks[u.id]
 		if task == nil {
 			missing = append(missing, fmt.Sprintf("%s (id %s)", u.path, u.id))
 			continue
