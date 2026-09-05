@@ -18,7 +18,8 @@ CREATE TABLE TMTask (
     project                         TEXT,
     heading                         TEXT,
     untrashedLeafActionsCount       INTEGER,
-    openUntrashedLeafActionsCount   INTEGER
+    openUntrashedLeafActionsCount   INTEGER,
+    rt1_recurrenceRule              BLOB
 );
 
 CREATE TABLE TMArea (

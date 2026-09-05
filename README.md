@@ -59,6 +59,7 @@ in follow-up commands like `show`, `edit`, `complete`, and `cancel`.
 | --- | --- | --- |
 | `-j, --json` | Output as JSON instead of plain text | `false` |
 | `--db PATH` | Override the Things3 SQLite database path | auto-detected |
+| `--no-verify` | Skip the read-back that confirms a `complete`/`cancel` actually landed | `false` |
 | `-v, --version` | Print version, commit, and build date and exit (same as `things version`) | — |
 
 ### Listing tasks
@@ -175,6 +176,11 @@ Checklist:
   [ ] Tag and push
 ```
 
+`things show` prints a `Repeats:` line for repeating to-dos and projects, and
+JSON output carries `"repeating": true` for them (the field is omitted
+otherwise). Things blocks several kinds of edit on those — see the note under
+[Editing](#editing-tasks-and-projects).
+
 `things projects` renders a one-line-per-project list; the leading glyph
 shows completion progress (`○` empty, `◔ ◑ ◕` partial, `●` done, `◌`
 cancelled):
@@ -244,10 +250,17 @@ stay untouched. An empty value clears the field (e.g. `--deadline ""`).
 | `--heading-id UUID` | ✓ | — | Set heading within project by UUID |
 | `--area NAME` | — | ✓ | Move project to area by name |
 | `--area-id UUID` | — | ✓ | Move project to area by UUID |
-| `--complete` | ✓ | ✓ | Mark as completed |
-| `--cancel` | ✓ | ✓ | Mark as canceled |
+| `--complete` | ✓ | ✓ | Mark as completed (not with `--cancel`) |
+| `--cancel` | ✓ | ✓ | Mark as canceled (not with `--complete`) |
 | `--duplicate` | ✓ | ✓ | Duplicate before applying edits |
 | `--reveal` | ✓ | ✓ | Reveal in Things after editing |
+
+> **Repeating items:** Things refuses `--when`, `--deadline`, `--complete`,
+> `--cancel`, and `--duplicate` on repeating to-dos and projects, and drops the
+> request silently instead of reporting an error
+> ([docs](https://culturedcode.com/things/support/articles/2803573/)). The CLI
+> checks first and exits non-zero with an explanation. Every other flag works
+> normally; the restricted changes have to be made in the Things app.
 
 Examples:
 
@@ -274,6 +287,22 @@ things complete 3
 things cancel "Old idea"
 things log
 ```
+
+After a `complete` or `cancel` the CLI reads the item back from the database
+and exits non-zero if the status did not change. Things has no callback for
+writes, so without this check a request it silently dropped is
+indistinguishable from one it applied. Repeating items are refused up front
+(see the note under [Editing](#editing-tasks-and-projects)); the read-back
+catches anything else — for example Things not running.
+
+```text
+$ things cancel W1gBDJPFpwUQrdP5Am5K7J
+Error: status change did not apply: "Renew insurance" (W1gBDJPFpwUQrdP5Am5K7J) is still open after 10s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
+$ echo $?
+1
+```
+
+Pass `--no-verify` to skip the check when you do not want to wait for it.
 
 ### Revealing items in Things3
 
@@ -446,6 +475,11 @@ embedded in the binary — so a plain `things` upgrade refreshes it; re-run
   URL schemes for creating and editing tasks, and through AppleScript for
   completing and cancelling them. This is the same interface Things exposes
   to Shortcuts and automation tools.
+- **Write confirmation**: `complete` and `cancel` poll the database after
+  writing until the status changes, up to 10 seconds, and fail if it never
+  does. Repeating items — which Things refuses to complete, cancel,
+  reschedule, or duplicate — are detected from the recurrence rule in the
+  database and rejected before any write is issued.
 - **Task resolution** accepts a UUID, a title (with interactive
   disambiguation when multiple tasks match) or a numeric index into the last
   listing.

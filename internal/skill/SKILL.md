@@ -8,10 +8,14 @@ today, upcoming, projects, or areas on macOS.
 - Reads (`list`, `show`, `projects`, `areas`, `tags`, `search`) are safe — use freely.
 - Writes (`add`, `project add`, `edit`, `complete`, `cancel`, `log`, `open`) modify the user's real data. Confirm before destructive ones (`complete`, `cancel`, bulk `edit`).
 - `edit`, `project edit`, and `import` payloads with `operation: update` require *Things → Settings → General → Enable Things URLs*. The error to recognise: `update: auth token is required — enable Things URLs in Things → Settings → General …`.
+- `--complete` and `--cancel` are mutually exclusive on `edit` and `project edit`.
+- `complete` and `cancel` (and `edit --complete` / `--cancel`) read the item back afterwards and exit non-zero if the status did not change. Treat a non-zero exit as "the task is still open" — do not report it as done.
 
 ## Output
 
 Most commands accept `--json` / `-j`. Prefer it when parsing output.
+
+Tasks and projects carry `"repeating": true` in JSON when Things treats them as repeating; the field is omitted otherwise. `things show` prints a `Repeats:` line for them.
 
 In JSON, `status` is a string enum — `"open"`, `"cancelled"`, or `"completed"` (not the raw Things integer) — on tasks, projects, and checklist items. Filter with e.g. `jq 'select(.status=="open")'`.
 
@@ -49,6 +53,7 @@ things edit <task> [--title --notes --prepend-notes --append-notes --when --dead
 things complete <task>          # task or project; project completion asks to confirm
 things cancel <task>            # task or project; project cancellation asks to confirm
 things log                      # move Today → Logbook
+things --no-verify complete <task>   # skip the read-back (rarely needed)
 things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
     # ref: task/project UUID, numeric list index, title, or built-in list name
     #      (today, inbox, upcoming, anytime, someday, logbook, trash, deadlines)
@@ -59,6 +64,17 @@ things import [--file F] [--reveal] < payload.json
     # batch create/update via the Things JSON URL scheme
     # payload is the array documented at culturedcode.com/things/support/articles/2803573/
 ```
+
+### Repeating to-dos and projects
+
+Things refuses to update `when`, `deadline`, completed/canceled status, and duplication on repeating items, and drops the request silently rather than reporting an error. The CLI checks first and fails with a non-zero exit:
+
+```
+"Water plants" is a repeating to-do — Things does not allow canceled to be changed
+on repeating to-dos and drops the request silently (…). Change it in the Things app instead
+```
+
+There is no CLI workaround — the user has to make the change in the Things app. Every other attribute (`--title`, `--notes`, `--tags`, `--list`, …) edits normally.
 
 ### Task reference forms
 

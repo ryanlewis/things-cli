@@ -40,6 +40,10 @@ func DateFilterableView(view string) bool {
 	return dateFilterableViews[view]
 }
 
+// repeatingPlaceholder is substituted with the probed recurrence expression by
+// (*DB).taskQuery — the column name varies across Things schema versions.
+const repeatingPlaceholder = "{{repeating}}"
+
 // baseTaskQuery selects a task with its project, heading, area and tags.
 //
 // A task filed under a project heading carries t.heading and leaves t.project
@@ -69,7 +73,8 @@ SELECT
 	COALESCE(a.title, COALESCE(pa.title, '')),
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
-	COALESCE(t.todayIndex, 0)
+	COALESCE(t.todayIndex, 0),
+	{{repeating}}
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -83,7 +88,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	var t model.Task
 	var startDate, deadline, stopDate, creationDate sql.NullFloat64
 	var tagsStr string
-	var trashed int
+	var trashed, repeating int
 
 	err := row.Scan(
 		&t.UUID, &t.Title, &t.Notes,
@@ -95,12 +100,14 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 		&t.AreaUUID, &t.AreaTitle,
 		&tagsStr,
 		&t.Index, &t.TodayIndex,
+		&repeating,
 	)
 	if err != nil {
 		return t, err
 	}
 
 	t.Trashed = trashed != 0
+	t.Repeating = repeating != 0
 	if startDate.Valid {
 		d := model.ThingsDate(int64(startDate.Float64))
 		t.StartDate = &d
@@ -222,12 +229,12 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 		orderBy = "ORDER BY t.\"index\" ASC"
 	}
 
-	query := baseTaskQuery + " WHERE " + where + " GROUP BY t.uuid " + orderBy
+	query := d.taskQuery() + " WHERE " + where + " GROUP BY t.uuid " + orderBy
 	return d.collectTasks(query, args...)
 }
 
 func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
-	query := baseTaskQuery + " WHERE t.uuid = ? GROUP BY t.uuid"
+	query := d.taskQuery() + " WHERE t.uuid = ? GROUP BY t.uuid"
 	row := d.db.QueryRow(query, uuid)
 	t, err := scanTask(row)
 	if err == sql.ErrNoRows {
@@ -249,7 +256,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	}
 
 	// Try exact title match
-	query := baseTaskQuery + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 GROUP BY t.uuid LIMIT 1"
+	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 GROUP BY t.uuid LIMIT 1"
 	row := d.db.QueryRow(query, uuidOrTitle)
 	task, err := scanTask(row)
 	if err == nil {
@@ -275,7 +282,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 }
 
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := baseTaskQuery + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 GROUP BY t.uuid ORDER BY t.\"index\" ASC"
+	query := d.taskQuery() + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 GROUP BY t.uuid ORDER BY t.\"index\" ASC"
 	return d.collectTasks(query, "%"+substr+"%")
 }
 
@@ -290,7 +297,7 @@ func (e *AmbiguousTaskError) Error() string {
 
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 	pattern := "%" + query + "%"
-	q := baseTaskQuery + " WHERE (t.title LIKE ? OR t.notes LIKE ?) AND t.trashed = 0 GROUP BY t.uuid ORDER BY t.\"index\" ASC"
+	q := d.taskQuery() + " WHERE (t.title LIKE ? OR t.notes LIKE ?) AND t.trashed = 0 GROUP BY t.uuid ORDER BY t.\"index\" ASC"
 	return d.collectTasks(q, pattern, pattern)
 }
 
