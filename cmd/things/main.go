@@ -33,7 +33,7 @@ var (
 type CLI struct {
 	JSON    bool             `help:"Output as JSON." short:"j" default:"false"`
 	Color   string           `help:"Color mode (auto|always|never)." enum:"auto,always,never" default:"auto"`
-	DB      string           `help:"Override database path." type:"existingfile"`
+	DB      string           `help:"Override database path." type:"path"`
 	Config  string           `help:"Path to the TOML config file (default ~/.config/things-cli/config.toml)." placeholder:"PATH"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
@@ -87,16 +87,14 @@ type Deps struct {
 	Config *config.File
 }
 
-// config returns the loaded config file, falling back to an unread file at the
-// default location so a Deps built without one (tests, direct construction)
-// still reports a sensible path.
+// config returns the loaded config file. main always supplies one, so a nil
+// Config means a Deps built by hand in a test. The fallback deliberately does
+// not resolve the real default path: a command that wrote to it would be
+// writing to the developer's own config file rather than the temp HOME the
+// test set up.
 func (d *Deps) config() *config.File {
 	if d.Config == nil {
-		path, source, err := config.ResolvePath("")
-		if err != nil {
-			source = config.SourceDefault
-		}
-		d.Config = &config.File{Path: path, Source: source}
+		d.Config = &config.File{Source: config.SourceDefault}
 	}
 	return d.Config
 }
@@ -130,6 +128,24 @@ func (d *Deps) Database() (*db.DB, error) {
 			return nil, err
 		}
 		path = p
+	}
+	// SQLite creates a missing file rather than refusing to open it, so a path
+	// that is not there would otherwise surface as "no such table" much later.
+	// The check lives here rather than on the --db flag so that a stale path in
+	// the config file does not break the commands that never read the database
+	// — `config path` and `config show` are how you find out it is stale.
+	info, err := os.Stat(path)
+	if err == nil && info.IsDir() {
+		// SQLite would take a directory too and fail much later with an opaque
+		// "unable to open database file"; kong's existingfile check used to
+		// catch this before the check moved here.
+		err = fmt.Errorf("%s is a directory, not a database file", path)
+	}
+	if err != nil {
+		if cfg := d.config(); cfg.SetsDB(path) {
+			return nil, &config.Error{Path: cfg.Path, Err: fmt.Errorf("db: %s", err)}
+		}
+		return nil, fmt.Errorf("cannot open the Things database: %s", err)
 	}
 	database, err := db.Open(path)
 	if err != nil {
@@ -887,14 +903,12 @@ func main() {
 	var cli CLI
 
 	// The config file supplies the defaults kong parses against, so it has to
-	// be read before the parser is built.
-	cfg, err := loadConfig(os.Args[1:])
-	if err != nil {
-		// Nothing is parsed yet, so --json has to come off argv. The config
-		// file cannot supply the answer here: reading it is what just failed.
-		renderError(os.Stdout, os.Stderr, jsonRequested(false, os.Args[1:]), err)
-		os.Exit(2)
-	}
+	// be read before the parser is built. A file that could not be read does
+	// not stop us here: it supplies no defaults, parsing carries on with the
+	// built-in ones, and the failure is reported after we know which command
+	// was asked for — because `things config` is how you find out what is
+	// wrong with the file.
+	cfg, cfgErr := loadConfig(os.Args[1:])
 
 	parser := kong.Must(&cli, parserOptions(cfg)...)
 
@@ -907,14 +921,6 @@ func main() {
 	ctx, err := parser.Parse(os.Args[1:])
 	if err != nil {
 		asJSON := jsonRequested(cfg.JSON(), os.Args[1:])
-		// A bad value in the config file is not a usage mistake, so it is
-		// reported on its own rather than under a usage dump for a command
-		// that was typed correctly.
-		var cfgErr *config.Error
-		if errors.As(err, &cfgErr) {
-			renderError(os.Stdout, os.Stderr, asJSON, cfgErr)
-			os.Exit(2)
-		}
 		// kong's UsageOnError writes the usage block to stdout, which under
 		// --json would leave a consumer parsing help text instead of the JSON
 		// object it was promised. Render the failure as JSON instead — the
@@ -924,6 +930,14 @@ func main() {
 			os.Exit(parseExitCode(err))
 		}
 		parser.FatalIfErrorf(err)
+	}
+
+	// Every command but the ones that report on the config file needs the file
+	// to have loaded. --help and --version never get here: kong answers them
+	// during Parse.
+	if cfgErr != nil && !diagnosesConfig(ctx) {
+		renderError(os.Stdout, os.Stderr, cli.JSON, cfgErr)
+		os.Exit(2)
 	}
 
 	if err := output.SetColorMode(cli.Color); err != nil {
@@ -936,6 +950,14 @@ func main() {
 
 	if err := ctx.Run(deps); err != nil {
 		renderError(os.Stdout, os.Stderr, cli.JSON, err)
+		var runCfgErr *config.Error
+		if errors.As(err, &runCfgErr) {
+			// Bad content in the config file exits 2 wherever it was caught —
+			// here, or before the command ran. Failures around the file rather
+			// than in it (nowhere to look for one, a refusal to overwrite) are
+			// ordinary command errors and exit 1.
+			os.Exit(2)
+		}
 		os.Exit(1)
 	}
 }

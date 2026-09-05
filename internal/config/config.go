@@ -216,6 +216,11 @@ type File struct {
 	Source string
 	Exists bool
 
+	// Err is why the file could not be used, when it could not be. The File is
+	// still returned so the diagnostic commands can report which file is at
+	// fault; it supplies no values in that state.
+	Err error
+
 	// values holds only the keys the file actually set, under their canonical
 	// names.
 	values map[string]any
@@ -223,43 +228,72 @@ type File struct {
 
 // Load reads and validates the config file at path. A file that is not there
 // yields an empty File rather than an error.
+//
+// The File is never nil, even when the error is not: a file that cannot be
+// read still has a path and an existence, which is what `things config path`
+// and `things config show` need in order to tell the user which file is
+// broken. Such a File supplies no values.
 func Load(path string) (*File, error) {
 	f := &File{Path: path, Source: SourceDefault, values: map[string]any{}}
+	fail := func(err error) (*File, error) {
+		f.Err = err
+		f.values = map[string]any{}
+		return f, err
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return f, nil
 		}
-		return nil, configErr(path, "cannot read: %w", err)
+		// Something is at the path, it just cannot be read — a directory, or
+		// a file the user has no read permission on. Say so: reporting it as
+		// "not found" would have `things config init` overwrite it without
+		// --force, and `things config path` deny it is there at all.
+		if _, statErr := os.Lstat(path); statErr == nil {
+			f.Exists = true
+		}
+		return fail(configErr(path, "cannot read: %w", err))
 	}
 	f.Exists = true
 
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		return nil, configErr(path, "invalid TOML: %s", tomlErrorText(err))
+		return fail(configErr(path, "invalid TOML: %s", tomlErrorText(err)))
 	}
 
 	for name, value := range raw {
 		key, ok := lookup(name)
 		if !ok {
-			return nil, configErr(path, "unknown key %q (valid keys: %s)",
-				name, strings.Join(KeyNames(), ", "))
+			return fail(configErr(path, "unknown key %q (valid keys: %s)",
+				name, strings.Join(KeyNames(), ", ")))
 		}
 		if _, dup := f.values[key.Name]; dup {
-			return nil, configErr(path, "key %q is set twice (%q and %q name the same setting)",
-				key.Name, key.Name, key.Flag)
+			return fail(configErr(path, "key %q is set twice (%q and %q name the same setting)",
+				key.Name, key.Name, key.Flag))
 		}
 		v, err := coerce(key, value)
 		if err != nil {
-			return nil, &Error{Path: path, Err: err}
+			return fail(&Error{Path: path, Err: err})
 		}
 		f.values[key.Name] = v
 	}
 
 	if err := f.checkExclusions(); err != nil {
-		return nil, err
+		return fail(err)
 	}
 	return f, nil
+}
+
+// SetsDB reports whether this file is what put path in play as the database,
+// so a failure to open it can be reported against the file rather than as a
+// bare path error with no clue where the path came from.
+func (f *File) SetsDB(path string) bool {
+	if f == nil || f.Err != nil {
+		return false
+	}
+	v, ok := f.values[dbKey].(string)
+	return ok && v != "" && kong.ExpandPath(v) == path
 }
 
 // checkExclusions rejects two mutually exclusive settings both turned on. Kong
@@ -381,17 +415,15 @@ func (f *File) Resolver() kong.Resolver {
 	values := map[string]any{}
 	excludes := map[string][]string{}
 	commands := map[string][]string{}
-	path := ""
-	if f != nil {
-		path = f.Path
+	if f != nil && f.Err == nil {
 		for _, k := range Keys {
 			v, ok := f.values[k.Name]
 			if !ok {
 				continue
 			}
 			// An empty db path is how a file says "leave it unset". Passing it
-			// on would make kong's existingfile check stat the empty string,
-			// which expands to the working directory.
+			// on would have kong's path mapper expand the empty string to the
+			// working directory and hand that over as the database.
 			if k.Name == dbKey && v == "" {
 				continue
 			}
@@ -428,17 +460,6 @@ func (f *File) Resolver() kong.Resolver {
 			for _, other := range parent.Flags {
 				if other.Name == name && other.Set {
 					return nil, nil
-				}
-			}
-		}
-		// A db path that does not exist is reported here, naming the config
-		// file, rather than as a bare flag error. Kong skips resolvers for
-		// flags given on the command line, so --db still overrides a stale
-		// entry instead of tripping over it.
-		if flag.Name == dbKey {
-			if s, ok := v.(string); ok {
-				if _, err := os.Stat(kong.ExpandPath(s)); err != nil {
-					return nil, configErr(path, "db: %s", err)
 				}
 			}
 		}

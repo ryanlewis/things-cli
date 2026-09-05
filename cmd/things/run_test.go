@@ -175,10 +175,10 @@ func runStreams(t *testing.T, database *db.DB, args ...string) (string, string, 
 	isolateHome(t)
 
 	var cli CLI
-	cfg, err := loadConfig(args)
-	if err != nil {
-		t.Fatalf("load config %v: %v", args, err)
-	}
+	// A config file that failed to load is not fatal here, exactly as it is
+	// not in main: parsing carries on without it, and the failure is reported
+	// afterwards unless the command is one that exists to report on the file.
+	cfg, cfgErr := loadConfig(args)
 	parser, err := kong.New(&cli, parserOptions(cfg)...)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
@@ -188,6 +188,9 @@ func runStreams(t *testing.T, database *db.DB, args ...string) (string, string, 
 		t.Fatalf("parse %v: %v", args, err)
 	}
 	var stdout, stderr bytes.Buffer
+	if cfgErr != nil && !diagnosesConfig(ctx) {
+		return "", "", cfgErr
+	}
 	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify, Hints: cli.Hints, Config: cfg}
 	var runErr error
 	withSilentStdout(t, func() {
