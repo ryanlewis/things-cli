@@ -11,6 +11,7 @@ import (
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/skill"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -251,5 +252,70 @@ func TestEditRejectsCompleteAndCancelTogether(t *testing.T) {
 				t.Fatalf("parse %v = %v, want a mutual-exclusion error", args, err)
 			}
 		})
+	}
+}
+
+// The batch read-back shares one budget across every item, so a payload of ten
+// dropped status changes must not wait ten timeouts. Counting sleeps is the
+// stable way to assert that: with a per-item deadline each item would burn its
+// own full run of polls.
+func TestVerifyStatusesShareOneDeadline(t *testing.T) {
+	timeout, interval, sleep := verifyTimeout, verifyInterval, verifySleep
+	t.Cleanup(func() { verifyTimeout, verifyInterval, verifySleep = timeout, interval, sleep })
+
+	database, _ := seedWritable(t)
+	// A budget of a few intervals, and a sleep that advances no real clock, so
+	// the deadline is reached by elapsed wall time in a handful of rounds.
+	verifyTimeout = 30 * time.Millisecond
+	verifyInterval = 5 * time.Millisecond
+	sleeps := 0
+	verifySleep = func(d time.Duration) {
+		sleeps++
+		time.Sleep(d)
+	}
+
+	wants := make([]statusWant, 8)
+	for i := range wants {
+		wants[i] = statusWant{uuid: "one-1", title: "Post letter", want: model.StatusCompleted}
+	}
+	errs := verifyStatuses(database, wants, verifyTimeout)
+
+	for i, err := range errs {
+		if err == nil {
+			t.Fatalf("item %d reported as landed, but nothing changed its status", i)
+		}
+		if !strings.Contains(err.Error(), "status change did not apply") {
+			t.Errorf("item %d: unexpected error %v", i, err)
+		}
+	}
+	// One sleep per round, and rounds stop at the shared deadline: at most
+	// budget/interval of them however many items there are. A per-item
+	// deadline would restart the count for each item and sleep roughly
+	// len(wants) times as often. Load can only push the real count below the
+	// bound, never above it, so this does not depend on how fast the machine
+	// is.
+	if maxRounds := int(verifyTimeout/verifyInterval) + 2; sleeps > maxRounds {
+		t.Errorf("slept %d times for %d items, want at most %d rounds — the deadline is not shared", sleeps, len(wants), maxRounds)
+	}
+}
+
+// A single write's read-back keeps the message it always had, batch refactor
+// or not.
+func TestVerifyStatusReportsTheItemThatDidNotChange(t *testing.T) {
+	fastVerify(t)
+	database, _ := seedWritable(t)
+
+	task, err := database.GetTaskByUUID("one-1")
+	if err != nil || task == nil {
+		t.Fatalf("seed lookup: %v", err)
+	}
+	err = verifyStatus(database, task, model.StatusCompleted)
+	if err == nil {
+		t.Fatal("expected a failure, got nil")
+	}
+	for _, want := range []string{"status change did not apply", `"Post letter" (one-1)`, "is still open"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing %q", err, want)
+		}
 	}
 }
