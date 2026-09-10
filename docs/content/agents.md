@@ -210,15 +210,16 @@ to retry with. The two import failures carry an `items` array naming which
 payload items were blocked or did not land; the [Commands](/commands/) page
 has the detail.
 
-`today`, `upcoming`, `anytime`, `someday` and `logbook` return projects as
-well as to-dos, because Things schedules a project the same way it schedules a
-to-do and shows the project itself in those lists — scheduled in the first
-three, deferred in Someday, completed in the Logbook under its completion
-date. Each row carries `"type"` — `"todo"` or `"project"` — so a script that
-acts on a listing should say which kind it means. It matters:
-`edit` refuses a project with `not a task`, and `complete` on a project closes
-every to-do inside it, so it asks first and refuses outright under `--json`
-without `--yes`.
+`today`, `upcoming`, `anytime`, `someday`, `logbook` and `trash` return
+projects as well as to-dos, because Things schedules a project the same way it
+schedules a to-do and shows the project itself in those lists — scheduled in
+the first three, deferred in Someday, completed in the Logbook under its
+completion date, trashed in Trash. A trashed project reaches no other command:
+`things projects` filters trashed rows. Each row carries `"type"` — `"todo"`
+or `"project"` — so a script that acts on a listing should say which kind it
+means. It matters: `edit` refuses a project with `not a task`, and `complete`
+on a project closes every to-do inside it, so it asks first and refuses
+outright under `--json` without `--yes`.
 
 Some patterns that fall out of this:
 

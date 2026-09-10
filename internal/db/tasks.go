@@ -138,9 +138,10 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 // carry both kinds (issue #201, the same UI-parity argument as #106). Someday
 // and Logbook are the same story at the other two ends of a project's life:
 // a project deferred to Someday is a row in Someday, and a completed project
-// is a row in the Logbook under its completion date (issue #206). Repeating
-// carries both for its own reason (issue #165). Headings (type 2) are
-// structure inside a project, never rows in a list, so they stay out.
+// is a row in the Logbook under its completion date (issue #206). Trash is the
+// last of them: a trashed project is a row in the app's Trash (issue #212).
+// Repeating carries both for its own reason (issue #165). Headings (type 2)
+// are structure inside a project, never rows in a list, so they stay out.
 const todoOrProject = "t.type IN (0, 1)"
 
 // todayWhere builds the today view's WHERE clause. By default only open tasks
@@ -156,13 +157,17 @@ func todayWhere(includeCompleted bool) string {
 }
 
 var viewFilters = map[string]string{
-	"today":     todayWhere(false),
-	"inbox":     "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	"upcoming":  "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
-	"anytime":   "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
-	"someday":   "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
-	"logbook":   "t.status = 3 AND t.trashed = 0 AND " + todoOrProject,
-	"trash":     "t.trashed = 1 AND t.type = 0",
+	"today":    todayWhere(false),
+	"inbox":    "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	"upcoming": "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
+	"anytime":  "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
+	"someday":  "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
+	"logbook":  "t.status = 3 AND t.trashed = 0 AND " + todoOrProject,
+	// Trash carries projects as well as to-dos: trashing a project in the
+	// app puts the project row itself in Trash, and `things projects` filters
+	// trashed rows, so pinning t.type = 0 here left a trashed project visible
+	// nowhere (issue #212).
+	"trash":     "t.trashed = 1 AND " + todoOrProject,
 	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	// Things' Repeating list: the templates that generate to-dos and
 	// projects, not the items they generate. A template carries the
