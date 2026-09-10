@@ -94,8 +94,8 @@ open is therefore either in `logbook` or in a list still showing it, never both
 and never neither — but `today` and `anytime` overlap each other, since a to-do
 scheduled for today is in the Anytime bucket too, so sweeping both means
 merging them on `uuid`. One closed inside a project that is itself closed or
-trashed is in neither `logbook` nor `today`, for the reason the next paragraph
-gives. `--include-completed`
+trashed is in none of the three — not `logbook`, not `today`, not `anytime` —
+for the reason the next paragraph gives. `--include-completed`
 works on `today` and `anytime`; with a filter, name the view:
 `things today -p "Launch v2" --include-completed`.
 

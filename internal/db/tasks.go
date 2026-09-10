@@ -236,6 +236,14 @@ const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate 
 // so the Logbook takes it the moment it closes. Withholding it on the day
 // alone would leave it listed nowhere at all (issue #230).
 //
+// The fold issue #249 adds to those two views needs no matching guard here,
+// unlike the template one. The test is left claiming today and anytime still
+// hold a closed project's to-dos, which since #249 they do not, and that
+// over-claim is harmless: the Logbook rejects exactly those rows on its own
+// parentNotClosed clause, so the withhold can never be what strands one. They
+// are folded into the project row and reached by naming the project, exactly
+// as issue #229 settled.
+//
 // Anytime's half is not redundant with Today's. A to-do can sit in the Anytime
 // bucket with no start date, which Today rejects, and Anytime is where the app
 // goes on showing it for the rest of the day. Today's half is not redundant
@@ -271,15 +279,40 @@ const heldByAnytime = "t.start = 1 AND t.type = 0 AND " + closedTodayUnlogged
 // accident.
 const heldByToday = todayScheduled + " AND " + closedTodayUnlogged
 
+// parentClosed is true for a row whose parent project has been completed or
+// cancelled. p is resolved through COALESCE(t.project, h.project), so a to-do
+// filed under a project heading is judged by its heading's project. COALESCE
+// makes an unparented row — p.uuid NULL — read false rather than NULL, which
+// is what lets both the test and its negation stay boolean.
+const parentClosed = "COALESCE(p.status, 0) IN (2, 3)"
+
+// parentNotClosed is the fold issue #229 measured: a closed project is one row
+// and its to-dos are not listed beside it, because the app folds them into the
+// project's row. The Logbook applies it, and so must the two views that can
+// show a closed row, or the same to-do is folded in one place and listed in
+// another (issue #249). It keeps an unparented row in the view.
+//
+// Trash is the deliberate exception rather than a third caller: it folds a
+// trashed parent's children only, for the reason its own viewFilters entry
+// gives.
+const parentNotClosed = "NOT (" + parentClosed + ")"
+
 // openOrJustClosed is the status test for the views that --include-completed
 // applies to. By default only open rows; with the flag, also the rows the app
-// is still showing in place because they were closed today and not yet logged.
-// Shared so today and anytime cannot answer the question differently.
+// is still showing in place because they were closed today, not yet logged,
+// and not folded into a closed project's row. Shared so today and anytime
+// cannot answer the question differently.
+//
+// The fold sits inside the closed branch rather than beside it, so it can only
+// ever remove a row --include-completed just added. An open to-do under a
+// closed project is a different question and a riskier one — dropping it would
+// take real work out of Today — and issue #249 does not ask it. There was no
+// such row in the data on 10 Sep 2026 to measure the app's answer against.
 func openOrJustClosed(includeCompleted bool) string {
 	if !includeCompleted {
 		return "t.status = 0"
 	}
-	return "(t.status = 0 OR (t.status IN (2, 3) AND " + closedTodayUnlogged + "))"
+	return "(t.status = 0 OR (t.status IN (2, 3) AND " + closedTodayUnlogged + " AND " + parentNotClosed + "))"
 }
 
 // todayWhere builds the today view's WHERE clause (issues #106, #230).
@@ -347,7 +380,7 @@ var viewFilters = map[string]string{
 	// rows in the CLI (issue #229). COALESCE keeps an unparented row — p.uuid
 	// NULL — in the view. The trashed-parent half of the fold is the clause
 	// ListTasks appends for every view.
-	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND COALESCE(" + heldInPlace + ", 0) = 0 AND COALESCE(p.status, 0) NOT IN (2, 3) AND " + todoOrProject,
+	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND COALESCE(" + heldInPlace + ", 0) = 0 AND " + parentNotClosed + " AND " + todoOrProject,
 	// Trash carries projects as well as to-dos: trashing a project in the
 	// app puts the project row itself in Trash, and `things projects` filters
 	// trashed rows, so pinning t.type = 0 here left a trashed project visible
@@ -554,14 +587,14 @@ func ValidView(name string) bool {
 const closedProjectContents = "(" + parentClosedOrTrashed + " OR t.status = 0) AND t.trashed = 0 AND " + todoOrProject
 
 // parentClosedOrTrashed is true for a row whose parent project has been closed
-// or thrown away. p is resolved through COALESCE(t.project, h.project), so a
-// to-do filed under a project heading is judged by its heading's project.
+// or thrown away — parentClosed widened to take the trash in too, so the two
+// cannot drift apart.
 //
 // Both halves COALESCE so an unparented row — p.uuid NULL — reads false rather
 // than NULL. A bare "p.status IN (2, 3)" would be NULL there, and NULL OR
 // false is NULL, which would drop every closed unparented row out of any
 // caller that ORs this with a status test.
-const parentClosedOrTrashed = "(COALESCE(p.status, 0) IN (2, 3) OR COALESCE(p.trashed, 0) = 1)"
+const parentClosedOrTrashed = "(" + parentClosed + " OR COALESCE(p.trashed, 0) = 1)"
 
 func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	where, ok := viewFilters[view]

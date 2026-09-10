@@ -334,8 +334,8 @@ other closed item, today's closes outside both lists included, so a closed item
 whose project is still open is either logged or still listed, never both. The
 two lists do overlap each other — a to-do scheduled for today is in the Anytime
 bucket too — so sweeping both means merging on `uuid`. One closed inside a
-project that is itself closed or trashed is in neither `logbook` nor `today` —
-see the fold described above.
+project that is itself closed or trashed is in none of the three — see the
+fold described above.
 
 Examples:
 

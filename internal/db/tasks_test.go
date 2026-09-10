@@ -2101,6 +2101,122 @@ func TestLogbookKeepsRepeatingTemplatesClosedToday(t *testing.T) {
 	}
 }
 
+// A closed project is one row and its to-dos are not listed beside it. The
+// Logbook and Trash have folded them since issue #229; the --include-completed
+// variants of today and anytime folded nothing, so the same to-do was folded
+// in one view and listed in another (issue #249).
+func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stopToday := model.TimeToUnix(time.Now())
+
+	for _, view := range []string{"today", "anytime"} {
+		t.Run(view, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
+				('proj-done',  'Finished', 1, 3, 0, 1, 0, ?,    ?,    1),
+				('proj-open',  'Live',     1, 0, 0, 1, 0, ?,    NULL, 2),
+				('proj-binned','Binned',   1, 0, 1, 1, 0, ?,    NULL, 3)`,
+				today, stopToday, today, today)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
+				('under-done',   'Folded',    0, 3, 0, 1, 0, ?, ?, 'proj-done',   4),
+				('under-binned', 'Also gone', 0, 3, 0, 1, 0, ?, ?, 'proj-binned', 5),
+				('under-open',   'Listed',    0, 3, 0, 1, 0, ?, ?, 'proj-open',   6),
+				('unparented',   'Listed',    0, 3, 0, 1, 0, ?, ?, NULL,          7)`,
+				today, stopToday, today, stopToday, today, stopToday, today, stopToday)
+
+			got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The closed project itself is a row in today, which carries
+			// project rows; anytime carries none (issue #217).
+			want := []string{"under-open", "unparented", "proj-open"}
+			if view == "today" {
+				want = append(want, "proj-done")
+			} else {
+				want = want[:2]
+			}
+			if !sameSet(uuidsOf(got), want) {
+				t.Errorf("%s --include-completed: got %v, want %v", view, uuidsOf(got), want)
+			}
+		})
+	}
+}
+
+// The fold sits inside the closed branch, so it can only remove a row the flag
+// just added. An open to-do under a closed project is a different question and
+// issue #249 does not ask it — dropping it would take real work out of Today.
+func TestIncludeCompletedKeepsOpenTodosUnderClosedProject(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
+		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 1)`,
+		today, model.TimeToUnix(time.Now()))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
+		VALUES ('still-open', 'Left over', 0, 0, 0, 1, 0, ?, 'proj-done', 2)`, today)
+
+	for _, tc := range []struct {
+		view             string
+		includeCompleted bool
+	}{
+		{"today", false}, {"today", true}, {"anytime", false}, {"anytime", true},
+	} {
+		got, err := d.ListTasks(tc.view, TaskFilter{IncludeCompleted: tc.includeCompleted})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, task := range got {
+			if task.UUID == "still-open" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s (include-completed=%v) dropped the open to-do: %v", tc.view, tc.includeCompleted, uuidsOf(got))
+		}
+	}
+}
+
+// The folded row is not stranded: naming the project returns it, which is what
+// issue #229 settled when it folded the same row out of the Logbook.
+func TestFoldedJustClosedRowIsReachableByProject(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stopToday := model.TimeToUnix(time.Now())
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
+		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 1)`, today, stopToday)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index")
+		VALUES ('folded', 'Folded', 0, 3, 0, 1, 0, ?, ?, 'proj-done', 2)`, today, stopToday)
+
+	for _, view := range []string{"today", "anytime", "logbook"} {
+		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, task := range got {
+			if task.UUID == "folded" {
+				t.Errorf("view %q lists the folded row", view)
+			}
+		}
+	}
+
+	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(contents), []string{"folded"}) {
+		t.Errorf("--project proj-done: got %v, want [folded]", uuidsOf(contents))
+	}
+}
+
 // Someday takes the same arrangement. Its filter keeps only unparented rows,
 // so what is left to check is that unfiled items lead and areas follow in area
 // order — it matched the app in none of its six positions before (issue #237).
