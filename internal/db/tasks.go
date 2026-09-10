@@ -135,9 +135,12 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 // Things schedules a project exactly as it schedules a to-do — start,
 // startBucket, startDate and todayIndex all live on the project row — and
 // lists the project itself in Today, Upcoming and Anytime, so those views
-// carry both kinds (issue #201, the same UI-parity argument as #106).
-// Repeating carries both for its own reason (issue #165). Headings (type 2)
-// are structure inside a project, never rows in a list, so they stay out.
+// carry both kinds (issue #201, the same UI-parity argument as #106). Someday
+// and Logbook are the same story at the other two ends of a project's life:
+// a project deferred to Someday is a row in Someday, and a completed project
+// is a row in the Logbook under its completion date (issue #206). Repeating
+// carries both for its own reason (issue #165). Headings (type 2) are
+// structure inside a project, never rows in a list, so they stay out.
 const todoOrProject = "t.type IN (0, 1)"
 
 // todayWhere builds the today view's WHERE clause. By default only open tasks
@@ -157,8 +160,8 @@ var viewFilters = map[string]string{
 	"inbox":     "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	"upcoming":  "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	"anytime":   "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
-	"someday":   "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	"logbook":   "t.status = 3 AND t.trashed = 0 AND t.type = 0",
+	"someday":   "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
+	"logbook":   "t.status = 3 AND t.trashed = 0 AND " + todoOrProject,
 	"trash":     "t.trashed = 1 AND t.type = 0",
 	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	// Things' Repeating list: the templates that generate to-dos and

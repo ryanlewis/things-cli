@@ -750,3 +750,73 @@ func TestRunListTodayIncludesScheduledProject(t *testing.T) {
 		t.Errorf("plain output marked a to-do as a project:\n%s", plain)
 	}
 }
+
+// A project deferred to Someday, and a completed project, are rows in the
+// app's Someday and Logbook lists, so they are rows in `things someday` and
+// `things logbook` too (issue #206). Plain text marks them "(project)"; JSON
+// already carried "type".
+func TestRunListSomedayAndLogbookIncludeProjects(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	stopDate := model.TimeToUnix(time.Now().Add(-1 * time.Hour))
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask
+			(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
+			('proj-welsh',  'Learn Welsh',  1, 0, 0, 2, 0, NULL, NULL, 1),
+			('todo-book',   'Read a book',  0, 0, 0, 2, 0, NULL, NULL, 2),
+			('proj-site',   'Site rebuild', 1, 3, 0, 1, 0, NULL, ?,    3),
+			('todo-css',    'Ship the CSS', 0, 3, 0, 1, 0, NULL, ?,    4)`,
+		stopDate, stopDate,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	database := db.NewFromSQL(sqlDB)
+
+	cases := []struct {
+		view        string
+		projectUUID string
+		projectName string
+		todoName    string
+	}{
+		{"someday", "proj-welsh", "Learn Welsh", "Read a book"},
+		{"logbook", "proj-site", "Site rebuild", "Ship the CSS"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.view, func(t *testing.T) {
+			out, err := runOut(t, database, "--json", "list", tc.view)
+			if err != nil {
+				t.Fatalf("run --json list %s: %v", tc.view, err)
+			}
+			var tasks []model.Task
+			if err := json.Unmarshal([]byte(out), &tasks); err != nil {
+				t.Fatalf("unmarshal %q: %v", out, err)
+			}
+			var project *model.Task
+			for i := range tasks {
+				if tasks[i].UUID == tc.projectUUID {
+					project = &tasks[i]
+				}
+			}
+			if project == nil {
+				t.Fatalf("%s omitted the project: %+v", tc.view, tasks)
+			}
+			if project.Type != model.TypeProject {
+				t.Errorf("type = %d, want %d", project.Type, model.TypeProject)
+			}
+
+			plain, err := runOut(t, database, "list", tc.view)
+			if err != nil {
+				t.Fatalf("run list %s: %v", tc.view, err)
+			}
+			if !strings.Contains(plain, tc.projectName) {
+				t.Errorf("plain output missing the project:\n%s", plain)
+			}
+			if !strings.Contains(plain, "(project)") {
+				t.Errorf("plain output does not mark the project row:\n%s", plain)
+			}
+			if strings.Contains(plain, tc.todoName+" (project)") {
+				t.Errorf("plain output marked a to-do as a project:\n%s", plain)
+			}
+		})
+	}
+}
