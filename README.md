@@ -67,7 +67,8 @@ how a project completes under `--json`.
 A failing command prints a single JSON object to stdout and exits non-zero, so
 a consumer parsing stdout gets a structured failure either way. `error` is a
 stable token — `ambiguous task`, `not found`, `not a task`, `not a project`,
-`import refused`, `import partially applied`, or `error` for anything else —
+`stale list cache`, `import refused`, `import partially applied`, or `error`
+for anything else —
 and `message` carries the same text plain-text mode prints.
 
 ```console
@@ -376,9 +377,11 @@ that share one are reported as candidates rather than resolved to whichever
 sorts first.
 
 The numeric index is for interactive use: it comes from the last plain-text
-listing, the only kind that prints numbers. A `--json` listing prints none and
-records none, so scripts and agents leave your numbering alone — they act on
-the `uuid` instead. See [Working with agents](https://things.rlew.io/agents/).
+listing, the only kind that prints numbers, and it is good for four hours after
+that listing. Past then it is refused, naming the listing to re-run. A `--json`
+listing prints no numbers and records none, so scripts and agents leave your
+numbering alone — they act on the `uuid` instead. See
+[Working with agents](https://things.rlew.io/agents/).
 
 ```sh
 things show 3                     # task #3 from the last list

@@ -9,9 +9,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/kong"
 
+	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -224,6 +226,29 @@ func TestRenderErrorStaleIndex(t *testing.T) {
 	}
 	if !strings.Contains(payload.Message, "stale list cache") {
 		t.Errorf("message = %q", payload.Message)
+	}
+}
+
+// A numeric ref refused for age gets its own token, so an agent can tell "the
+// row numbers moved, re-list" apart from "the item is gone" (issue #265).
+func TestRenderErrorStaleListCache(t *testing.T) {
+	payload, raw := decodePayload(t, &staleCacheError{
+		Query: "3",
+		Row:   3,
+		Last: cache.LastList{
+			WrittenAt: time.Now().Add(-3 * 24 * time.Hour),
+			Command:   "things today",
+			UUIDs:     []string{"a", "b", "c"},
+		},
+	})
+	if payload.Error != "stale list cache" {
+		t.Errorf("error = %q, want %q (%s)", payload.Error, "stale list cache", raw)
+	}
+	if payload.Kind != "task" || payload.Query != "3" {
+		t.Errorf("payload = %+v", payload)
+	}
+	if !strings.Contains(payload.Message, "things today") {
+		t.Errorf("message = %q, want the listing named", payload.Message)
 	}
 }
 

@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/kong"
 
@@ -170,14 +174,30 @@ func TestCacheTaskUUIDs(t *testing.T) {
 	tasks := []model.Task{
 		{UUID: "u1"}, {UUID: "u2"}, {UUID: "u3"},
 	}
-	cacheTaskUUIDs(&Deps{}, tasks)
+	cacheTaskUUIDs(&Deps{}, "things today", tasks)
 
 	got, err := cache.ReadLastList()
 	if err != nil {
 		t.Fatalf("ReadLastList: %v", err)
 	}
-	if len(got) != 3 || got[0] != "u1" || got[2] != "u3" {
-		t.Errorf("cached list = %v", got)
+	if len(got.UUIDs) != 3 || got.UUIDs[0] != "u1" || got.UUIDs[2] != "u3" {
+		t.Errorf("cached list = %v", got.UUIDs)
+	}
+	if got.Command != "things today" {
+		t.Errorf("cached command = %q", got.Command)
+	}
+	if got.Stale(time.Now()) {
+		t.Error("a listing just written reads back as stale")
+	}
+}
+
+// seedCache writes a last-list cache aged by age, so a test can put a numeric
+// reference either side of cache.MaxAge.
+func seedCache(t *testing.T, age time.Duration, command string, uuids ...string) {
+	t.Helper()
+	entry := cache.LastList{WrittenAt: time.Now().Add(-age), Command: command, UUIDs: uuids}
+	if err := cache.WriteLastList(entry); err != nil {
+		t.Fatalf("seed cache: %v", err)
 	}
 }
 
@@ -195,9 +215,7 @@ func seedResolveTaskDB(t *testing.T) *db.DB {
 func TestResolveTaskNumericFromCache(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	if err := cache.WriteLastList([]string{"abc-123", "other"}); err != nil {
-		t.Fatalf("seed cache: %v", err)
-	}
+	seedCache(t, time.Minute, "things today", "abc-123", "other")
 	database := seedResolveTaskDB(t)
 
 	got, err := resolveTask(&Deps{}, "1", database)
@@ -212,13 +230,116 @@ func TestResolveTaskNumericFromCache(t *testing.T) {
 func TestResolveTaskStaleCacheIndex(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	if err := cache.WriteLastList([]string{"missing-uuid"}); err != nil {
-		t.Fatal(err)
-	}
+	seedCache(t, time.Minute, "things today", "missing-uuid")
 	database := seedResolveTaskDB(t)
 
 	_, err := resolveTask(&Deps{}, "1", database)
 	if err == nil {
 		t.Fatal("expected stale cache error")
+	}
+}
+
+// A numeric ref against a listing older than cache.MaxAge is refused rather
+// than resolved: the UUID is still there, so acting on it would silently hit
+// whatever has drifted into that row (issue #265).
+func TestResolveTaskNumericRefusedWhenCacheIsOld(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	seedCache(t, 3*24*time.Hour, `things today --project "Work"`, "abc-123", "other")
+	database := seedResolveTaskDB(t)
+
+	_, err := resolveTask(&Deps{}, "1", database)
+	var stale *staleCacheError
+	if !errors.As(err, &stale) {
+		t.Fatalf("resolveTask = %v, want a stale cache error", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"3 days ago", `things today --project "Work"`, "uuid"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message %q does not mention %q", msg, want)
+		}
+	}
+}
+
+// The bound is a bound: a listing from within it still resolves.
+func TestResolveTaskNumericInsideTheBound(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	seedCache(t, cache.MaxAge-time.Minute, "things today", "abc-123")
+	database := seedResolveTaskDB(t)
+
+	got, err := resolveTask(&Deps{}, "1", database)
+	if err != nil {
+		t.Fatalf("resolveTask: %v", err)
+	}
+	if got.UUID != "abc-123" {
+		t.Errorf("got %+v", got)
+	}
+}
+
+// A cache file left by a things-cli older than 0.8.0 carries no timestamp, so
+// there is nothing to age it by and no listing to name. It is refused with the
+// same shape of message.
+func TestResolveTaskNumericRefusedWhenCacheHasNoTimestamp(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, "Library", "Caches", "things-cli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "last-list"), []byte("abc-123\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	database := seedResolveTaskDB(t)
+
+	_, err := resolveTask(&Deps{}, "1", database)
+	var stale *staleCacheError
+	if !errors.As(err, &stale) {
+		t.Fatalf("resolveTask = %v, want a stale cache error", err)
+	}
+	if !strings.Contains(err.Error(), "older things-cli") {
+		t.Errorf("message = %q", err.Error())
+	}
+}
+
+// A number past the end of the cache was never a row, so it keeps falling
+// through to the title lookup whatever the cache's age.
+func TestResolveTaskNumericPastEndOfOldCache(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	seedCache(t, 3*24*time.Hour, "things today", "abc-123")
+	database := seedResolveTaskDB(t)
+
+	_, err := resolveTask(&Deps{}, "9", database)
+	var stale *staleCacheError
+	if errors.As(err, &stale) {
+		t.Fatalf("row 9 of a 1-row cache should not be refused as stale: %v", err)
+	}
+	if err == nil {
+		t.Fatal("expected a not-found error for a title of \"9\"")
+	}
+}
+
+func TestListCommandLine(t *testing.T) {
+	cases := []struct {
+		name    string
+		cmd     ListCmd
+		view    string
+		project string
+		want    string
+	}{
+		{"bare view", ListCmd{}, "today", "", "things today"},
+		{"filter only", ListCmd{}, "project", "Some Project", `things --project "Some Project"`},
+		{"view and filter", ListCmd{Area: "Home"}, "today", "", "things today --area Home"},
+		{"tag", ListCmd{Tag: "errand"}, "anytime", "", "things anytime --tag errand"},
+		{"dates", ListCmd{From: "2026-09-01", To: "2026-09-30"}, "upcoming", "", "things upcoming --from 2026-09-01 --to 2026-09-30"},
+		{"include completed", ListCmd{IncludeCompleted: true}, "today", "", "things today --include-completed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cmd.commandLine(tc.view, tc.project); got != tc.want {
+				t.Errorf("commandLine = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

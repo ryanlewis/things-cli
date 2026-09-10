@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -16,9 +17,15 @@ import (
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// Try numeric index from last list
 	if n, err := strconv.Atoi(ref); err == nil && n >= 1 {
-		uuids, cacheErr := cache.ReadLastList()
-		if cacheErr == nil && n <= len(uuids) {
-			t, err := database.GetTaskByUUID(uuids[n-1])
+		last, cacheErr := cache.ReadLastList()
+		if cacheErr == nil && n <= len(last.UUIDs) {
+			// The row exists in the cache, so this reference is a row number
+			// and nothing else. Refuse it when the listing behind it is old
+			// enough that the rows have probably moved (issue #265).
+			if last.Stale(time.Now()) {
+				return nil, &staleCacheError{Query: ref, Row: n, Last: last}
+			}
+			t, err := database.GetTaskByUUID(last.UUIDs[n-1])
 			if err != nil {
 				return nil, err
 			}
@@ -91,7 +98,11 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 //
 // The guard lives here, not at the call sites, so ListCmd and SearchCmd
 // cannot drift apart.
-func cacheTaskUUIDs(d *Deps, tasks []model.Task) {
+//
+// command is the listing as the user could re-type it, recorded alongside the
+// UUIDs so a later numeric ref that has gone stale can name the listing to
+// re-run (issue #265).
+func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 	if d.JSON {
 		return
 	}
@@ -99,7 +110,16 @@ func cacheTaskUUIDs(d *Deps, tasks []model.Task) {
 	for i, t := range tasks {
 		uuids[i] = t.UUID
 	}
-	if err := cache.WriteLastList(uuids); err != nil {
+	entry := cache.LastList{WrittenAt: time.Now(), Command: command, UUIDs: uuids}
+	if err := cache.WriteLastList(entry); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to cache task list: %v\n", err)
 	}
+}
+
+// quoteArg renders one argument as the user would have to type it.
+func quoteArg(s string) string {
+	if s == "" || strings.ContainsAny(s, " \t\"'\\") {
+		return strconv.Quote(s)
+	}
+	return s
 }

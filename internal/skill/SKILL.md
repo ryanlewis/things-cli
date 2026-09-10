@@ -17,7 +17,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 | Form | Notes |
 | --- | --- |
 | UUID | Always unambiguous. **Prefer this.** |
-| Numeric index | 1-based, from the last *plain-text* `list` or `search` only. For a person at a terminal — **not for you**. |
+| Numeric index | 1-based, from the last *plain-text* `list` or `search` only, and only for four hours after it. For a person at a terminal — **not for you**. |
 | Title substring | Matched literally and case-insensitively — `%` and `_` are characters, not wildcards. Interactive runs prompt; non-TTY runs error with the match list. |
 
 **Use `--json` and act on the `uuid`** — `things show <uuid>`, `things complete <uuid>`, `things edit <uuid>`. Never act on a row number. The numbered list is a convenience for a person reading a terminal, and the numbers behind it come from a single cache file shared by everyone on the machine: another agent, or the user, can renumber it between your listing and your write, so a number you read is not reliably the item you meant. A UUID names the same item forever. Resolve once and use it for the rest of the job:
@@ -26,7 +26,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 things --json list today | jq -r '.[0].uuid'
 ```
 
-A `--json` listing does not write that cache at all (JSON output has no row numbers to write), so your runs cannot move the numbers a person is reading from. A plain listing does write it, and overwrites whatever was there. Order within one listing is fixed, so the same listing run twice numbers the same items the same way, but the numbers still move as items are added, closed or rescheduled.
+A `--json` listing does not write that cache at all (JSON output has no row numbers to write), so your runs cannot move the numbers a person is reading from. A plain listing does write it, and overwrites whatever was there. Order within one listing is fixed, so the same listing run twice numbers the same items the same way, but the numbers still move as items are added, closed or rescheduled. Row numbers also expire: a numeric reference to a listing more than four hours old fails with `stale list cache` rather than resolving. A `uuid` never expires.
 
 A title can match several items. Under `--json` an ambiguous reference is an error carrying the candidates (below), never a prompt.
 
@@ -52,6 +52,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 {"error": "ambiguous task", "message": "...", "kind": "task", "query": "milk",
  "matches": [{"uuid": "...", "title": "Buy milk", "type": "task", "project": "Chores"}]}
 {"error": "not found", "message": "task not found: milk", "kind": "task", "query": "milk"}
+{"error": "stale list cache", "message": "task #2 comes from a stale list cache: ...", "kind": "task", "query": "2"}
 {"error": "not a task", "message": "\"Chores\" is a project; use things project edit",
  "kind": "project", "query": "Chores", "uuid": "...", "title": "Chores"}
 {"error": "not a project", "message": "\"Post letter\" is a task; use things edit",
@@ -59,7 +60,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 {"error": "error", "message": "..."}
 ```
 
-On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries its `type`, and a title a project and a to-do share is reported this way rather than resolving to one of them, so `type` tells you whether the uuid you picked wants `things edit` or `things project edit`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
+On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries its `type`, and a title a project and a to-do share is reported this way rather than resolving to one of them, so `type` tells you whether the uuid you picked wants `things edit` or `things project edit`. On `stale list cache` a row number was used past its four hours; re-list and use the `uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
 
 `import` fails per item, so its two failures add an `items` array — act on that rather than parsing `message`:
 

@@ -72,6 +72,11 @@ so there is nothing for it to record, and this way a scripted run cannot move
 the numbers a person is working from. Plain listings still write it, and each
 one overwrites the last.
 
+Row numbers also expire. The cache records when the listing ran, and a numeric
+reference to one more than four hours old fails with the `stale list cache`
+token instead of resolving. This is a safety net for people, not a mode to code
+against: act on the `uuid` and it never applies.
+
 ## Hand a task to an agent
 
 `things show <ref> --agent` prints the item as a self-contained Markdown
@@ -133,8 +138,8 @@ A few things about the brief are deliberate:
 
 - **Every command names the UUID.** A title can match several tasks and a
   numeric index belongs to whichever plain listing last wrote the cache —
-  which may be the user's, not yours, and may be hours old — so neither is
-  safe for an agent that will run its own `list` along the way.
+  which may be the user's, not yours, and may be too old to resolve at all —
+  so neither is safe for an agent that will run its own `list` along the way.
 - **The notes are quarantined.** They sit inside a fence wide enough that
   nothing in them can close it, and the brief says they are content, not
   instructions. A note carrying its own headings or a command block stays
@@ -243,7 +248,8 @@ reads as an ambiguity rather than resolving to one of them, and the `type` of
 the uuid you pick tells you whether to retry with `edit` or `project edit`.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
-`import refused`, `import partially applied`, and `error` for everything else.
+`stale list cache`, `import refused`, `import partially applied`, and `error`
+for everything else.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
 to `project edit`; both refuse before anything is written and name the command
 to retry with. The two import failures carry an `items` array naming which
