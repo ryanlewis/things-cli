@@ -256,11 +256,12 @@ marked `(project)` in plain output and `"type": "project"` in JSON. The
 match a project, and `things skill show` states the rule in full.
 
 Trashing a project in Things leaves its tasks untrashed in the database, so
-every view above hides tasks whose project is in the trash. A closed project
-is one `logbook` row rather than a row plus its contents, and a trashed
-project is one `trash` row the same way: the app folds their tasks into the
-project row. Name the project to read them — `things --project <uuid>` on a
-closed or trashed project returns its contents whatever their status.
+every view above hides tasks whose project is in the trash unless you name that
+project with `--project`. A closed project is one `logbook` row rather than a
+row plus its contents, and a trashed project is one `trash` row the same way:
+the app folds their tasks into the project row. Name the project to read them —
+`things --project <uuid>` on a closed or trashed project returns its contents
+whatever their status.
 
 Filters:
 

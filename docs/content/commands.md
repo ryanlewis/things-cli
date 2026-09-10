@@ -99,7 +99,9 @@ app folds a closed project's tasks into the project's own row and lists none
 of them separately, and `trash` does the same for a trashed project. To reach
 those tasks, name the project: `things --project <uuid>` on a closed or
 trashed project returns its contents whatever their status, which is what the
-app answers for the same question. Naming a closed project on `today` or
+app answers for the same question. Naming the project works inside a view as
+well as in that bare form: `things anytime --project <uuid>` on a trashed
+project lists its open tasks, and naming a closed project on `today` or
 `anytime` with `--include-completed` lifts the fold there too, so a slice of
 those contents is reachable without leaving the view. A task you threw away
 out of a project is the exception — it keeps its own `trash` row, because it
