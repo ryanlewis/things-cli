@@ -227,7 +227,17 @@ var viewFilters = map[string]string{
 	"today":    todayWhere(false),
 	"inbox":    "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	"upcoming": "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
-	"anytime":  "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
+	// Anytime is the one scheduled view that does not carry project rows, and
+	// that is the app's own shape rather than an inconsistency. Every active
+	// project is trivially "anytime", so listing them all as rows would bury
+	// the to-dos; the app uses the project as the group header above its
+	// to-dos instead. Measured on 10 Sep 2026: the app's Anytime held none of
+	// the 23 active projects as a row, and held all 107 of their to-dos, which
+	// the CLI already matched exactly. This revises the widening #205 and #216
+	// applied to this view (issue #217). Today keeps its project rows — a
+	// project scheduled for a day is a row in the app's Today — and so do
+	// upcoming and someday, where a project has actually been put somewhere.
+	"anytime": "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	// Someday is the app's list of deferred things you have not filed under a
 	// project. A to-do inside a project stays inside it however it is deferred:
 	// the app shows it greyed within the project and keeps it out of the global
@@ -353,14 +363,51 @@ var viewOrderBy = map[string]string{
 	// project so the rendered group headers stay contiguous instead of
 	// repeating as rows interleave by index.
 	"project": "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.start ASC, t.\"index\" ASC" + uuidTiebreak,
+	// Anytime groups the same way, which is how the app presents it: the
+	// project is the header above its own to-dos, not a row among them. The
+	// view listed in bare t."index" order before, so a project's to-dos
+	// interleaved with everything else and the rendered header repeated
+	// (issue #217).
+	"anytime": "ORDER BY " + anytimeGrouping + ", t.\"index\" ASC" + uuidTiebreak,
+	// Upcoming is a diary, so it reads by date and not by list position. The
+	// app orders it by start date and then by todayIndex, which is the
+	// within-day position it also keys Today on; the view listed in bare
+	// t."index" order before, which interleaved the dates (issue #217).
+	"upcoming": "ORDER BY t.startDate ASC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 }
 
+// anytimeGrouping reproduces how the app's Anytime list is arranged, measured
+// against it on 10 Sep 2026 (issue #217). Four keys, and the two that ask
+// "filed here at all?" are a CASE rather than a plain index because Things'
+// own indexes are negative, so the COALESCE default of 0 that stands for "not
+// filed here" would sort last where the app puts it first:
+//
+//  1. the items filed nowhere at all — no project and no area — lead the list;
+//  2. then areas, in area order;
+//  3. and inside an area its own loose to-dos come before those of its
+//     projects, which then follow project by project.
+//
+// A to-do inside a project that carries no area is the case these keys do not
+// separate: the area key takes its COALESCE default of 0 and so lands the row
+// after every area. Sorting it where the app does would mean comparing a
+// TMArea."index" with a TMTask."index", which are different spaces, so the
+// app's sidebar order between a standalone project and an area cannot be
+// reconstructed from either alone.
+//
+// The caller adds t."index" to order within a project, and the uuid tiebreak
+// after that. Together they put a project's to-dos in one contiguous block, so
+// the rendered group header prints once above them, which is the app's own
+// presentation of a project in this list — a header, not a row.
+const anytimeGrouping = `CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, ` +
+	`COALESCE(a."index", pa."index", 0), ` +
+	`CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, ` +
+	`COALESCE(p."index", 0)`
+
 // indexOrderBy is the ordering for the views with no entry in viewOrderBy —
-// inbox, upcoming, anytime, someday and trash all list in index order, as does
-// the bare --project/--area/--tag filter. SearchTasks takes it too: its results
-// are numbered out of the same cache. uuidTiebreak closes the same gap here,
-// because t."index" repeats across lists and two rows in one listing can share
-// it.
+// inbox, someday and trash list in index order. SearchTasks takes it too: its
+// results are numbered out of the same cache. uuidTiebreak closes the same gap
+// here, because t."index" repeats across lists and two rows in one listing can
+// share it.
 const indexOrderBy = `ORDER BY t."index" ASC` + uuidTiebreak
 
 // untrashedParent excludes to-dos whose project is in the trash, in every

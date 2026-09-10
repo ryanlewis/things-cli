@@ -164,9 +164,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # a closed or trashed project returns its contents whatever their status,
     # and `things show <uuid> --agent` marks each row [x]/[~]/[ ]. A to-do
     # thrown away out of a trashed project is reachable nowhere, as in the app.
-    # every named view except inbox lists projects as rows too, since Things
-    # schedules a project the same way it schedules a to-do and shows the
-    # project itself in those lists: scheduled in today/upcoming/anytime,
+    # every named view except inbox and anytime lists projects as rows too,
+    # since Things schedules a project the same way it schedules a to-do and
+    # shows the project itself in those lists: scheduled in today/upcoming,
     # deferred in someday, closed in logbook under its stopDate (completed
     # and cancelled both, told apart by "status"),
     # trashed in trash, and due in deadlines — a project takes a deadline the
@@ -176,7 +176,11 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # matches one; --area does. repeating carries project templates for its
     # own reason. A bare --project/--area/--tag with no view named follows the
     # same rule, so --area/--tag return project rows and --project does not.
-    # Only inbox stays to-do only.
+    # inbox stays to-do only. So does anytime, and for the opposite reason:
+    # every active project is trivially anytime, so the app groups its to-dos
+    # under the project name instead of listing the project among them. Plain
+    # output prints that name as the group header. To sweep projects, use
+    # `things projects`.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
     # --include-completed is today-only: items ticked off in Today that Things
