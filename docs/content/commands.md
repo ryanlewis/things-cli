@@ -55,6 +55,14 @@ way the app's Logbook shows both, so the view returns cancelled rows too.
 `[~]` in plain output — so filter on it when you mean finished rather than
 closed: `things logbook -j | jq '.[] | select(.status=="completed")'`.
 
+`someday` is the app's Someday list: the deferred things you have not filed
+under a project. A to-do inside a project stays inside it however it is
+deferred, so `someday` returns Someday projects and unparented Someday to-dos,
+not the deferred to-dos of an Anytime project. Open the project to see those —
+`things --project "Name"` — or use `anytime`, which carries the project itself.
+Because nothing in `someday` has a parent project, `--project` there could
+never match; the CLI rejects the combination rather than print an empty list.
+
 `repeating` lists repeating to-do and project templates. The items a template
 generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
 `things projects` and the rest; the template itself appears only here — plus

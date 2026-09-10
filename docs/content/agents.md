@@ -226,6 +226,16 @@ a script that acts on a listing should say which kind it means. It matters:
 every to-do inside it, so it asks first and refuses outright under `--json`
 without `--yes`.
 
+`someday` matches the app's Someday list, which holds the deferred things not
+filed under a project. A to-do inside a project stays inside it however it is
+deferred, so an agent asked what is in Someday sees Someday projects and
+unparented Someday to-dos, not the deferred contents of other projects. That
+holds even when the parent project is itself in Someday: the project lists, its
+to-dos do not. To sweep a project's own deferred to-dos, name the project:
+`things --project "Name" -j`. `things someday --project "Name"` is an error,
+not an empty list — nothing in the view has a parent project, so the filter
+could never match.
+
 `logbook` is everything closed, not just everything finished: a cancelled
 to-do or project is logged beside the completed ones, as the app's Logbook
 shows them. `status` separates them, `"completed"` or `"cancelled"`, so an
