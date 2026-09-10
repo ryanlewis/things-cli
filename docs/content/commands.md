@@ -45,31 +45,22 @@ things <view>          # shortcut: things inbox, things today, etc.
 Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
 `repeating`, `logbook`, `trash`, `deadlines`.
 
-Every view above except `inbox` and `anytime` lists projects as well as
-to-dos, matching what Things shows in those lists — a project is scheduled the
-same way a to-do is, so a project put in Today is a row in Today, one deferred
-to Someday is a row in Someday, a closed project is a row in the Logbook
-under its stop date, and a trashed one is a row in Trash. `deadlines`
-is the same argument about a different column: a project takes a deadline the
-way a to-do does, and project rows are ordered in among the to-dos by
-deadline. Project rows are marked `(project)` in plain output and carry
-`"type": "project"` in JSON, so `jq '.[] | select(.type=="project")'` picks them
-out. A project has no parent project, so `--project` never matches one;
-`--area` does, because a project carries its own area. `repeating` carries
-project templates too, for the reason below. A bare `-p`/`-a`/`-t` filter with
-no view named follows the same rule. `inbox` stays to-do only: an inbox item
-has not been filed anywhere yet, so it is never a project.
-
-`anytime` is to-do only for the opposite reason. Every active project is
-trivially "anytime", so a list of them all would bury the to-dos; the app
-groups each project's to-dos under the project name rather than listing the
-project among them. `things projects` is how to sweep the projects themselves.
+Every view above except `inbox` and `anytime` lists projects as well as tasks,
+marked `(project)` in plain output and `"type": "project"` in JSON; `--area`
+and `--tag` match a project, `--project` never does, and `things projects` is
+how to sweep projects on their own. The bundled agent skill states the rule
+and the reasoning in full — `things skill show`.
 
 `today`, `anytime` and `someday` are arranged the way the app arranges them —
-unfiled items first, then areas, and inside an area its own loose to-dos before
+unfiled items first, then areas, and inside an area its own loose tasks before
 its projects' — so plain output prints each project name once as a group header
-above its to-dos. `someday` reaches only the first half of that: it carries no
-to-do with a parent project, so it ends at unfiled items and then areas.
+above its tasks. `anytime` carries no project rows of its own because every
+active project is trivially "anytime": listing them all would bury the tasks,
+so the app uses each project as a group header instead. `today` and `someday`
+group the same way but do list their project rows, because a project put in
+Today or Someday has actually been put somewhere. `someday` reaches only the
+first half of the arrangement: it carries no task with a parent project, so it
+ends at unfiled items and then areas.
 `today` then orders within a group by the position Things keeps for the day,
 which leaves an item closed today where it was rather than moving it to the
 end. `upcoming` reads by date instead, the way the app's own Upcoming does.

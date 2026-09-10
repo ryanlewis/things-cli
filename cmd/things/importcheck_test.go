@@ -209,7 +209,7 @@ func TestImportRefusalListsEveryOffendingItem(t *testing.T) {
 	}
 	for _, want := range []string{
 		"2 of 3 update items",
-		`[1] (id rep-1): "Water plants" is a repeating to-do — when, deadline`,
+		`[1] (id rep-1): "Water plants" is a repeating task — when, deadline`,
 		`[2] (id repproj-1): "Weekly review" is a repeating project — canceled`,
 	} {
 		if !strings.Contains(err.Error(), want) {
@@ -656,7 +656,7 @@ func TestImportFailuresPlainTextUnchanged(t *testing.T) {
 	if !strings.HasPrefix(stderr.String(), want) {
 		t.Errorf("stderr = %q, want prefix %q", stderr.String(), want)
 	}
-	if !strings.Contains(stderr.String(), `  [0] (id rep-1): "Water plants" is a repeating to-do — when`) {
+	if !strings.Contains(stderr.String(), `  [0] (id rep-1): "Water plants" is a repeating task — when`) {
 		t.Errorf("stderr lost the per-item line: %q", stderr.String())
 	}
 }
@@ -686,8 +686,8 @@ func TestImportBatchedLookupKeepsCheckBehaviour(t *testing.T) {
 	// position, even though it was only looked up once.
 	for _, want := range []string{
 		"2 of 5 update items",
-		`[1] (id rep-1): "Water plants" is a repeating to-do — when`,
-		`[2] (id rep-1): "Water plants" is a repeating to-do — deadline`,
+		`[1] (id rep-1): "Water plants" is a repeating task — when`,
+		`[2] (id rep-1): "Water plants" is a repeating task — deadline`,
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error missing %q:\n%v", want, err)

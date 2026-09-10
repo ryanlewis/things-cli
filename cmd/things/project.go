@@ -17,7 +17,7 @@ type ProjectAddCmd struct {
 	Deadline string `help:"Deadline date (YYYY-MM-DD)."`
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
-	Todos    string `help:"Newline-separated initial to-dos."`
+	Todos    string `help:"Newline-separated initial tasks."`
 
 	TagFlags
 }

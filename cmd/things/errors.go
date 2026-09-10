@@ -27,8 +27,8 @@ type jsonErrorPayload struct {
 	// vocabulary: "task", "project", "area" or "tag". A to-do is a "task"
 	// here as it is in `type` on a task row — no JSON value the CLI emits
 	// spells it "to-do", which is the `import` payload's word (issue #219).
-	// Prose is not bound by this: Message and the agent brief still call a
-	// to-do a to-do where that is what reads naturally.
+	// The prose follows the same vocabulary: Message and the agent brief say
+	// "task" too, so a reader meets one word for one thing (issue #245).
 	Kind    string           `json:"kind,omitempty"`
 	Query   string           `json:"query,omitempty"`
 	UUID    string           `json:"uuid,omitempty"`

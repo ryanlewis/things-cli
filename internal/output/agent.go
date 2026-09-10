@@ -9,10 +9,14 @@ import (
 )
 
 // AgentBrief is the material `things show <ref> --agent` renders: the item
-// itself, its checklist, and — when the item is a project — the to-dos filed
-// under it. For an open project those are its open to-dos; for a closed or
+// itself, its checklist, and — when the item is a project — the tasks filed
+// under it. For an open project those are its open tasks; for a closed or
 // trashed one they are its contents whatever their status, since issue #229
 // made naming the project the only way to reach them.
+//
+// "task" is the word throughout, matching the JSON `type` and the `kind` in an
+// error payload, so an agent reading a brief beside an "ambiguous task" error
+// sees one vocabulary (issue #245).
 type AgentBrief struct {
 	Task      *model.Task
 	Checklist []model.ChecklistItem
@@ -26,7 +30,7 @@ type AgentBrief struct {
 // as written whether or not stdout is a terminal.
 func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 	t := b.Task
-	kind := "to-do"
+	kind := "task"
 	if t.Type == model.TypeProject {
 		kind = "project"
 	}
@@ -72,13 +76,13 @@ func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 	}
 
 	if t.Type == model.TypeProject {
-		// A closed or trashed project has no open to-dos by definition, and
+		// A closed or trashed project has no open tasks by definition, and
 		// since issue #229 the listing returns its contents whatever their
-		// status — so "Open to-dos" would be a lie and a bare title would read
+		// status — so "Open tasks" would be a lie and a bare title would read
 		// as something still to do. Mark each row instead.
-		heading, empty, marked := "Open to-dos", "no open to-dos", false
+		heading, empty, marked := "Open tasks", "no open tasks", false
 		if t.Status != model.StatusOpen || t.Trashed {
-			heading, empty, marked = "To-dos", "no to-dos", true
+			heading, empty, marked = "Tasks", "no tasks", true
 		}
 		fmt.Fprintf(&s, "\n## %s\n\n", heading)
 		if len(b.Todos) == 0 {
@@ -150,7 +154,7 @@ func closingOut(b AgentBrief, kind string) string {
 		if len(b.Todos) > 0 {
 			cmds = append(cmds, command{
 				fmt.Sprintf("things show %s --agent", b.Todos[0].UUID),
-				"the same brief for one of its to-dos",
+				"the same brief for one of its tasks",
 			})
 		}
 		// A project's complete/cancel needs a confirmation that a command run
@@ -166,11 +170,11 @@ func closingOut(b AgentBrief, kind string) string {
 			cmds = append(cmds,
 				command{
 					fmt.Sprintf("things complete %s --yes", t.UUID),
-					"complete it AND every to-do under it",
+					"complete it AND every task under it",
 				},
 				command{
 					fmt.Sprintf("things cancel %s --yes", t.UUID),
-					"cancel it AND every to-do under it",
+					"cancel it AND every task under it",
 				},
 			)
 		}
@@ -179,7 +183,7 @@ func closingOut(b AgentBrief, kind string) string {
 			fmt.Sprintf("things edit %s --notes \"...\"", t.UUID),
 			"replace the notes (--append-notes adds to them)",
 		})
-		// A repeating to-do is the other item whose status the CLI refuses to
+		// A repeating task is the other item whose status the CLI refuses to
 		// write: Things drops the change silently, so `complete`/`cancel` on
 		// one always exits non-zero. Leave them out rather than hand an agent
 		// a command that cannot work — the note below says why they are gone.
@@ -193,11 +197,11 @@ func closingOut(b AgentBrief, kind string) string {
 	s.WriteString(codeBlock(cmds))
 
 	if t.Type == model.TypeProject && !t.Repeating {
-		s.WriteString("\nCompleting or cancelling a project changes the status of every to-do under\n")
+		s.WriteString("\nCompleting or cancelling a project changes the status of every task under\n")
 		s.WriteString("it, so the CLI asks first and refuses outright when it cannot prompt — as a\n")
 		s.WriteString("command run by an agent cannot. `--yes` answers that question in advance;\n")
 		s.WriteString("it is not a formality, so do not pass it unless closing the whole project\n")
-		s.WriteString("is what was asked for. Closing one to-do at a time needs no confirmation.\n")
+		s.WriteString("is what was asked for. Closing one task at a time needs no confirmation.\n")
 	} else if !t.Repeating {
 		s.WriteString("\n`complete` and `cancel` read the item back afterwards and exit non-zero if\n")
 		s.WriteString("the status did not change, so a zero exit means it landed.\n")

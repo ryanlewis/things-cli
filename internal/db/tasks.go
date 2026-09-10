@@ -182,19 +182,11 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 }
 
 // todoOrProject is the TMTask type set for the views that carry both kinds.
-// Things schedules a project exactly as it schedules a to-do — start,
-// startBucket, startDate and todayIndex all live on the project row — and
-// lists the project itself in Today, Upcoming and Anytime, so those views
-// carry both kinds (issue #201, the same UI-parity argument as #106). Someday
-// and Logbook are the same story at the other two ends of a project's life: a
-// project deferred to Someday is a row in Someday, and a closed project —
-// completed or cancelled — is a row in the Logbook under its stopDate
-// (issues #206, #210). A trashed project is a row in the app's Trash (issue
-// #212). Deadlines is the same argument about a different column: a project
-// carries a deadline the way a to-do does (issue #213).
-//
-// Repeating carries both for its own reason (issue #165). Headings (type 2)
-// are structure inside a project, never rows in a list, so they stay out.
+// The statement a reader is meant to find — which views carry projects, and
+// why — is in internal/skill/SKILL.md under `things list`; each viewFilters
+// entry below carries the measurement behind its own clause (issues #201,
+// #206, #210, #212, #213, #245). Headings (type 2) are structure inside a
+// project, never rows in a list, so they stay out.
 const todoOrProject = "t.type IN (0, 1)"
 
 // closedTodayUnlogged is the app's rule for a closed item Things has not yet filed
