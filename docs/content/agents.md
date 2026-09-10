@@ -12,7 +12,7 @@ pieces do the work: a bundled **skill** that teaches the agent the CLI, an
 anything scripted. Underneath all three, the writes fail loudly rather than
 report a success that did not happen.
 
-![Printing an agent brief for a to-do, piping it into claude -p, and searching to confirm the to-do is done](/img/demo-agent.gif)
+![Printing an agent brief for a task, piping it into claude -p, and searching to confirm the task is done](/img/demo-agent.gif)
 
 ## Teach your agent the CLI
 
@@ -56,7 +56,7 @@ version along; re-run `skill install` to refresh an installed copy. The
 source is
 [`internal/skill/SKILL.md`](https://github.com/ryanlewis/things-cli/blob/main/internal/skill/SKILL.md).
 
-## Hand a to-do to an agent
+## Hand a task to an agent
 
 `things show <ref> --agent` prints the item as a self-contained Markdown
 brief instead of the aligned detail view. It reads as a prompt: what the
@@ -114,17 +114,17 @@ the status did not change, so a zero exit means it landed.
 
 A few things about the brief are deliberate:
 
-- **Every command names the UUID.** A title can match several to-dos and a
+- **Every command names the UUID.** A title can match several tasks and a
   numeric index only holds until the next listing, so neither is safe for
   an agent that will run its own `list` along the way.
 - **The notes are quarantined.** They sit inside a fence wide enough that
   nothing in them can close it, and the brief says they are content, not
   instructions. A note carrying its own headings or a command block stays
   inert text rather than becoming structure the agent trusts.
-- **A project brief lists its open to-dos** with their UUIDs, so the agent
+- **A project brief lists its open tasks** with their UUIDs, so the agent
   can pick one up with another `show <uuid> --agent`. Its closing commands
   carry `--yes`, because completing or cancelling a project changes every
-  to-do under it and an unattended command cannot answer a confirmation.
+  task under it and an unattended command cannot answer a confirmation.
   The brief says so, and tells the agent not to pass `--yes` unless closing
   the whole project is what was asked.
 - **A repeating item's brief omits `complete` and `cancel`.** Things refuses
@@ -181,7 +181,7 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   type never reaches the output. In v0.7.0 and earlier this field was the
   integer `0`, `1` or `2`, so a filter matching on `.type==1` has to
   become `.type=="project"`. It is not the vocabulary an `import` payload
-  takes: that format is Things' own and spells a to-do `"to-do"`, so do
+  takes: that format is Things' own and spells a task `"to-do"`, so do
   not copy `.type` from a listing into an import item.
 - **Start is a string enum too**, `"inbox"`, `"anytime"` or `"someday"`,
   not the raw Things integer. It is the list an item falls back to when it
@@ -194,15 +194,15 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   everything else.
 - **Projects carry scheduling too.** `things projects` reports `start`,
   `startBucket`, `startDate` and `deadline` under the same names and
-  encodings a to-do uses, so a scheduled project reads the same way
+  encodings a task uses, so a scheduled project reads the same way
   without a per-project `show`. `startDate` and `deadline` are omitted
   when unset.
 - **Projects carry their progress too.** `things projects` reports
-  `taskCount`, every untrashed to-do in the project, and `openCount`, the
+  `taskCount`, every untrashed task in the project, and `openCount`, the
   ones still open. The difference is the ones no longer open, which means
-  completed or cancelled. To-dos under a project heading count towards
+  completed or cancelled. Tasks under a project heading count towards
   both; the heading rows themselves never do, and neither do trashed
-  to-dos or checklist items.
+  tasks or checklist items.
 
 ```console
 $ things show milk --json; echo "exit=$?"
@@ -238,17 +238,17 @@ own, use `things projects`, not a view — it leaves out trashed projects, so
 `trash` is the only place one of those shows up.
 
 `someday` matches the app's Someday list, which holds the deferred things not
-filed under a project. A to-do inside a project stays inside it however it is
+filed under a project. A task inside a project stays inside it however it is
 deferred, so an agent asked what is in Someday sees Someday projects and
-unparented Someday to-dos, not the deferred contents of other projects. That
+unparented Someday tasks, not the deferred contents of other projects. That
 holds even when the parent project is itself in Someday: the project lists, its
-to-dos do not. To sweep a project's own deferred to-dos, name the project:
+tasks do not. To sweep a project's own deferred tasks, name the project:
 `things --project "Name" -j`. `things someday --project "Name"` is an error,
 not an empty list — nothing in the view has a parent project, so the filter
 could never match.
 
 `logbook` is everything closed, not just everything finished: a cancelled
-to-do or project is logged beside the completed ones, as the app's Logbook
+task or project is logged beside the completed ones, as the app's Logbook
 shows them. `status` separates them, `"completed"` or `"cancelled"`, so an
 agent asked what actually got done should filter on it rather than assume
 every logbook row is a success.
@@ -258,7 +258,7 @@ keeps it where it was until the day rolls over, or until `things log` files it
 early, and `--include-completed` is how to see those on either view. Anything
 closed outside both goes straight to `logbook`, including today's closes.
 `logbook` is disjoint from the other two, but `today` and `anytime` are not
-disjoint from each other: a to-do scheduled for today sits in the Anytime
+disjoint from each other: a task scheduled for today sits in the Anytime
 bucket as well, so it comes back from both. None of the three is a whole day on
 its own, so an agent reporting on a day's work sweeps all three — `things today
 --include-completed -j` and `things anytime --include-completed -j` plus
@@ -267,17 +267,17 @@ than concatenating, or it counts the scheduled ones twice. An agent reporting
 on history needs `logbook` alone.
 
 A closed project is one `logbook` row, not a row plus its contents, and a
-trashed project is one `trash` row the same way — the app folds their to-dos
+trashed project is one `trash` row the same way — the app folds their tasks
 into the project row and so does the CLI. An agent counting what got done from
-`logbook` counts projects once, not once plus every to-do inside them — which
-also means the day sweep above reports the project rather than the to-dos
+`logbook` counts projects once, not once plus every task inside them — which
+also means the day sweep above reports the project rather than the tasks
 `things complete <project> --yes` closed along with it: the fold applies to
 `today --include-completed` and `anytime --include-completed` as well as to
-`logbook`, so those to-dos are in none of the three. To read
+`logbook`, so those tasks are in none of the three. To read
 the contents, name the project: `things --project <uuid> -j` on a closed or
-trashed project returns its to-dos whatever their status, and
+trashed project returns its tasks whatever their status, and
 `things show <uuid> --agent` lists them under `## Tasks` with `[x]`, `[~]` or
-`[ ]` on each row. A to-do thrown away out of a project that is itself in the
+`[ ]` on each row. A task thrown away out of a project that is itself in the
 Trash is reachable nowhere, matching the app.
 
 Some patterns that fall out of this:
@@ -304,14 +304,14 @@ things projects -j | jq -r '.[] | select(.openCount == 0 and .taskCount > 0) | .
 
 `taskCount > 0` keeps out empty projects, which have nothing done rather
 than everything done. It does not tell done from cancelled: a project
-whose to-dos were all cancelled matches too, so confirm before offering
+whose tasks were all cancelled matches too, so confirm before offering
 to close one. Plain output marks the same projects with a filled `●`
 progress icon, so an agent reading plain output is not blind to them —
 under `--completed` that icon also marks every completed project,
-including empty ones. A project holding a repeating to-do never appears
+including empty ones. A project holding a repeating task never appears
 while the repeat is live: Things counts the hidden template row itself as
-an open to-do, and a template never completes. `things list -p <project>`
-hides that template, so it can report no open to-dos for a project whose
+an open task, and a template never completes. `things list -p <project>`
+hides that template, so it can report no open tasks for a project whose
 `openCount` is 1.
 
 Colour and column alignment are for terminals; they switch off when the
@@ -337,7 +337,7 @@ instead of assuming:
   first and `--strict-tags` refuses to write instead.
 - **Repeating items refuse `when`, `deadline`, and status changes.** Things
   drops these silently, so the CLI refuses them before any write goes out.
-- **A project takes its to-dos with it.** `complete` and `cancel` on a
+- **A project takes its tasks with it.** `complete` and `cancel` on a
   project ask first, and refuse outright when they cannot prompt. `--yes`
   is the answer, not a formality.
 

@@ -242,8 +242,8 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `inbox` | Inbox |
 | `upcoming` | Scheduled tasks and deadlines |
 | `anytime` | Anytime list |
-| `someday` | Someday projects and unparented Someday to-dos |
-| `repeating` | Repeating to-do and project templates |
+| `someday` | Someday projects and unparented Someday tasks |
+| `repeating` | Repeating task and project templates |
 | `logbook` | Completed and cancelled tasks |
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks and projects with a deadline |
@@ -253,10 +253,10 @@ marked `(project)` in plain output and `"type": "project"` in JSON. The
 [commands page](https://things.rlew.io/commands/) covers the filters that
 match a project, and `things skill show` states the rule in full.
 
-Trashing a project in Things leaves its to-dos untrashed in the database, so
-every view above hides to-dos whose project is in the trash. A closed project
+Trashing a project in Things leaves its tasks untrashed in the database, so
+every view above hides tasks whose project is in the trash. A closed project
 is one `logbook` row rather than a row plus its contents, and a trashed
-project is one `trash` row the same way: the app folds their to-dos into the
+project is one `trash` row the same way: the app folds their tasks into the
 project row. Name the project to read them — `things --project <uuid>` on a
 closed or trashed project returns its contents whatever their status.
 
@@ -287,19 +287,19 @@ Tasks filed under a project heading count as part of the project, so they
 show up under `-p` and under the project's `-a` area, and carry the project
 name in `show` and JSON output.
 
-A repeating to-do is stored as a template plus the to-dos it generates. Only
-the template appears in `things repeating`; the generated to-dos are ordinary
+A repeating task is stored as a template plus the tasks it generates. Only
+the template appears in `things repeating`; the generated tasks are ordinary
 tasks and show up in `today`, `upcoming` and the rest as usual. Templates are
 kept out of every other view except `trash` and `logbook`, which report what
 the database holds.
 
 Projects repeat the same way, so `things repeating` lists project templates
 too — marked `(project)` in plain output, `"type": "project"` in JSON — and
-`things projects` leaves them out. To-do templates come first, then project
+`things projects` leaves them out. Task templates come first, then project
 templates. `trash` and `logbook` carry projects too, so a trashed or logged
 project template shows there.
 
-The to-dos inside a project template are hidden along with it. They carry no
+The tasks inside a project template are hidden along with it. They carry no
 recurrence rule of their own, so they are recognised by their project rather
 than by themselves — otherwise they would list as ordinary tasks against a
 project `things projects` does not report. `trash` and `logbook` still show
@@ -311,8 +311,8 @@ can see in the Things app is always findable. Search results carry
 `"repeating": true`, and `things show` prints a `Repeats:` line, so a
 template is identifiable when one comes back.
 
-A template and the to-do it generated share a title, so a title lookup —
-`things show`, `edit`, `complete`, `cancel` — resolves to the generated to-do,
+A template and the task it generated share a title, so a title lookup —
+`things show`, `edit`, `complete`, `cancel` — resolves to the generated task,
 which is the one that can be completed. Reach the template by UUID, or by the
 numeric index from `things repeating`.
 
@@ -326,7 +326,7 @@ filter it needs the view spelled out:
 ticked off in that list which Things still keeps there; `logbook` holds every
 other closed item, today's closes outside both lists included, so a closed item
 whose project is still open is either logged or still listed, never both. The
-two lists do overlap each other — a to-do scheduled for today is in the Anytime
+two lists do overlap each other — a task scheduled for today is in the Anytime
 bucket too — so sweeping both means merging on `uuid`. One closed inside a
 project that is itself closed or trashed is in none of the three — see the
 fold described above.
@@ -393,7 +393,7 @@ Checklist:
   [ ] Tag and push
 ```
 
-`things show` prints a `Repeats:` line for repeating to-dos and projects, and
+`things show` prints a `Repeats:` line for repeating tasks and projects, and
 JSON output carries `"repeating": true` for them (the field is omitted
 otherwise). Things blocks several kinds of edit on those — see the note under
 [Editing](#editing-tasks-and-projects).
@@ -410,7 +410,7 @@ $ things projects
 ●  Spring cleaning    Home
 ```
 
-### Handing a to-do to an agent
+### Handing a task to an agent
 
 `things show <ref> --agent` prints a self-contained Markdown brief with the
 item's details and the exact commands that act on it, for piping into an
@@ -429,7 +429,7 @@ project.
 | `--deadline DATE` | ✓ | ✓ | Deadline date |
 | `--tags LIST` | ✓ | ✓ | Comma-separated tags |
 | `--checklist ITEMS` | ✓ | — | Newline-separated checklist items |
-| `--todos ITEMS` | — | ✓ | Newline-separated initial to-dos |
+| `--todos ITEMS` | — | ✓ | Newline-separated initial tasks |
 | `--project NAME` | ✓ | — | Project to add the task into |
 | `--heading NAME` | ✓ | — | Heading within the project |
 | `--list NAME` | ✓ | — | List (project or area) name |
@@ -452,9 +452,9 @@ things project add "Launch site" --area Work --deadline 2026-05-01
 `things:///update-project`. Only the flags you pass are sent — unset fields
 stay untouched. An empty value clears the field (e.g. `--deadline ""`).
 
-`edit` is for to-dos only. A reference that resolves to a project is refused
+`edit` is for tasks only. A reference that resolves to a project is refused
 before anything is written — `things:///update` cannot address one — so use
-`things project edit` for those, and `project edit` refuses a to-do the same
+`things project edit` for those, and `project edit` refuses a task the same
 way. See [Errors under `--json`](#errors-under---json).
 
 > **Prerequisite:** `edit`, `project edit`, and `import` payloads with
@@ -489,7 +489,7 @@ way. See [Errors under `--json`](#errors-under---json).
 | `--create-tags` | ✓ | ✓ | Create tags that do not exist before writing (see [Tags must already exist](#tags-must-already-exist)) |
 
 > **Repeating items:** Things refuses `--when`, `--deadline`, `--complete`,
-> `--cancel`, and `--duplicate` on repeating to-dos and projects, and drops the
+> `--cancel`, and `--duplicate` on repeating tasks and projects, and drops the
 > request silently instead of reporting an error
 > ([docs](https://culturedcode.com/things/support/articles/2803573/)). The CLI
 > checks first and exits non-zero with an explanation. Every other flag works
@@ -665,10 +665,12 @@ things open --query staging
 `things import` forwards a [Things JSON URL scheme
 payload](https://culturedcode.com/things/support/articles/2803573/) — a
 batch of `to-do`, `project`, `heading`, and `checklist-item` items, each
-with `operation` and `attributes`. The CLI validates the payload is
-syntactically valid JSON, then forwards it verbatim. The auth token is
-attached automatically (required for `operation: update` items, harmless
-for create-only payloads).
+with `operation` and `attributes`. That format spells a task `"to-do"`: it is
+Things' own word, and the payload is the one place these docs use it, because
+it is passed through untouched. Everywhere else the CLI says `task`. The CLI
+validates the payload is syntactically valid JSON, then forwards it verbatim.
+The auth token is attached automatically (required for `operation: update`
+items, harmless for create-only payloads).
 
 | Flag | Description |
 | --- | --- |
@@ -686,7 +688,7 @@ Note: macOS `open` has a URL length limit; split very large payloads.
 
 #### Repeating items in an import payload
 
-An `operation: update` item goes through the same repeating check as `edit`. If any item in the payload carries `when`, `deadline`, `completed` or `canceled` for a repeating to-do or project, the whole import is refused and nothing is sent. The value does not matter: the URL scheme documents both status fields as two-way ("Complete a to-do or set a to-do to incomplete") and says of each that it "cannot be updated on repeating to-dos", so `"completed": false` is refused exactly like `"completed": true`.
+An `operation: update` item goes through the same repeating check as `edit`. If any item in the payload carries `when`, `deadline`, `completed` or `canceled` for a repeating task or project, the whole import is refused and nothing is sent. The value does not matter: the URL scheme documents both status fields as two-way ("Complete a to-do or set a to-do to incomplete") and says of each that it "cannot be updated on repeating to-dos", so `"completed": false` is refused exactly like `"completed": true`.
 
 ```text
 $ things import --file reschedule.json
@@ -735,7 +737,7 @@ as likely typos (e.g. `tommorrow`, `evning`) with a "did you mean" hint.
 phrase. Keywords are not accepted.
 
 `project add` accepts `--notes`, `--when`, `--deadline`, `--tags`, `--area`
-and `--todos` (newline-separated initial to-dos).
+and `--todos` (newline-separated initial tasks).
 
 `import` accepts a JSON array on stdin (or via `--file`) matching the
 [Things JSON URL scheme payload](https://culturedcode.com/things/support/articles/2803573/)

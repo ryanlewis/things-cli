@@ -12,12 +12,12 @@ accept `-j` / `--json` for structured output. Run `things --help` or
 
 In JSON, `status`, `type` and `start` are string enums rather than the raw
 Things integers. `status` is `"open"`, `"completed"` or `"cancelled"`, and
-appears on to-dos, projects and checklist items. `type` is `"task"` or
+appears on tasks, projects and checklist items. `type` is `"task"` or
 `"project"`, and appears on task rows only — `projects`, `areas` and `tags`
 rows carry no `type`. Headings are never returned by any command, so the
 third Things type never reaches the output.
 
-`start` is `"inbox"`, `"anytime"` or `"someday"`, and appears on to-do and
+`start` is `"inbox"`, `"anytime"` or `"someday"`, and appears on task and
 project rows. It is the list an item falls back to when it carries no date,
 so it does not on its own say which list the app shows the item in: a dated
 `"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and
@@ -31,8 +31,10 @@ everything else. Only the first of those has a name in Things' own
 vocabulary, so naming the pair would have meant inventing a word for `0`.
 
 The `type` values a listing reports are not the ones an `import` payload
-takes: that payload is Things' own JSON URL scheme, which spells a to-do
-`"to-do"`. Do not copy `.type` from a listing into an import item.
+takes: that payload is Things' own JSON URL scheme, which spells a task
+`"to-do"`. The payload is the one place these pages use Things' word rather
+than the CLI's, because it is passed through untouched. Do not copy `.type`
+from a listing into an import item.
 
 ## Listing
 
@@ -66,7 +68,7 @@ which leaves an item closed today where it was rather than moving it to the
 end. `upcoming` reads by date instead, the way the app's own Upcoming does.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
-to-do or a project logs it under its stop date beside the completed ones, the
+task or a project logs it under its stop date beside the completed ones, the
 way the app's Logbook shows both, so the view returns cancelled rows too.
 `status` tells them apart — `"completed"` or `"cancelled"` in JSON, `[x]` and
 `[~]` in plain output — so filter on it when you mean finished rather than
@@ -79,10 +81,10 @@ files the day's closed items straight away. `things today --include-completed`
 shows the ones still waiting. `anytime` behaves the same way and takes the
 same flag, because the app goes on showing a just-closed item there too.
 Everything else closed goes to `logbook` at once, today's closes included: a
-to-do ticked off in the Inbox, or ahead of its date in Upcoming, is under
+task ticked off in the Inbox, or ahead of its date in Upcoming, is under
 neither list, so nothing holds it back. A closed item whose project is still
 open is therefore either in `logbook` or in a list still showing it, never both
-and never neither — but `today` and `anytime` overlap each other, since a to-do
+and never neither — but `today` and `anytime` overlap each other, since a task
 scheduled for today is in the Anytime bucket too, so sweeping both means
 merging them on `uuid`. One closed inside a project that is itself closed or
 trashed is in none of the three — not `logbook`, not `today`, not `anytime` —
@@ -91,25 +93,25 @@ works on `today` and `anytime`; with a filter, name the view:
 `things today -p "Launch v2" --include-completed`.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
-app folds a closed project's to-dos into the project's own row and lists none
+app folds a closed project's tasks into the project's own row and lists none
 of them separately, and `trash` does the same for a trashed project. To reach
-those to-dos, name the project: `things --project <uuid>` on a closed or
+those tasks, name the project: `things --project <uuid>` on a closed or
 trashed project returns its contents whatever their status, which is what the
-app answers for the same question. A to-do you threw away out of a project is
+app answers for the same question. A task you threw away out of a project is
 the exception — it keeps its own `trash` row, because it is in the Trash on
-its own account rather than through its project. A to-do thrown away out of a
+its own account rather than through its project. A task thrown away out of a
 project that is itself in the Trash is reachable nowhere, as in the app.
 
 `someday` is the app's Someday list: the deferred things you have not filed
-under a project. A to-do inside a project stays inside it however it is
-deferred, so `someday` returns Someday projects and unparented Someday to-dos,
-not the deferred to-dos of an Anytime project. Open the project to see those —
+under a project. A task inside a project stays inside it however it is
+deferred, so `someday` returns Someday projects and unparented Someday tasks,
+not the deferred tasks of an Anytime project. Open the project to see those —
 `things --project "Name"` — or use `anytime`, which carries the project itself.
 Because nothing in `someday` has a parent project, `--project` there could
 never match; the CLI rejects the combination rather than print an empty list.
 
-`repeating` lists repeating to-do and project templates. The items a template
-generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
+`repeating` lists repeating task and project templates. The items a template
+generates are ordinary tasks and projects and appear in `today`, `upcoming`,
 `things projects` and the rest; the template itself appears only here — plus
 `trash` or `logbook` for a template that ends up there, since those two report
 what the database holds. Both carry projects, so a trashed or logged project
@@ -117,7 +119,7 @@ template shows there.
 Project templates are marked `(project)` in plain output and carry
 `"type": "project"` in JSON.
 
-The to-dos inside a project template are hidden along with it, since they
+The tasks inside a project template are hidden along with it, since they
 would otherwise list against a project `things projects` does not report.
 `trash` and `logbook` still show them once they are trashed or closed.
 
@@ -126,12 +128,12 @@ Results carry `"repeating": true`.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. On their
 own the filters cover everything open in the project, area, or tag — so
-`things -a Work` lists that area's own projects as well as its to-dos, while
+`things -a Work` lists that area's own projects as well as its tasks, while
 `-p` still returns a project's contents rather than the project row. Add a
 view and the filter applies within it, with the view named in the output:
 
 ```sh
-things -p "Launch v2"                # every open to-do in the project
+things -p "Launch v2"                # every open task in the project
 things today -p "Launch v2"          # today's slice of it, labelled "view: today"
 things upcoming -t urgent
 things anytime --area "Side projects"
@@ -145,16 +147,16 @@ under `-p` and under the project's area.
 collections themselves. `things projects` accepts `--area` and
 `--completed`.
 
-Projects are scheduled the same way to-dos are, and `things projects -j`
+Projects are scheduled the same way tasks are, and `things projects -j`
 reports that with the same field names and encodings: `start`,
 `startBucket`, `startDate` and `deadline`. A caller can tell a scheduled
 project from an anytime one without a `things show` per project.
 
 `things projects -j` also reports two counts per project. `taskCount` is
-every untrashed to-do in the project; `openCount` is the ones still open.
+every untrashed task in the project; `openCount` is the ones still open.
 The difference is the ones no longer open, which means completed or
-cancelled. To-dos filed under a project heading count towards both; the
-heading rows themselves never do, and neither do trashed to-dos or
+cancelled. Tasks filed under a project heading count towards both; the
+heading rows themselves never do, and neither do trashed tasks or
 checklist items. Both numbers are Things' own bookkeeping, read straight
 from the database rather than recounted by the CLI.
 
@@ -167,13 +169,13 @@ things projects -j | jq '.[] | select(.openCount == 0 and .taskCount > 0)'
 
 `taskCount > 0` keeps out empty projects, which have nothing done rather
 than everything done. It does not tell done from cancelled: a project
-whose to-dos were all cancelled matches the same filter. Plain output
+whose tasks were all cancelled matches the same filter. Plain output
 marks the same projects with a filled `●` progress icon, and under
 `--completed` that icon also marks every completed project, including
-empty ones. A project holding a repeating to-do never appears while the
+empty ones. A project holding a repeating task never appears while the
 repeat is live: Things counts the hidden template row itself as an open
-to-do, and a template never completes. `things list -p <project>` hides
-that template, so it can report no open to-dos for a project whose
+task, and a template never completes. `things list -p <project>` hides
+that template, so it can report no open tasks for a project whose
 `openCount` is 1.
 
 ## Inspecting a task
@@ -191,7 +193,7 @@ same items the same way — but the numbers still move as items are added,
 closed or rescheduled, so re-read the list rather than reusing an index
 from an earlier one.
 
-## Handing a to-do to an agent
+## Handing a task to an agent
 
 `things show <ref> --agent` prints a Markdown brief written for an agent,
 with the commands that act on the item. See
@@ -236,9 +238,9 @@ things edit 3 --append-checklist "Almond too"
 things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
 ```
 
-`edit` is for to-dos only. A reference that resolves to a project is refused
+`edit` is for tasks only. A reference that resolves to a project is refused
 before anything is written, because `things:///update` cannot address one —
-use `things project edit` instead. `project edit` refuses a to-do the same
+use `things project edit` instead. `project edit` refuses a task the same
 way, pointing back at `things edit`.
 
 `things project edit` takes most of the same flags (`--title`, `--notes`,
@@ -306,7 +308,7 @@ things import < payload.json  # batch create/update via the Things JSON URL sche
 
 Items with `"operation": "update"` go through the same repeating check as
 `edit`: if any of them carries `when`, `deadline`, `completed` or `canceled`
-for a repeating to-do or project, the whole import is refused before anything
+for a repeating task or project, the whole import is refused before anything
 is sent, and the error names every offending item. The status fields are
 two-way, so `false` is refused as readily as `true`. Update items that set
 `completed` or `canceled` are read back from the database afterwards, and any
