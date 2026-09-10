@@ -20,7 +20,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 | Numeric index | 1-based, from the *last* `list` or `search` only. |
 | Title substring | Interactive runs prompt; non-TTY runs error with the match list. |
 
-The numeric index comes from a cache that every `list` and `search` overwrites — **including one you run yourself**. Resolve to a UUID once and use it for the rest of the job:
+The numeric index comes from a cache that every `list` and `search` overwrites — **including one you run yourself**. A listing's order is fixed, so running the same one twice numbers the same items the same way, but the numbers still move as items are added, closed or rescheduled. Resolve to a UUID once and use it for the rest of the job:
 
 ```
 things --json list today | jq -r '.[0].uuid'

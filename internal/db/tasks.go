@@ -206,13 +206,29 @@ var viewFilters = map[string]string{
 // so %v or %s would splice the word `heading` into the SQL instead of `2`.
 var notHeading = fmt.Sprintf("COALESCE(t.type, 0) != %d", int(model.TypeHeading))
 
+// uuidTiebreak is the last key of every ordering in this package. It makes the
+// order total: rows that tie on every other key still come back in one fixed
+// sequence. Numbered listings are the reason — cacheTaskUUIDs numbers rows by
+// position, so `things complete 3` acts on whatever row landed third, and an
+// order SQLite leaves undefined let two identical listings number the same
+// rows differently (issue #221).
+//
+// It is a named constant rather than inline text so a test can assert that
+// every ordering carries it; the tiebreak itself is invisible in results on
+// any data that has no ties, so nothing else would catch its removal.
+const uuidTiebreak = `, t.uuid ASC`
+
+// viewOrderBy holds the per-view ordering. Every entry ends in uuidTiebreak.
+// The key before it is t."index", the order Things keeps rows in within a
+// list, so the tiebreak only decides rows that were genuinely
+// indistinguishable — no view's primary ordering changes.
 var viewOrderBy = map[string]string{
-	"logbook":   "ORDER BY t.stopDate DESC",
-	"deadlines": "ORDER BY t.deadline ASC",
+	"logbook":   "ORDER BY t.stopDate DESC, t.\"index\" ASC" + uuidTiebreak,
+	"deadlines": "ORDER BY t.deadline ASC, t.\"index\" ASC" + uuidTiebreak,
 	// Repeating holds both to-dos and projects. Ordering by type first keeps
 	// the two kinds in contiguous blocks instead of interleaving them by an
 	// index that is only meaningful within a kind.
-	"repeating": "ORDER BY t.type ASC, t.\"index\" ASC",
+	"repeating": "ORDER BY t.type ASC, t.\"index\" ASC" + uuidTiebreak,
 	// Today view: top-level items (no project, no area) come first, then
 	// everything else sorted by area then project index. Project tasks and
 	// area-only tasks interleave by area.index — so projects in a low-index
@@ -225,14 +241,22 @@ var viewOrderBy = map[string]string{
 	// COALESCE(p."index", 0) = 0, alongside that area's unparented to-dos and
 	// ahead of the to-dos of any project with a non-zero index. Its own
 	// todayIndex then places it, the same signal the app orders Today by.
-	"today": "ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC",
+	"today": "ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	// Project view: a single-project listing keeps its start/index order (the
 	// area and project keys are constant across it), while a filter that spans
 	// projects — `things --area X`, `things --tag y` — groups by area then
 	// project so the rendered group headers stay contiguous instead of
 	// repeating as rows interleave by index.
-	"project": "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.start ASC, t.\"index\" ASC",
+	"project": "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.start ASC, t.\"index\" ASC" + uuidTiebreak,
 }
+
+// indexOrderBy is the ordering for the views with no entry in viewOrderBy —
+// inbox, upcoming, anytime, someday and trash all list in index order, as does
+// the bare --project/--area/--tag filter. SearchTasks takes it too: its results
+// are numbered out of the same cache. uuidTiebreak closes the same gap here,
+// because t."index" repeats across lists and two rows in one listing can share
+// it.
+const indexOrderBy = `ORDER BY t."index" ASC` + uuidTiebreak
 
 // viewsIncludingTrashedProjects lists the views that keep to-dos whose project
 // is in the trash. Trashing a project in Things leaves its child rows at
@@ -323,7 +347,7 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 
 	orderBy := viewOrderBy[view]
 	if orderBy == "" {
-		orderBy = "ORDER BY t.\"index\" ASC"
+		orderBy = indexOrderBy
 	}
 
 	// The recurrence column varies across Things schema versions, so the
@@ -454,7 +478,9 @@ func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
 
 // templatesLastOrder orders a title lookup so repeating templates sort after
 // ordinary to-dos, keeping t."index" as the tiebreak the lookups have always
-// used.
+// used, then t.uuid so the order is total. GetTask takes the first row of this
+// order as the write target, so two same-titled rows tying on index must not
+// resolve differently between two runs (issue #221).
 //
 // A repeating to-do exists twice: the template carrying the recurrence rule,
 // and the instance Things generated from it, sharing its title. The template
@@ -468,7 +494,7 @@ func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
 // instances first. On a schema with no recurrence column the expression is
 // "NULL IS NOT NULL" — 0 for every row, leaving the index order untouched.
 func (d *DB) templatesLastOrder() string {
-	return `ORDER BY ` + d.recurrenceCol() + ` IS NOT NULL ASC, t."index" ASC`
+	return `ORDER BY ` + d.recurrenceCol() + ` IS NOT NULL ASC, t."index" ASC` + uuidTiebreak
 }
 
 // TaskNotFoundError reports a reference that matched no task. It is typed so
@@ -492,7 +518,7 @@ func (e *AmbiguousTaskError) Error() string {
 
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 	pattern := "%" + query + "%"
-	q := d.taskQuery() + " WHERE (t.title LIKE ? OR t.notes LIKE ?) AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid ORDER BY t.\"index\" ASC"
+	q := d.taskQuery() + " WHERE (t.title LIKE ? OR t.notes LIKE ?) AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid " + indexOrderBy
 	return d.collectTasks(q, pattern, pattern)
 }
 

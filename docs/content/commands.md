@@ -133,7 +133,10 @@ things show 3 --agent         # Markdown brief for handing to an agent
 ```
 
 After any list or `search`, numeric indices stay valid until the next
-one.
+one. A listing's order is fixed, so the same list run twice numbers the
+same items the same way — but the numbers still move as items are added,
+closed or rescheduled, so re-read the list rather than reusing an index
+from an earlier one.
 
 ## Handing a to-do to an agent
 

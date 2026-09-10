@@ -46,7 +46,10 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 		args = append(args, areaFilter, areaFilter)
 	}
 
-	query += ` GROUP BY t.uuid ORDER BY CASE WHEN a.uuid IS NULL THEN 1 ELSE 0 END, a."index", t."index" ASC`
+	// t.uuid last for the same reason the task views take it: two projects in
+	// one area can share an "index", and without a total order the listing can
+	// come back in a different sequence between two runs (issue #221).
+	query += ` GROUP BY t.uuid ORDER BY CASE WHEN a.uuid IS NULL THEN 1 ELSE 0 END, a."index", t."index" ASC` + uuidTiebreak
 
 	rows, err := d.db.Query(query, args...)
 	if err != nil {
