@@ -42,8 +42,11 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 		query += " AND t.status = 0"
 	}
 	if areaFilter != "" {
-		query += " AND (a.uuid = ? OR a.title LIKE ?)"
-		args = append(args, areaFilter, areaFilter)
+		// The same --area flag as the list filters, escaped the same way so
+		// the two commands cannot disagree about what a name matches
+		// (issue #262).
+		query += " AND (a.uuid = ? OR a.title LIKE ?" + escapeClause + ")"
+		args = append(args, areaFilter, literalLike(areaFilter))
 	}
 
 	// t.uuid last for the same reason the task views take it: two projects in

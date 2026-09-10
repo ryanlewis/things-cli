@@ -781,6 +781,39 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	return d.collectTasks(query, args...)
 }
 
+// likeEscapeChar is the escape character the filter LIKE patterns declare. A
+// backslash is not special to SQLite's LIKE by default — the escape character
+// only exists because ESCAPE names one — so it needs escaping in the value too
+// once it has that meaning.
+const likeEscapeChar = `\`
+
+// escapeClause is appended to every LIKE that matches a filter value. Without
+// it the value is a pattern: `things --project '%'` matched every project, and
+// a title holding a `%` or a `_` matched more than itself (issue #262). It is
+// built from likeEscapeChar so the clause and the escaping below cannot name
+// different characters.
+const escapeClause = ` ESCAPE '` + likeEscapeChar + `'`
+
+// likeEscaper rewrites the LIKE wildcards, and the escape character itself,
+// into their escaped forms. A Replacer is immutable and safe for concurrent
+// use, so it is built once rather than per filter.
+//
+// It runs in one pass and does not rescan what it writes, so the escape
+// character is handled in the same pass as the wildcards without the doubled
+// backslash being escaped again.
+var likeEscaper = strings.NewReplacer(
+	likeEscapeChar, likeEscapeChar+likeEscapeChar,
+	"%", likeEscapeChar+"%",
+	"_", likeEscapeChar+"_",
+)
+
+// literalLike turns a filter value into a LIKE pattern matching it and nothing
+// else. LIKE stays case-insensitive for ASCII, which is what it was before and
+// what a name filter wants; only the wildcards lose their meaning.
+func literalLike(value string) string {
+	return likeEscaper.Replace(value)
+}
+
 // buildListQuery composes a view's WHERE clause with the caller's filters and
 // the view's ORDER BY, and returns the SQL ListTasks runs. Splitting it out of
 // ListTasks gives the golden SQL test something to call: the text this returns
@@ -821,16 +854,16 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 
 	var args []any
 	if opts.Project != "" {
-		where += " AND (p.uuid = ? OR p.title LIKE ?)"
-		args = append(args, opts.Project, opts.Project)
+		where += " AND (p.uuid = ? OR p.title LIKE ?" + escapeClause + ")"
+		args = append(args, opts.Project, literalLike(opts.Project))
 	}
 	if opts.Area != "" {
-		where += " AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ?)"
-		args = append(args, opts.Area, opts.Area)
+		where += " AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ?" + escapeClause + ")"
+		args = append(args, opts.Area, literalLike(opts.Area))
 	}
 	if opts.Tag != "" {
-		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ?)"
-		args = append(args, opts.Tag)
+		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ?" + escapeClause + ")"
+		args = append(args, literalLike(opts.Tag))
 	}
 
 	if opts.On != nil || opts.From != nil || opts.To != nil {

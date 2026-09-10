@@ -209,3 +209,32 @@ func TestListProjectsCarriesScheduling(t *testing.T) {
 		t.Errorf("unscheduled project should carry no dates: %+v", plain)
 	}
 }
+
+// `things projects --area` takes the same flag as the list filters and escapes
+// it the same way, so the two commands cannot disagree about what a name
+// matches (issue #262).
+func TestListProjectsAreaFilterMatchesLiterally(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('ar-pct', '100% Work', 1, 1),
+		('ar-home', 'Home', 1, 2)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
+		('p-pct', 'In percent area', 1, 0, 0, 'ar-pct', 1),
+		('p-home', 'In home', 1, 0, 0, 'ar-home', 2)`)
+
+	none, err := d.ListProjects("%", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none) != 0 {
+		t.Errorf("--area '%%': got %d projects, want none — the value is a title, not a pattern", len(none))
+	}
+
+	match, err := d.ListProjects("100% Work", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(match) != 1 || match[0].UUID != "p-pct" {
+		t.Errorf("--area '100%% Work': got %+v, want just p-pct", match)
+	}
+}
