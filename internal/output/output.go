@@ -157,8 +157,8 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			current, other = &currentProject, &currentArea
 		}
 		if r.groupKey != *current || *other != sentinel {
-			// today, upcoming, anytime, someday and logbook list a project as
-			// a row of its own (issues #201, #206). Where the view's order
+			// Every view but inbox lists a project as a row of its own
+			// (issues #201, #206, #212, #213). Where the view's order
 			// puts its to-dos straight after that row, their project group
 			// header would restate the title on the line above, so fold them
 			// under the row instead of repeating it. Where the order separates

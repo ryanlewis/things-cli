@@ -34,16 +34,19 @@ things <view>          # shortcut: things inbox, things today, etc.
 Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
 `repeating`, `logbook`, `trash`, `deadlines`.
 
-`today`, `upcoming`, `anytime`, `someday`, `logbook` and `trash` list projects
-as well as to-dos, matching what Things shows in those lists — a project is
-scheduled the same way a to-do is, so a project put in Today is a row in
-Today, one deferred to Someday is a row in Someday, a completed project is a
-row in the Logbook under its completion date, and a trashed one is a row in
-Trash. Project rows are marked `(project)` in plain output and carry `"type":
-"project"` in JSON, so `jq 'select(.type=="project")'` picks them out. A
-project has no parent project, so `--project` never matches one; `--area`
-does, because a project carries its own area. `repeating` carries project
-templates too, for the reason below. `inbox` and `deadlines` stay to-do only.
+Every view above except `inbox` lists projects as well as to-dos, matching
+what Things shows in those lists — a project is scheduled the same way a
+to-do is, so a project put in Today is a row in Today, one deferred to
+Someday is a row in Someday, a completed project is a row in the Logbook
+under its completion date, and a trashed one is a row in Trash. `deadlines`
+is the same argument about a different column: a project takes a deadline the
+way a to-do does, and project rows are ordered in among the to-dos by
+deadline. Project rows are marked `(project)` in plain output and carry
+`"type": "project"` in JSON, so `jq 'select(.type=="project")'` picks them
+out. A project has no parent project, so `--project` never matches one;
+`--area` does, because a project carries its own area. `repeating` carries
+project templates too, for the reason below. `inbox` stays to-do only: an
+inbox item has not been filed anywhere yet, so it is never a project.
 
 `repeating` lists repeating to-do and project templates. The items a template
 generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
@@ -62,11 +65,13 @@ would otherwise list against a project `things projects` does not report.
 Results carry `"repeating": true`.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. On their
-own the filters cover every open task in the project, area, or tag; add a
-view and the filter applies within it, with the view named in the output:
+own the filters cover every open to-do in the project, area, or tag — to-dos
+only, so an area's own projects are not rows here; add a view and the filter
+applies within it, with the view named in the output and project rows
+included as above:
 
 ```sh
-things -p "Launch v2"                # every open task in the project
+things -p "Launch v2"                # every open to-do in the project
 things today -p "Launch v2"          # today's slice of it, labelled "view: today"
 things upcoming -t urgent
 things anytime --area "Side projects"
