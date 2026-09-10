@@ -55,6 +55,11 @@ under `-p` and under the project's area.
 collections themselves. `things projects` accepts `--area` and
 `--completed`.
 
+Projects are scheduled the same way to-dos are, and `things projects -j`
+reports that with the same field names and encodings: `start`,
+`startBucket`, `startDate` and `deadline`. A caller can tell a scheduled
+project from an anytime one without a `things show` per project.
+
 ## Inspecting a task
 
 ```sh

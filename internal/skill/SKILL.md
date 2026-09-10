@@ -34,6 +34,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 
 - `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq 'select(.status=="open")'`.
 - `"repeating": true` marks an item Things treats as repeating; the field is omitted otherwise. Projects also carry `"type": 1`.
+- `things projects` reports `start`, `startBucket`, `startDate` and `deadline` under the same names and encodings a to-do uses, so a scheduled project reads the same way without a per-project `show`. `startDate` and `deadline` are omitted when unset.
 - Human output is styled and column-aligned; colour auto-disables when piping or under `NO_COLOR`. `--color=always|never` overrides. JSON is unaffected.
 
 **A failure under `--json` prints one JSON object to stdout and exits non-zero.** Branch on the exit status and read the failure off stdout — not stderr. On success the read commands print their result there and the write commands print nothing — except `tag add`, which reports what it created and what it skipped. `error` is a stable token; `message` is the human text.
@@ -157,6 +158,7 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]
+    # carries start/startBucket/startDate/deadline like a to-do
 things areas
 things tags
 things search <query>           # titles and notes; a lookup, not a view
