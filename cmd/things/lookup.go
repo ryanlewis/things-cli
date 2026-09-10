@@ -116,10 +116,36 @@ func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 	}
 }
 
-// quoteArg renders one argument as the user would have to type it.
+// quoteArg renders one argument as the user would have to type it. Anything
+// that is not a bare word is wrapped in single quotes, which a shell takes
+// literally: double quotes would still expand `$rate` or a backtick, and an
+// unquoted value breaks on a space or on the metacharacters an ordinary name
+// carries — an area called `R&D` pasted back unquoted runs two commands.
 func quoteArg(s string) string {
-	if s == "" || strings.ContainsAny(s, " \t\"'\\") {
-		return strconv.Quote(s)
+	if s != "" && !strings.ContainsFunc(s, needsQuote) {
+		return s
 	}
-	return s
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// needsQuote reports whether r stops a value being a bare shell word. The safe
+// set is a whitelist, so a character a shell treats specially cannot slip
+// through by having been forgotten here.
+func needsQuote(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return false
+	}
+	return !strings.ContainsRune("-_./:=@+,", r)
+}
+
+// globalFlags renders the global flags a re-run of a listing needs to reach the
+// same rows. Only --db qualifies: the rest change how a listing prints, not
+// which items it holds. A path the config file supplied is left out, since a
+// re-run picks that up on its own.
+func globalFlags(d *Deps) []string {
+	if d.DBPath == "" || d.config().SetsDB(d.DBPath) {
+		return nil
+	}
+	return []string{"--db", quoteArg(d.DBPath)}
 }

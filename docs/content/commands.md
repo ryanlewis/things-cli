@@ -406,13 +406,15 @@ moved. The error names the listing to re-run:
 
 ```console
 $ things complete 2
-Error: task #2 comes from a stale list cache: the rows were listed 2 days ago, older than the 4 hours a row number is good for. Re-run `things today` and use the new row number, or pass the task's uuid.
+Error: task #2 comes from a stale list cache: the rows were listed over 2 days ago, older than the 4 hours a row number is good for. Re-run `things today` and use the new row number, or pass the task's uuid.
 ```
 
 Re-running that listing renumbers the rows and clears the refusal. A
 UUID is never refused, and neither is a title. A cache file written by
 a version before 0.8.0 records no time, so the first numeric reference
-after upgrading is refused until you list again.
+after upgrading is refused until you list again. The named listing
+carries `--db` when the flag supplied one, so it re-reads the database
+the rows came from.
 
 A `--json` listing never writes the cache. JSON output carries no row
 numbers, so it has nothing to record, and the file is one shared cache

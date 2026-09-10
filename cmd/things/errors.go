@@ -146,7 +146,7 @@ func (e *staleCacheError) Error() string {
 		// to age it by and no listing to name.
 		b.WriteString(" written by an older things-cli; re-run your listing")
 	} else {
-		fmt.Fprintf(&b, ": the rows were listed %s ago, older than the %s a row number is good for", humanDuration(time.Since(e.Last.WrittenAt)), humanDuration(cache.MaxAge))
+		fmt.Fprintf(&b, ": the rows were listed %s ago, older than the %s a row number is good for", overDuration(time.Since(e.Last.WrittenAt)), humanDuration(cache.MaxAge))
 		if e.Last.Command != "" {
 			fmt.Fprintf(&b, ". Re-run `%s`", e.Last.Command)
 		} else {
@@ -169,6 +169,26 @@ func humanDuration(d time.Duration) string {
 	default:
 		return plural(int(d.Hours()/24), "day")
 	}
+}
+
+// overDuration renders a span that is known to exceed the bound it is being
+// compared against. humanDuration truncates, so a listing 4h05m old would
+// otherwise read as "4 hours ago, older than the 4 hours a row number is good
+// for" — a sentence that contradicts itself in the commonest case of all, a
+// row number used shortly after it expired. Saying "over 4 hours" keeps the
+// comparison true without inventing precision.
+func overDuration(d time.Duration) string {
+	unit := 24 * time.Hour
+	switch {
+	case d < time.Hour:
+		unit = time.Minute
+	case d < 48*time.Hour:
+		unit = time.Hour
+	}
+	if d%unit != 0 {
+		return "over " + humanDuration(d)
+	}
+	return humanDuration(d)
 }
 
 func plural(n int, unit string) string {

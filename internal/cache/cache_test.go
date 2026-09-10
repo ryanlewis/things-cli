@@ -13,7 +13,7 @@ func TestRoundTrip(t *testing.T) {
 
 	written := LastList{
 		WrittenAt: time.Now().Truncate(time.Second),
-		Command:   `things today --project "Work"`,
+		Command:   `things today --project 'Work'`,
 		UUIDs:     []string{"a", "b", "c"},
 	}
 	if err := WriteLastList(written); err != nil {

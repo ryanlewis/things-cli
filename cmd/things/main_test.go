@@ -245,7 +245,7 @@ func TestResolveTaskStaleCacheIndex(t *testing.T) {
 func TestResolveTaskNumericRefusedWhenCacheIsOld(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	seedCache(t, 3*24*time.Hour, `things today --project "Work"`, "abc-123", "other")
+	seedCache(t, 3*24*time.Hour, `things today --project 'Work'`, "abc-123", "other")
 	database := seedResolveTaskDB(t)
 
 	_, err := resolveTask(&Deps{}, "1", database)
@@ -254,10 +254,29 @@ func TestResolveTaskNumericRefusedWhenCacheIsOld(t *testing.T) {
 		t.Fatalf("resolveTask = %v, want a stale cache error", err)
 	}
 	msg := err.Error()
-	for _, want := range []string{"3 days ago", `things today --project "Work"`, "uuid"} {
+	for _, want := range []string{"3 days ago", `things today --project 'Work'`, "uuid"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message %q does not mention %q", msg, want)
 		}
+	}
+}
+
+// Just past the bound the coarse rendering truncates to the bound itself, so
+// the message has to say "over 4 hours" rather than claim four hours is older
+// than four hours.
+func TestResolveTaskNumericJustPastTheBound(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	seedCache(t, cache.MaxAge+5*time.Minute, "things today", "abc-123")
+	database := seedResolveTaskDB(t)
+
+	_, err := resolveTask(&Deps{}, "1", database)
+	var stale *staleCacheError
+	if !errors.As(err, &stale) {
+		t.Fatalf("resolveTask = %v, want a stale cache error", err)
+	}
+	if !strings.Contains(err.Error(), "over 4 hours ago") {
+		t.Errorf("message = %q, want it to read as over the bound", err.Error())
 	}
 }
 
@@ -329,7 +348,8 @@ func TestListCommandLine(t *testing.T) {
 		want    string
 	}{
 		{"bare view", ListCmd{}, "today", "", "things today"},
-		{"filter only", ListCmd{}, "project", "Some Project", `things --project "Some Project"`},
+		{"filter only", ListCmd{}, "project", "Some Project", `things --project 'Some Project'`},
+		{"metacharacter in a name", ListCmd{Area: "R&D"}, "project", "", `things --area 'R&D'`},
 		{"view and filter", ListCmd{Area: "Home"}, "today", "", "things today --area Home"},
 		{"tag", ListCmd{Tag: "errand"}, "anytime", "", "things anytime --tag errand"},
 		{"dates", ListCmd{From: "2026-09-01", To: "2026-09-30"}, "upcoming", "", "things upcoming --from 2026-09-01 --to 2026-09-30"},
@@ -337,9 +357,20 @@ func TestListCommandLine(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.cmd.commandLine(tc.view, tc.project); got != tc.want {
+			if got := tc.cmd.commandLine(&Deps{}, tc.view, tc.project); got != tc.want {
 				t.Errorf("commandLine = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// A --db the flag supplied has to survive into the recorded command: re-running
+// without it would read the default database and renumber against other rows.
+func TestListCommandLineCarriesDBFlag(t *testing.T) {
+	d := &Deps{DBPath: "/tmp/things test.sqlite"}
+	got := (&ListCmd{}).commandLine(d, "today", "")
+	want := `things --db '/tmp/things test.sqlite' today`
+	if got != want {
+		t.Errorf("commandLine = %q, want %q", got, want)
 	}
 }
