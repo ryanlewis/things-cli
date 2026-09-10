@@ -826,7 +826,7 @@ func TestRunListSomedayAndLogbookIncludeProjects(t *testing.T) {
 // either the indented or the compact encoding.
 var numericTypeField = regexp.MustCompile(`"type":\s*-?\d`)
 
-// `type` renders as a string on every JSON surface that carries it — `todo`
+// `type` renders as a string on every JSON surface that carries it — `task`
 // or `project`, never the raw Things code (issue #208). The assertions are
 // against the raw JSON rather than an unmarshalled model.Task on purpose:
 // TaskType.UnmarshalJSON still accepts the legacy integer, so decoding would
@@ -852,11 +852,11 @@ func TestRunJSONRendersTypeAsString(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"list", []string{"--json", "list", "today"}, []string{`"type": "project"`, `"type": "todo"`}},
-		{"show todo", []string{"--json", "show", "todo-milk"}, []string{`"type": "todo"`}},
+		{"list", []string{"--json", "list", "today"}, []string{`"type": "project"`, `"type": "task"`}},
+		{"show todo", []string{"--json", "show", "todo-milk"}, []string{`"type": "task"`}},
 		{"show project", []string{"--json", "show", "proj-audit"}, []string{`"type": "project"`}},
 		{"search", []string{"--json", "search", "Runbook"}, []string{`"type": "project"`}},
-		{"repeating", []string{"--json", "list", "repeating"}, []string{`"type": "todo"`, `"type": "project"`}},
+		{"repeating", []string{"--json", "list", "repeating"}, []string{`"type": "task"`, `"type": "project"`}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
