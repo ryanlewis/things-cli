@@ -29,7 +29,9 @@ func (d *DB) ListTags() ([]model.Tag, error) {
 	query := `
 		SELECT uuid, COALESCE(title, ''), COALESCE(shortcut, ''), COALESCE(parent, '')
 		FROM TMTag
-		ORDER BY "index" ASC
+		-- uuid last so the order is total: two tags sharing an "index" would
+		-- otherwise list in an order SQLite does not define (issue #221).
+		ORDER BY "index" ASC, uuid ASC
 	`
 	rows, err := d.db.Query(query)
 	if err != nil {

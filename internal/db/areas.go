@@ -28,7 +28,9 @@ func (d *DB) ListAreas() ([]model.Area, error) {
 	query := `
 		SELECT uuid, COALESCE(title, ''), COALESCE(visible, 1)
 		FROM TMArea
-		ORDER BY "index" ASC
+		-- uuid last so the order is total: two areas sharing an "index" would
+		-- otherwise list in an order SQLite does not define (issue #221).
+		ORDER BY "index" ASC, uuid ASC
 	`
 	rows, err := d.db.Query(query)
 	if err != nil {

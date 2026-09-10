@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -2015,6 +2016,165 @@ func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
 			if task.Status == model.StatusCancelled {
 				t.Errorf("view %q: cancelled row %s should not be listed", view, task.UUID)
 			}
+		}
+	}
+}
+
+// Ties are the whole point of these seeds: every row shares its view's natural
+// sort key with a sibling, and the "index" that breaks the tie runs against the
+// uuid order the grouping happens to produce, so a view with no tiebreak lists
+// them in the wrong order. cacheTaskUUIDs numbers a listing by position, so an
+// order SQLite leaves undefined lets two identical listings number the same
+// rows differently and `things complete 3` act on a row the user never read
+// (issue #221).
+
+func seedTiedDeadlines(t *testing.T, d *DB) {
+	t.Helper()
+
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+
+	// Three rows on one deadline, the shape issue #221 was filed on: two of
+	// them tie on "index" as well and only the uuid separates those.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, deadline, "index") VALUES
+		('tie-dl-a', 'Renew the cert', 0, 0, 0, 1, 0, ?, 5),
+		('tie-dl-b', 'File the form',  0, 0, 0, 1, 0, ?, 5),
+		('tie-dl-c', 'Pay the invoice', 0, 0, 0, 1, 0, ?, 1)`,
+		jun1, jun1, jun1)
+}
+
+func seedTiedLogbook(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, stopDate, "index") VALUES
+		('tie-lb-a', 'Logged first',  0, 3, 0, 780000000.0, 5),
+		('tie-lb-b', 'Logged second', 0, 3, 0, 780000000.0, 5),
+		('tie-lb-c', 'Logged third',  0, 3, 0, 780000000.0, 1)`)
+}
+
+func seedTiedToday(t *testing.T, d *DB) {
+	t.Helper()
+
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndex, todayIndexReferenceDate, "index") VALUES
+		('tie-td-a', 'Stand up',   0, 0, 0, 1, 0, ?, 1, 1, 5),
+		('tie-td-b', 'Sit down',   0, 0, 0, 1, 0, ?, 1, 1, 5),
+		('tie-td-c', 'Walk about', 0, 0, 0, 1, 0, ?, 1, 1, 1)`,
+		jun1, jun1, jun1)
+}
+
+// The views with no entry in viewOrderBy list in "index" order, so a tie there
+// leaves only the uuid. Nothing but the uuid can order these rows, which is
+// what makes the tiebreak worth pinning.
+func seedTiedIndex(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
+		('tie-any-b', 'Second', 0, 0, 0, 1, 0, 1),
+		('tie-any-a', 'First',  0, 0, 0, 1, 0, 1)`)
+}
+
+func TestListTasksViewOrderIsTotalOnTiedKeys(t *testing.T) {
+	cases := []struct {
+		view string
+		seed func(t *testing.T, d *DB)
+		want []string
+	}{
+		{"deadlines", seedTiedDeadlines, []string{"tie-dl-c", "tie-dl-a", "tie-dl-b"}},
+		{"logbook", seedTiedLogbook, []string{"tie-lb-c", "tie-lb-a", "tie-lb-b"}},
+		{"today", seedTiedToday, []string{"tie-td-c", "tie-td-a", "tie-td-b"}},
+		// anytime takes the default index ordering, as inbox, upcoming,
+		// someday, trash and the bare --project/--area/--tag filter do.
+		{"anytime", seedTiedIndex, []string{"tie-any-a", "tie-any-b"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.view, func(t *testing.T) {
+			d := newTestDB(t)
+			tc.seed(t, d)
+
+			first, err := d.ListTasks(tc.view, TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(uuidsOf(first), tc.want) {
+				t.Errorf("%s order: got %v, want %v", tc.view, uuidsOf(first), tc.want)
+			}
+
+			// The same listing read twice has to number the same rows the
+			// same way, which is the contract the write commands rely on.
+			second, err := d.ListTasks(tc.view, TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(uuidsOf(second), uuidsOf(first)) {
+				t.Errorf("%s reread: got %v, want %v", tc.view, uuidsOf(second), uuidsOf(first))
+			}
+		})
+	}
+}
+
+// A search listing is numbered out of the same cache, so it needs the same
+// total order.
+func TestSearchTasksOrderIsTotalOnTiedIndex(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
+		('tie-any-b', 'Rotate the keys again', 0, 0, 0, 1, 0, 1),
+		('tie-any-a', 'Rotate the keys',       0, 0, 0, 1, 0, 1)`)
+
+	got, err := d.SearchTasks("Rotate the keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"tie-any-a", "tie-any-b"}
+	if !reflect.DeepEqual(uuidsOf(got), want) {
+		t.Errorf("search order: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// The seeded-tie tests above cannot catch a missing uuid tiebreak on their own:
+// GROUP BY t.uuid already leaves SQLite returning tied rows in uuid order, so
+// they pass either way. Assert the tiebreak on the SQL instead, where its
+// absence is visible.
+func TestEveryTaskOrderingEndsInTheUUIDTiebreak(t *testing.T) {
+	d := newTestDB(t)
+
+	// Spelled out rather than taken from uuidTiebreak: a test that compared
+	// the orderings against the constant would still pass if the constant
+	// itself were emptied.
+	const wantSuffix = `, t.uuid ASC`
+	if uuidTiebreak != wantSuffix {
+		t.Errorf("uuidTiebreak = %q, want %q", uuidTiebreak, wantSuffix)
+	}
+
+	orderings := map[string]string{
+		"default":            indexOrderBy,
+		"templatesLastOrder": d.templatesLastOrder(),
+	}
+	for view, orderBy := range viewOrderBy {
+		orderings["view "+view] = orderBy
+	}
+	for name, orderBy := range orderings {
+		if !strings.HasSuffix(orderBy, wantSuffix) {
+			t.Errorf("%s ordering %q does not end in %q", name, orderBy, wantSuffix)
+		}
+	}
+
+	// A view added without an ordering falls back to indexOrderBy, so every
+	// view is covered — but only as long as the fallback keeps the tiebreak.
+	for view := range viewFilters {
+		orderBy := viewOrderBy[view]
+		if orderBy == "" {
+			orderBy = indexOrderBy
+		}
+		if !strings.HasSuffix(orderBy, wantSuffix) {
+			t.Errorf("view %q orders by %q, which does not end in %q", view, orderBy, wantSuffix)
 		}
 	}
 }
