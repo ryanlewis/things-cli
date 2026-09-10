@@ -190,8 +190,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # today and anytime overlap each other though — a to-do scheduled for today
     # is in the Anytime bucket too — so for a whole day's closes sweep all
     # three, filter logbook on stopDate, and merge on uuid. One closed inside a
-    # project that is itself closed or trashed is not in logbook: it is folded
-    # into the project row, per the note above.
+    # project that is itself closed or trashed is in none of the three — not
+    # logbook, not today, not anytime: it is folded into the project row, per
+    # the note above, and reached with --project <uuid>.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

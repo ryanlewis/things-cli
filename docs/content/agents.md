@@ -265,7 +265,9 @@ trashed project is one `trash` row the same way — the app folds their to-dos
 into the project row and so does the CLI. An agent counting what got done from
 `logbook` counts projects once, not once plus every to-do inside them — which
 also means the day sweep above reports the project rather than the to-dos
-`things complete <project> --yes` closed along with it. To read
+`things complete <project> --yes` closed along with it: the fold applies to
+`today --include-completed` and `anytime --include-completed` as well as to
+`logbook`, so those to-dos are in none of the three. To read
 the contents, name the project: `things --project <uuid> -j` on a closed or
 trashed project returns its to-dos whatever their status, and
 `things show <uuid> --agent` lists them under `## To-dos` with `[x]`, `[~]` or
