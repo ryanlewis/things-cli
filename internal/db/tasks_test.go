@@ -669,6 +669,104 @@ func TestGetTaskLikeMatchSingle(t *testing.T) {
 	}
 }
 
+// A lookup matches its text literally. `_` used to stand for any character and
+// `%` for any run of them, so a reference could resolve to a task the user did
+// not name — and GetTask acts on a lookup that matches exactly one row, which
+// put `complete` on the wrong task (issue #267).
+func TestLookupMatchesTitlesLiterally(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('t-colon', '20:30 review', 0, 0, 0, 1),
+		('t-pct',   'Cut 50% of the scope', 0, 0, 0, 2),
+		('t-fifty', 'Fifty50 something', 0, 0, 0, 3)`)
+
+	// The dangerous shape: nothing is called '20_30 review', so the reference
+	// has to miss. GetTask acts on a lookup that matches exactly one row, so
+	// while `_` stood for any character this resolved silently to
+	// '20:30 review' and a write landed on it.
+	if got, err := d.GetTask("20_30 review"); err == nil {
+		t.Errorf("GetTask(\"20_30 review\") resolved to %q; no task is called that", got.UUID)
+	} else {
+		var notFound *TaskNotFoundError
+		if !errors.As(err, &notFound) {
+			t.Errorf("GetTask(\"20_30 review\"): got %v, want a not-found error", err)
+		}
+	}
+
+	// The underscore still finds its own task once one exists. The reference
+	// is a substring, so the equality branch GetTask tries first misses and
+	// the escaped LIKE is what resolves it — unescaped, the colon title
+	// matched the same pattern and the lookup was ambiguous.
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('t-under', '20_30 review', 0, 0, 0, 4)`)
+	got, err := d.GetTask("20_30 rev")
+	if err != nil {
+		t.Fatalf("GetTask(\"20_30 rev\"): %v", err)
+	}
+	if got.UUID != "t-under" {
+		t.Errorf("got %q, want t-under", got.UUID)
+	}
+
+	// A percent in a lookup is a character to find, so a title that merely has
+	// a 5 and a 0 in it is not a match.
+	matches, err := d.FindTasksByTitle("50%")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(matches), []string{"t-pct"}) {
+		t.Errorf("FindTasksByTitle(\"50%%\"): got %v, want [t-pct]", uuidsOf(matches))
+	}
+
+	// Substring matching itself is unchanged: the wrapping wildcards are the
+	// CLI's, not the caller's.
+	matches, err = d.FindTasksByTitle("review")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(matches), []string{"t-under", "t-colon"}) {
+		t.Errorf("FindTasksByTitle(\"review\"): got %v, want both reviews", uuidsOf(matches))
+	}
+
+	// Still case-insensitive, as it has always been.
+	matches, err = d.FindTasksByTitle("REVIEW")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 2 {
+		t.Errorf("uppercase lookup: got %v, want both reviews", uuidsOf(matches))
+	}
+}
+
+// `things search` matches its text literally too. `search '50%'` returned
+// every title holding a 5 followed by a 0, because the value went in as a
+// pattern (issue #267).
+func TestSearchMatchesLiterally(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, notes, type, status, trashed, "index") VALUES
+		('s-pct',   'Cut 50% of the scope', '',            0, 0, 0, 1),
+		('s-fifty', 'Fifty50 something',    '',            0, 0, 0, 2),
+		('s-note',  'Plain title',          'about 50% done', 0, 0, 0, 3),
+		('s-under', 'a_b',                  '',            0, 0, 0, 4),
+		('s-axb',   'axb',                  '',            0, 0, 0, 5)`)
+
+	pct, err := d.SearchTasks("50%")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The note match is wanted — search covers notes — but s-fifty is not.
+	if !sameSet(uuidsOf(pct), []string{"s-pct", "s-note"}) {
+		t.Errorf("search 50%%: got %v, want [s-pct s-note]", uuidsOf(pct))
+	}
+
+	under, err := d.SearchTasks("a_b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(under), []string{"s-under"}) {
+		t.Errorf("search a_b: got %v, want [s-under]", uuidsOf(under))
+	}
+}
+
 func TestGetTaskAmbiguous(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)

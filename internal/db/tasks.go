@@ -814,6 +814,14 @@ func literalLike(value string) string {
 	return likeEscaper.Replace(value)
 }
 
+// containsLike is literalLike for the lookups that match a substring: the
+// value is escaped so nothing inside it is a wildcard, then wrapped in the two
+// the caller did not type. `%` and `_` in the value are characters to find,
+// not pattern syntax (issue #267).
+func containsLike(value string) string {
+	return "%" + literalLike(value) + "%"
+}
+
 // buildListQuery composes a view's WHERE clause with the caller's filters and
 // the view's ORDER BY, and returns the SQL ListTasks runs. Splitting it out of
 // ListTasks gives the golden SQL test something to call: the text this returns
@@ -1010,10 +1018,18 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	}
 }
 
+// FindTasksByTitle returns the open tasks whose title contains substr. The
+// substring is matched literally: the wildcards are escaped and only the two
+// the caller never typed, either side of the value, are left as wildcards
+// (issue #267). Without that, `_` stood for any character and `%` for any run
+// of them, so a lookup could resolve to a task the user did not name — and
+// GetTask acts on a lookup that matches exactly one row, which put a status
+// write on the wrong task. Matching stays case-insensitive for ASCII, as it
+// has always been; nothing documented offered wildcards.
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE t.title LIKE ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+	query := d.taskQuery() + " WHERE t.title LIKE ?" + escapeClause + " AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
-	return d.collectTasks(query, "%"+substr+"%")
+	return d.collectTasks(query, containsLike(substr))
 }
 
 // templatesLastOrder orders a title lookup so repeating templates sort after
@@ -1056,9 +1072,13 @@ func (e *AmbiguousTaskError) Error() string {
 	return fmt.Sprintf("ambiguous task: %q matches %d tasks", e.Query, len(e.Matches))
 }
 
+// SearchTasks returns the tasks whose title or notes contain query, matched
+// literally for the same reason FindTasksByTitle is: `things search '50%'`
+// used to match every title holding a 5 followed by a 0, because the value
+// went in as a pattern (issue #267).
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
-	pattern := "%" + query + "%"
-	q := d.taskQuery() + " WHERE (t.title LIKE ? OR t.notes LIKE ?) AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid " + indexOrderBy
+	pattern := containsLike(query)
+	q := d.taskQuery() + " WHERE (t.title LIKE ?" + escapeClause + " OR t.notes LIKE ?" + escapeClause + ") AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid " + indexOrderBy
 	return d.collectTasks(q, pattern, pattern)
 }
 
