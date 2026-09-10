@@ -279,6 +279,32 @@ func TestRunListDateFilterRejectsView(t *testing.T) {
 	}
 }
 
+// someday carries no row with a parent project (issue #211), so --project on
+// it — flag or positional — could never match. It is rejected rather than
+// silently printing an empty list, as an impossible date filter is.
+func TestRunListSomedayRejectsProjectFilter(t *testing.T) {
+	database := seedFullDB(t)
+
+	err := runWith(t, database, "list", "someday", "--project", "Launch v2")
+	if err == nil || !strings.Contains(err.Error(), "not supported on the \"someday\" view") {
+		t.Fatalf("--project: expected view-rejection error, got: %v", err)
+	}
+
+	// The positional form resolves to the same filter, so it is rejected too.
+	err = runWith(t, database, "list", "someday", "Launch v2")
+	if err == nil || !strings.Contains(err.Error(), "not supported on the \"someday\" view") {
+		t.Fatalf("positional project: expected view-rejection error, got: %v", err)
+	}
+
+	// The view itself still lists, and --area still narrows it.
+	if err := runWith(t, database, "list", "someday"); err != nil {
+		t.Fatalf("bare someday: %v", err)
+	}
+	if err := runWith(t, database, "list", "someday", "--area", "Home"); err != nil {
+		t.Fatalf("someday --area: %v", err)
+	}
+}
+
 func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	database := seedFullDB(t)
 

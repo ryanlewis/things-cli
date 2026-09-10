@@ -40,6 +40,21 @@ func DateFilterableView(view string) bool {
 	return dateFilterableViews[view]
 }
 
+// viewsWithoutProjectFilter lists the views a --project filter can never match
+// in. someday keeps only rows with no parent project (issue #211), so pairing
+// it with --project asks for the contents of a project the view has already
+// excluded: the two clauses contradict, and the listing is empty whatever the
+// project holds. Rejecting the combination beats printing an empty list, the
+// same call issue #124 made for date filters on this view.
+var viewsWithoutProjectFilter = map[string]bool{
+	"someday": true,
+}
+
+// ProjectFilterableView reports whether --project applies to the view.
+func ProjectFilterableView(view string) bool {
+	return !viewsWithoutProjectFilter[view]
+}
+
 // repeatingPlaceholder is substituted with the probed recurrence column
 // reference by (*DB).taskQuery — the column name varies across Things schema
 // versions, and a schema carrying none resolves it to NULL.
@@ -164,7 +179,18 @@ var viewFilters = map[string]string{
 	"inbox":    "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	"upcoming": "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	"anytime":  "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
-	"someday":  "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
+	// Someday is the app's list of deferred things you have not filed under a
+	// project. A to-do inside a project stays inside it however it is deferred:
+	// the app shows it greyed within the project and keeps it out of the global
+	// Someday list, so "p.uuid IS NULL" is the parity rule (issue #211).
+	// Measured against the app rather than assumed — the discriminating case is
+	// a Someday to-do whose parent project is itself in Someday, and the app
+	// hides that one too, so the test is the presence of a parent, not the
+	// parent's own bucket. Project rows have no parent project, so they pass and
+	// stay listed (issue #206). Resolving p through COALESCE(t.project,
+	// h.project) means a to-do under a project heading is filed by its heading's
+	// project, not left looking unparented.
+	"someday": "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND p.uuid IS NULL AND " + todoOrProject,
 	// The Logbook is where Things files everything closed, not just everything
 	// finished: cancelling a to-do or a project logs it under its stopDate
 	// beside the completed ones, so the view carries status 2 as well as 3

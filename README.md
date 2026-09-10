@@ -242,7 +242,7 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `inbox` | Inbox |
 | `upcoming` | Scheduled tasks and deadlines |
 | `anytime` | Anytime list |
-| `someday` | Someday list |
+| `someday` | Someday projects and unparented Someday to-dos |
 | `repeating` | Repeating to-do and project templates |
 | `logbook` | Completed and cancelled tasks |
 | `trash` | Trashed tasks |
@@ -264,7 +264,7 @@ Filters:
 
 | Flag | Description |
 | --- | --- |
-| `-p, --project NAME` | Filter by project name or UUID |
+| `-p, --project NAME` | Filter by project name or UUID (not on `someday`, which lists only unparented items) |
 | `-a, --area NAME` | Filter by area name or UUID |
 | `-t, --tag NAME` | Filter by tag name |
 | `--on DATE` | Only tasks scheduled on `YYYY-MM-DD` (or RFC3339); on `deadlines`, filters by deadline |

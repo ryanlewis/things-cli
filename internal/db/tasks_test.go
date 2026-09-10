@@ -2178,3 +2178,161 @@ func TestEveryTaskOrderingEndsInTheUUIDTiebreak(t *testing.T) {
 		}
 	}
 }
+
+func seedSomedayParents(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('area-den', 'Den', 1, 1)`)
+
+	// Two parent projects in different buckets. The Someday one is the case
+	// that separates "no parent project" from "no parent project outside
+	// Someday": measured against Things, the app hides that child too.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, area, "index") VALUES
+		('sd-parent-anytime', 'Anytime project', 1, 0, 0, 1, 0, NULL, 'area-den', 1),
+		('sd-parent-someday', 'Someday project', 1, 0, 0, 2, 0, NULL, 'area-den', 2)`)
+
+	// Someday to-dos: one under each parent, one under a heading of the
+	// Anytime parent, and two with no parent project at all.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index") VALUES
+		('sd-in-anytime', 'Filed under anytime', 0, 0, 0, 2, 0, NULL, 'sd-parent-anytime', 3),
+		('sd-in-someday', 'Filed under someday', 0, 0, 0, 2, 0, NULL, 'sd-parent-someday', 4)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, project, "index") VALUES
+		('sd-head', 'Phase one', 2, 0, 0, 'sd-parent-anytime', 5)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, heading, "index") VALUES
+		('sd-under-head', 'Filed under a heading', 0, 0, 0, 2, 0, NULL, 'sd-head', 6)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, area, "index") VALUES
+		('sd-loose-area', 'Deferred in an area', 0, 0, 0, 2, 0, NULL, 'area-den', 7),
+		('sd-loose',      'Deferred on its own', 0, 0, 0, 2, 0, NULL, NULL,       8)`)
+}
+
+// Things' Someday list is the deferred things not filed under a project. A
+// to-do inside a project stays inside it however it is deferred, so the app
+// keeps it out of the global list while the CLI returned it (issue #211).
+//
+// The rule is the presence of a parent project, not the parent's bucket. That
+// was measured, not assumed: a probe project created in Someday through the
+// app, holding one Someday to-do, put the project in the app's Someday list
+// and left the child out.
+func TestListTasksSomedayExcludesProjectChildren(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayParents(t, d)
+
+	got, err := d.ListTasks("someday", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(someday): %v", err)
+	}
+	want := []string{"sd-parent-someday", "sd-loose-area", "sd-loose"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("someday: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// The discriminating case, called out on its own because it is the one the
+// issue guessed wrong: a Someday to-do whose parent project is itself in
+// Someday is still hidden, while the parent project lists.
+func TestListTasksSomedayHidesChildOfSomedayProject(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayParents(t, d)
+
+	got, err := d.ListTasks("someday", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	uuids := uuidsOf(got)
+
+	var sawParent, sawChild bool
+	for _, u := range uuids {
+		switch u {
+		case "sd-parent-someday":
+			sawParent = true
+		case "sd-in-someday":
+			sawChild = true
+		}
+	}
+	if !sawParent {
+		t.Errorf("someday: parent project sd-parent-someday should list, got %v", uuids)
+	}
+	if sawChild {
+		t.Errorf("someday: sd-in-someday sits inside a Someday project and should not list, got %v", uuids)
+	}
+}
+
+// A to-do filed under a project heading carries a NULL project and reaches its
+// project through the heading, so it must be excluded by the same rule rather
+// than slipping through as unparented.
+func TestListTasksSomedayExcludesHeadingNestedChildren(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayParents(t, d)
+
+	got, err := d.ListTasks("someday", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range got {
+		if task.UUID == "sd-under-head" {
+			t.Errorf("someday: sd-under-head reaches a project through its heading and should not list")
+		}
+	}
+}
+
+// Narrowing someday must not empty it: a project row and an unparented to-do
+// both still list, and --area still finds them through the area they carry.
+func TestListTasksSomedayKeepsUnparentedRows(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayParents(t, d)
+
+	byArea, err := d.ListTasks("someday", TaskFilter{Area: "area-den"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byArea), []string{"sd-parent-someday", "sd-loose-area"}) {
+		t.Errorf("--area area-den: got %v, want [sd-parent-someday sd-loose-area]", uuidsOf(byArea))
+	}
+
+	// --project can never match on this view now: every row that survives has
+	// no parent project. The CLI rejects the combination outright rather than
+	// print an empty list (see TestRunListSomedayRejectsProjectFilter); the
+	// query layer stays literal and simply matches nothing.
+	byProject, err := d.ListTasks("someday", TaskFilter{Project: "sd-parent-anytime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byProject) != 0 {
+		t.Errorf("--project sd-parent-anytime: got %v, want none", uuidsOf(byProject))
+	}
+}
+
+// The narrowing is someday-only: the same parented to-do still lists in the
+// other views, which show a project's contents.
+func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayParents(t, d)
+
+	// The seeded children are all someday-shaped (start=2, no startDate), so
+	// none of them can appear in another view as they stand. Seed one more
+	// child of the same parent in anytime shape to prove the guard is
+	// someday-only rather than global.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
+		('sd-anytime-child', 'Inside, anytime', 0, 0, 0, 1, 0, 'sd-parent-anytime', 9)`)
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, task := range got {
+		if task.UUID == "sd-anytime-child" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("anytime: sd-anytime-child should still list, got %v", uuidsOf(got))
+	}
+}

@@ -250,6 +250,39 @@ func TestRepeatingViewExcludesHeadings(t *testing.T) {
 	}
 }
 
+// Someday keeps no to-do that sits inside a project, whether that project is a
+// repeating template or an ordinary one (issues #171, #211), so the template
+// guard cannot be told apart from the parent guard by presence alone. What
+// still has to hold is that the view is not simply empty: a top-level Someday
+// to-do, and a Someday project row, both list.
+func TestTemplateChildExcludedFromSomeday(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index", rt1_recurrenceRule) VALUES
+		('p-tmpl', 'Weekly review', 1, 0, 0, 2, 0, 1, x'0102')`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
+		('p-real', 'Ship it', 1, 0, 0, 2, 0, 2)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
+		('t-in-tmpl', 'Inside the template', 0, 0, 0, 2, 0, 'p-tmpl', 1),
+		('t-in-real', 'Inside a real one',   0, 0, 0, 2, 0, 'p-real', 2)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
+		('t-toplevel', 'Deferred on its own', 0, 0, 0, 2, 0, 3)`)
+
+	got, err := d.ListTasks("someday", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(someday): %v", err)
+	}
+	// p-real is a Someday project and lists as a row of its own; p-tmpl is a
+	// template and belongs to the repeating view.
+	if !sameSet(uuidsOf(got), []string{"t-toplevel", "p-real"}) {
+		t.Errorf("someday: got %v, want [t-toplevel p-real]", uuidsOf(got))
+	}
+}
+
 // A to-do inside a repeating project template must not list as an ordinary
 // task: `things projects` does not report its project, so it would show
 // against a project the user cannot see (issue #171). Each case seeds the row
@@ -269,7 +302,10 @@ func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
 		{"today", "start, startBucket, startDate", fmt.Sprintf("1, 0, %d", today)},
 		{"upcoming", "start, startBucket, startDate", fmt.Sprintf("2, 0, %d", tomorrow)},
 		{"anytime", "start, startBucket", "1, 0"},
-		{"someday", "start, startBucket", "2, 0"},
+		// someday is absent deliberately: since issue #211 it carries no
+		// to-do with a parent project at all, so the sibling this table
+		// relies on cannot exist there. TestTemplateChildExcludedFromSomeday
+		// covers that view instead.
 		{"deadlines", "start, startBucket, deadline", fmt.Sprintf("1, 0, %d", tomorrow)},
 		{"project", "start, startBucket", "1, 0"},
 	}
