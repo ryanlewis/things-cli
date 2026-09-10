@@ -136,10 +136,13 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 // startBucket, startDate and todayIndex all live on the project row — and
 // lists the project itself in Today, Upcoming and Anytime, so those views
 // carry both kinds (issue #201, the same UI-parity argument as #106). Someday
-// and Logbook are the same story at the other two ends of a project's life:
-// a project deferred to Someday is a row in Someday, and a completed project
-// is a row in the Logbook under its completion date (issue #206). Trash is the
-// last of them: a trashed project is a row in the app's Trash (issue #212).
+// and Logbook are the same story at the other two ends of a project's life: a
+// project deferred to Someday is a row in Someday, and a completed project is
+// a row in the Logbook under its completion date (issue #206). A trashed
+// project is a row in the app's Trash (issue #212). Deadlines is the same
+// argument about a different column: a project carries a deadline the way a
+// to-do does (issue #213).
+//
 // Repeating carries both for its own reason (issue #165). Headings (type 2)
 // are structure inside a project, never rows in a list, so they stay out.
 const todoOrProject = "t.type IN (0, 1)"
@@ -167,8 +170,14 @@ var viewFilters = map[string]string{
 	// app puts the project row itself in Trash, and `things projects` filters
 	// trashed rows, so pinning t.type = 0 here left a trashed project visible
 	// nowhere (issue #212).
-	"trash":     "t.trashed = 1 AND " + todoOrProject,
-	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	"trash": "t.trashed = 1 AND " + todoOrProject,
+	// Deadlines carries projects too: a project takes a deadline exactly as a
+	// to-do does, `things projects` reports it, and agents.md advertises this
+	// view as the way to sweep what is due, so pinning t.type = 0 hid every
+	// project deadline from the sweep (issue #213). The view orders by
+	// t.deadline, so project rows fall in among the to-dos by date rather than
+	// forming a block of their own.
+	"deadlines": "t.deadline IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	// Things' Repeating list: the templates that generate to-dos and
 	// projects, not the items they generate. A template carries the
 	// recurrence rule; each generated instance is an ordinary row with no

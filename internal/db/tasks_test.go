@@ -1701,3 +1701,153 @@ func TestListTasksTrashProjectRowsAndFilters(t *testing.T) {
 		t.Errorf("--project trash-proj: got %v, want none", uuidsOf(byUUID))
 	}
 }
+
+func seedDeadlines(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('area-ops', 'Ops', 1, 1)`)
+
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+	jun2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
+	jun3 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.Local)))
+
+	// Interleaved by date but not by kind, and with "index" running against
+	// the deadline order, so an ordering that fell back to "index" or grouped
+	// by type would put these in a different sequence.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, deadline, area, "index") VALUES
+		('dl-todo-early', 'Renew the cert', 0, 0, 0, 1, 0, ?, 'area-ops', 3),
+		('dl-proj-mid',   'Migrate hosts',  1, 0, 0, 1, 0, ?, 'area-ops', 2),
+		('dl-todo-late',  'File the form',  0, 0, 0, 1, 0, ?, 'area-ops', 1)`,
+		jun1, jun2, jun3)
+
+	// A project with no deadline is not a deadlines row, and neither a closed
+	// nor a trashed project is, however its deadline reads.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, deadline, "index") VALUES
+		('dl-proj-none',    'No date',     1, 0, 0, 1, 0, NULL, 4),
+		('dl-proj-done',    'Shipped',     1, 3, 0, 1, 0, ?,    5),
+		('dl-proj-trashed', 'Binned',      1, 0, 1, 1, 0, ?,    6)`,
+		jun1, jun1)
+
+	// A heading is structure inside a project, never a list row.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, deadline, project, "index") VALUES
+		('dl-head', 'Phase one', 2, 0, 0, ?, 'dl-proj-mid', 7)`, jun1)
+
+	// A repeating project template belongs to Repeating, not to the view its
+	// deadline would otherwise put it in, and the to-dos inside it come with
+	// it — they carry no rule of their own, only the project does
+	// (issues #147, #171).
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, deadline, "index", rt1_recurrenceRule)
+		VALUES ('dl-proj-template', 'Quarterly audit', 1, 0, 0, 1, 0, ?, 8, x'0102')`, jun1)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, deadline, project, "index")
+		VALUES ('dl-todo-in-template', 'Pull the figures', 0, 0, 0, 1, 0, ?, 'dl-proj-template', 9)`, jun1)
+}
+
+// A project takes a deadline exactly as a to-do does and `things projects`
+// reports it, but the deadlines view was pinned to to-dos, so an agent
+// sweeping what is due never saw a project deadline (issue #213).
+func TestListTasksDeadlinesIncludeProjects(t *testing.T) {
+	d := newTestDB(t)
+	seedDeadlines(t, d)
+
+	got, err := d.ListTasks("deadlines", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(deadlines): %v", err)
+	}
+	want := []string{"dl-todo-early", "dl-proj-mid", "dl-todo-late"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("deadlines: got %v, want %v", uuidsOf(got), want)
+	}
+
+	for _, task := range got {
+		if task.UUID != "dl-proj-mid" {
+			continue
+		}
+		if task.Type != model.TypeProject {
+			t.Errorf("dl-proj-mid: got type %v, want %v", task.Type, model.TypeProject)
+		}
+	}
+}
+
+// Project rows are ordered with the to-dos by deadline rather than forming a
+// block of their own, so the project falls between the two to-dos.
+func TestListTasksDeadlinesOrderWithProject(t *testing.T) {
+	d := newTestDB(t)
+	seedDeadlines(t, d)
+
+	got, err := d.ListTasks("deadlines", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"dl-todo-early", "dl-proj-mid", "dl-todo-late"}
+	if !reflect.DeepEqual(uuidsOf(got), want) {
+		t.Errorf("deadlines order: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// Widening deadlines to projects must not widen it past a deadline: a project
+// without one, a closed one, a trashed one, a heading and a repeating project
+// template with its children all stay out.
+func TestListTasksDeadlinesProjectExclusions(t *testing.T) {
+	d := newTestDB(t)
+	seedDeadlines(t, d)
+
+	got, err := d.ListTasks("deadlines", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(deadlines): %v", err)
+	}
+	for _, uuid := range []string{
+		"dl-proj-none", "dl-proj-done", "dl-proj-trashed", "dl-head",
+		"dl-proj-template", "dl-todo-in-template",
+	} {
+		for _, task := range got {
+			if task.UUID == uuid {
+				t.Errorf("deadlines: %s should not be listed", uuid)
+			}
+		}
+	}
+}
+
+// --on/--from/--to filter t.deadline on this view, and a project row is
+// filtered by its own deadline like any other row.
+func TestListTasksDeadlinesDateFilterMatchesProject(t *testing.T) {
+	d := newTestDB(t)
+	seedDeadlines(t, d)
+
+	on := model.ThingsDate(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
+	got, err := d.ListTasks("deadlines", TaskFilter{On: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(got), []string{"dl-proj-mid"}) {
+		t.Errorf("deadlines --on: got %v, want [dl-proj-mid]", uuidsOf(got))
+	}
+}
+
+// A project carries its own area, so --area finds it; it has no parent
+// project, so --project can never match it.
+func TestListTasksDeadlinesProjectRowsAndFilters(t *testing.T) {
+	d := newTestDB(t)
+	seedDeadlines(t, d)
+
+	byArea, err := d.ListTasks("deadlines", TaskFilter{Area: "area-ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byArea), []string{"dl-todo-early", "dl-proj-mid", "dl-todo-late"}) {
+		t.Errorf("--area area-ops: got %v", uuidsOf(byArea))
+	}
+
+	byUUID, err := d.ListTasks("deadlines", TaskFilter{Project: "dl-proj-mid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byUUID) != 0 {
+		t.Errorf("--project dl-proj-mid: got %v, want none", uuidsOf(byUUID))
+	}
+}

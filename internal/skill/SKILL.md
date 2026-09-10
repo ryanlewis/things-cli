@@ -148,22 +148,25 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # views: today, inbox, upcoming, anytime, someday, repeating, logbook, trash, deadlines
     # shortcut: `things today`, `things inbox`, etc.
     # bare `things` is today — but --project/--area/--tag alone list every open
-    # task in that project/area/tag. Name a view to scope the filter to it
+    # to-do in that project/area/tag. Name a view to scope the filter to it
     # (`things today --project X`); plain output then prints a `view: <name>`
     # line so a slice isn't read as the whole project.
     # Tasks under a project heading belong to that project — they match
     # --project and the project's --area, and report projectTitle.
     # Trashing a project leaves its to-dos untrashed in the database; every
     # view hides them anyway, except trash and logbook.
-    # today, upcoming, anytime, someday, logbook and trash list projects as rows
-    # too, since Things schedules a project the same way it schedules a to-do
-    # and shows the project itself in those lists: scheduled in the first
-    # three, deferred in someday, completed in logbook under its completion
-    # date, trashed in trash. Tell them apart by "type" ("project") or the plain-text
+    # every named view except inbox lists projects as rows too, since Things
+    # schedules a project the same way it schedules a to-do and shows the
+    # project itself in those lists: scheduled in today/upcoming/anytime,
+    # deferred in someday, completed in logbook under its completion date,
+    # trashed in trash, and due in deadlines — a project takes a deadline the
+    # way a to-do does, ordered in among the to-dos by deadline.
+    # Tell them apart by "type" ("project") or the plain-text
     # "(project)" tag. A project has no parent project, so --project never
     # matches one; --area does. repeating carries project templates for its
-    # own reason, and trash because a trashed project is a row in the app's
-    # Trash; inbox and deadlines stay to-do only.
+    # own reason. Only inbox stays to-do only — plus a bare --project/--area/
+    # --tag with no view named, which lists to-dos, so name a view when the
+    # project rows matter.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
     # --include-completed is today-only: items Things hasn't logged out yet.
