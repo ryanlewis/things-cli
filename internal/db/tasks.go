@@ -344,19 +344,24 @@ var viewOrderBy = map[string]string{
 	// the two kinds in contiguous blocks instead of interleaving them by an
 	// index that is only meaningful within a kind.
 	"repeating": "ORDER BY t.type ASC, t.\"index\" ASC" + uuidTiebreak,
-	// Today view: top-level items (no project, no area) come first, then
-	// everything else sorted by area then project index. Project tasks and
-	// area-only tasks interleave by area.index — so projects in a low-index
-	// area come before area-only items in higher-index areas, matching the
-	// Things app. Within each group, sort by status (open before completed),
-	// then todayIndexReferenceDate DESC, then todayIndex ASC.
+	// Today takes the shared grouping and then todayIndex, which is the one
+	// signal the app orders within a group by. Measured against the app on
+	// 10 Sep 2026 over a 27-row Today, these keys reproduce its order in every
+	// position (issue #237).
+	//
+	// Two keys came off to get there, and both were doing harm. t.status put
+	// the closed items --include-completed keeps at the end of their group,
+	// where the app leaves them in place among the open ones, struck through:
+	// the app's Today interleaved six closed rows through three groups.
+	// t.todayIndexReferenceDate DESC reordered whole groups by the day their
+	// todayIndex was last rewritten, which the app does not do either — it is
+	// the stamp that says which day a todayIndex belongs to, not a sort key.
 	//
 	// A project row scheduled for Today (issue #201) has no parent project of
-	// its own, so p.* is NULL and it lands in its area's group keyed on
-	// COALESCE(p."index", 0) = 0, alongside that area's unparented to-dos and
-	// ahead of the to-dos of any project with a non-zero index. Its own
-	// todayIndex then places it, the same signal the app orders Today by.
-	"today": "ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
+	// its own, so p.* is NULL and it lands in its area's group ahead of that
+	// area's projects. Its own todayIndex then places it among the area's
+	// loose to-dos, the same signal everything else here is ordered by.
+	"today": "ORDER BY " + listGrouping + ", t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	// Project view: a single-project listing keeps its start/index order (the
 	// area and project keys are constant across it), while a filter that spans
 	// projects — `things --area X`, `things --tag y` — groups by area then
@@ -368,7 +373,21 @@ var viewOrderBy = map[string]string{
 	// view listed in bare t."index" order before, so a project's to-dos
 	// interleaved with everything else and the rendered header repeated
 	// (issue #217).
-	"anytime": "ORDER BY " + anytimeGrouping + ", t.\"index\" ASC" + uuidTiebreak,
+	"anytime": "ORDER BY " + listGrouping + ", t.\"index\" ASC" + uuidTiebreak,
+	// Someday is arranged the same way. Its filter keeps only rows with no
+	// parent project, so the two project keys are constant across the listing
+	// and it reduces to unfiled items, then areas, then t."index" — but it is
+	// written with the shared constant rather than a trimmed copy, so the
+	// three views cannot drift apart. It listed in bare t."index" order before
+	// and matched the app in none of its positions (issue #237).
+	//
+	// One case here is unverified: a Someday project row and a loose Someday
+	// to-do in the same area both fall through to t."index", which compares a
+	// project's index with a to-do's — different spaces, the same concern the
+	// repeating view's ordering calls out. It is no worse than the bare index
+	// ordering this replaces, and there is no Someday project in the data to
+	// measure the app's answer against.
+	"someday": "ORDER BY " + listGrouping + ", t.\"index\" ASC" + uuidTiebreak,
 	// Upcoming is a diary, so it reads by date and not by list position. The
 	// app orders it by start date and then by todayIndex, which is the
 	// within-day position it also keys Today on; the view listed in bare
@@ -376,11 +395,12 @@ var viewOrderBy = map[string]string{
 	"upcoming": "ORDER BY t.startDate ASC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 }
 
-// anytimeGrouping reproduces how the app's Anytime list is arranged, measured
-// against it on 10 Sep 2026 (issue #217). Four keys, and the two that ask
-// "filed here at all?" are a CASE rather than a plain index because Things'
-// own indexes are negative, so the COALESCE default of 0 that stands for "not
-// filed here" would sort last where the app puts it first:
+// listGrouping reproduces how the app arranges a list of to-dos. Today,
+// Anytime and Someday all take it: measured against the app on 10 Sep 2026,
+// the three lists are arranged identically (issues #217, #237). Four keys, and
+// the two that ask "filed here at all?" are a CASE rather than a plain index
+// because Things' own indexes are negative, so the COALESCE default of 0 that
+// stands for "not filed here" would sort last where the app puts it first:
 //
 //  1. the items filed nowhere at all — no project and no area — lead the list;
 //  2. then areas, in area order;
@@ -394,20 +414,21 @@ var viewOrderBy = map[string]string{
 // app's sidebar order between a standalone project and an area cannot be
 // reconstructed from either alone.
 //
-// The caller adds t."index" to order within a project, and the uuid tiebreak
-// after that. Together they put a project's to-dos in one contiguous block, so
-// the rendered group header prints once above them, which is the app's own
-// presentation of a project in this list — a header, not a row.
-const anytimeGrouping = `CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, ` +
+// The caller adds its own within-group key after these — t."index" for anytime
+// and someday, today's todayIndex ordering for today — and the uuid tiebreak
+// last. Together they put a project's to-dos in one contiguous block, so the
+// rendered group header prints once above them, which is the app's own
+// presentation of a project in these lists.
+const listGrouping = `CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, ` +
 	`COALESCE(a."index", pa."index", 0), ` +
 	`CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, ` +
 	`COALESCE(p."index", 0)`
 
 // indexOrderBy is the ordering for the views with no entry in viewOrderBy —
-// inbox, someday and trash list in index order. SearchTasks takes it too: its
-// results are numbered out of the same cache. uuidTiebreak closes the same gap
-// here, because t."index" repeats across lists and two rows in one listing can
-// share it.
+// inbox and trash list in index order. SearchTasks takes it too: its results
+// are numbered out of the same cache. uuidTiebreak closes the same gap here,
+// because t."index" repeats across lists and two rows in one listing can share
+// it.
 const indexOrderBy = `ORDER BY t."index" ASC` + uuidTiebreak
 
 // untrashedParent excludes to-dos whose project is in the trash, in every
