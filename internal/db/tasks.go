@@ -59,6 +59,16 @@ func ProjectFilterableView(view string) bool {
 	return !views[view].rejectsProjectFilter
 }
 
+// HidesTemplateContentsView reports whether the view withholds the to-dos
+// inside a repeating project template (issue #171). trash, logbook and
+// repeating keep templates, and with them their contents, so a closed or
+// trashed to-do out of a template does list there — only the other views hide
+// it. It reads the same flag buildListQuery does, so the answer and the SQL
+// cannot drift apart.
+func HidesTemplateContentsView(view string) bool {
+	return !views[view].includesTemplates
+}
+
 // repeatingPlaceholder is substituted with the probed recurrence column
 // reference by (*DB).taskQuery — the column name varies across Things schema
 // versions, and a schema carrying none resolves it to NULL.

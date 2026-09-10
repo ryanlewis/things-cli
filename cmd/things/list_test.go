@@ -59,6 +59,11 @@ func TestRepeatingProjectNoteStaysQuietOtherwise(t *testing.T) {
 		"ordinary project":  {"--no-hints", "--project", "Ship it"},
 		"unknown project":   {"--no-hints", "--project", "No such thing"},
 		"no project filter": {"--no-hints", "anytime"},
+		// logbook and trash report what the database holds, templates and
+		// their contents included, so an empty listing there means nothing
+		// has closed or been thrown away yet — not that the view hides them.
+		"logbook": {"--no-hints", "logbook", "--project", "Weekly review"},
+		"trash":   {"--no-hints", "trash", "--project", "Weekly review"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
