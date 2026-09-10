@@ -34,10 +34,10 @@ things <view>          # shortcut: things inbox, things today, etc.
 Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
 `repeating`, `logbook`, `trash`, `deadlines`.
 
-Every view above except `inbox` lists projects as well as to-dos, matching
-what Things shows in those lists — a project is scheduled the same way a
-to-do is, so a project put in Today is a row in Today, one deferred to
-Someday is a row in Someday, a closed project is a row in the Logbook
+Every view above except `inbox` and `anytime` lists projects as well as
+to-dos, matching what Things shows in those lists — a project is scheduled the
+same way a to-do is, so a project put in Today is a row in Today, one deferred
+to Someday is a row in Someday, a closed project is a row in the Logbook
 under its stop date, and a trashed one is a row in Trash. `deadlines`
 is the same argument about a different column: a project takes a deadline the
 way a to-do does, and project rows are ordered in among the to-dos by
@@ -48,6 +48,15 @@ out. A project has no parent project, so `--project` never matches one;
 project templates too, for the reason below. A bare `-p`/`-a`/`-t` filter with
 no view named follows the same rule. `inbox` stays to-do only: an inbox item
 has not been filed anywhere yet, so it is never a project.
+
+`anytime` is to-do only for the opposite reason. Every active project is
+trivially "anytime", so a list of them all would bury the to-dos; the app
+groups each project's to-dos under the project name rather than listing the
+project among them, and `anytime` is ordered to match — unfiled items first,
+then areas, and inside an area its own loose to-dos before its projects', so
+plain output prints each project name once as a group header. `things projects`
+is how to sweep the projects themselves. `upcoming` reads by date rather than
+by list position, the way the app's own Upcoming does.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
 to-do or a project logs it under its stop date beside the completed ones, the

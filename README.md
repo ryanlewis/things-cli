@@ -248,13 +248,16 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks and projects with a deadline |
 
-Every view above except `inbox` lists projects as well as to-dos, because
-Things schedules and files a project exactly as it does a to-do — a project
-put in Today is a row in Today, a closed one is a row in the Logbook, a
-trashed one a row in Trash, and one with a deadline a row in `deadlines`.
-Project rows are marked `(project)` in plain output and carry `"type":
-"project"` in JSON. A bare `-p`/`-a`/`-t` filter with no view named follows
-the same rule.
+Every view above except `inbox` and `anytime` lists projects as well as
+to-dos, because Things schedules and files a project exactly as it does a
+to-do — a project put in Today is a row in Today, a closed one is a row in the
+Logbook, a trashed one a row in Trash, and one with a deadline a row in
+`deadlines`. Project rows are marked `(project)` in plain output and carry
+`"type": "project"` in JSON. A bare `-p`/`-a`/`-t` filter with no view named
+follows the same rule. `anytime` is to-do only: every active project is
+trivially "anytime", so the app groups each project's to-dos under the project
+name rather than listing the project among them, and `things projects` is how
+to sweep the projects themselves.
 
 Trashing a project in Things leaves its to-dos untrashed in the database, so
 every view above hides to-dos whose project is in the trash. A closed project

@@ -210,11 +210,14 @@ to retry with. The two import failures carry an `items` array naming which
 payload items were blocked or did not land; the [Commands](/commands/) page
 has the detail.
 
-Every named view except `inbox` returns projects as well as to-dos, because
-Things schedules a project the same way it schedules a to-do and shows the
-project itself in those lists — scheduled in `today`, `upcoming` and
-`anytime`, deferred in `someday`, closed in `logbook` under its stop date,
-trashed in `trash`. A trashed project reaches no other command:
+Every named view except `inbox` and `anytime` returns projects as well as
+to-dos, because Things schedules a project the same way it schedules a to-do
+and shows the project itself in those lists — scheduled in `today` and
+`upcoming`, deferred in `someday`, closed in `logbook` under its stop date,
+trashed in `trash`. `anytime` is to-do only, because every active project is
+trivially "anytime": the app groups each project's to-dos under the project
+name instead of listing the project among them, so an agent sweeping projects
+wants `things projects`, not `things anytime`. A trashed project reaches no other command:
 `things projects` filters trashed rows. `deadlines` carries projects for the
 same reason applied to a different column, so a sweep of what is due no
 longer misses a project deadline. A bare filter with no view named —

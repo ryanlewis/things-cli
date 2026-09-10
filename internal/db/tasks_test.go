@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -1593,7 +1594,10 @@ func TestListTasksViewsIncludeProjects(t *testing.T) {
 	}{
 		{"today", []string{"proj-today", "todo-in-proj", "todo-in-area", "todo-loose"}},
 		{"upcoming", []string{"proj-upcoming"}},
-		{"anytime", []string{"proj-today", "proj-anytime", "todo-in-proj", "todo-in-area", "todo-loose"}},
+		// anytime is the exception: every active project is trivially
+		// "anytime", and the app shows them as group headers over their
+		// to-dos rather than as rows (issue #217).
+		{"anytime", []string{"todo-in-proj", "todo-in-area", "todo-loose"}},
 	}
 
 	for _, tc := range cases {
@@ -1646,6 +1650,116 @@ func TestListTasksProjectsExcludedFromViews(t *testing.T) {
 	}
 	if !sameSet(uuidsOf(got), []string{"proj-template"}) {
 		t.Errorf("repeating: got %v, want [proj-template]", uuidsOf(got))
+	}
+}
+
+// Anytime is the one scheduled view without project rows. Every active project
+// is trivially "anytime", so the app groups its to-dos under the project name
+// instead of listing the project among them — measured against the app on
+// 10 Sep 2026, whose Anytime held none of the 23 active projects and all 107
+// of their to-dos. The views where a project has actually been put somewhere
+// keep their rows (issue #217).
+func TestAnytimeHasNoProjectRows(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range got {
+		if task.Type == model.TypeProject {
+			t.Errorf("anytime lists project %s as a row", task.UUID)
+		}
+	}
+	// The projects' to-dos are still there — the rows were dropped, not the
+	// contents.
+	if !sameSet(uuidsOf(got), []string{"todo-in-proj", "todo-in-area", "todo-loose"}) {
+		t.Errorf("anytime: got %v, want the three to-dos", uuidsOf(got))
+	}
+
+	// today and upcoming still carry theirs.
+	for _, tc := range []struct{ view, project string }{
+		{"today", "proj-today"},
+		{"upcoming", "proj-upcoming"},
+	} {
+		rows, err := d.ListTasks(tc.view, TaskFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, task := range rows {
+			if task.UUID == tc.project && task.Type == model.TypeProject {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("view %q dropped its project row %s: %v", tc.view, tc.project, uuidsOf(rows))
+		}
+	}
+}
+
+// The app arranges Anytime as unfiled items, then areas, and inside an area
+// its own loose to-dos before those of its projects. Bare t."index" order
+// interleaved all of it, so a project's to-dos were scattered and the rendered
+// group header repeated (issue #217).
+func TestAnytimeGroupsByAreaThenProject(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('ar-first', 'Work', 1, -2005),
+		('ar-second', 'Home', 1, -900)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, area, "index") VALUES
+		('proj-a', 'Project A', 1, 0, 0, 1, 0, 'ar-first', -11481),
+		('proj-b', 'Project B', 1, 0, 0, 1, 0, 'ar-first', -10958)`)
+	// Indexes are deliberately interleaved: index order alone would mix every
+	// group together. Area indexes are negative, as Things writes them, so an
+	// unfiled row's COALESCE default of 0 would sort last without the CASE.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, area, "index") VALUES
+		('a1',        'A one',   0, 0, 0, 1, 0, 'proj-a', NULL,        5),
+		('b1',        'B one',   0, 0, 0, 1, 0, 'proj-b', NULL,        1),
+		('loose-1',   'Loose',   0, 0, 0, 1, 0, NULL,     'ar-first',  9),
+		('a2',        'A two',   0, 0, 0, 1, 0, 'proj-a', NULL,        7),
+		('unfiled',   'Unfiled', 0, 0, 0, 1, 0, NULL,     NULL,        8),
+		('home-todo', 'Home',    0, 0, 0, 1, 0, NULL,     'ar-second', 2)`)
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"unfiled", "loose-1", "a1", "a2", "b1", "home-todo"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("anytime order: got %v, want %v", got, want)
+	}
+}
+
+// Upcoming is a diary: the app reads it by date, then by the within-day
+// position it also keys Today on. The view listed in bare t."index" order,
+// which interleaved the dates (issue #217).
+func TestUpcomingOrdersByDateThenTodayIndex(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+	later := today + (2 << 7)
+
+	// Indexes run against the wanted order so t."index" alone cannot produce it.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, todayIndex, "index") VALUES
+		('late-b',  'Later two',    0, 0, 0, 2, 0, ?, -100, 1),
+		('soon-b',  'Tomorrow two', 0, 0, 0, 2, 0, ?, -200, 2),
+		('late-a',  'Later one',    0, 0, 0, 2, 0, ?, -900, 3),
+		('soon-a',  'Tomorrow one', 0, 0, 0, 2, 0, ?, -800, 4)`,
+		later, tomorrow, later, tomorrow)
+
+	got, err := d.ListTasks("upcoming", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"soon-a", "soon-b", "late-a", "late-b"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("upcoming order: got %v, want %v", got, want)
 	}
 }
 
@@ -2455,8 +2569,11 @@ func TestListTasksViewOrderIsTotalOnTiedKeys(t *testing.T) {
 		{"deadlines", seedTiedDeadlines, []string{"tie-dl-c", "tie-dl-a", "tie-dl-b"}},
 		{"logbook", seedTiedLogbook, []string{"tie-lb-c", "tie-lb-a", "tie-lb-b"}},
 		{"today", seedTiedToday, []string{"tie-td-c", "tie-td-a", "tie-td-b"}},
-		// anytime takes the default index ordering, as inbox, upcoming,
-		// someday, trash and the bare --project/--area/--tag filter do.
+		// anytime groups before it orders by index, and these rows are filed
+		// nowhere, so they share every grouping key and fall through to the
+		// index — which they also tie on, leaving only the uuid. inbox,
+		// someday and trash reach the same place through the default index
+		// ordering.
 		{"anytime", seedTiedIndex, []string{"tie-any-a", "tie-any-b"}},
 	}
 
