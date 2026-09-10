@@ -107,7 +107,11 @@ func (c *SkillListCmd) Run(d *Deps) error {
 	for _, a := range skill.Agents() {
 		dir, err := a.DefaultDir()
 		if err != nil {
-			dir = "(unknown)"
+			// Say why rather than printing a placeholder path and then
+			// stat-ing it as if it were real, which would probe the current
+			// working directory.
+			fmt.Fprintf(d.Stdout, "%-10s (path unresolved: %v)\n", a.Name(), err)
+			continue
 		}
 		status := "not installed"
 		if skill.Exists(a, dir) {
