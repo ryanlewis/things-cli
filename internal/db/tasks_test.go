@@ -293,11 +293,17 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 }
 
 // A closed item the today view never carries — completed out of the Inbox,
-// out of Upcoming, out of Anytime — belongs in the Logbook the moment it is
-// closed, whatever calendar day that is. Today only ever shows rows scheduled
-// for today, so excluding "closed today" from the Logbook outright would leave
-// these rows in no list at all (issue #230).
-func TestLogbookKeepsItemsClosedTodayOutsideToday(t *testing.T) {
+// out of Upcoming — belongs in the Logbook the moment it is closed, whatever
+// calendar day that is, because no list is still showing it. Excluding "closed
+// today" from the Logbook outright would leave those rows in no list at all
+// (issue #230).
+//
+// Anytime is the case that is not like the other two. Since issue #238 the
+// app's Anytime goes on showing a row closed out of it, so the Logbook
+// withholds it for the rest of the day and `anytime --include-completed` has
+// it instead. Each case therefore names the list that should be holding the
+// row, and every case asserts it is in exactly one place.
+func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 	future := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3)))
 	stopNow := model.TimeToUnix(time.Now())
 
@@ -306,10 +312,11 @@ func TestLogbookKeepsItemsClosedTodayOutsideToday(t *testing.T) {
 		start       int
 		startBucket int
 		startDate   any
+		heldBy      string // the view that should have it, "" for the logbook
 	}{
-		{"t-closed-inbox", 0, 0, nil},       // closed straight out of the Inbox
-		{"t-closed-anytime", 1, 0, nil},     // closed out of Anytime — no startDate
-		{"t-closed-upcoming", 2, 0, future}, // closed out of Upcoming, ahead of its date
+		{"t-closed-inbox", 0, 0, nil, ""},          // closed straight out of the Inbox
+		{"t-closed-anytime", 1, 0, nil, "anytime"}, // closed out of Anytime — no startDate
+		{"t-closed-upcoming", 2, 0, future, ""},    // closed ahead of its Upcoming date
 	}
 
 	for _, tc := range cases {
@@ -324,15 +331,32 @@ func TestLogbookKeepsItemsClosedTodayOutsideToday(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !sameSet([]string{tc.uuid}, uuidsOf(logged)) {
-				t.Errorf("logbook = %v, want {%s}", uuidsOf(logged), tc.uuid)
+			wantLogged := tc.heldBy == ""
+			if gotLogged := len(logged) == 1; gotLogged != wantLogged {
+				t.Errorf("logbook = %v, want held there: %v", uuidsOf(logged), wantLogged)
 			}
+
+			// today never has it: none of these rows is scheduled for today.
 			inToday, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(inToday) != 0 {
 				t.Errorf("today = %v, want empty", uuidsOf(inToday))
+			}
+
+			inAnytime, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantAnytime := tc.heldBy == "anytime"
+			if gotAnytime := len(inAnytime) == 1; gotAnytime != wantAnytime {
+				t.Errorf("anytime --include-completed = %v, want held there: %v", uuidsOf(inAnytime), wantAnytime)
+			}
+
+			// Exactly one list, never both and never neither.
+			if n := len(logged) + len(inAnytime); n != 1 {
+				t.Errorf("row is in %d lists, want exactly 1", n)
 			}
 		})
 	}
@@ -1949,6 +1973,131 @@ func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 	want := []string{"open-first", "closed-mid", "open-last"}
 	if got := uuidsOf(got); !slices.Equal(got, want) {
 		t.Errorf("today order: got %v, want %v — the closed row must stay in place", got, want)
+	}
+}
+
+// The app keeps an item closed today visible, struck through, in whatever list
+// it was in until the day rolls over — Anytime as much as Today. Without the
+// flag anytime is open rows only, as before (issue #238).
+func TestAnytimeIncludeCompleted(t *testing.T) {
+	d := newTestDB(t)
+
+	stopToday := model.TimeToUnix(time.Now())
+	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
+		('open-one',       'Open',           0, 0, 0, 1, 0, NULL, NULL, 1),
+		('closed-today',   'Done today',     0, 3, 0, 1, 0, NULL, ?,    2),
+		('cancelled-today','Dropped today',  0, 2, 0, 1, 0, NULL, ?,    3),
+		('closed-earlier', 'Done yesterday', 0, 3, 0, 1, 0, NULL, ?,    4)`,
+		stopToday, stopToday, stopYesterday)
+
+	plain, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(plain), []string{"open-one"}) {
+		t.Errorf("anytime: got %v, want [open-one]", uuidsOf(plain))
+	}
+
+	withClosed, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The one closed yesterday stays out: Things filed it when the day rolled
+	// over. Cancelled counts as closed, the same as in today.
+	want := []string{"open-one", "closed-today", "cancelled-today"}
+	if !sameSet(uuidsOf(withClosed), want) {
+		t.Errorf("anytime --include-completed: got %v, want %v", uuidsOf(withClosed), want)
+	}
+
+	// "Log Completed Now" files the day's closed items early, and the flag
+	// respects it here exactly as it does in today.
+	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
+	afterLog, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(afterLog), []string{"open-one"}) {
+		t.Errorf("after Log Completed Now: got %v, want [open-one]", uuidsOf(afterLog))
+	}
+}
+
+// today and anytime answer "is this row still shown in place?" from one
+// helper, so a row scheduled for today that is closed today appears under both
+// — which is what the app does, since a to-do scheduled for a day sits in the
+// Anytime bucket too. All nine such rows in the measured data were in both.
+func TestTodayAndAnytimeAgreeOnJustClosedRows(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
+		VALUES ('scheduled-and-done', 'Done', 0, 3, 0, 1, 0, ?, ?, 1)`,
+		today, model.TimeToUnix(time.Now()))
+
+	for _, view := range []string{"today", "anytime"} {
+		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sameSet(uuidsOf(got), []string{"scheduled-and-done"}) {
+			t.Errorf("%s --include-completed: got %v, want the row", view, uuidsOf(got))
+		}
+	}
+
+	// And it is in neither list without the flag, nor in the logbook, which
+	// still holds nothing closed today.
+	logged, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logged) != 0 {
+		t.Errorf("logbook: got %v, want empty — the row closed today", uuidsOf(logged))
+	}
+}
+
+// today and anytime both drop repeating templates and the contents of a
+// repeating project template; the Logbook keeps them. So the Logbook must not
+// withhold such a row on the strength of the Anytime bucket it happens to sit
+// in — nothing would be showing it, and it would list nowhere at all, which is
+// the hazard issue #230 named (issues #171, #238).
+func TestLogbookKeepsRepeatingTemplatesClosedToday(t *testing.T) {
+	d := newTestDB(t)
+
+	stopToday := model.TimeToUnix(time.Now())
+	// The template row itself: it carries the recurrence rule.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, rt1_recurrenceRule, "index") VALUES
+		('template', 'Repeats', 0, 3, 0, 1, 0, NULL, ?, x'00', 1)`, stopToday)
+	// And a to-do inside a repeating project template, which carries no rule
+	// of its own — only its project does.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, rt1_recurrenceRule, "index") VALUES
+		('proj-template', 'Repeating project', 1, 0, 0, 1, 0, NULL, NULL, x'00', 2)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
+		('inside-template', 'Step', 0, 3, 0, 1, 0, NULL, ?, 'proj-template', 3)`, stopToday)
+
+	logged, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"template", "inside-template"}
+	if !sameSet(uuidsOf(logged), want) {
+		t.Errorf("logbook: got %v, want %v", uuidsOf(logged), want)
+	}
+
+	// Neither list is showing them, which is why the Logbook has to.
+	for _, view := range []string{"today", "anytime"} {
+		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("%s --include-completed: got %v, want empty", view, uuidsOf(got))
+		}
 	}
 }
 

@@ -183,12 +183,14 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # `things projects`.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
-    # --include-completed is today-only: items ticked off in Today that Things
-    # hasn't logged out yet. logbook holds every other closed item, including
-    # things closed today from Inbox/Anytime/Upcoming, so a closed item whose
-    # project is still open is in exactly one of the two lists — for a whole
-    # day's closes sweep both and filter logbook on stopDate. One closed inside
-    # a project that is itself closed or trashed is in neither: it is folded
+    # --include-completed works on today and anytime: items ticked off in that
+    # list which Things hasn't logged out yet. logbook holds every other closed
+    # item, including things closed today from Inbox/Upcoming, so a closed item
+    # whose project is still open is either logged or still listed, never both.
+    # today and anytime overlap each other though — a to-do scheduled for today
+    # is in the Anytime bucket too — so for a whole day's closes sweep all
+    # three, filter logbook on stopDate, and merge on uuid. One closed inside a
+    # project that is itself closed or trashed is not in logbook: it is folded
     # into the project row, per the note above.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)

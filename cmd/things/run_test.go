@@ -308,21 +308,29 @@ func TestRunListSomedayRejectsProjectFilter(t *testing.T) {
 func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	database := seedFullDB(t)
 
-	// Non-today view: the flag is rejected rather than silently ignored.
-	err := runWith(t, database, "list", "inbox", "--include-completed")
-	if err == nil || !strings.Contains(err.Error(), "only supported on the \"today\" view") {
-		t.Fatalf("inbox: expected view-rejection error, got: %v", err)
+	// A view the app does not keep just-closed items in: the flag is rejected
+	// rather than silently ignored. someday is named here as well as inbox
+	// because it is the view the flag most plausibly ought to reach, and does
+	// not until the app's behaviour there has been measured (issue #238).
+	for _, view := range []string{"inbox", "someday"} {
+		err := runWith(t, database, "list", view, "--include-completed")
+		if err == nil || !strings.Contains(err.Error(), "only supported on the anytime and today views") {
+			t.Fatalf("%s: expected view-rejection error, got: %v", view, err)
+		}
 	}
 
 	// A filter with no explicit view lists the whole project, which also rejects.
-	err = runWith(t, database, "list", "Chores", "--include-completed")
-	if err == nil || !strings.Contains(err.Error(), "only supported on the \"today\" view") {
+	err := runWith(t, database, "list", "Chores", "--include-completed")
+	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime and today views") {
 		t.Fatalf("project filter: expected view-rejection error, got: %v", err)
 	}
 
-	// An explicit today view keeps the flag valid alongside a filter.
+	// The two views it does reach keep the flag valid, today alongside a filter.
 	if err := runWith(t, database, "list", "today", "Chores", "--include-completed"); err != nil {
 		t.Fatalf("today + project filter: %v", err)
+	}
+	if err := runWith(t, database, "list", "anytime", "--include-completed"); err != nil {
+		t.Fatalf("anytime: %v", err)
 	}
 }
 

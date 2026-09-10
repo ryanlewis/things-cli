@@ -175,7 +175,7 @@ type ListCmd struct {
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
 
-	IncludeCompleted bool   `help:"On the today view, also show completed/cancelled items Things hasn't logged out of Today yet (UI-parity). Not supported on other views."`
+	IncludeCompleted bool   `help:"On the today and anytime views, also show items closed today that Things hasn't logged out of the list yet (UI-parity). Not supported on other views."`
 	On               string `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline. Mutually exclusive with --from/--to."`
 	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
 	To               string `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline."`
@@ -210,11 +210,13 @@ func (c *ListCmd) Run(d *Deps) error {
 		view = "project"
 	}
 
-	// --include-completed only changes the today view. Reject it elsewhere
+	// --include-completed only changes the views the app keeps a just-closed
+	// item visible in — today and anytime (issue #238). Reject it elsewhere
 	// (including when a filter defaults today → project) rather than silently
 	// ignoring it, matching how --on/--from/--to reject views.
-	if c.IncludeCompleted && view != "today" {
-		return fmt.Errorf("--include-completed is only supported on the %q view, not %q; name the view explicitly, e.g. `things today --project NAME`", "today", view)
+	if c.IncludeCompleted && !db.CompletableView(view) {
+		return fmt.Errorf("--include-completed is only supported on the %s views, not %q; name the view explicitly, e.g. `things today --project NAME`",
+			strings.Join(db.CompletableViewNames(), " and "), view)
 	}
 
 	// someday lists only what has no parent project, so narrowing it to one
