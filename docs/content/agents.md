@@ -34,6 +34,10 @@ things skill list              # what is installed where
 | `codex` | `~/.codex/skills/things-cli/` |
 | `pi` | `~/.pi/agent/skills/things-cli/` |
 
+If `$CLAUDE_CONFIG_DIR` is set, `claude` installs under
+`$CLAUDE_CONFIG_DIR/skills/things-cli/` instead, matching wherever Claude
+Code keeps its config.
+
 `--path DIR` installs somewhere else, such as a project-local
 `.claude/skills/` or `.agents/skills/`. `-y` skips the overwrite prompt.
 `things skill uninstall <agent>` removes it again.
