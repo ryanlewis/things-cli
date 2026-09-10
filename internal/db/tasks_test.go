@@ -98,12 +98,11 @@ func TestCompletableViews(t *testing.T) {
 	}
 }
 
-// ProjectFilterableView still reads viewsWithoutProjectFilter, a map of its
-// own — it gates flag validation at the CLI boundary rather than composing
-// SQL, so issue #240 left it out of the view table. Pin it against the answer
-// spelled out here so the two stay in step while they are apart. It is a
-// negative flag: everything is filterable but someday, an unknown name
-// included.
+// ProjectFilterableView reads the view table. Pin it against the answer
+// spelled out here rather than derived from the table, so a spec that loses
+// the flag fails rather than redefining the expectation. It is the one flag
+// stated in the negative: everything is filterable but someday, an unknown
+// name included.
 func TestProjectFilterableView(t *testing.T) {
 	denied := map[string]bool{"someday": true}
 	for view := range views {
@@ -560,20 +559,27 @@ func TestListTasksDeadlinesDateFilters(t *testing.T) {
 	}
 }
 
+// DateFilterableView reads the view table. Pin it against the answer spelled
+// out here rather than derived from the table, so a spec that loses the flag
+// fails rather than redefining the expectation. Walking the table rather than
+// a hand-written list of names also means a view added later is covered: set
+// the flag on it and this fails until the answer here says so too.
 func TestDateFilterableView(t *testing.T) {
-	allowed := []string{"today", "upcoming", "anytime", "deadlines", "project"}
 	// someday is denied because its view predicate requires startDate IS NULL —
-	// a startDate range filter could never match anything.
-	denied := []string{"inbox", "trash", "logbook", "someday", "bogus"}
-	for _, v := range allowed {
-		if !DateFilterableView(v) {
-			t.Errorf("%q: expected filterable", v)
+	// a startDate range filter could never match anything. inbox has no
+	// startDate, trash is trashed-only, logbook has no meaningful startDate
+	// filter, and repeating lists templates rather than dated rows.
+	allowed := map[string]bool{
+		"today": true, "upcoming": true, "anytime": true,
+		"deadlines": true, "project": true,
+	}
+	for view := range views {
+		if got := DateFilterableView(view); got != allowed[view] {
+			t.Errorf("DateFilterableView(%q) = %v, want %v", view, got, allowed[view])
 		}
 	}
-	for _, v := range denied {
-		if DateFilterableView(v) {
-			t.Errorf("%q: expected NOT filterable", v)
-		}
+	if DateFilterableView("bogus") {
+		t.Error("DateFilterableView(\"bogus\") = true, want false")
 	}
 }
 
