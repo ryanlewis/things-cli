@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -18,66 +17,36 @@ import (
 // views and statuses.
 func seedTasks(t *testing.T, d *DB) {
 	t.Helper()
+	fx := &fixture{t: t, d: d}
 
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-work', 'Work', 1, 1)`)
-
-	// Project (type=1) to host a few tasks.
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
-		('proj-1', 'Ship MVP', 1, 0, 0, 'area-work', 1)`)
-
-	// Tags
-	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
-		('tg-urgent', 'urgent', 1),
-		('tg-home',   'home',   2)`)
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-1", "Ship MVP", 1, inArea("area-work"))
+	fx.tag("tg-urgent", "urgent", 1)
+	fx.tag("tg-home", "home", 2)
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
-
-	// Tasks covering views:
-	//   t-today       → today view (start=1, startBucket=0)
-	//   t-inbox       → inbox (start=0)
-	//   t-evening     → today/evening (start=1, startBucket=1)
-	//   t-upcoming    → upcoming, scheduled for the future (start=2, startDate set)
-	//   t-anytime     → anytime (start=1, no startDate)
-	//   t-someday     → someday (start=2, no startDate)
-	//   t-done        → status=completed (logbook)
-	//   t-cancelled   → status=cancelled (logbook)
-	//   t-trashed     → trashed
-	//   t-deadline    → has deadline
-	//   t-in-proj     → open task inside proj-1
-	//   t-repeat      → repeating template; shaped like t-someday but belongs
-	//                   to the repeating view, not someday (issue #147)
 	tomorrow := today + (1 << 7)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, notes, type, status, trashed, start, startBucket,
-		 startDate, todayIndexReferenceDate, deadline, project, area, "index", todayIndex) VALUES
-		('t-today',     'Today task',    '',       0, 0, 0, 1, 0, ?, ?, NULL, NULL,     NULL,        10, 1),
-		('t-inbox',     'Inbox task',    'notes',  0, 0, 0, 0, 0, NULL, NULL, NULL, NULL,     NULL,        11, 0),
-		('t-evening',   'Evening task',  '',       0, 0, 0, 1, 1, ?, NULL, NULL, NULL,     NULL,        12, 0),
-		('t-upcoming',  'Upcoming task', '',       0, 0, 0, 2, 0, ?, NULL, NULL, NULL,     NULL,        22, 0),
-		('t-anytime',   'Anytime task',  '',       0, 0, 0, 1, 0, NULL, NULL, NULL, NULL,     NULL,        13, 0),
-		('t-someday',   'Someday task',  '',       0, 0, 0, 2, 0, NULL, NULL, NULL, NULL,     NULL,        14, 0),
-		('t-done',      'Done task',     '',       0, 3, 0, 0, 0, NULL, NULL, NULL, NULL,     NULL,        15, 0),
-		('t-cancelled', 'Cancelled',     '',       0, 2, 0, 0, 0, NULL, NULL, NULL, NULL,     NULL,        16, 0),
-		('t-trashed',   'Trashed task',  '',       0, 0, 1, 0, 0, NULL, NULL, NULL, NULL,     NULL,        17, 0),
-		('t-deadline',  'Has deadline',  '',       0, 0, 0, 1, 0, NULL, NULL, ?,    NULL,     NULL,        18, 0),
-		('t-in-proj',   'Project task',  '',       0, 0, 0, 0, 0, NULL, NULL, NULL, 'proj-1', 'area-work', 19, 0)`,
-		today, today, today, tomorrow, tomorrow) // last arg is the deadline
-
-	// Templates carry the recurrence rule; Things files them under Repeating
-	// while their row otherwise looks exactly like a Someday to-do.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, project, area, "index", rt1_recurrenceRule) VALUES
-		('t-repeat', 'Water plants', 0, 0, 0, 2, 0, 'proj-1', 'area-work', 20, x'0102')`)
-
-	// Tag the today task with urgent + home
-	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES
-		('t-today', 'tg-urgent'),
-		('t-today', 'tg-home')`)
-
-	// stopDate on the done task so logbook has something to order by
 	done := model.TimeToUnix(time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC))
-	mustExec(t, d, `UPDATE TMTask SET stopDate = ? WHERE uuid = 't-done'`, done)
+
+	fx.todo("t-today", "Today task", 10, anytimeOn(today), todayIndexRef(today), todayIndex(1))
+	fx.todo("t-inbox", "Inbox task", 11, inbox(), notes("notes"), todayIndex(0))
+	fx.todo("t-evening", "Evening task", 12, evening(today), todayIndex(0))
+	fx.todo("t-upcoming", "Upcoming task", 22, somedayOn(tomorrow), todayIndex(0))
+	fx.todo("t-anytime", "Anytime task", 13, anytime(), todayIndex(0))
+	fx.todo("t-someday", "Someday task", 14, someday(), todayIndex(0))
+	// A stopDate on the completed to-do so the logbook has something to order
+	// by; the cancelled one deliberately has none, and is the only fixture
+	// exercising the logbook filter's NULL guard.
+	fx.todo("t-done", "Done task", 15, inbox(), completed(done), todayIndex(0))
+	fx.todo("t-cancelled", "Cancelled", 16, inbox(), status(model.StatusCancelled), todayIndex(0))
+	fx.todo("t-trashed", "Trashed task", 17, inbox(), trashed(), todayIndex(0))
+	fx.todo("t-deadline", "Has deadline", 18, anytime(), deadline(tomorrow), todayIndex(0))
+	fx.todo("t-in-proj", "Project task", 19, inbox(), inProject("proj-1"), inArea("area-work"), todayIndex(0))
+	// Templates carry the recurrence rule; Things files them under Repeating
+	// while their row otherwise looks exactly like a Someday to-do (issue #147).
+	fx.todo("t-repeat", "Water plants", 20, someday(), inProject("proj-1"), inArea("area-work"), repeats())
+
+	fx.tagged("t-today", "tg-urgent", "tg-home")
 }
 
 // CompletableView and CompletableViewNames used to read a map of their own and
@@ -877,63 +846,17 @@ func TestScanTaskFieldsPopulated(t *testing.T) {
 	}
 }
 
-// --- helpers ---
-
-func uuidsOf(tasks []model.Task) []string {
-	out := make([]string, len(tasks))
-	for i, t := range tasks {
-		out[i] = t.UUID
-	}
-	return out
-}
-
-func sameSet(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	m := make(map[string]int, len(a))
-	for _, x := range a {
-		m[x]++
-	}
-	for _, x := range b {
-		m[x]--
-		if m[x] < 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// seedHeadingTasks builds a project with a heading, holding one task directly
-// on the project and one under the heading. The heading-nested task leaves
-// t.project NULL, as Things does — the heading row carries the project.
-func seedHeadingTasks(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-launch', 'Launch', 1, 1)`)
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
-		('proj-h', 'Ship v2', 1, 0, 0, 'area-launch', 1)`)
-	// Heading (type=2) belonging to proj-h.
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, project, "index") VALUES
-		('head-1', 'Phase one', 2, 0, 0, 'proj-h', 2)`)
-	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg-ship', 'ship', 1)`)
-
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, project, heading, "index") VALUES
-		('t-direct',  'Direct task',  0, 0, 0, 1, 0, ?,    'proj-h', NULL,     3),
-		('t-nested',  'Nested task',  0, 0, 0, 1, 0, NULL, NULL,     'head-1', 4),
-		('t-loose',   'Loose task',   0, 0, 0, 1, 0, NULL, NULL,     NULL,     5)`,
-		today)
-	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('t-nested', 'tg-ship')`)
-}
-
 // Tasks filed under a project heading have no t.project of their own; the
 // project filter has to reach it through the heading row (issue #139).
 func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
-	d := newTestDB(t)
-	seedHeadingTasks(t, d)
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.project("proj-h", "Ship v2", 1)
+	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
+	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	// Outside the project, so the filter has to leave it out.
+	fx.todo("t-loose", "Loose task", 5, anytime())
 
 	for _, filter := range []string{"proj-h", "Ship v2"} {
 		got, err := d.ListTasks("project", TaskFilter{Project: filter})
@@ -949,8 +872,15 @@ func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
 // The area comes from the project, so a heading-nested task has to inherit it
 // through the heading too.
 func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
-	d := newTestDB(t)
-	seedHeadingTasks(t, d)
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.area("area-launch", "Launch", 1)
+	fx.project("proj-h", "Ship v2", 1, inArea("area-launch"))
+	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
+	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	// Filed in no area at all, so the filter has to leave it out.
+	fx.todo("t-loose", "Loose task", 5, anytime())
 
 	got, err := d.ListTasks("project", TaskFilter{Area: "Launch"})
 	if err != nil {
@@ -965,8 +895,11 @@ func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
 // A heading-nested task reports its project in output, so it can't be mistaken
 // for a standalone task (issue #139).
 func TestHeadingTaskCarriesProject(t *testing.T) {
-	d := newTestDB(t)
-	seedHeadingTasks(t, d)
+	d, fx := newFixture(t)
+	fx.area("area-launch", "Launch", 1)
+	fx.project("proj-h", "Ship v2", 1, inArea("area-launch"))
+	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 
 	task, err := d.GetTaskByUUID("t-nested")
 	if err != nil {
@@ -989,8 +922,13 @@ func TestHeadingTaskCarriesProject(t *testing.T) {
 // The project view is the whole open set, so a project filter run against it
 // returns tasks the today view would have hidden (issue #140).
 func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
-	d := newTestDB(t)
-	seedHeadingTasks(t, d)
+	d, fx := newFixture(t)
+	todayDate := int64(model.ThingsDateFromTime(time.Now()))
+	fx.project("proj-h", "Ship v2", 1)
+	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
+	// One of the two is scheduled for today; the today view sees only that one.
+	fx.todo("t-direct", "Direct task", 3, anytimeOn(todayDate), inProject("proj-h"))
+	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 
 	today, err := d.ListTasks("today", TaskFilter{Project: "Ship v2"})
 	if err != nil {
@@ -1012,8 +950,15 @@ func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
 // Tags live on the task itself, but the tag filter still has to work on a
 // heading-nested task now that the project join reaches through the heading.
 func TestListTasksTagFilterIncludesHeadingTasks(t *testing.T) {
-	d := newTestDB(t)
-	seedHeadingTasks(t, d)
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.tag("tg-ship", "ship", 1)
+	fx.project("proj-h", "Ship v2", 1)
+	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
+	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	fx.todo("t-loose", "Loose task", 5, anytime())
+	fx.tagged("t-nested", "tg-ship")
 
 	got, err := d.ListTasks("project", TaskFilter{Tag: "ship"})
 	if err != nil {
@@ -1159,36 +1104,26 @@ func TestTrashAndLogbookFoldTrashedProjectChildren(t *testing.T) {
 	}
 }
 
-// seedClosedProjectContents builds the shape issue #229 is about: a closed
-// project and a trashed one, each holding children in several states, plus an
-// open project as the control.
-func seedClosedProjectContents(t *testing.T, d *DB) {
-	t.Helper()
-
-	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, stopDate, "index") VALUES
-		('proj-done',    'Finished',  1, 3, 0, ?,    1),
-		('proj-binned',  'Binned',    1, 0, 1, NULL, 2),
-		('proj-open',    'Live',      1, 0, 0, NULL, 3)`, stop)
-
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, stopDate, project, "index") VALUES
-		('done-completed', 'Shipped',   0, 3, 0, 1, 0, ?,    'proj-done',   4),
-		('done-cancelled', 'Dropped',   0, 2, 0, 1, 0, ?,    'proj-done',   5),
-		('done-trashed',   'Binned',    0, 0, 1, 1, 0, NULL, 'proj-done',   6),
-		('done-open',      'Left over', 0, 0, 0, 1, 0, NULL, 'proj-done',   7),
-		('binned-logged',  'Logged',    0, 3, 0, 1, 0, ?,    'proj-binned', 8),
-		('open-todo',      'To do',     0, 0, 0, 1, 0, NULL, 'proj-open',   9)`,
-		stop, stop, stop)
-}
-
 // The app folds a closed project's to-dos into the project's own Logbook row
 // and lists none of them separately, so the CLI does too (issue #229). Trash
 // is not the same case: a to-do thrown away out of a finished project is in
 // Trash on its own account, and the project is not there to fold it into.
 func TestLogbookFoldsClosedProjectChildren(t *testing.T) {
-	d := newTestDB(t)
-	seedClosedProjectContents(t, d)
+	d, fx := newFixture(t)
+
+	// A closed project and a trashed one, each holding children in several
+	// states, plus an open project as the control (issue #229).
+	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	fx.project("proj-done", "Finished", 1, completed(stop))
+	fx.project("proj-binned", "Binned", 2, trashed())
+	fx.project("proj-open", "Live", 3)
+
+	fx.todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
+	fx.todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
+	fx.todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
+	fx.todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
+	fx.todo("binned-logged", "Logged", 8, anytime(), inProject("proj-binned"), completed(stop))
+	fx.todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
 	logged, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -1216,8 +1151,21 @@ func TestLogbookFoldsClosedProjectChildren(t *testing.T) {
 // the closed and cancelled children, and not the trashed one, which is in the
 // Trash on its own account (issue #229).
 func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
-	d := newTestDB(t)
-	seedClosedProjectContents(t, d)
+	d, fx := newFixture(t)
+
+	// A closed project and a trashed one, each holding children in several
+	// states, plus an open project as the control (issue #229).
+	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	fx.project("proj-done", "Finished", 1, completed(stop))
+	fx.project("proj-binned", "Binned", 2, trashed())
+	fx.project("proj-open", "Live", 3)
+
+	fx.todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
+	fx.todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
+	fx.todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
+	fx.todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
+	fx.todo("binned-logged", "Logged", 8, anytime(), inProject("proj-binned"), completed(stop))
+	fx.todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
 	cases := []struct {
 		name    string
@@ -1248,10 +1196,20 @@ func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
 // open set: it must not start returning the closed contents of every closed
 // project in the area.
 func TestAreaFilterDoesNotWidenToClosedContents(t *testing.T) {
-	d := newTestDB(t)
-	seedClosedProjectContents(t, d)
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('ar', 'Work', 1, 1)`)
-	mustExec(t, d, `UPDATE TMTask SET area = 'ar' WHERE uuid IN ('proj-done', 'proj-open')`)
+	d, fx := newFixture(t)
+
+	// A closed project and an open one in the same area, each holding
+	// children in several states (issue #229).
+	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	fx.area("ar", "Work", 1)
+	fx.project("proj-done", "Finished", 1, inArea("ar"), completed(stop))
+	fx.project("proj-open", "Live", 3, inArea("ar"))
+
+	fx.todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
+	fx.todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
+	fx.todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
+	fx.todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
+	fx.todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
 	got, err := d.ListTasks("project", TaskFilter{Area: "ar"})
 	if err != nil {
@@ -1310,23 +1268,16 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 }
 
 // --- heading exclusion from lookups (issue #146) ---
-
-// seedLookupHeadings adds two headings on top of the seedTasks fixture: one
-// with a title of its own, and one whose title collides exactly with an open
-// to-do so a lookup that failed to filter would either return the wrong row or
-// report the pair as ambiguous.
-func seedLookupHeadings(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, notes, type, status, trashed, project, "index") VALUES
-		('head-phase', 'Phase one',  'heading notes', 2, 0, 0, 'proj-1', 20),
-		('head-dupe',  'Inbox task', '',              2, 0, 0, 'proj-1', 21)`)
-}
+//
+// Two heading shapes matter to a lookup: "head-phase", with a title of its
+// own, and "head-dupe", whose title collides exactly with an open to-do — a
+// lookup that failed to filter headings out would either return the wrong row
+// or report the pair as ambiguous. Each test below seeds the one it needs.
 
 func TestGetTaskByUUIDExcludesHeading(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
+	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
 
 	got, err := d.GetTaskByUUID("head-phase")
 	if err != nil {
@@ -1342,7 +1293,6 @@ func TestGetTaskByUUIDExcludesHeading(t *testing.T) {
 func TestGetTaskByUUIDKeepsProject(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
 
 	got, err := d.GetTaskByUUID("proj-1")
 	if err != nil {
@@ -1356,9 +1306,9 @@ func TestGetTaskByUUIDKeepsProject(t *testing.T) {
 // A heading sharing a to-do's exact title must neither win the exact-title
 // match nor make it ambiguous.
 func TestGetTaskExactTitleSkipsHeading(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
+	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	got, err := d.GetTask("Inbox task")
 	if err != nil {
@@ -1370,9 +1320,10 @@ func TestGetTaskExactTitleSkipsHeading(t *testing.T) {
 }
 
 func TestGetTaskLikeMatchSkipsHeading(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
+	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	// "Phase" matches only the heading, so the lookup should not find a task.
 	if _, err := d.GetTask("Phase"); err == nil {
@@ -1391,9 +1342,10 @@ func TestGetTaskLikeMatchSkipsHeading(t *testing.T) {
 }
 
 func TestFindTasksByTitleExcludesHeadings(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
+	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	got, err := d.FindTasksByTitle("Phase")
 	if err != nil {
@@ -1413,9 +1365,10 @@ func TestFindTasksByTitleExcludesHeadings(t *testing.T) {
 }
 
 func TestSearchTasksExcludesHeadings(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
+	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	byTitle, err := d.SearchTasks("Phase")
 	if err != nil {
@@ -1453,28 +1406,20 @@ func TestSearchTasksExcludesHeadings(t *testing.T) {
 }
 
 // --- repeating template vs. its instance in title lookups (issue #156) ---
-
-// seedTemplateAndInstance creates a repeating to-do the way Things stores one:
-// a template carrying the recurrence rule (start=2/someday-ish, no startDate)
-// and the instance generated from it (start=1, scheduled, no rule), sharing a
-// title. The template is given the lower "index" so index order alone would
-// pick it — the ordering under test is what puts the instance first.
-func seedTemplateAndInstance(t *testing.T, d *DB) {
-	t.Helper()
-
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule) VALUES
-		('tpl-water',  'Water plants', 0, 0, 0, 2, 0, NULL, 1, x'0102'),
-		('inst-water', 'Water plants', 0, 0, 0, 1, 0, ?,    2, NULL)`,
-		today)
-}
+//
+// Things stores a repeating to-do as two rows sharing a title: the template
+// carrying the recurrence rule, deferred with no start date, and the instance
+// generated from it, scheduled and ruleless. The template takes the lower
+// "index" in each test below, so index order alone would pick it — the
+// ordering under test is what puts the instance first.
 
 // `things complete "Water plants"` must land on the instance: the template
 // refuses writes (issue #143), so resolving to it strands the user.
 func TestGetTaskExactTitlePrefersInstance(t *testing.T) {
-	d := newTestDB(t)
-	seedTemplateAndInstance(t, d)
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
 
 	got, err := d.GetTask("Water plants")
 	if err != nil {
@@ -1509,8 +1454,10 @@ func TestGetTaskExactTitleTemplateOnly(t *testing.T) {
 // The LIKE path feeds the disambiguation picker, so the instance has to be the
 // first thing offered there too.
 func TestFindTasksByTitleOrdersTemplatesLast(t *testing.T) {
-	d := newTestDB(t)
-	seedTemplateAndInstance(t, d)
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
 
 	got, err := d.FindTasksByTitle("Water")
 	if err != nil {
@@ -1527,8 +1474,10 @@ func TestFindTasksByTitleOrdersTemplatesLast(t *testing.T) {
 // A partial title matching only the pair resolves through the LIKE path's
 // ambiguity branch; the candidates it reports are ordered the same way.
 func TestGetTaskAmbiguousListsInstanceFirst(t *testing.T) {
-	d := newTestDB(t)
-	seedTemplateAndInstance(t, d)
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
 
 	_, err := d.GetTask("ater plant")
 	var ambig *AmbiguousTaskError
@@ -1576,9 +1525,9 @@ func TestTitleLookupsWithoutRecurrenceColumn(t *testing.T) {
 // --- batched uuid lookups (issue #167) ---
 
 func TestGetTasksByUUIDs(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
+	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
 
 	// A duplicate, an empty string, an unknown id and a heading all go in
 	// alongside the real ones: callers pass a raw list built from a payload.
@@ -1613,9 +1562,9 @@ func TestGetTasksByUUIDs(t *testing.T) {
 // The batch must agree with the single lookup field for field, or the import
 // checks would see different tasks depending on which path ran.
 func TestGetTasksByUUIDsMatchesGetTaskByUUID(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	seedTasks(t, d)
-	seedLookupHeadings(t, d)
+	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
 
 	ids := []string{"t-today", "t-inbox", "proj-1", "head-phase", "nope"}
 	batch, err := d.GetTasksByUUIDs(ids)
@@ -1688,69 +1637,25 @@ func TestGetTasksByUUIDsEmptyInput(t *testing.T) {
 	}
 }
 
-func keysOf(m map[string]*model.Task) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// seedScheduledProjects seeds projects scheduled the way Things schedules
-// them — start/startBucket/startDate/todayIndex on the project row itself —
-// next to the rows that must stay out of the scheduling views: a repeating
-// project template and its child, a trashed project, and a heading.
-func seedScheduledProjects(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-work', 'Work', 1, 1),
-		('area-home', 'Home', 1, 2)`)
-
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	tomorrow := today + (1 << 7)
-
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate,
-		 todayIndexReferenceDate, area, "index", todayIndex) VALUES
-		('proj-today',    'Runbook audit', 1, 0, 0, 1, 0, ?,    ?,    'area-work', 5, 2005),
-		('proj-upcoming', 'Q4 planning',   1, 0, 0, 2, 0, ?,    NULL, 'area-work', 6, 0),
-		('proj-anytime',  'Backlog',       1, 0, 0, 1, 0, NULL, NULL, 'area-work', 7, 0),
-		('proj-trashed',  'Abandoned',     1, 0, 1, 1, 0, ?,    ?,    'area-work', 8, 0)`,
-		today, today, tomorrow, today, today)
-
-	// A repeating project template is filed under Repeating, not under the
-	// bucket its row carries, and its children come with it (issues #147, #171).
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, area, "index", rt1_recurrenceRule)
-		VALUES ('proj-template', 'Monthly review', 1, 0, 0, 1, 0, ?, 'area-work', 9, x'0102')`, today)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
-		VALUES ('todo-in-template', 'Draft agenda', 0, 0, 0, 1, 0, ?, 'proj-template', 10)`, today)
-
-	// A heading (type 2) is structure inside a project, never a list row.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
-		VALUES ('head-1', 'Phase one', 2, 0, 0, 1, 0, ?, 'proj-today', 11)`, today)
-
-	// To-dos for company: one inside the scheduled project, one loose in the
-	// same area, one top-level.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate,
-		 todayIndexReferenceDate, project, area, "index", todayIndex) VALUES
-		('todo-in-proj', 'Read logs',  0, 0, 0, 1, 0, ?, ?, 'proj-today', NULL,        12, 3000),
-		('todo-in-area', 'Call bank',  0, 0, 0, 1, 0, ?, ?, NULL,         'area-work', 13, 1),
-		('todo-loose',   'Buy milk',   0, 0, 0, 1, 0, ?, ?, NULL,         NULL,        14, 7)`,
-		today, today, today, today, today, today)
-}
-
 // Things shows a project scheduled for Today in its Today list, and the same
 // for Upcoming and Anytime; the CLI's views used to be pinned to to-dos, so a
 // scheduled project was invisible (issue #201).
 func TestListTasksViewsIncludeProjects(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
+	d, fx := newFixture(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+
+	// To-dos for company: one inside the scheduled project, one loose in the
+	// same area, one top-level.
+	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	cases := []struct {
 		view string
@@ -1788,8 +1693,21 @@ func TestListTasksViewsIncludeProjects(t *testing.T) {
 // shaped: repeating project templates, the to-dos inside them, trashed
 // projects and headings all stay out.
 func TestListTasksProjectsExcludedFromViews(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
+	d, fx := newFixture(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.project("proj-trashed", "Abandoned", 8, anytimeOn(today), todayIndexRef(today), inArea("area-work"), trashed(), todayIndex(0))
+
+	// A repeating project template is filed under Repeating, not under the
+	// bucket its row carries, and its children come with it (issues #147, #171).
+	fx.project("proj-template", "Monthly review", 9, anytimeOn(today), inArea("area-work"), repeats())
+	fx.todo("todo-in-template", "Draft agenda", 10, anytimeOn(today), inProject("proj-template"))
+
+	// A heading (type 2) is structure inside a project, never a list row.
+	fx.heading("head-1", "Phase one", 11, anytimeOn(today), inProject("proj-today"))
 
 	excluded := []string{"proj-template", "todo-in-template", "proj-trashed", "head-1"}
 	for _, view := range []string{"today", "anytime"} {
@@ -1824,8 +1742,21 @@ func TestListTasksProjectsExcludedFromViews(t *testing.T) {
 // of their to-dos. The views where a project has actually been put somewhere
 // keep their rows (issue #217).
 func TestAnytimeHasNoProjectRows(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
+	d, fx := newFixture(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+
+	// To-dos for company: one inside the scheduled project, one loose in the
+	// same area, one top-level.
+	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	got, err := d.ListTasks("anytime", TaskFilter{})
 	if err != nil {
@@ -1931,8 +1862,19 @@ func TestUpcomingOrdersByDateThenTodayIndex(t *testing.T) {
 // filter narrows to the project's contents, not the project itself. --area
 // still finds it, because a project carries its own area.
 func TestListTasksProjectRowsAndFilters(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
+	d, fx := newFixture(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+
+	fx.area("area-work", "Work", 1)
+	fx.area("area-home", "Home", 2)
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+
+	// To-dos for company: one inside the scheduled project, one loose in the
+	// same area, one top-level.
+	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	byUUID, err := d.ListTasks("today", TaskFilter{Project: "proj-today"})
 	if err != nil {
@@ -1974,12 +1916,25 @@ func TestListTasksProjectRowsAndFilters(t *testing.T) {
 // been widened to projects, so an agent sweeping an area that way got none of
 // its projects (issue #222).
 func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
-	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tag-urgent', 'urgent', 1)`)
-	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES
-		('proj-anytime', 'tag-urgent'),
-		('todo-in-area', 'tag-urgent')`)
+	d, fx := newFixture(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+
+	// To-dos for company: one inside the scheduled project, one loose in the
+	// same area, one top-level.
+	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
+
+	fx.tag("tag-urgent", "urgent", 1)
+	fx.tagged("proj-anytime", "tag-urgent")
+	fx.tagged("todo-in-area", "tag-urgent")
 
 	byArea, err := d.ListTasks("project", TaskFilter{Area: "area-work"})
 	if err != nil {
@@ -2019,8 +1974,30 @@ func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
 // headings, trashed projects, repeating project templates and the to-dos
 // inside a template all stay out, as they do in the named views.
 func TestListTasksCatchAllViewExclusions(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
+	d, fx := newFixture(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+	fx.project("proj-trashed", "Abandoned", 8, anytimeOn(today), todayIndexRef(today), inArea("area-work"), trashed(), todayIndex(0))
+
+	// A repeating project template is filed under Repeating, not under the
+	// bucket its row carries, and its children come with it (issues #147, #171).
+	fx.project("proj-template", "Monthly review", 9, anytimeOn(today), inArea("area-work"), repeats())
+	fx.todo("todo-in-template", "Draft agenda", 10, anytimeOn(today), inProject("proj-template"))
+
+	// A heading (type 2) is structure inside a project, never a list row.
+	fx.heading("head-1", "Phase one", 11, anytimeOn(today), inProject("proj-today"))
+
+	// To-dos for company: one inside the scheduled project, one loose in the
+	// same area, one top-level.
+	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	got, err := d.ListTasks("project", TaskFilter{})
 	if err != nil {
@@ -2042,8 +2019,18 @@ func TestListTasksCatchAllViewExclusions(t *testing.T) {
 // unparented to-dos, ordered against them by todayIndex, and ahead of the
 // to-dos of any project with a non-zero index.
 func TestListTasksTodayOrderWithProjects(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
+	d, fx := newFixture(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+
+	// To-dos for company: one inside the scheduled project, one loose in the
+	// same area, one top-level.
+	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
@@ -2577,16 +2564,19 @@ func TestSomedayGroupsUnfiledThenAreas(t *testing.T) {
 // --include-completed carries project rows too: a project completed today and
 // not yet logged is still on the app's Today list.
 func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
-	d := newTestDB(t)
-	seedScheduledProjects(t, d)
+	d, fx := newFixture(t)
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	stopToday := model.TimeToUnix(time.Now().Add(-1 * time.Minute))
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate,
-		 todayIndexReferenceDate, stopDate, area, "index", todayIndex)
-		VALUES ('proj-done', 'Shipped', 1, 3, 0, 1, 0, ?, ?, ?, 'area-work', 20, 9000)`,
-		today, today, stopToday)
+	// Now, not "a minute ago": the calendar day decides whether a closed row is
+	// still under Today (issue #230), and a minute before midnight falls on the
+	// previous day, which failed this test in the first minute of every day.
+	stopToday := model.TimeToUnix(time.Now())
+
+	fx.area("area-work", "Work", 1)
+	// An open project for company, so the default list is not empty and the
+	// exclusion below turns on the status rather than the row's type.
+	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.project("proj-done", "Shipped", 20, anytimeOn(today), todayIndexRef(today), inArea("area-work"), completed(stopToday), todayIndex(9000))
 
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
@@ -2613,60 +2603,24 @@ func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
 	}
 }
 
-// seedSomedayAndLogbook seeds the two ends of a project's life that issue #206
-// covers — a project deferred to Someday and a completed project in the
-// Logbook — next to the rows that must stay out: a Someday-start repeating
-// project template and its child, a trashed project, and a heading.
-func seedSomedayAndLogbook(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-work', 'Work', 1, 1)`)
-
-	// Both stop dates fall on an earlier calendar day: an item closed today is
-	// still under Today, not in the Logbook (issue #230). stopLate is the
-	// later of the two, which is what the logbook ordering test keys on.
-	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate,
-		 area, "index") VALUES
-		('proj-someday',  'Learn Welsh',  1, 0, 0, 2, 0, NULL, NULL, 'area-work', 1),
-		('todo-someday',  'Read a book',  0, 0, 0, 2, 0, NULL, NULL, 'area-work', 2),
-		('proj-logged',   'Site rebuild', 1, 3, 0, 1, 0, NULL, ?,    'area-work', 3),
-		('todo-logged',   'Ship the CSS', 0, 3, 0, 1, 0, NULL, ?,    NULL,        4)`,
-		stopLate, stopEarly)
-
-	// Trashed rows belong to the trash view, not to Someday or the Logbook.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
-		('proj-someday-trashed', 'Dropped idea', 1, 0, 1, 2, 0, NULL, NULL, 5),
-		('proj-logged-trashed',  'Dropped work', 1, 3, 1, 1, 0, NULL, ?,    6)`, stopEarly)
-
-	// A Someday-start repeating project template is filed under Repeating, not
-	// under the bucket its row carries, and its children come with it
-	// (issues #147, #171).
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule)
-		VALUES ('proj-template', 'Annual review', 1, 0, 0, 2, 0, NULL, 7, x'0102')`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
-		VALUES ('todo-in-template', 'Draft agenda', 0, 0, 0, 2, 0, NULL, 'proj-template', 8)`)
-
-	// A heading (type 2) is structure inside a project, never a list row.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
-		('head-someday', 'Phase one', 2, 0, 0, 2, 0, NULL, NULL, 'proj-someday', 9),
-		('head-logged',  'Phase two', 2, 3, 0, 1, 0, NULL, ?,    'proj-logged',  10)`, stopEarly)
-}
-
 // Things shows a project deferred to Someday in its Someday list, and a
 // completed project in its Logbook. The CLI's two views were pinned to to-dos,
 // so both project rows were invisible (issue #206).
 func TestListTasksSomedayAndLogbookIncludeProjects(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayAndLogbook(t, d)
+	d, fx := newFixture(t)
+
+	// The two ends of a project's life (issue #206): one deferred to Someday
+	// and one completed into the Logbook, each with a to-do beside it. Both
+	// stop dates fall on an earlier calendar day, because an item closed today
+	// is still under Today rather than in the Logbook (issue #230).
+	fx.area("area-work", "Work", 1)
+	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+
+	fx.project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
+	fx.todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
+	fx.project("proj-logged", "Site rebuild", 3, anytime(), inArea("area-work"), completed(stopLate))
+	fx.todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
 
 	cases := []struct {
 		view    string
@@ -2702,8 +2656,26 @@ func TestListTasksSomedayAndLogbookIncludeProjects(t *testing.T) {
 // project-shaped: a Someday-start repeating project template, the to-dos
 // inside it, trashed projects and headings all stay out.
 func TestListTasksSomedayLogbookProjectExclusions(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayAndLogbook(t, d)
+	d, fx := newFixture(t)
+
+	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	fx.project("proj-someday", "Learn Welsh", 1, someday())
+	fx.project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
+
+	// Trashed rows belong to the trash view, not to Someday or the Logbook.
+	fx.project("proj-someday-trashed", "Dropped idea", 5, someday(), trashed())
+	fx.project("proj-logged-trashed", "Dropped work", 6, anytime(), trashed(), completed(stopEarly))
+
+	// A Someday-start repeating project template is filed under Repeating, not
+	// under the bucket its row carries, and its children come with it
+	// (issues #147, #171).
+	fx.project("proj-template", "Annual review", 7, someday(), repeats())
+	fx.todo("todo-in-template", "Draft agenda", 8, someday(), inProject("proj-template"))
+
+	// A heading is structure inside a project, never a list row.
+	fx.heading("head-someday", "Phase one", 9, someday(), inProject("proj-someday"))
+	fx.heading("head-logged", "Phase two", 10, anytime(), inProject("proj-logged"), completed(stopEarly))
 
 	excluded := map[string][]string{
 		"someday": {"proj-template", "todo-in-template", "proj-someday-trashed", "head-someday"},
@@ -2737,8 +2709,14 @@ func TestListTasksSomedayLogbookProjectExclusions(t *testing.T) {
 // The Logbook orders by completion date, newest first, and a project row is
 // ordered by its own stopDate like any other row.
 func TestListTasksLogbookOrderWithProject(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayAndLogbook(t, d)
+	d, fx := newFixture(t)
+
+	// stopLate is the later of the two, and the project carries it, so a
+	// Logbook ordered newest-first has the project row ahead of the to-do.
+	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	fx.project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
+	fx.todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -2754,8 +2732,11 @@ func TestListTasksLogbookOrderWithProject(t *testing.T) {
 // these two views either; --area still finds it, because a project carries its
 // own area.
 func TestListTasksSomedayProjectRowsAndFilters(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayAndLogbook(t, d)
+	d, fx := newFixture(t)
+
+	fx.area("area-work", "Work", 1)
+	fx.project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
+	fx.todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
 
 	byUUID, err := d.ListTasks("someday", TaskFilter{Project: "proj-someday"})
 	if err != nil {
@@ -2775,37 +2756,23 @@ func TestListTasksSomedayProjectRowsAndFilters(t *testing.T) {
 	}
 }
 
-func seedTrashedProjects(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-home', 'Home', 1, 1)`)
-
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, area, "index") VALUES
-		('trash-proj',      'Dropped project', 1, 0, 1, 1, 0, 'area-home', 1),
-		('trash-proj-done', 'Shelved rebuild', 1, 3, 1, 1, 0, 'area-home', 2),
-		('trash-todo',      'Dropped to-do',   0, 0, 1, 1, 0, 'area-home', 3)`)
-
-	// Live rows never belong to the trash view, whichever kind they are.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, area, "index") VALUES
-		('live-proj', 'Still going', 1, 0, 0, 1, 0, 'area-home', 4),
-		('live-todo', 'Still to do', 0, 0, 0, 1, 0, 'area-home', 5)`)
-
-	// A heading (type 2) is structure inside a project, never a list row —
-	// not even once its project has been trashed.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, project, "index") VALUES
-		('trash-head', 'Phase one', 2, 0, 1, 'trash-proj', 6)`)
-}
-
 // Things puts a trashed project in its Trash list, and `things projects`
 // filters trashed rows, so pinning the view to to-dos left a trashed project
 // visible nowhere (issue #212).
 func TestListTasksTrashIncludesProjects(t *testing.T) {
-	d := newTestDB(t)
-	seedTrashedProjects(t, d)
+	d, fx := newFixture(t)
+
+	fx.area("area-home", "Home", 1)
+	fx.project("trash-proj", "Dropped project", 1, anytime(), inArea("area-home"), trashed())
+	fx.project("trash-proj-done", "Shelved rebuild", 2, anytime(), inArea("area-home"), trashed(), status(model.StatusCompleted))
+	fx.todo("trash-todo", "Dropped to-do", 3, anytime(), inArea("area-home"), trashed())
+
+	// Live rows never belong to the trash view, whichever kind they are, and a
+	// heading is structure inside a project rather than a list row — not even
+	// once its project has been trashed.
+	fx.project("live-proj", "Still going", 4, anytime(), inArea("area-home"))
+	fx.todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
+	fx.heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
 
 	got, err := d.ListTasks("trash", TaskFilter{})
 	if err != nil {
@@ -2829,8 +2796,12 @@ func TestListTasksTrashIncludesProjects(t *testing.T) {
 // Widening trash to projects must not widen it to everything project-shaped:
 // headings and live rows of either kind stay out.
 func TestListTasksTrashProjectExclusions(t *testing.T) {
-	d := newTestDB(t)
-	seedTrashedProjects(t, d)
+	d, fx := newFixture(t)
+
+	fx.project("trash-proj", "Dropped project", 1, anytime(), trashed())
+	fx.project("live-proj", "Still going", 4, anytime())
+	fx.todo("live-todo", "Still to do", 5, anytime())
+	fx.heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
 
 	got, err := d.ListTasks("trash", TaskFilter{})
 	if err != nil {
@@ -2848,8 +2819,17 @@ func TestListTasksTrashProjectExclusions(t *testing.T) {
 // A trashed project carries its own area, so --area finds it; it has no parent
 // project of its own, so --project can never match it.
 func TestListTasksTrashProjectRowsAndFilters(t *testing.T) {
-	d := newTestDB(t)
-	seedTrashedProjects(t, d)
+	d, fx := newFixture(t)
+
+	fx.area("area-home", "Home", 1)
+	fx.project("trash-proj", "Dropped project", 1, anytime(), inArea("area-home"), trashed())
+	fx.project("trash-proj-done", "Shelved rebuild", 2, anytime(), inArea("area-home"), trashed(), status(model.StatusCompleted))
+	fx.todo("trash-todo", "Dropped to-do", 3, anytime(), inArea("area-home"), trashed())
+
+	// Live rows in the same area, which the view keeps out however the filter
+	// is written.
+	fx.project("live-proj", "Still going", 4, anytime(), inArea("area-home"))
+	fx.todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
 
 	byArea, err := d.ListTasks("trash", TaskFilter{Area: "area-home"})
 	if err != nil {
@@ -2868,11 +2848,11 @@ func TestListTasksTrashProjectRowsAndFilters(t *testing.T) {
 	}
 }
 
-func seedDeadlines(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-ops', 'Ops', 1, 1)`)
+// A project takes a deadline exactly as a to-do does and `things projects`
+// reports it, but the deadlines view was pinned to to-dos, so an agent
+// sweeping what is due never saw a project deadline (issue #213).
+func TestListTasksDeadlinesIncludeProjects(t *testing.T) {
+	d, fx := newFixture(t)
 
 	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
 	jun2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
@@ -2881,45 +2861,9 @@ func seedDeadlines(t *testing.T, d *DB) {
 	// Interleaved by date but not by kind, and with "index" running against
 	// the deadline order, so an ordering that fell back to "index" or grouped
 	// by type would put these in a different sequence.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, deadline, area, "index") VALUES
-		('dl-todo-early', 'Renew the cert', 0, 0, 0, 1, 0, ?, 'area-ops', 3),
-		('dl-proj-mid',   'Migrate hosts',  1, 0, 0, 1, 0, ?, 'area-ops', 2),
-		('dl-todo-late',  'File the form',  0, 0, 0, 1, 0, ?, 'area-ops', 1)`,
-		jun1, jun2, jun3)
-
-	// A project with no deadline is not a deadlines row, and neither a closed
-	// nor a trashed project is, however its deadline reads.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, deadline, "index") VALUES
-		('dl-proj-none',    'No date',     1, 0, 0, 1, 0, NULL, 4),
-		('dl-proj-done',    'Shipped',     1, 3, 0, 1, 0, ?,    5),
-		('dl-proj-trashed', 'Binned',      1, 0, 1, 1, 0, ?,    6)`,
-		jun1, jun1)
-
-	// A heading is structure inside a project, never a list row.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, deadline, project, "index") VALUES
-		('dl-head', 'Phase one', 2, 0, 0, ?, 'dl-proj-mid', 7)`, jun1)
-
-	// A repeating project template belongs to Repeating, not to the view its
-	// deadline would otherwise put it in, and the to-dos inside it come with
-	// it — they carry no rule of their own, only the project does
-	// (issues #147, #171).
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, deadline, "index", rt1_recurrenceRule)
-		VALUES ('dl-proj-template', 'Quarterly audit', 1, 0, 0, 1, 0, ?, 8, x'0102')`, jun1)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, deadline, project, "index")
-		VALUES ('dl-todo-in-template', 'Pull the figures', 0, 0, 0, 1, 0, ?, 'dl-proj-template', 9)`, jun1)
-}
-
-// A project takes a deadline exactly as a to-do does and `things projects`
-// reports it, but the deadlines view was pinned to to-dos, so an agent
-// sweeping what is due never saw a project deadline (issue #213).
-func TestListTasksDeadlinesIncludeProjects(t *testing.T) {
-	d := newTestDB(t)
-	seedDeadlines(t, d)
+	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
+	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
 	got, err := d.ListTasks("deadlines", TaskFilter{})
 	if err != nil {
@@ -2943,8 +2887,18 @@ func TestListTasksDeadlinesIncludeProjects(t *testing.T) {
 // Project rows are ordered with the to-dos by deadline rather than forming a
 // block of their own, so the project falls between the two to-dos.
 func TestListTasksDeadlinesOrderWithProject(t *testing.T) {
-	d := newTestDB(t)
-	seedDeadlines(t, d)
+	d, fx := newFixture(t)
+
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+	jun2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
+	jun3 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.Local)))
+
+	// Interleaved by date but not by kind, and with "index" running against
+	// the deadline order, so an ordering that fell back to "index" or grouped
+	// by type would put these in a different sequence.
+	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
+	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
 	got, err := d.ListTasks("deadlines", TaskFilter{})
 	if err != nil {
@@ -2960,8 +2914,27 @@ func TestListTasksDeadlinesOrderWithProject(t *testing.T) {
 // without one, a closed one, a trashed one, a heading and a repeating project
 // template with its children all stay out.
 func TestListTasksDeadlinesProjectExclusions(t *testing.T) {
-	d := newTestDB(t)
-	seedDeadlines(t, d)
+	d, fx := newFixture(t)
+
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+	jun2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
+
+	// A project with no deadline is not a deadlines row, and neither a closed
+	// nor a trashed project is, however its deadline reads.
+	fx.project("dl-proj-none", "No date", 4, anytime())
+	fx.project("dl-proj-done", "Shipped", 5, anytime(), status(model.StatusCompleted), deadline(jun1))
+	fx.project("dl-proj-trashed", "Binned", 6, anytime(), trashed(), deadline(jun1))
+
+	// A heading is structure inside a project, never a list row.
+	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.heading("dl-head", "Phase one", 7, deadline(jun1), inProject("dl-proj-mid"))
+
+	// A repeating project template belongs to Repeating, not to the view its
+	// deadline would otherwise put it in, and the to-dos inside it come with
+	// it — they carry no rule of their own, only the project does
+	// (issues #147, #171).
+	fx.project("dl-proj-template", "Quarterly audit", 8, anytime(), deadline(jun1), repeats())
+	fx.todo("dl-todo-in-template", "Pull the figures", 9, anytime(), deadline(jun1), inProject("dl-proj-template"))
 
 	got, err := d.ListTasks("deadlines", TaskFilter{})
 	if err != nil {
@@ -2982,8 +2955,18 @@ func TestListTasksDeadlinesProjectExclusions(t *testing.T) {
 // --on/--from/--to filter t.deadline on this view, and a project row is
 // filtered by its own deadline like any other row.
 func TestListTasksDeadlinesDateFilterMatchesProject(t *testing.T) {
-	d := newTestDB(t)
-	seedDeadlines(t, d)
+	d, fx := newFixture(t)
+
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+	jun2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
+	jun3 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.Local)))
+
+	// Interleaved by date but not by kind, and with "index" running against
+	// the deadline order, so an ordering that fell back to "index" or grouped
+	// by type would put these in a different sequence.
+	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
+	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
 	on := model.ThingsDate(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
 	got, err := d.ListTasks("deadlines", TaskFilter{On: &on})
@@ -2998,8 +2981,19 @@ func TestListTasksDeadlinesDateFilterMatchesProject(t *testing.T) {
 // A project carries its own area, so --area finds it; it has no parent
 // project, so --project can never match it.
 func TestListTasksDeadlinesProjectRowsAndFilters(t *testing.T) {
-	d := newTestDB(t)
-	seedDeadlines(t, d)
+	d, fx := newFixture(t)
+
+	fx.area("area-ops", "Ops", 1)
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+	jun2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
+	jun3 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.Local)))
+
+	// Interleaved by date but not by kind, and with "index" running against
+	// the deadline order, so an ordering that fell back to "index" or grouped
+	// by type would put these in a different sequence.
+	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1), inArea("area-ops"))
+	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2), inArea("area-ops"))
+	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3), inArea("area-ops"))
 
 	byArea, err := d.ListTasks("deadlines", TaskFilter{Area: "area-ops"})
 	if err != nil {
@@ -3018,11 +3012,12 @@ func TestListTasksDeadlinesProjectRowsAndFilters(t *testing.T) {
 	}
 }
 
-func seedLogbookCancelled(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-lab', 'Lab', 1, 1)`)
+// The Logbook is where Things files everything closed, not just everything
+// finished: a cancelled to-do or project is logged beside the completed ones,
+// but the view filtered status = 3 alone, so cancelled items never appeared
+// (issue #210).
+func TestListTasksLogbookIncludesCancelled(t *testing.T) {
+	d, fx := newFixture(t)
 
 	// Stop dates interleave the two statuses, and "index" runs against that
 	// order, so a view that grouped by status or fell back to "index" would
@@ -3032,34 +3027,10 @@ func seedLogbookCancelled(t *testing.T, d *DB) {
 	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
 
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, stopDate, area, "index") VALUES
-		('log-todo-done',   'Wrote it up',  0, 3, 0, 1, 0, ?, 'area-lab', 4),
-		('log-proj-cancel', 'Dropped work', 1, 2, 0, 1, 0, ?, 'area-lab', 3),
-		('log-todo-cancel', 'Dropped task', 0, 2, 0, 1, 0, ?, 'area-lab', 2),
-		('log-proj-done',   'Shipped it',   1, 3, 0, 1, 0, ?, 'area-lab', 1)`,
-		newest, newer, older, oldest)
-
-	// Open rows are not logged, and a trashed row belongs to trash however it
-	// was closed.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, stopDate, "index") VALUES
-		('log-open',           'Still going',  0, 0, 0, 1, 0, NULL, 5),
-		('log-cancel-trashed', 'Binned',       0, 2, 1, 1, 0, ?,    6)`, older)
-
-	// A heading is structure inside a project, never a list row.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, stopDate, project, "index") VALUES
-		('log-head', 'Phase one', 2, 2, 0, ?, 'log-proj-done', 7)`, older)
-}
-
-// The Logbook is where Things files everything closed, not just everything
-// finished: a cancelled to-do or project is logged beside the completed ones,
-// but the view filtered status = 3 alone, so cancelled items never appeared
-// (issue #210).
-func TestListTasksLogbookIncludesCancelled(t *testing.T) {
-	d := newTestDB(t)
-	seedLogbookCancelled(t, d)
+	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
+	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
+	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
+	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -3094,8 +3065,20 @@ func TestListTasksLogbookIncludesCancelled(t *testing.T) {
 // Cancelled rows are ordered by stopDate with the completed ones rather than
 // forming a block of their own, newest first like the rest of the Logbook.
 func TestListTasksLogbookCancelledOrder(t *testing.T) {
-	d := newTestDB(t)
-	seedLogbookCancelled(t, d)
+	d, fx := newFixture(t)
+
+	// Stop dates interleave the two statuses, and "index" runs against that
+	// order, so a view that grouped by status or fell back to "index" would
+	// return these in a different sequence.
+	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
+	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
+	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+
+	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
+	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
+	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
+	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -3110,8 +3093,16 @@ func TestListTasksLogbookCancelledOrder(t *testing.T) {
 // Widening the Logbook to cancelled must not widen it to everything closed:
 // open rows, a trashed cancelled row and a cancelled heading stay out.
 func TestListTasksLogbookCancelledExclusions(t *testing.T) {
-	d := newTestDB(t)
-	seedLogbookCancelled(t, d)
+	d, fx := newFixture(t)
+
+	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
+
+	// Open rows are not logged, a trashed row belongs to trash however it was
+	// closed, and a heading is structure inside a project, never a list row.
+	fx.todo("log-open", "Still going", 5, anytime())
+	fx.todo("log-cancel-trashed", "Binned", 6, anytime(), trashed(), cancelled(older))
+	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(older))
+	fx.heading("log-head", "Phase one", 7, cancelled(older), inProject("log-proj-done"))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -3129,8 +3120,21 @@ func TestListTasksLogbookCancelledExclusions(t *testing.T) {
 // A cancelled row is filtered like any other: --area finds it through the area
 // it carries, and --project cannot match a project row.
 func TestListTasksLogbookCancelledFilters(t *testing.T) {
-	d := newTestDB(t)
-	seedLogbookCancelled(t, d)
+	d, fx := newFixture(t)
+
+	fx.area("area-lab", "Lab", 1)
+	// Stop dates interleave the two statuses, and "index" runs against that
+	// order, so a view that grouped by status or fell back to "index" would
+	// return these in a different sequence.
+	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
+	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
+	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+
+	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest), inArea("area-lab"))
+	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer), inArea("area-lab"))
+	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older), inArea("area-lab"))
+	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest), inArea("area-lab"))
 
 	byArea, err := d.ListTasks("logbook", TaskFilter{Area: "area-lab"})
 	if err != nil {
@@ -3153,8 +3157,20 @@ func TestListTasksLogbookCancelledFilters(t *testing.T) {
 // The cancelled widening must not reach the views that select open rows: a
 // cancelled to-do is not in today, anytime, someday, upcoming or the catch-all.
 func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
-	d := newTestDB(t)
-	seedLogbookCancelled(t, d)
+	d, fx := newFixture(t)
+
+	// Stop dates interleave the two statuses, and "index" runs against that
+	// order, so a view that grouped by status or fell back to "index" would
+	// return these in a different sequence.
+	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
+	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
+	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+
+	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
+	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
+	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
+	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
 	// The logbook seed rows are all start = 1 with no startDate, so on their
 	// own they could never appear in today, upcoming or someday whatever their
@@ -3192,78 +3208,50 @@ func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
 // rows differently and `things complete 3` act on a row the user never read
 // (issue #221).
 
-func seedTiedDeadlines(t *testing.T, d *DB) {
-	t.Helper()
-
-	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
-
-	// Three rows on one deadline, the shape issue #221 was filed on: two of
-	// them tie on "index" as well and only the uuid separates those.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, deadline, "index") VALUES
-		('tie-dl-a', 'Renew the cert', 0, 0, 0, 1, 0, ?, 5),
-		('tie-dl-b', 'File the form',  0, 0, 0, 1, 0, ?, 5),
-		('tie-dl-c', 'Pay the invoice', 0, 0, 0, 1, 0, ?, 1)`,
-		jun1, jun1, jun1)
-}
-
-func seedTiedLogbook(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, stopDate, "index") VALUES
-		('tie-lb-a', 'Logged first',  0, 3, 0, 780000000.0, 5),
-		('tie-lb-b', 'Logged second', 0, 3, 0, 780000000.0, 5),
-		('tie-lb-c', 'Logged third',  0, 3, 0, 780000000.0, 1)`)
-}
-
-func seedTiedToday(t *testing.T, d *DB) {
-	t.Helper()
-
-	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
-
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate,
-		 todayIndex, todayIndexReferenceDate, "index") VALUES
-		('tie-td-a', 'Stand up',   0, 0, 0, 1, 0, ?, 1, 1, 5),
-		('tie-td-b', 'Sit down',   0, 0, 0, 1, 0, ?, 1, 1, 5),
-		('tie-td-c', 'Walk about', 0, 0, 0, 1, 0, ?, 1, 1, 1)`,
-		jun1, jun1, jun1)
-}
-
-// Rows filed nowhere, tied on "index": whatever the view's grouping keys are,
-// they are equal across these rows, so nothing but the uuid can order them —
-// which is what makes the tiebreak worth pinning.
-func seedTiedIndex(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
-		('tie-any-b', 'Second', 0, 0, 0, 1, 0, 1),
-		('tie-any-a', 'First',  0, 0, 0, 1, 0, 1)`)
-}
-
 func TestListTasksViewOrderIsTotalOnTiedKeys(t *testing.T) {
+	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
+
 	cases := []struct {
 		view string
-		seed func(t *testing.T, d *DB)
+		seed func(fx *fixture)
 		want []string
 	}{
-		{"deadlines", seedTiedDeadlines, []string{"tie-dl-c", "tie-dl-a", "tie-dl-b"}},
-		{"logbook", seedTiedLogbook, []string{"tie-lb-c", "tie-lb-a", "tie-lb-b"}},
-		{"today", seedTiedToday, []string{"tie-td-c", "tie-td-a", "tie-td-b"}},
-		// anytime groups before it orders by index, and these rows are filed
-		// nowhere, so they share every grouping key and fall through to the
-		// index — which they also tie on, leaving only the uuid. someday
-		// takes the same grouping and reaches the same place; inbox and trash
-		// reach it through the default index ordering.
-		{"anytime", seedTiedIndex, []string{"tie-any-a", "tie-any-b"}},
+		// Three rows on one deadline, the shape issue #221 was filed on: two
+		// of them tie on "index" as well and only the uuid separates those.
+		{"deadlines", func(fx *fixture) {
+			fx.todo("tie-dl-a", "Renew the cert", 5, anytime(), deadline(jun1))
+			fx.todo("tie-dl-b", "File the form", 5, anytime(), deadline(jun1))
+			fx.todo("tie-dl-c", "Pay the invoice", 1, anytime(), deadline(jun1))
+		}, []string{"tie-dl-c", "tie-dl-a", "tie-dl-b"}},
+
+		{"logbook", func(fx *fixture) {
+			const stop = 780000000.0
+			fx.todo("tie-lb-a", "Logged first", 5, completed(stop))
+			fx.todo("tie-lb-b", "Logged second", 5, completed(stop))
+			fx.todo("tie-lb-c", "Logged third", 1, completed(stop))
+		}, []string{"tie-lb-c", "tie-lb-a", "tie-lb-b"}},
+
+		{"today", func(fx *fixture) {
+			fx.todo("tie-td-a", "Stand up", 5, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
+			fx.todo("tie-td-b", "Sit down", 5, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
+			fx.todo("tie-td-c", "Walk about", 1, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
+		}, []string{"tie-td-c", "tie-td-a", "tie-td-b"}},
+
+		// Rows filed nowhere, tied on "index": anytime groups before it orders
+		// by index, and these rows share every grouping key, so they fall
+		// through to the index — which they also tie on, leaving only the
+		// uuid. someday takes the same grouping and reaches the same place;
+		// inbox and trash reach it through the default index ordering.
+		{"anytime", func(fx *fixture) {
+			fx.todo("tie-any-b", "Second", 1, anytime())
+			fx.todo("tie-any-a", "First", 1, anytime())
+		}, []string{"tie-any-a", "tie-any-b"}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
-			d := newTestDB(t)
-			tc.seed(t, d)
+			d, fx := newFixture(t)
+			tc.seed(fx)
 
 			first, err := d.ListTasks(tc.view, TaskFilter{})
 			if err != nil {
@@ -3334,38 +3322,6 @@ func TestEveryTaskOrderingEndsInTheUUIDTiebreak(t *testing.T) {
 	}
 }
 
-func seedSomedayParents(t *testing.T, d *DB) {
-	t.Helper()
-
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('area-den', 'Den', 1, 1)`)
-
-	// Two parent projects in different buckets. The Someday one is the case
-	// that separates "no parent project" from "no parent project outside
-	// Someday": measured against Things, the app hides that child too.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, area, "index") VALUES
-		('sd-parent-anytime', 'Anytime project', 1, 0, 0, 1, 0, NULL, 'area-den', 1),
-		('sd-parent-someday', 'Someday project', 1, 0, 0, 2, 0, NULL, 'area-den', 2)`)
-
-	// Someday to-dos: one under each parent, one under a heading of the
-	// Anytime parent, and two with no parent project at all.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index") VALUES
-		('sd-in-anytime', 'Filed under anytime', 0, 0, 0, 2, 0, NULL, 'sd-parent-anytime', 3),
-		('sd-in-someday', 'Filed under someday', 0, 0, 0, 2, 0, NULL, 'sd-parent-someday', 4)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, project, "index") VALUES
-		('sd-head', 'Phase one', 2, 0, 0, 'sd-parent-anytime', 5)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, heading, "index") VALUES
-		('sd-under-head', 'Filed under a heading', 0, 0, 0, 2, 0, NULL, 'sd-head', 6)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, startDate, area, "index") VALUES
-		('sd-loose-area', 'Deferred in an area', 0, 0, 0, 2, 0, NULL, 'area-den', 7),
-		('sd-loose',      'Deferred on its own', 0, 0, 0, 2, 0, NULL, NULL,       8)`)
-}
-
 // Things' Someday list is the deferred things not filed under a project. A
 // to-do inside a project stays inside it however it is deferred, so the app
 // keeps it out of the global list while the CLI returned it (issue #211).
@@ -3375,8 +3331,23 @@ func seedSomedayParents(t *testing.T, d *DB) {
 // app, holding one Someday to-do, put the project in the app's Someday list
 // and left the child out.
 func TestListTasksSomedayExcludesProjectChildren(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayParents(t, d)
+	d, fx := newFixture(t)
+
+	// Two parent projects in different buckets. The Someday one is the case
+	// that separates "no parent project" from "no parent project outside
+	// Someday": measured against Things, the app hides that child too.
+	fx.area("area-den", "Den", 1)
+	fx.project("sd-parent-anytime", "Anytime project", 1, anytime(), inArea("area-den"))
+	fx.project("sd-parent-someday", "Someday project", 2, someday(), inArea("area-den"))
+
+	// Someday to-dos: one under each parent, one under a heading of the
+	// Anytime parent, and two with no parent project at all.
+	fx.todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
+	fx.todo("sd-in-someday", "Filed under someday", 4, someday(), inProject("sd-parent-someday"))
+	fx.heading("sd-head", "Phase one", 5, inProject("sd-parent-anytime"))
+	fx.todo("sd-under-head", "Filed under a heading", 6, someday(), underHeading("sd-head"))
+	fx.todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
+	fx.todo("sd-loose", "Deferred on its own", 8, someday())
 
 	got, err := d.ListTasks("someday", TaskFilter{})
 	if err != nil {
@@ -3392,8 +3363,10 @@ func TestListTasksSomedayExcludesProjectChildren(t *testing.T) {
 // issue guessed wrong: a Someday to-do whose parent project is itself in
 // Someday is still hidden, while the parent project lists.
 func TestListTasksSomedayHidesChildOfSomedayProject(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayParents(t, d)
+	d, fx := newFixture(t)
+
+	fx.project("sd-parent-someday", "Someday project", 2, someday())
+	fx.todo("sd-in-someday", "Filed under someday", 4, someday(), inProject("sd-parent-someday"))
 
 	got, err := d.ListTasks("someday", TaskFilter{})
 	if err != nil {
@@ -3422,8 +3395,11 @@ func TestListTasksSomedayHidesChildOfSomedayProject(t *testing.T) {
 // project through the heading, so it must be excluded by the same rule rather
 // than slipping through as unparented.
 func TestListTasksSomedayExcludesHeadingNestedChildren(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayParents(t, d)
+	d, fx := newFixture(t)
+
+	fx.project("sd-parent-anytime", "Anytime project", 1, anytime())
+	fx.heading("sd-head", "Phase one", 5, inProject("sd-parent-anytime"))
+	fx.todo("sd-under-head", "Filed under a heading", 6, someday(), underHeading("sd-head"))
 
 	got, err := d.ListTasks("someday", TaskFilter{})
 	if err != nil {
@@ -3439,8 +3415,14 @@ func TestListTasksSomedayExcludesHeadingNestedChildren(t *testing.T) {
 // Narrowing someday must not empty it: a project row and an unparented to-do
 // both still list, and --area still finds them through the area they carry.
 func TestListTasksSomedayKeepsUnparentedRows(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayParents(t, d)
+	d, fx := newFixture(t)
+
+	fx.area("area-den", "Den", 1)
+	fx.project("sd-parent-anytime", "Anytime project", 1, anytime(), inArea("area-den"))
+	fx.project("sd-parent-someday", "Someday project", 2, someday(), inArea("area-den"))
+	fx.todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
+	fx.todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
+	fx.todo("sd-loose", "Deferred on its own", 8, someday())
 
 	byArea, err := d.ListTasks("someday", TaskFilter{Area: "area-den"})
 	if err != nil {
@@ -3466,16 +3448,16 @@ func TestListTasksSomedayKeepsUnparentedRows(t *testing.T) {
 // The narrowing is someday-only: the same parented to-do still lists in the
 // other views, which show a project's contents.
 func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
-	d := newTestDB(t)
-	seedSomedayParents(t, d)
+	d, fx := newFixture(t)
+
+	fx.project("sd-parent-anytime", "Anytime project", 1, anytime())
+	fx.todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
 
 	// The seeded children are all someday-shaped (start=2, no startDate), so
 	// none of them can appear in another view as they stand. Seed one more
 	// child of the same parent in anytime shape to prove the guard is
 	// someday-only rather than global.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
-		('sd-anytime-child', 'Inside, anytime', 0, 0, 0, 1, 0, 'sd-parent-anytime', 9)`)
+	fx.todo("sd-anytime-child", "Inside, anytime", 9, anytime(), inProject("sd-parent-anytime"))
 
 	got, err := d.ListTasks("anytime", TaskFilter{})
 	if err != nil {
