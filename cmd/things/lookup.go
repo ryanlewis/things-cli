@@ -47,11 +47,12 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		var b strings.Builder
 		fmt.Fprintf(&b, "ambiguous task %q — matches %d tasks:\n", ambig.Query, len(ambig.Matches))
 		for i, m := range ambig.Matches {
-			fmt.Fprintf(&b, "  %d. %s  (%s)\n", i+1, m.Title, m.UUID)
+			fmt.Fprintf(&b, "  %d. %s  [%s]  (%s)\n", i+1, m.Title, m.Type, m.UUID)
 		}
 		fmt.Fprint(&b, "Re-run with a UUID or more specific string.")
-		// Wrap rather than replace: the plain-text message stays exactly as
-		// it was, while --json still sees the candidates (issue #152).
+		// Wrap rather than replace: the plain-text reader gets the rendered
+		// list, while --json still reaches the candidates behind it
+		// (issue #152).
 		return nil, &ambiguousRefError{msg: b.String(), inner: ambig}
 	}
 
@@ -62,7 +63,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		if m.ProjectTitle != "" {
 			project = "  (" + m.ProjectTitle + ")"
 		}
-		fmt.Fprintf(os.Stderr, "  %d. %s%s\n", i+1, m.Title, project)
+		fmt.Fprintf(os.Stderr, "  %d. %s  [%s]%s\n", i+1, m.Title, m.Type, project)
 	}
 	fmt.Fprintf(os.Stderr, "Pick [1-%d]: ", len(ambig.Matches))
 

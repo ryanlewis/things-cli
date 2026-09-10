@@ -14,6 +14,7 @@ import (
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/skill"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -305,6 +306,51 @@ func TestCommandsEmitJSONErrors(t *testing.T) {
 			}
 			if payload.Query != tc.wantQuery {
 				t.Errorf("query = %q, want %q", payload.Query, tc.wantQuery)
+			}
+		})
+	}
+}
+
+// The title a project and a to-do share reaches the caller as an ambiguity
+// from both commands, rather than resolving to one row and advising a retry
+// that acts on the other (issue #194). The kind rides along on each candidate
+// so the caller knows which command the uuid it picks belongs to.
+func TestSharedTitleIsAmbiguousForBothCommands(t *testing.T) {
+	for _, args := range [][]string{
+		{"--json", "edit", "Chores", "--title", "New"},
+		{"--json", "project", "edit", "Chores", "--title", "New"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			stubTTY(t, true)
+			sqlDB := dbtest.NewSQL(t)
+			if _, err := sqlDB.Exec(
+				`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
+					('proj-chores', 'Chores', 1, 0, 0),
+					('todo-chores', 'Chores', 0, 0, 0)`,
+			); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+
+			err := runWith(t, db.NewFromSQL(sqlDB), args...)
+			if err == nil {
+				t.Fatalf("run %v: expected an error", args)
+			}
+			payload, raw := decodePayload(t, err)
+			if payload.Error != "ambiguous task" {
+				t.Fatalf("error = %q, want %q (%s)", payload.Error, "ambiguous task", raw)
+			}
+			byUUID := map[string]jsonErrorMatch{}
+			for _, m := range payload.Matches {
+				byUUID[m.UUID] = m
+			}
+			if len(byUUID) != 2 {
+				t.Fatalf("matches = %+v, want both rows", payload.Matches)
+			}
+			if got := byUUID["proj-chores"].Type; got != model.TypeProject {
+				t.Errorf("proj-chores type = %v (%s)", got, raw)
+			}
+			if got := byUUID["todo-chores"].Type; got != model.TypeTask {
+				t.Errorf("todo-chores type = %v (%s)", got, raw)
 			}
 		})
 	}

@@ -231,12 +231,16 @@ $ things show milk --json; echo "exit=$?"
   "kind": "task",
   "query": "milk",
   "matches": [
-    { "uuid": "A1B2...", "title": "Buy milk", "project": "Chores" },
-    { "uuid": "C3D4...", "title": "Buy oat milk" }
+    { "uuid": "A1B2...", "title": "Buy milk", "type": "task", "project": "Chores" },
+    { "uuid": "C3D4...", "title": "Buy oat milk", "type": "task" }
   ]
 }
 exit=1
 ```
+
+Each candidate carries its `type`, so a title a project and a to-do share
+reads as an ambiguity rather than resolving to one of them, and the `type` of
+the uuid you pick tells you whether to retry with `edit` or `project edit`.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
 `import refused`, `import partially applied`, and `error` for everything else.
