@@ -33,15 +33,15 @@ A title can match several items. Under `--json` an ambiguous reference is an err
 Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees the command never blocks on a prompt.
 
 - `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq '.[] | select(.status=="open")'`.
-- `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq '.[] | select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells a to-do `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.
-- `start` is a string enum the same way — `"inbox"`, `"anytime"` or `"someday"` — not the raw Things integer. It is the list an item falls back to when it carries no date, so it does not on its own say which list the app shows the item in: a dated `"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and only an undated one is in Someday. It is on to-do and project rows. Filter with `jq '.[] | select(.start=="someday")'`. **This changed:** in v0.7.0 and earlier `start` was the integer `0`, `1` or `2`, so a filter matching on `.start==2` needs updating. `startBucket` beside it is still an integer — `1` is the app's This Evening section, `0` is everything else.
-- **A to-do is a `task` in every JSON value the CLI emits** — `type` on a row, `kind` in an error payload — matching the word this skill uses throughout. The single exception is an `import` payload, which is Things' own format and spells it `"to-do"`.
+- `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq '.[] | select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells it `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.
+- `start` is a string enum the same way — `"inbox"`, `"anytime"` or `"someday"` — not the raw Things integer. It is the list an item falls back to when it carries no date, so it does not on its own say which list the app shows the item in: a dated `"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and only an undated one is in Someday. It is on task and project rows. Filter with `jq '.[] | select(.start=="someday")'`. **This changed:** in v0.7.0 and earlier `start` was the integer `0`, `1` or `2`, so a filter matching on `.start==2` needs updating. `startBucket` beside it is still an integer — `1` is the app's This Evening section, `0` is everything else.
+- **The CLI's word is `task`** — `type` on a row, `kind` in an error payload, and the prose throughout this skill. Things' own JSON URL scheme calls the same thing a `"to-do"`, and an `import` payload is the one place that word appears in anything the CLI emits, because the payload is passed to Things untouched. The `description` in this file's frontmatter is the exception that proves it: it lists the phrases a *user* might say, "to-do lists" among them, so the skill matches how people talk rather than how the CLI writes.
 - `"repeating": true` marks an item Things treats as repeating; the field is omitted otherwise. A project appearing as a row in a task listing carries `"type": "project"`.
-- `things projects` reports `start`, `startBucket`, `startDate` and `deadline` under the same names and encodings a to-do uses, so a scheduled project reads the same way without a per-project `show`. `startDate` and `deadline` are omitted when unset.
+- `things projects` reports `start`, `startBucket`, `startDate` and `deadline` under the same names and encodings a task uses, so a scheduled project reads the same way without a per-project `show`. `startDate` and `deadline` are omitted when unset.
 - Project rows arrive in the same listings as tasks. Split them on `"type"` — `jq '.[] | select(.type=="project")'` for the projects, `.[] | select(.type=="task")` for the tasks. Plain output tags a project row `(project)`. Which views carry them, and why, is under `things list` below — that is the one statement of it.
-- `someday` is the deferred things not filed under a project: Someday projects and unparented Someday to-dos. A to-do inside a project stays inside it however it is deferred, so it is not a `someday` row even when its project is in Someday too. Reach those with `things --project "Name"` — `things someday --project "Name"` is rejected, because no `someday` row has a parent project for it to match.
+- `someday` is the deferred things not filed under a project: Someday projects and unparented Someday tasks. A task inside a project stays inside it however it is deferred, so it is not a `someday` row even when its project is in Someday too. Reach those with `things --project "Name"` — `things someday --project "Name"` is rejected, because no `someday` row has a parent project for it to match.
 - `logbook` is everything closed, not just everything finished: cancelled items sit beside completed ones, as they do in the app's Logbook. Split them on `"status"` — `"completed"` or `"cancelled"`; plain output prints `[x]` and `[~]`. Filter with `jq '.[] | select(.status=="completed")'` when you mean finished rather than closed.
-- `things projects` also reports `taskCount` and `openCount`. `taskCount` is every untrashed to-do in the project; `openCount` is the ones still open. The difference is the ones that are no longer open, which means completed or cancelled. To-dos filed under a project heading count towards both; the heading rows themselves never do, and neither do trashed to-dos or checklist items. Both numbers are Things' own bookkeeping, read straight from the database rather than recounted by the CLI.
+- `things projects` also reports `taskCount` and `openCount`. `taskCount` is every untrashed task in the project; `openCount` is the ones still open. The difference is the ones that are no longer open, which means completed or cancelled. Tasks filed under a project heading count towards both; the heading rows themselves never do, and neither do trashed tasks or checklist items. Both numbers are Things' own bookkeeping, read straight from the database rather than recounted by the CLI.
 - Human output is styled and column-aligned; colour auto-disables when piping or under `NO_COLOR`. `--color=always|never` overrides. JSON is unaffected.
 
 **A failure under `--json` prints one JSON object to stdout and exits non-zero.** Branch on the exit status and read the failure off stdout — not stderr. On success the read commands print their result there and the write commands print nothing — except `tag add`, which reports what it created and what it skipped. `error` is a stable token; `message` is the human text.
@@ -94,7 +94,7 @@ Both routes create over AppleScript, so Things3 must be running, and both skip n
 
 ### 2. Repeating items refuse status, `when` and `deadline`
 
-A repeating to-do is a template plus the to-dos it generates. Things refuses to change `when`, `deadline`, completed/canceled status, or duplication on a repeating item, and **drops the request silently**. The CLI checks first and exits non-zero:
+A repeating task is a template plus the tasks it generates. Things refuses to change `when`, `deadline`, completed/canceled status, or duplication on a repeating item, and **drops the request silently**. The CLI checks first and exits non-zero:
 
 ```
 "Water plants" is a repeating task — Things does not allow canceled to be changed
@@ -105,12 +105,12 @@ There is no CLI workaround; the user must use the Things app. Every other attrib
 
 How they list:
 
-- `things repeating` lists the templates — to-dos and projects both, to-dos first, projects marked `(project)` in plain output and `"type": "project"` in JSON. `things projects` leaves project templates out.
+- `things repeating` lists the templates — tasks and projects both, tasks first, projects marked `(project)` in plain output and `"type": "project"` in JSON. `things projects` leaves project templates out.
 - Templates appear in no other view except `trash` and `logbook`, which report what the database holds. Both carry projects, so a trashed or logged project template shows there.
-- The to-dos *generated by* a template carry no recurrence rule, so they list as ordinary tasks under `today`, `upcoming` and the rest. The to-dos *inside a project template* are hidden, being recognised by their project.
+- The tasks *generated by* a template carry no recurrence rule, so they list as ordinary rows under `today`, `upcoming` and the rest. The tasks *inside a project template* are hidden, being recognised by their project.
 - `things search` is a lookup, not a view: it returns templates like anything else. Check `"repeating"` on a search hit before writing to it.
 
-A template and its generated to-do share a title, so a title lookup resolves to the **generated** to-do — the one that can be completed. Reach the template by UUID or by its index from `things repeating`.
+A template and its generated task share a title, so a title lookup resolves to the **generated** task — the one that can be completed. Reach the template by UUID or by its index from `things repeating`.
 
 `import` applies the same check per item: if any `operation: update` item carries `when`, `deadline`, `completed` or `canceled` for a repeating item, the whole payload is refused before anything is sent. The value is irrelevant — `"completed": false` is refused like `"completed": true`. The URL scheme takes one payload and reports nothing per item, so there is no way to send the rest and say what was skipped.
 
@@ -125,11 +125,11 @@ Error: 1 of 2 requested status changes did not apply. …:
 
 The rest of that import is already applied — re-run with only the failed items. `--no-verify` skips this read-back and the tag one in rule 1; it does **not** skip rule 2, which is a documented rule rather than a guess about what Things did.
 
-### 4. A project takes its to-dos with it
+### 4. A project takes its tasks with it
 
-`complete`/`cancel` on a *project* changes the status of every to-do in it, so the CLI asks first. `-y` / `--yes` answers that question in advance. Under `--json` — which never prompts — `--yes` is the only way a project completes at all.
+`complete`/`cancel` on a *project* changes the status of every task in it, so the CLI asks first. `-y` / `--yes` answers that question in advance. Under `--json` — which never prompts — `--yes` is the only way a project completes at all.
 
-**Ask the user before passing `--yes`.** It exists so a non-interactive run can proceed, not so the check can be dropped. It has no effect on a plain to-do, which is never confirmed. `--complete` and `--cancel` on `edit` / `project edit` are mutually exclusive.
+**Ask the user before passing `--yes`.** It exists so a non-interactive run can proceed, not so the check can be dropped. It has no effect on a plain task, which is never confirmed. `--complete` and `--cancel` on `edit` / `project edit` are mutually exclusive.
 
 `edit`, `project edit`, and `import` payloads with `operation: update` also need *Things → Settings → General → Enable Things URLs*. The error to recognise: `update: auth token is required — enable Things URLs in Things → Settings → General …`.
 
@@ -209,9 +209,9 @@ things tag add <name>...        # create tags; existing names are skipped
 things add <title> [--notes --when --deadline --tags --checklist --project --heading --list --strict-tags --create-tags]
 things project add <title> [--notes --when --deadline --tags --area --todos --strict-tags --create-tags]
 things edit <task> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --checklist --prepend-checklist --append-checklist --list --list-id --heading --heading-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
-    # to-dos only; a project reference is refused — edit projects with `things project edit`
+    # tasks only; a project reference is refused — edit projects with `things project edit`
 things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
-    # projects only; a to-do reference is refused — edit to-dos with `things edit`
+    # projects only; a task reference is refused — edit tasks with `things edit`
 things complete <task> [-y|--yes]   # task or project; a project asks first (rule 4)
 things cancel <task> [-y|--yes]
 things log                          # move Today → Logbook
@@ -286,13 +286,13 @@ things import <<'JSON'
 JSON
 ```
 
-Find projects with no open to-dos — the work has landed but the project is still open, so a reconcile can offer to close it:
+Find projects with no open tasks — the work has landed but the project is still open, so a reconcile can offer to close it:
 
 ```
 things projects -j | jq -r '.[] | select(.openCount == 0 and .taskCount > 0) | "\(.uuid)\t\(.title)"'
 ```
 
-`taskCount > 0` keeps out empty projects, which have nothing done rather than everything done. It does not tell done from cancelled — a project whose to-dos were all cancelled matches too — so confirm before offering to close one. Plain output marks the same projects with a filled `●` progress icon, and under `--completed` that icon also marks every completed project, empty ones included. A project holding a repeating to-do never shows up while the repeat is live: Things counts the hidden template row itself as an open to-do, and a template never completes. Note that `things list -p <project>` hides that template, so it can show no open to-dos for a project whose `openCount` is 1.
+`taskCount > 0` keeps out empty projects, which have nothing done rather than everything done. It does not tell done from cancelled — a project whose tasks were all cancelled matches too — so confirm before offering to close one. Plain output marks the same projects with a filled `●` progress icon, and under `--completed` that icon also marks every completed project, empty ones included. A project holding a repeating task never shows up while the repeat is live: Things counts the hidden template row itself as an open task, and a template never completes. Note that `things list -p <project>` hides that template, so it can show no open tasks for a project whose `openCount` is 1.
 
 ## Shell completions
 
