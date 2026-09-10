@@ -90,6 +90,7 @@ func TestAgentsSorted(t *testing.T) {
 
 func TestAgentDefaultDir(t *testing.T) {
 	t.Setenv("HOME", "/tmp/fake-home")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	for _, tc := range []struct {
 		agent, want string
 	}{
@@ -110,6 +111,23 @@ func TestAgentDefaultDir(t *testing.T) {
 				t.Errorf("DefaultDir = %q, want %q", dir, tc.want)
 			}
 		})
+	}
+}
+
+func TestClaudeDefaultDirHonoursConfigDir(t *testing.T) {
+	t.Setenv("HOME", "/tmp/fake-home")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/tmp/custom-claude")
+	a, err := Lookup("claude")
+	if err != nil {
+		t.Fatalf("Lookup(claude): %v", err)
+	}
+	dir, err := a.DefaultDir()
+	if err != nil {
+		t.Fatalf("DefaultDir: %v", err)
+	}
+	want := filepath.Join("/tmp/custom-claude", "skills", "things-cli")
+	if dir != want {
+		t.Errorf("DefaultDir = %q, want %q", dir, want)
 	}
 }
 
