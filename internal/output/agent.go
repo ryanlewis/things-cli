@@ -231,19 +231,18 @@ func codeBlock(cmds []command) string {
 }
 
 // whenText renders the schedule as one value: the scheduled date if there is
-// one, otherwise the list the item sits in.
+// one, otherwise the list the item sits in. The list names come from
+// model.Start, the same map that names the field in JSON, so renaming one
+// renames both.
+//
+// The two surfaces do part company on a code Things never writes: JSON keeps
+// an unrecognized code as its integer so the value round-trips, while this
+// renders it "unknown", there being nothing to round-trip in a brief.
 func whenText(t *model.Task) string {
 	if t.StartDate != nil {
 		return t.StartDate.String()
 	}
-	switch t.Start {
-	case model.StartInbox:
-		return "inbox"
-	case model.StartSomeday:
-		return "someday"
-	default:
-		return "anytime"
-	}
+	return t.Start.String()
 }
 
 func checklistLine(item model.ChecklistItem) string {

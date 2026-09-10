@@ -175,6 +175,15 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   become `.type=="project"`. It is not the vocabulary an `import` payload
   takes: that format is Things' own and spells a to-do `"to-do"`, so do
   not copy `.type` from a listing into an import item.
+- **Start is a string enum too**, `"inbox"`, `"anytime"` or `"someday"`,
+  not the raw Things integer. It is the list an item falls back to when it
+  carries no date, so it does not on its own say which list the app shows
+  the item in: a dated `"anytime"` row is in Today, a dated `"someday"` row
+  is in Upcoming, and only an undated one is in Someday. In v0.7.0 and
+  earlier this field was the integer `0`, `1` or `2`, so a filter matching
+  on `.start==2` has to become `.start=="someday"`. `startBucket` beside it
+  is still an integer — `1` is the app's This Evening section, `0` is
+  everything else.
 - **Projects carry scheduling too.** `things projects` reports `start`,
   `startBucket`, `startDate` and `deadline` under the same names and
   encodings a to-do uses, so a scheduled project reads the same way
