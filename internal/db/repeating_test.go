@@ -297,17 +297,23 @@ func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
 		view    string
 		columns string
 		values  string
+		// extra names the rows the view carries besides t-plain. The ordinary
+		// project p-real is one of them wherever the view lists project rows
+		// and p-real's own columns satisfy it — the catch-all view selects on
+		// status alone, so it does (issue #222). The template project p-tmpl
+		// is never among them.
+		extra []string
 	}{
-		{"inbox", "start, startBucket", "0, 0"},
-		{"today", "start, startBucket, startDate", fmt.Sprintf("1, 0, %d", today)},
-		{"upcoming", "start, startBucket, startDate", fmt.Sprintf("2, 0, %d", tomorrow)},
-		{"anytime", "start, startBucket", "1, 0"},
+		{"inbox", "start, startBucket", "0, 0", nil},
+		{"today", "start, startBucket, startDate", fmt.Sprintf("1, 0, %d", today), nil},
+		{"upcoming", "start, startBucket, startDate", fmt.Sprintf("2, 0, %d", tomorrow), nil},
+		{"anytime", "start, startBucket", "1, 0", nil},
 		// someday is absent deliberately: since issue #211 it carries no
 		// to-do with a parent project at all, so the sibling this table
 		// relies on cannot exist there. TestTemplateChildExcludedFromSomeday
 		// covers that view instead.
-		{"deadlines", "start, startBucket, deadline", fmt.Sprintf("1, 0, %d", tomorrow)},
-		{"project", "start, startBucket", "1, 0"},
+		{"deadlines", "start, startBucket, deadline", fmt.Sprintf("1, 0, %d", tomorrow), nil},
+		{"project", "start, startBucket", "1, 0", []string{"p-real"}},
 	}
 
 	for _, tc := range cases {
@@ -330,8 +336,9 @@ func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ListTasks(%q): %v", tc.view, err)
 			}
-			if !sameSet(uuidsOf(got), []string{"t-plain"}) {
-				t.Errorf("view %q: got %v, want just t-plain — the template's child must not list", tc.view, uuidsOf(got))
+			want := append([]string{"t-plain"}, tc.extra...)
+			if !sameSet(uuidsOf(got), want) {
+				t.Errorf("view %q: got %v, want %v — the template's child must not list", tc.view, uuidsOf(got), want)
 			}
 		})
 	}

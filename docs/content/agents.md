@@ -218,9 +218,11 @@ trashed in `trash`. A trashed project reaches no other command:
 `things projects` filters trashed rows. `deadlines` carries projects for the
 same reason applied to a different column, so a sweep of what is due no
 longer misses a project deadline. A bare filter with no view named —
-`things -p X`, `things -a Work`, `things -t urgent` — is the exception: it
-lists the open to-dos of that project, area or tag, so name a view when the
-project rows matter. Each row carries `"type"` — `"task"` or `"project"` — so
+`things -p X`, `things -a Work`, `things -t urgent` — follows the same rule,
+so `things -a Work` returns that area's own projects alongside its open
+to-dos. `things -p X` is the exception the rule already carries: a project has
+no parent project, so `--project` matches a project's contents and never the
+project row itself. Each row carries `"type"` — `"task"` or `"project"` — so
 a script that acts on a listing should say which kind it means. It matters:
 `edit` refuses a project with `not a task`, and `complete` on a project closes
 every to-do inside it, so it asks first and refuses outright under `--json`

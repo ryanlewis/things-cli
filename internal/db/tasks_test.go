@@ -235,13 +235,14 @@ func TestListTasksAreaFilter(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	// t-in-proj inherits area-work via its project (pa.uuid join).
+	// t-in-proj inherits area-work via its project (pa.uuid join), and proj-1
+	// is a row in its own right since issue #222.
 	tasks, err := d.ListTasks("project", TaskFilter{Area: "area-work"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tasks) != 1 || tasks[0].UUID != "t-in-proj" {
-		t.Errorf("area filter: got %+v", uuidsOf(tasks))
+	if !sameSet(uuidsOf(tasks), []string{"proj-1", "t-in-proj"}) {
+		t.Errorf("area filter: got %+v, want [proj-1 t-in-proj]", uuidsOf(tasks))
 	}
 }
 
@@ -624,8 +625,9 @@ func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
-	if !sameSet(uuidsOf(got), []string{"t-direct", "t-nested"}) {
-		t.Errorf("area filter: got %v, want [t-direct t-nested]", uuidsOf(got))
+	// proj-h itself is in the area too, and lists as a row (issue #222).
+	if !sameSet(uuidsOf(got), []string{"proj-h", "t-direct", "t-nested"}) {
+		t.Errorf("area filter: got %v, want [proj-h t-direct t-nested]", uuidsOf(got))
 	}
 }
 
@@ -837,7 +839,15 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 	for _, task := range got {
 		order = append(order, task.UUID)
 	}
-	want := []string{"a1", "a2", "b1", "b2"}
+	// The two project rows have no parent project of their own, so they sort
+	// on COALESCE(p."index", 0) = 0, into the same key group as the area's
+	// unparented rows and ahead of every project's to-dos; each project's
+	// to-dos then follow in a contiguous block. Within that leading group the
+	// next key is t.start, which these fixture projects leave NULL, so they
+	// come first — a project row with a start of its own would order against
+	// the area's loose to-dos by that key instead. Which primary key mixed
+	// rows should take is issue #217.
+	want := []string{"proj-a", "proj-b", "a1", "a2", "b1", "b2"}
 	if len(order) != len(want) {
 		t.Fatalf("got %v, want %v", order, want)
 	}
@@ -1392,6 +1402,74 @@ func TestListTasksProjectRowsAndFilters(t *testing.T) {
 	}
 	if len(otherArea) != 0 {
 		t.Errorf("--area area-home: got %v, want none", uuidsOf(otherArea))
+	}
+}
+
+// The bare --project/--area/--tag filter routes to the internal catch-all
+// view, which was pinned to to-dos while every named view except inbox had
+// been widened to projects, so an agent sweeping an area that way got none of
+// its projects (issue #222).
+func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tag-urgent', 'urgent', 1)`)
+	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES
+		('proj-anytime', 'tag-urgent'),
+		('todo-in-area', 'tag-urgent')`)
+
+	byArea, err := d.ListTasks("project", TaskFilter{Area: "area-work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The area's three open projects, plus the to-do in one of them (through
+	// the pa join) and the loose to-do filed on the area itself.
+	wantArea := []string{"proj-today", "proj-upcoming", "proj-anytime", "todo-in-proj", "todo-in-area"}
+	if !sameSet(uuidsOf(byArea), wantArea) {
+		t.Errorf("--area area-work: got %v, want %v", uuidsOf(byArea), wantArea)
+	}
+
+	byTag, err := d.ListTasks("project", TaskFilter{Tag: "urgent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byTag), []string{"proj-anytime", "todo-in-area"}) {
+		t.Errorf("--tag urgent: got %v, want [proj-anytime todo-in-area]", uuidsOf(byTag))
+	}
+	for _, task := range byTag {
+		if task.UUID == "proj-anytime" && task.Type != model.TypeProject {
+			t.Errorf("proj-anytime: got type %d, want %d", task.Type, model.TypeProject)
+		}
+	}
+
+	// A project has no parent project, so --project still narrows to contents.
+	byProject, err := d.ListTasks("project", TaskFilter{Project: "proj-today"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byProject), []string{"todo-in-proj"}) {
+		t.Errorf("--project proj-today: got %v, want [todo-in-proj]", uuidsOf(byProject))
+	}
+}
+
+// Widening the catch-all view to projects must not widen it past them:
+// headings, trashed projects, repeating project templates and the to-dos
+// inside a template all stay out, as they do in the named views.
+func TestListTasksCatchAllViewExclusions(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+
+	got, err := d.ListTasks("project", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Asserted as a whole set, not just as absences: a catch-all that returned
+	// nothing at all would satisfy every exclusion on its own.
+	want := []string{
+		"proj-today", "proj-upcoming", "proj-anytime",
+		"todo-in-proj", "todo-in-area", "todo-loose",
+	}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("catch-all view: got %v, want %v", uuidsOf(got), want)
 	}
 }
 

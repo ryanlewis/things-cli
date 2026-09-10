@@ -565,10 +565,15 @@ func TestRunListFilterDefaultsToAllOpenTasks(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
+		want []string
 	}{
-		{"project flag", []string{"list", "--project", "Chores"}},
-		{"project arg", []string{"list", "Chores"}},
-		{"area flag", []string{"list", "--area", "Home"}},
+		// --project narrows to a project's contents, so the project row
+		// itself is never among them: a project has no parent project.
+		{"project flag", []string{"list", "--project", "Chores"}, []string{"task-1", "task-3"}},
+		{"project arg", []string{"list", "Chores"}, []string{"task-1", "task-3"}},
+		// --area sweeps the area, and the area's own project is part of what
+		// the app shows there (issue #222).
+		{"area flag", []string{"list", "--area", "Home"}, []string{"proj-1", "task-1", "task-3"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -579,9 +584,12 @@ func TestRunListFilterDefaultsToAllOpenTasks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadLastList: %v", err)
 			}
-			want := map[string]bool{"task-1": true, "task-3": true}
+			want := map[string]bool{}
+			for _, uuid := range tc.want {
+				want[uuid] = true
+			}
 			if len(got) != len(want) {
-				t.Fatalf("got %v, want task-1 and task-3", got)
+				t.Fatalf("got %v, want %v", got, tc.want)
 			}
 			for _, uuid := range got {
 				if !want[uuid] {

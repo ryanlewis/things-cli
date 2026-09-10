@@ -219,12 +219,16 @@ var viewFilters = map[string]string{
 	// (issue #165).
 	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	// The catch-all open set: also the default view for a bare --project/
-	// --area/--tag filter.
-	"project": "t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	// --area/--tag filter. It carries projects for the same reason the named
+	// views do — `things --area Work` is a sweep of that area, and the area's
+	// own projects are part of what the app shows there (issue #222). A
+	// --project filter still returns no project rows: a project has no parent
+	// project of its own, so p.uuid never matches.
+	"project": "t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 }
 
 // notHeading excludes project headings (TMTask type 2) from the lookup
-// queries. Most list views pin t.type = 0 outright, but a lookup has to keep
+// queries. The inbox view pins t.type = 0 outright, but a lookup has to keep
 // returning projects as well as to-dos — show, edit, complete, cancel and
 // open all resolve projects through GetTask/GetTaskByUUID — so it excludes the
 // heading type rather than pinning the task type (issue #146).
