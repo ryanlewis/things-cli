@@ -388,6 +388,42 @@ func TestResolveTaskAmbiguousNonInteractive(t *testing.T) {
 	}
 }
 
+// The reference a write command acts on is resolved literally. `_` used to
+// stand for any character, so `things complete '20_30 review'` could resolve
+// to, and then complete, a task called "20:30 review" — a status write on a
+// task the user never named (issue #267).
+func TestResolveTaskMatchesUnderscoreLiterally(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
+		('t-colon', '20:30 review', 0, 0, 0)`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	database := db.NewFromSQL(sqlDB)
+
+	// The discriminating case: no task is called '20_30 review', so the
+	// reference must miss. While `_` stood for any character it matched the
+	// colon title and resolved to it silently, so `things complete
+	// '20_30 review'` closed a task the user never named.
+	if task, err := resolveTask(&Deps{}, "20_30 review", database); err == nil {
+		t.Errorf("resolved to %q — a write would have hit a task the user never named", task.UUID)
+	}
+
+	// And once the underscored task does exist the reference finds it, and
+	// only it. The reference is a substring, so this goes through the LIKE
+	// rather than the exact-title branch.
+	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
+		('t-under', '20_30 review', 0, 0, 0)`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	task, err := resolveTask(&Deps{}, "20_30 rev", database)
+	if err != nil {
+		t.Fatalf("resolveTask: %v", err)
+	}
+	if task.UUID != "t-under" {
+		t.Errorf("resolved to %q, want t-under — the underscore is a character", task.UUID)
+	}
+}
+
 func TestResolveTaskNotFound(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	database := db.NewFromSQL(sqlDB)

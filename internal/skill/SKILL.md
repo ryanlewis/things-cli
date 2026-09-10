@@ -18,7 +18,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 | --- | --- |
 | UUID | Always unambiguous. **Prefer this.** |
 | Numeric index | 1-based, from the last *plain-text* `list` or `search` only. For a person at a terminal — **not for you**. |
-| Title substring | Interactive runs prompt; non-TTY runs error with the match list. |
+| Title substring | Matched literally and case-insensitively — `%` and `_` are characters, not wildcards. Interactive runs prompt; non-TTY runs error with the match list. |
 
 **Use `--json` and act on the `uuid`** — `things show <uuid>`, `things complete <uuid>`, `things edit <uuid>`. Never act on a row number. The numbered list is a convenience for a person reading a terminal, and the numbers behind it come from a single cache file shared by everyone on the machine: another agent, or the user, can renumber it between your listing and your write, so a number you read is not reliably the item you meant. A UUID names the same item forever. Resolve once and use it for the rest of the job:
 
@@ -207,7 +207,7 @@ things projects [-a|--area A] [--completed]
     # plus taskCount/openCount in JSON
 things areas
 things tags
-things search <query>           # titles and notes; a lookup, not a view
+things search <query>           # titles and notes, matched literally; a lookup, not a view
 
 things tag add <name>...        # create tags; existing names are skipped
 

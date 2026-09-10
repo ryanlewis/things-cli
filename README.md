@@ -364,11 +364,13 @@ $ things
 | `things projects [-a NAME] [--completed]` | List projects |
 | `things areas` | List areas |
 | `things tags` | List tags |
-| `things search <query>` | Full-text search across titles and notes |
+| `things search <query>` | Search titles and notes for the text, matched literally |
 
 `<task>` accepts a UUID, a numeric index from the last list, or a title
-substring. When a title matches multiple tasks, an interactive prompt picks
-between them; non-TTY callers get the match list as an error.
+substring. The substring is matched literally and case-insensitively — `%` and
+`_` are characters to find, not wildcards. When a title matches multiple tasks,
+an interactive prompt picks between them; non-TTY callers get the match list as
+an error.
 
 The numeric index is for interactive use: it comes from the last plain-text
 listing, the only kind that prints numbers. A `--json` listing prints none and

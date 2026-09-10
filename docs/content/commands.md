@@ -192,6 +192,11 @@ things show "Buy milk"        # by title (interactive disambiguation)
 things show 3 --agent         # Markdown brief for handing to an agent
 ```
 
+A title reference is matched as a substring, literally and
+case-insensitively. There is no wildcard syntax: `%` and `_` are characters
+to find, so `things show "20_30 review"` finds the task spelled with an
+underscore and not the one spelled with a colon.
+
 After any plain list or `search`, numeric indices stay valid until the
 next one. A listing's order is fixed, so the same list run twice numbers
 the same items the same way — but the numbers still move as items are
@@ -216,6 +221,10 @@ with the commands that act on the item. See
 things search "milk"
 things search "release" --json
 ```
+
+The query matches titles and notes literally and case-insensitively. There is
+no wildcard syntax: `%` and `_` are characters to find, so
+`things search "50%"` returns the items that say "50%".
 
 ## Capturing
 
