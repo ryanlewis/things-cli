@@ -183,7 +183,9 @@ var viewFilters = map[string]string{
 // returning projects as well as to-dos — show, edit, complete, cancel and
 // open all resolve projects through GetTask/GetTaskByUUID — so it excludes the
 // heading type rather than pinning the task type (issue #146).
-var notHeading = fmt.Sprintf("COALESCE(t.type, 0) != %d", model.TypeHeading)
+// The int() conversion is load-bearing: model.TypeHeading is a fmt.Stringer,
+// so %v or %s would splice the word `heading` into the SQL instead of `2`.
+var notHeading = fmt.Sprintf("COALESCE(t.type, 0) != %d", int(model.TypeHeading))
 
 var viewOrderBy = map[string]string{
 	"logbook":   "ORDER BY t.stopDate DESC",

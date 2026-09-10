@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	TypeTask    = 0
-	TypeProject = 1
+	TypeTask    TaskType = 0
+	TypeProject TaskType = 1
 	// TypeHeading is a project heading — a TMTask row that groups to-dos
 	// inside a project. It is never a to-do itself, so lookups exclude it.
-	TypeHeading = 2
+	TypeHeading TaskType = 2
 
 	StatusOpen      Status = 0
 	StatusCancelled Status = 2
@@ -23,6 +23,82 @@ const (
 	StartAnytime = 1
 	StartSomeday = 2
 )
+
+// TaskType is a Things3 TMTask type. The underlying integers are the raw
+// Things codes (0 = to-do, 1 = project, 2 = heading), but JSON renders the
+// human-readable string so scripts and agents never have to decode the magic
+// ints — the same treatment Status gets.
+//
+// Only "todo" and "project" ever reach output: every list view pins the type
+// in SQL and every lookup applies the notHeading filter, so a heading row is
+// never returned (see internal/db/tasks.go). "heading" is defined because the
+// codec has to be total over the three codes the database uses.
+type TaskType int
+
+// typeNames is the single source of truth for the name<->code mapping used by
+// String, MarshalJSON, and UnmarshalJSON. TypeTask renders as "todo", which is
+// deliberately not the "to-do" that Things' own JSON URL scheme uses for the
+// same concept in a `things import` payload — that payload is Things'
+// vocabulary, not the CLI's, and the two are not interchangeable.
+var typeNames = map[TaskType]string{
+	TypeTask:    "todo",
+	TypeProject: "project",
+	TypeHeading: "heading",
+}
+
+func (t TaskType) String() string {
+	if name, ok := typeNames[t]; ok {
+		return name
+	}
+	return "unknown"
+}
+
+// MarshalJSON renders a recognized type as its string name
+// ("todo"/"project"/"heading"). An unrecognized raw Things code is preserved
+// as its integer so the value round-trips losslessly rather than collapsing to
+// a lossy "unknown" string.
+func (t TaskType) MarshalJSON() ([]byte, error) {
+	if name, ok := typeNames[t]; ok {
+		return json.Marshal(name)
+	}
+	return json.Marshal(int(t))
+}
+
+// UnmarshalJSON accepts either a type name or the raw Things integer,
+// mirroring MarshalJSON so values round-trip. Names are matched strictly
+// against the known set; integers are taken verbatim as the raw wire code.
+func (t *TaskType) UnmarshalJSON(data []byte) error {
+	// Per the json.Unmarshaler convention, a JSON null is a no-op: leave the
+	// existing value untouched rather than silently coercing it to
+	// TaskType(0) ("todo").
+	if string(data) == "null" {
+		return nil
+	}
+	// Try the string name first; on a type mismatch fall back to the raw
+	// integer so both the emitted string form and the legacy integer decode. A
+	// non-type error (malformed JSON) is surfaced as-is rather than retried as
+	// an int.
+	var name string
+	if err := json.Unmarshal(data, &name); err != nil {
+		var typeErr *json.UnmarshalTypeError
+		if !errors.As(err, &typeErr) {
+			return fmt.Errorf("TaskType: %w", err)
+		}
+		var n int
+		if err := json.Unmarshal(data, &n); err != nil {
+			return fmt.Errorf("TaskType: %w", err)
+		}
+		*t = TaskType(n)
+		return nil
+	}
+	for tt, n := range typeNames {
+		if n == name {
+			*t = tt
+			return nil
+		}
+	}
+	return fmt.Errorf("TaskType: unknown value %q", name)
+}
 
 // Status is a Things3 task/project status. The underlying integers are the
 // raw Things codes (0 = open, 2 = cancelled, 3 = completed — note there is no
@@ -147,7 +223,7 @@ type Task struct {
 	UUID         string      `json:"uuid"`
 	Title        string      `json:"title"`
 	Notes        string      `json:"notes,omitempty"`
-	Type         int         `json:"type"`
+	Type         TaskType    `json:"type"`
 	Status       Status      `json:"status"`
 	Start        int         `json:"start"`
 	StartBucket  int         `json:"startBucket"`

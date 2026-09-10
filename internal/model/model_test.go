@@ -203,8 +203,10 @@ func TestStatusUnmarshalJSON(t *testing.T) {
 	if pre != StatusCompleted {
 		t.Errorf("Unmarshal(null) = %d, want %d (unchanged)", pre, StatusCompleted)
 	}
-	// Unknown string names are rejected, but a malformed JSON token must not be
-	// silently funnelled into the integer branch.
+	// Unknown string names are rejected. A non-string, non-number token does
+	// reach the integer branch — encoding/json reports it as an
+	// UnmarshalTypeError, which is the same error a legacy integer produces —
+	// but it has to fail there rather than decode to anything.
 	for _, bad := range []string{`"bogus"`, `{}`, `[1]`} {
 		var s Status
 		if err := json.Unmarshal([]byte(bad), &s); err == nil {
@@ -227,6 +229,108 @@ func TestStatusRoundTripJSON(t *testing.T) {
 		}
 		if out.Status != want {
 			t.Errorf("round-trip status = %d, want %d", out.Status, want)
+		}
+	}
+}
+
+// The three wire names are a public contract: agents and jq filters match on
+// them, so a rename is a breaking change and has to fail here first (issue
+// #208).
+func TestTaskTypeMarshalJSON(t *testing.T) {
+	cases := []struct {
+		taskType TaskType
+		want     string
+	}{
+		{TypeTask, `"todo"`},
+		{TypeProject, `"project"`},
+		{TypeHeading, `"heading"`},
+		{TaskType(99), `99`}, // unrecognized code preserved as its raw int
+	}
+	for _, tc := range cases {
+		got, err := json.Marshal(tc.taskType)
+		if err != nil {
+			t.Fatalf("Marshal(%d): %v", tc.taskType, err)
+		}
+		if string(got) != tc.want {
+			t.Errorf("Marshal(%d) = %s, want %s", tc.taskType, got, tc.want)
+		}
+	}
+}
+
+func TestTaskTypeUnmarshalJSON(t *testing.T) {
+	cases := []struct {
+		in   string
+		want TaskType
+	}{
+		{`"todo"`, TypeTask},
+		{`"project"`, TypeProject},
+		{`"heading"`, TypeHeading},
+		{`0`, TypeTask},      // legacy integer input
+		{`1`, TypeProject},   // legacy integer input
+		{`2`, TypeHeading},   // legacy integer input
+		{`99`, TaskType(99)}, // unrecognized raw code taken verbatim
+	}
+	for _, tc := range cases {
+		var tt TaskType
+		if err := json.Unmarshal([]byte(tc.in), &tt); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", tc.in, err)
+		}
+		if tt != tc.want {
+			t.Errorf("Unmarshal(%s) = %d, want %d", tc.in, tt, tc.want)
+		}
+	}
+	// A JSON null is a no-op: it must leave the existing value untouched rather
+	// than silently coercing it to TaskType(0) ("todo").
+	pre := TypeProject
+	if err := json.Unmarshal([]byte(`null`), &pre); err != nil {
+		t.Fatalf("Unmarshal(null): %v", err)
+	}
+	if pre != TypeProject {
+		t.Errorf("Unmarshal(null) = %d, want %d (unchanged)", pre, TypeProject)
+	}
+	// Unknown string names are rejected. A non-string, non-number token does
+	// reach the integer branch — encoding/json reports it as an
+	// UnmarshalTypeError, which is the same error a legacy integer produces —
+	// but it has to fail there rather than decode to anything.
+	for _, bad := range []string{`"bogus"`, `{}`, `[1]`} {
+		var tt TaskType
+		if err := json.Unmarshal([]byte(bad), &tt); err == nil {
+			t.Errorf("Unmarshal(%s) succeeded, want error", bad)
+		}
+	}
+}
+
+func TestTaskTypeRoundTripJSON(t *testing.T) {
+	// Both a recognized type and an unrecognized raw code must round-trip.
+	for _, want := range []TaskType{TypeTask, TypeProject, TypeHeading, TaskType(99)} {
+		in := Task{Title: "t", Type: want}
+		data, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var out Task
+		if err := json.Unmarshal(data, &out); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if out.Type != want {
+			t.Errorf("round-trip type = %d, want %d", out.Type, want)
+		}
+	}
+}
+
+func TestTaskTypeString(t *testing.T) {
+	cases := []struct {
+		taskType TaskType
+		want     string
+	}{
+		{TypeTask, "todo"},
+		{TypeProject, "project"},
+		{TypeHeading, "heading"},
+		{TaskType(99), "unknown"},
+	}
+	for _, tc := range cases {
+		if got := tc.taskType.String(); got != tc.want {
+			t.Errorf("TaskType(%d).String() = %q, want %q", int(tc.taskType), got, tc.want)
 		}
 	}
 }

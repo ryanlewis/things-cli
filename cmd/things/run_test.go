@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -733,7 +734,7 @@ func TestRunListTodayIncludesScheduledProject(t *testing.T) {
 		t.Fatalf("today omitted the scheduled project: %+v", tasks)
 	}
 	if project.Type != model.TypeProject {
-		t.Errorf("type = %d, want %d", project.Type, model.TypeProject)
+		t.Errorf("type = %s, want %s", project.Type, model.TypeProject)
 	}
 
 	plain, err := runOut(t, database, "list", "today")
@@ -816,6 +817,66 @@ func TestRunListSomedayAndLogbookIncludeProjects(t *testing.T) {
 			}
 			if strings.Contains(plain, tc.todoName+" (project)") {
 				t.Errorf("plain output marked a to-do as a project:\n%s", plain)
+			}
+		})
+	}
+}
+
+// numericTypeField matches a `type` field whose value is a bare number, in
+// either the indented or the compact encoding.
+var numericTypeField = regexp.MustCompile(`"type":\s*-?\d`)
+
+// `type` renders as a string on every JSON surface that carries it — `todo`
+// or `project`, never the raw Things code (issue #208). The assertions are
+// against the raw JSON rather than an unmarshalled model.Task on purpose:
+// TaskType.UnmarshalJSON still accepts the legacy integer, so decoding would
+// keep passing even if the encoder regressed to emitting ints.
+func TestRunJSONRendersTypeAsString(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask
+			(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule) VALUES
+			('proj-audit', 'Runbook audit', 1, 0, 0, 1, 0, ?,    1, NULL),
+			('todo-milk',  'Buy milk',      0, 0, 0, 1, 0, ?,    2, NULL),
+			('tpl-water',  'Water plants',  0, 0, 0, 2, 0, NULL, 3, x'0102'),
+			('tpl-review', 'Weekly review', 1, 0, 0, 2, 0, NULL, 4, x'0102')`,
+		today, today,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	database := db.NewFromSQL(sqlDB)
+
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"list", []string{"--json", "list", "today"}, []string{`"type": "project"`, `"type": "todo"`}},
+		{"show todo", []string{"--json", "show", "todo-milk"}, []string{`"type": "todo"`}},
+		{"show project", []string{"--json", "show", "proj-audit"}, []string{`"type": "project"`}},
+		{"search", []string{"--json", "search", "Runbook"}, []string{`"type": "project"`}},
+		{"repeating", []string{"--json", "list", "repeating"}, []string{`"type": "todo"`, `"type": "project"`}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := runOut(t, database, tc.args...)
+			if err != nil {
+				t.Fatalf("run %v: %v", tc.args, err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %s in:\n%s", want, out)
+				}
+			}
+			// Match any numeric token, not just 0/1/2: MarshalJSON falls back
+			// to the raw integer for a code it does not recognize, so pinning
+			// the three known codes would miss exactly the case that can
+			// legitimately emit one. Matching on the token rather than a
+			// literal also keeps the assertion independent of the encoder's
+			// indentation.
+			if loc := numericTypeField.FindString(out); loc != "" {
+				t.Errorf("raw Things type code leaked into JSON (%q):\n%s", loc, out)
 			}
 		})
 	}

@@ -286,7 +286,7 @@ kept out of every other view except `trash` and `logbook`, which report what
 the database holds.
 
 Projects repeat the same way, so `things repeating` lists project templates
-too — marked `(project)` in plain output, `"type": 1` in JSON — and
+too — marked `(project)` in plain output, `"type": "project"` in JSON — and
 `things projects` leaves them out. To-do templates come first, then project
 templates. `trash` and `logbook` are to-do lists, so a project template never
 shows there.
