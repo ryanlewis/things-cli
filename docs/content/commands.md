@@ -68,6 +68,32 @@ reports that with the same field names and encodings: `start`,
 `startBucket`, `startDate` and `deadline`. A caller can tell a scheduled
 project from an anytime one without a `things show` per project.
 
+`things projects -j` also reports two counts per project. `taskCount` is
+every untrashed to-do in the project; `openCount` is the ones still open.
+The difference is the ones no longer open, which means completed or
+cancelled. To-dos filed under a project heading count towards both; the
+heading rows themselves never do, and neither do trashed to-dos or
+checklist items. Both numbers are Things' own bookkeeping, read straight
+from the database rather than recounted by the CLI.
+
+That makes it one call to find projects whose work has landed but which
+are still open:
+
+```sh
+things projects -j | jq '.[] | select(.openCount == 0 and .taskCount > 0)'
+```
+
+`taskCount > 0` keeps out empty projects, which have nothing done rather
+than everything done. It does not tell done from cancelled: a project
+whose to-dos were all cancelled matches the same filter. Plain output
+marks the same projects with a filled `●` progress icon, and under
+`--completed` that icon also marks every completed project, including
+empty ones. A project holding a repeating to-do never appears while the
+repeat is live: Things counts the hidden template row itself as an open
+to-do, and a template never completes. `things list -p <project>` hides
+that template, so it can report no open to-dos for a project whose
+`openCount` is 1.
+
 ## Inspecting a task
 
 ```sh

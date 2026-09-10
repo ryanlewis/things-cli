@@ -36,6 +36,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 - `"repeating": true` marks an item Things treats as repeating; the field is omitted otherwise. Projects also carry `"type": 1`.
 - `things projects` reports `start`, `startBucket`, `startDate` and `deadline` under the same names and encodings a to-do uses, so a scheduled project reads the same way without a per-project `show`. `startDate` and `deadline` are omitted when unset.
 - The `today`, `upcoming` and `anytime` views list scheduled projects alongside to-dos, as the app does. Split them on `"type"` — `jq 'select(.type==1)'` for the projects, `select(.type==0)` for the to-dos. Plain output tags a project row `(project)`.
+- `things projects` also reports `taskCount` and `openCount`. `taskCount` is every untrashed to-do in the project; `openCount` is the ones still open. The difference is the ones that are no longer open, which means completed or cancelled. To-dos filed under a project heading count towards both; the heading rows themselves never do, and neither do trashed to-dos or checklist items. Both numbers are Things' own bookkeeping, read straight from the database rather than recounted by the CLI.
 - Human output is styled and column-aligned; colour auto-disables when piping or under `NO_COLOR`. `--color=always|never` overrides. JSON is unaffected.
 
 **A failure under `--json` prints one JSON object to stdout and exits non-zero.** Branch on the exit status and read the failure off stdout — not stderr. On success the read commands print their result there and the write commands print nothing — except `tag add`, which reports what it created and what it skipped. `error` is a stable token; `message` is the human text.
@@ -164,7 +165,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]
-    # carries start/startBucket/startDate/deadline like a to-do
+    # carries start/startBucket/startDate/deadline like a to-do,
+    # plus taskCount/openCount in JSON
 things areas
 things tags
 things search <query>           # titles and notes; a lookup, not a view
@@ -250,6 +252,14 @@ things import <<'JSON'
 ]
 JSON
 ```
+
+Find projects with no open to-dos — the work has landed but the project is still open, so a reconcile can offer to close it:
+
+```
+things projects -j | jq -r '.[] | select(.openCount == 0 and .taskCount > 0) | "\(.uuid)\t\(.title)"'
+```
+
+`taskCount > 0` keeps out empty projects, which have nothing done rather than everything done. It does not tell done from cancelled — a project whose to-dos were all cancelled matches too — so confirm before offering to close one. Plain output marks the same projects with a filled `●` progress icon, and under `--completed` that icon also marks every completed project, empty ones included. A project holding a repeating to-do never shows up while the repeat is live: Things counts the hidden template row itself as an open to-do, and a template never completes. Note that `things list -p <project>` hides that template, so it can show no open to-dos for a project whose `openCount` is 1.
 
 ## Shell completions
 
