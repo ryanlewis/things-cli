@@ -52,11 +52,16 @@ has not been filed anywhere yet, so it is never a project.
 `anytime` is to-do only for the opposite reason. Every active project is
 trivially "anytime", so a list of them all would bury the to-dos; the app
 groups each project's to-dos under the project name rather than listing the
-project among them, and `anytime` is ordered to match — unfiled items first,
-then areas, and inside an area its own loose to-dos before its projects', so
-plain output prints each project name once as a group header. `things projects`
-is how to sweep the projects themselves. `upcoming` reads by date rather than
-by list position, the way the app's own Upcoming does.
+project among them. `things projects` is how to sweep the projects themselves.
+
+`today`, `anytime` and `someday` are arranged the way the app arranges them —
+unfiled items first, then areas, and inside an area its own loose to-dos before
+its projects' — so plain output prints each project name once as a group header
+above its to-dos. `someday` reaches only the first half of that: it carries no
+to-do with a parent project, so it ends at unfiled items and then areas.
+`today` then orders within a group by the position Things keeps for the day,
+which leaves an item closed today where it was rather than moving it to the
+end. `upcoming` reads by date instead, the way the app's own Upcoming does.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
 to-do or a project logs it under its stop date beside the completed ones, the

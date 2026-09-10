@@ -1891,6 +1891,94 @@ func TestListTasksTodayOrderWithProjects(t *testing.T) {
 	}
 }
 
+// Today is arranged like Anytime and Someday — unfiled items, then areas, and
+// inside an area its loose to-dos before its projects' — and ordered within a
+// group by todayIndex alone. Measured against the app on 10 Sep 2026, where
+// these keys reproduced a 27-row Today in every position (issue #237).
+func TestTodayGroupsLooseTodosBeforeProjectTodos(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('ar-first', 'Work', 1, -2005),
+		('ar-second', 'Home', 1, -550)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
+		('proj-a', 'Project A', 1, 0, 0, 'ar-first', -11481)`)
+	// todayIndex runs against t."index" so the within-group key is the one
+	// under test, and against the group order so grouping cannot be faked.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, project, area, "index", todayIndex) VALUES
+		('in-proj',  'In a project', 0, 0, 0, 1, 0, ?, ?, 'proj-a', NULL,        1, -900),
+		('loose',    'Loose',        0, 0, 0, 1, 0, ?, ?, NULL,     'ar-first',  2, -100),
+		('unfiled',  'Unfiled',      0, 0, 0, 1, 0, ?, ?, NULL,     NULL,        3, -50),
+		('other-ar', 'Other area',   0, 0, 0, 1, 0, ?, ?, NULL,     'ar-second', 4, -999)`,
+		today, today, today, today, today, today, today, today)
+
+	got, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"unfiled", "loose", "in-proj", "other-ar"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("today order: got %v, want %v", got, want)
+	}
+}
+
+// The app leaves a closed item where it was, struck through, rather than
+// pushing it to the end of its group, so today orders on todayIndex alone and
+// not on status first. The app's Today interleaved six closed rows through
+// three groups when this was measured (issue #237).
+func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stop := model.TimeToUnix(time.Now())
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, "index", todayIndex) VALUES
+		('open-first',  'One',   0, 0, 0, 1, 0, ?, ?, NULL, 1, -300),
+		('closed-mid',  'Two',   0, 3, 0, 1, 0, ?, ?, ?,    2, -200),
+		('open-last',   'Three', 0, 0, 0, 1, 0, ?, ?, NULL, 3, -100)`,
+		today, today, today, today, stop, today, today)
+
+	got, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"open-first", "closed-mid", "open-last"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("today order: got %v, want %v — the closed row must stay in place", got, want)
+	}
+}
+
+// Someday takes the same arrangement. Its filter keeps only unparented rows,
+// so what is left to check is that unfiled items lead and areas follow in area
+// order — it matched the app in none of its six positions before (issue #237).
+func TestSomedayGroupsUnfiledThenAreas(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('ar-first', 'Work', 1, -2005),
+		('ar-second', 'Home', 1, -550)`)
+	// Indexes run against the wanted order, so t."index" alone cannot make it.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, area, "index") VALUES
+		('second-b', 'Home two',  0, 0, 0, 2, 0, NULL, 'ar-second', 1),
+		('first-a',  'Work one',  0, 0, 0, 2, 0, NULL, 'ar-first',  2),
+		('unfiled',  'Unfiled',   0, 0, 0, 2, 0, NULL, NULL,        3),
+		('second-a', 'Home one',  0, 0, 0, 2, 0, NULL, 'ar-second', 0)`)
+
+	got, err := d.ListTasks("someday", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"unfiled", "first-a", "second-a", "second-b"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("someday order: got %v, want %v", got, want)
+	}
+}
+
 // --include-completed carries project rows too: a project completed today and
 // not yet logged is still on the app's Today list.
 func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
@@ -2548,9 +2636,9 @@ func seedTiedToday(t *testing.T, d *DB) {
 		jun1, jun1, jun1)
 }
 
-// The views with no entry in viewOrderBy list in "index" order, so a tie there
-// leaves only the uuid. Nothing but the uuid can order these rows, which is
-// what makes the tiebreak worth pinning.
+// Rows filed nowhere, tied on "index": whatever the view's grouping keys are,
+// they are equal across these rows, so nothing but the uuid can order them —
+// which is what makes the tiebreak worth pinning.
 func seedTiedIndex(t *testing.T, d *DB) {
 	t.Helper()
 
@@ -2571,9 +2659,9 @@ func TestListTasksViewOrderIsTotalOnTiedKeys(t *testing.T) {
 		{"today", seedTiedToday, []string{"tie-td-c", "tie-td-a", "tie-td-b"}},
 		// anytime groups before it orders by index, and these rows are filed
 		// nowhere, so they share every grouping key and fall through to the
-		// index — which they also tie on, leaving only the uuid. inbox,
-		// someday and trash reach the same place through the default index
-		// ordering.
+		// index — which they also tie on, leaving only the uuid. someday
+		// takes the same grouping and reaches the same place; inbox and trash
+		// reach it through the default index ordering.
 		{"anytime", seedTiedIndex, []string{"tie-any-a", "tie-any-b"}},
 	}
 
