@@ -388,8 +388,9 @@ func TestPrintTasksMarksProjects(t *testing.T) {
 	}
 }
 
-// today/upcoming/anytime list a scheduled project as a row, and its own to-dos
-// sort straight after it (issue #201). The to-dos' project group header would
+// today and upcoming list a scheduled project as a row, and its own to-dos
+// sort straight after it (issue #201) — anytime carries no project rows at all
+// since issue #217. The to-dos' project group header would
 // restate the title on the line above, so it is suppressed — the title must
 // appear exactly once. A project group that does not follow its own row still
 // gets its header.

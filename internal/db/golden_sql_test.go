@@ -140,6 +140,14 @@ func TestListQueryGoldenSQL(t *testing.T) {
 			return
 		}
 	}
+
+	// got != want, yet no case body differs: the difference is outside a
+	// "### view=" block — trailing whitespace, or stray text the splitter
+	// drops. Without this the loop reports nothing and the test passes, which
+	// is the one outcome a golden test must never have.
+	if reported == 0 {
+		t.Errorf("generated SQL differs from %s outside any case body; regenerate with: go test ./internal/db -run TestListQueryGoldenSQL -update-golden", goldenSQLPath)
+	}
 }
 
 // splitGoldenCases indexes the document by its "### view=..." headers.
