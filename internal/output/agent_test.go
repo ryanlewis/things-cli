@@ -106,7 +106,7 @@ func TestPrintAgentBriefOmitsEmptySections(t *testing.T) {
 
 func TestPrintAgentBriefWhenFallsBackToBucket(t *testing.T) {
 	cases := []struct {
-		start int
+		start model.Start
 		want  string
 	}{
 		{model.StartInbox, "- When: inbox"},

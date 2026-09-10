@@ -927,3 +927,67 @@ func TestRunJSONRendersTypeAsString(t *testing.T) {
 		})
 	}
 }
+
+// numericStartField matches a `start` field whose value is a bare number, in
+// either the indented or the compact encoding. `startBucket` and `startDate`
+// are deliberately not matched: the colon has to follow `start` directly.
+var numericStartField = regexp.MustCompile(`"start":\s*-?\d`)
+
+// `start` renders as a string on every JSON surface that carries it —
+// `inbox`, `anytime` or `someday`, never the raw Things code (issue #241).
+// The assertions are against the raw JSON rather than an unmarshalled
+// model.Task on purpose: Start.UnmarshalJSON still accepts the legacy integer,
+// so decoding would keep passing even if the encoder regressed to emitting
+// ints. This mirrors TestRunJSONRendersTypeAsString, which guards `type` the
+// same way.
+func TestRunJSONRendersStartAsString(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask
+			(uuid, title, type, status, trashed, start, startBucket, startDate, "index") VALUES
+			('todo-inbox',   'Sort post',     0, 0, 0, 0, 0, NULL, 1),
+			('todo-today',   'Buy milk',      0, 0, 0, 1, 0, ?,    2),
+			('todo-someday', 'Learn Welsh',   0, 0, 0, 2, 0, NULL, 3),
+			('proj-audit',   'Runbook audit', 1, 0, 0, 1, 0, ?,    4)`,
+		today, today,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	database := db.NewFromSQL(sqlDB)
+
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"inbox", []string{"--json", "list", "inbox"}, []string{`"start": "inbox"`}},
+		{"today", []string{"--json", "list", "today"}, []string{`"start": "anytime"`}},
+		{"someday", []string{"--json", "list", "someday"}, []string{`"start": "someday"`}},
+		{"show", []string{"--json", "show", "todo-someday"}, []string{`"start": "someday"`}},
+		{"search", []string{"--json", "search", "Welsh"}, []string{`"start": "someday"`}},
+		// Projects carry start under the same name and the same codec (issue
+		// #202), so the field has to change on that surface too.
+		{"projects", []string{"--json", "projects"}, []string{`"start": "anytime"`}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := runOut(t, database, tc.args...)
+			if err != nil {
+				t.Fatalf("run %v: %v", tc.args, err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %s in:\n%s", want, out)
+				}
+			}
+			// Match any numeric token, not just 0/1/2: MarshalJSON falls back
+			// to the raw integer for a code it does not recognize, so pinning
+			// the three known codes would miss exactly the case that can
+			// legitimately emit one.
+			if loc := numericStartField.FindString(out); loc != "" {
+				t.Errorf("raw Things start code leaked into JSON (%q):\n%s", loc, out)
+			}
+		})
+	}
+}

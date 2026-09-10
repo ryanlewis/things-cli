@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -217,7 +218,9 @@ func TestStatusUnmarshalJSON(t *testing.T) {
 
 func TestStatusRoundTripJSON(t *testing.T) {
 	// Both a recognized status and an unrecognized raw code must round-trip.
-	for _, want := range []Status{StatusCancelled, StatusCompleted, Status(99)} {
+	// StatusOpen is the zero value, and the field carries no omitempty, so it
+	// is emitted as "open" and has to decode back rather than being skipped.
+	for _, want := range []Status{StatusOpen, StatusCancelled, StatusCompleted, Status(99)} {
 		in := Task{Title: "t", Status: want}
 		data, err := json.Marshal(in)
 		if err != nil {
@@ -332,5 +335,170 @@ func TestTaskTypeString(t *testing.T) {
 		if got := tc.taskType.String(); got != tc.want {
 			t.Errorf("TaskType(%d).String() = %q, want %q", int(tc.taskType), got, tc.want)
 		}
+	}
+}
+
+// TestStatusString was missing while TaskType had one, which is exactly the
+// asymmetry issue #215 set out to remove: the two types now share a codec, so
+// both sides of it need the same coverage.
+func TestStatusString(t *testing.T) {
+	cases := []struct {
+		status Status
+		want   string
+	}{
+		{StatusOpen, "open"},
+		{StatusCancelled, "cancelled"},
+		{StatusCompleted, "completed"},
+		{Status(99), "unknown"},
+	}
+	for _, tc := range cases {
+		if got := tc.status.String(); got != tc.want {
+			t.Errorf("Status(%d).String() = %q, want %q", int(tc.status), got, tc.want)
+		}
+	}
+}
+
+// The three wire names are a public contract the same way `type`'s are: agents
+// and jq filters match on them, so a rename is a breaking change and has to
+// fail here first (issue #241).
+func TestStartMarshalJSON(t *testing.T) {
+	cases := []struct {
+		start Start
+		want  string
+	}{
+		{StartInbox, `"inbox"`},
+		{StartAnytime, `"anytime"`},
+		{StartSomeday, `"someday"`},
+		{Start(99), `99`}, // unrecognized code preserved as its raw int
+	}
+	for _, tc := range cases {
+		got, err := json.Marshal(tc.start)
+		if err != nil {
+			t.Fatalf("Marshal(%d): %v", tc.start, err)
+		}
+		if string(got) != tc.want {
+			t.Errorf("Marshal(%d) = %s, want %s", tc.start, got, tc.want)
+		}
+	}
+}
+
+func TestStartUnmarshalJSON(t *testing.T) {
+	cases := []struct {
+		in   string
+		want Start
+	}{
+		{`"inbox"`, StartInbox},
+		{`"anytime"`, StartAnytime},
+		{`"someday"`, StartSomeday},
+		{`0`, StartInbox},   // legacy integer input
+		{`1`, StartAnytime}, // legacy integer input
+		{`2`, StartSomeday}, // legacy integer input
+		{`99`, Start(99)},   // unrecognized raw code taken verbatim
+	}
+	for _, tc := range cases {
+		var s Start
+		if err := json.Unmarshal([]byte(tc.in), &s); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", tc.in, err)
+		}
+		if s != tc.want {
+			t.Errorf("Unmarshal(%s) = %d, want %d", tc.in, s, tc.want)
+		}
+	}
+	// A JSON null is a no-op: it must leave the existing value untouched rather
+	// than silently coercing it to Start(0) ("inbox"), which would move an item
+	// into the Inbox on a partial decode.
+	pre := StartSomeday
+	if err := json.Unmarshal([]byte(`null`), &pre); err != nil {
+		t.Fatalf("Unmarshal(null): %v", err)
+	}
+	if pre != StartSomeday {
+		t.Errorf("Unmarshal(null) = %d, want %d (unchanged)", pre, StartSomeday)
+	}
+	for _, bad := range []string{`"bogus"`, `{}`, `[1]`} {
+		var s Start
+		if err := json.Unmarshal([]byte(bad), &s); err == nil {
+			t.Errorf("Unmarshal(%s) succeeded, want error", bad)
+		}
+	}
+}
+
+func TestStartRoundTripJSON(t *testing.T) {
+	// Both a recognized start and an unrecognized raw code must round-trip, on
+	// a project as well as a to-do: the two carry the field under the same name
+	// and the same codec (issue #202).
+	for _, want := range []Start{StartInbox, StartAnytime, StartSomeday, Start(99)} {
+		task := Task{Title: "t", Start: want}
+		data, err := json.Marshal(task)
+		if err != nil {
+			t.Fatalf("Marshal task: %v", err)
+		}
+		var gotTask Task
+		if err := json.Unmarshal(data, &gotTask); err != nil {
+			t.Fatalf("Unmarshal task: %v", err)
+		}
+		if gotTask.Start != want {
+			t.Errorf("round-trip task start = %d, want %d", gotTask.Start, want)
+		}
+
+		project := Project{Title: "p", Start: want}
+		data, err = json.Marshal(project)
+		if err != nil {
+			t.Fatalf("Marshal project: %v", err)
+		}
+		var gotProject Project
+		if err := json.Unmarshal(data, &gotProject); err != nil {
+			t.Fatalf("Unmarshal project: %v", err)
+		}
+		if gotProject.Start != want {
+			t.Errorf("round-trip project start = %d, want %d", gotProject.Start, want)
+		}
+	}
+}
+
+func TestStartString(t *testing.T) {
+	cases := []struct {
+		start Start
+		want  string
+	}{
+		{StartInbox, "inbox"},
+		{StartAnytime, "anytime"},
+		{StartSomeday, "someday"},
+		{Start(99), "unknown"},
+	}
+	for _, tc := range cases {
+		if got := tc.start.String(); got != tc.want {
+			t.Errorf("Start(%d).String() = %q, want %q", int(tc.start), got, tc.want)
+		}
+	}
+}
+
+// Each type has to hand the shared codec its own name. Nothing else notices if
+// one of them is wired up with another type's name — every other test only
+// asks whether decoding failed, not what it said — so a Start value rejected as
+// "Status: unknown value" would pass the whole suite while sending a caller to
+// the wrong field (issue #215).
+func TestEnumCodecErrorsNameTheirOwnType(t *testing.T) {
+	cases := []struct {
+		typeName string
+		decode   func([]byte) error
+	}{
+		{"Status", func(b []byte) error { var v Status; return json.Unmarshal(b, &v) }},
+		{"TaskType", func(b []byte) error { var v TaskType; return json.Unmarshal(b, &v) }},
+		{"Start", func(b []byte) error { var v Start; return json.Unmarshal(b, &v) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.typeName, func(t *testing.T) {
+			// An unknown name, and a token that is neither name nor number, are
+			// the two error paths. Both have to carry the prefix.
+			for _, bad := range []string{`"bogus"`, `{}`} {
+				err := tc.decode([]byte(bad))
+				if err == nil {
+					t.Fatalf("Unmarshal(%s) succeeded, want error", bad)
+				}
+				if want := tc.typeName + ": "; !strings.HasPrefix(err.Error(), want) {
+					t.Errorf("Unmarshal(%s) error = %q, want prefix %q", bad, err, want)
+				}
+			}
+		})
 	}
 }

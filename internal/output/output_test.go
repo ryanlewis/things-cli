@@ -466,7 +466,8 @@ func TestPrintProjectsJSONScheduling(t *testing.T) {
 		t.Fatalf("want 1 project, got %d", len(got))
 	}
 	for field, want := range map[string]any{
-		"start":       float64(model.StartAnytime),
+		// start is a string enum, not the raw Things code (issue #241).
+		"start":       model.StartAnytime.String(),
 		"startBucket": float64(0),
 		"startDate":   "2026-09-07",
 		"deadline":    "2026-09-13",

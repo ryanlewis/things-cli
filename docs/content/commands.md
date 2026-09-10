@@ -10,14 +10,25 @@ Read commands (`list`/views, `projects`, `areas`, `tags`, `show`, `search`)
 accept `-j` / `--json` for structured output. Run `things --help` or
 `things <subcommand> --help` for the full flag list.
 
-In JSON, `status` and `type` are string enums rather than the raw Things
-integers. `status` is `"open"`, `"completed"` or `"cancelled"`, and appears
-on to-dos, projects and checklist items. `type` is `"task"` or `"project"`,
-and appears on task rows only — `projects`, `areas` and `tags` rows carry no
-`type`. Headings are never returned by any command, so the third Things type
-never reaches the output. In v0.7.0 and earlier `type` was the integer `0`,
-`1` or `2`, so a caller matching on `.type==1` has to become
-`.type=="project"`.
+In JSON, `status`, `type` and `start` are string enums rather than the raw
+Things integers. `status` is `"open"`, `"completed"` or `"cancelled"`, and
+appears on to-dos, projects and checklist items. `type` is `"task"` or
+`"project"`, and appears on task rows only — `projects`, `areas` and `tags`
+rows carry no `type`. Headings are never returned by any command, so the
+third Things type never reaches the output.
+
+`start` is `"inbox"`, `"anytime"` or `"someday"`, and appears on to-do and
+project rows. It is the list an item falls back to when it carries no date,
+so it does not on its own say which list the app shows the item in: a dated
+`"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and
+only an undated one is in Someday.
+
+In v0.7.0 and earlier `type` and `start` were both integers, so a caller
+matching on `.type==1` has to become `.type=="project"`, and one matching
+on `.start==2` has to become `.start=="someday"`. `startBucket` alongside
+them is still an integer: `1` is the app's This Evening section and `0` is
+everything else. Only the first of those has a name in Things' own
+vocabulary, so naming the pair would have meant inventing a word for `0`.
 
 The `type` values a listing reports are not the ones an `import` payload
 takes: that payload is Things' own JSON URL scheme, which spells a to-do
