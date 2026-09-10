@@ -80,6 +80,42 @@ func seedTasks(t *testing.T, d *DB) {
 	mustExec(t, d, `UPDATE TMTask SET stopDate = ? WHERE uuid = 't-done'`, done)
 }
 
+// CompletableView and CompletableViewNames used to read a map of their own and
+// now read the view table, so pin both against the answer spelled out rather
+// than against the table they are derived from (issue #240).
+func TestCompletableViews(t *testing.T) {
+	want := map[string]bool{"today": true, "anytime": true}
+	for view := range views {
+		if got := CompletableView(view); got != want[view] {
+			t.Errorf("CompletableView(%q) = %v, want %v", view, got, want[view])
+		}
+	}
+	if CompletableView("bogus") {
+		t.Error("CompletableView(\"bogus\") = true, want false")
+	}
+	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "today"}) {
+		t.Errorf("CompletableViewNames() = %v, want [anytime today]", got)
+	}
+}
+
+// ProjectFilterableView still reads viewsWithoutProjectFilter, a map of its
+// own — it gates flag validation at the CLI boundary rather than composing
+// SQL, so issue #240 left it out of the view table. Pin it against the answer
+// spelled out here so the two stay in step while they are apart. It is a
+// negative flag: everything is filterable but someday, an unknown name
+// included.
+func TestProjectFilterableView(t *testing.T) {
+	denied := map[string]bool{"someday": true}
+	for view := range views {
+		if got := ProjectFilterableView(view); got != !denied[view] {
+			t.Errorf("ProjectFilterableView(%q) = %v, want %v", view, got, !denied[view])
+		}
+	}
+	if !ProjectFilterableView("bogus") {
+		t.Error("ProjectFilterableView(\"bogus\") = false, want true")
+	}
+}
+
 func TestValidView(t *testing.T) {
 	known := []string{"today", "inbox", "upcoming", "anytime", "someday", "repeating", "logbook", "trash", "deadlines", "project"}
 	for _, v := range known {
@@ -2994,24 +3030,12 @@ func TestEveryTaskOrderingEndsInTheUUIDTiebreak(t *testing.T) {
 		"default":            indexOrderBy,
 		"templatesLastOrder": d.templatesLastOrder(),
 	}
-	for view, orderBy := range viewOrderBy {
-		orderings["view "+view] = orderBy
+	for view, spec := range views {
+		orderings["view "+view] = spec.orderBy
 	}
 	for name, orderBy := range orderings {
 		if !strings.HasSuffix(orderBy, wantSuffix) {
 			t.Errorf("%s ordering %q does not end in %q", name, orderBy, wantSuffix)
-		}
-	}
-
-	// A view added without an ordering falls back to indexOrderBy, so every
-	// view is covered — but only as long as the fallback keeps the tiebreak.
-	for view := range viewFilters {
-		orderBy := viewOrderBy[view]
-		if orderBy == "" {
-			orderBy = indexOrderBy
-		}
-		if !strings.HasSuffix(orderBy, wantSuffix) {
-			t.Errorf("view %q orders by %q, which does not end in %q", view, orderBy, wantSuffix)
 		}
 	}
 }

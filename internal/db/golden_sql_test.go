@@ -52,13 +52,13 @@ func goldenFilterCases() []struct {
 // renderGoldenSQL builds every view against every filter shape, with and
 // without --include-completed, and renders the lot as one text document.
 //
-// The views come from viewFilters rather than a list written out here, so a
-// view added later cannot quietly escape the golden file: it shows up as an
+// The views come from the view table rather than a list written out here, so
+// a view added later cannot quietly escape the golden file: it shows up as an
 // unreviewed block the moment it exists.
 func renderGoldenSQL(t *testing.T, d *DB) string {
 	t.Helper()
-	names := make([]string, 0, len(viewFilters))
-	for v := range viewFilters {
+	names := make([]string, 0, len(views))
+	for v := range views {
 		names = append(names, v)
 	}
 	sort.Strings(names)
