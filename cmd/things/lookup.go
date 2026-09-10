@@ -77,7 +77,23 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	return &ambig.Matches[choice-1], nil
 }
 
-func cacheTaskUUIDs(tasks []model.Task) {
+// cacheTaskUUIDs records the listing's task UUIDs so a later numeric ref
+// resolves against the rows the user just read.
+//
+// Under --json it does nothing (issue #246). JSON output carries no row
+// numbers, so a JSON listing can never be the listing a numeric ref refers
+// back to — but writing the cache would still renumber whatever a plain
+// listing displayed a moment earlier, and the cache is one shared file per
+// machine, so an agent's JSON run could silently move the rows a person is
+// working from. The existing cache is left in place rather than cleared: that
+// earlier plain listing is still the one its reader can see.
+//
+// The guard lives here, not at the call sites, so ListCmd and SearchCmd
+// cannot drift apart.
+func cacheTaskUUIDs(d *Deps, tasks []model.Task) {
+	if d.JSON {
+		return
+	}
 	uuids := make([]string, len(tasks))
 	for i, t := range tasks {
 		uuids[i] = t.UUID

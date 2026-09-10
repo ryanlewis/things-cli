@@ -186,17 +186,23 @@ that template, so it can report no open tasks for a project whose
 ## Inspecting a task
 
 ```sh
-things show 3                 # by index from the last list
+things show 3                 # by index from the last plain list
 things show <uuid>            # by Things3 UUID
 things show "Buy milk"        # by title (interactive disambiguation)
 things show 3 --agent         # Markdown brief for handing to an agent
 ```
 
-After any list or `search`, numeric indices stay valid until the next
-one. A listing's order is fixed, so the same list run twice numbers the
-same items the same way — but the numbers still move as items are added,
-closed or rescheduled, so re-read the list rather than reusing an index
-from an earlier one.
+After any plain list or `search`, numeric indices stay valid until the
+next one. A listing's order is fixed, so the same list run twice numbers
+the same items the same way — but the numbers still move as items are
+added, closed or rescheduled, so re-read the list rather than reusing an
+index from an earlier one.
+
+A `--json` listing is the exception: it prints no numbers and records
+none, so it leaves your indices pointing where they did. That keeps a
+script or an agent running `--json` in another window from renumbering
+the list you are reading. Agents should act on the `uuid` rather than an
+index — see [Working with agents](/agents/).
 
 ## Handing a task to an agent
 
@@ -376,4 +382,9 @@ CLI cannot use — they are how you find out what is wrong with it.
 `things` caches the last list it printed in
 `$HOME/Library/Caches/things-cli/last-list` so that numeric indices
 (`things show 3`) work across invocations. Clear it by deleting that
-file or by running any list command, which overwrites it.
+file or by running any plain list command, which overwrites it.
+
+A `--json` listing never writes the cache. JSON output carries no row
+numbers, so it has nothing to record, and the file is one shared cache
+per machine rather than one per shell — writing it from a scripted run
+would move the numbers a person is reading from another window.

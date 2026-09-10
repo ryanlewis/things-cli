@@ -56,6 +56,22 @@ version along; re-run `skill install` to refresh an installed copy. The
 source is
 [`internal/skill/SKILL.md`](https://github.com/ryanlewis/things-cli/blob/main/internal/skill/SKILL.md).
 
+## Refer to items by UUID
+
+An agent acts on the `uuid`: `things show <uuid>`, `things complete <uuid>`,
+`things edit <uuid>`. Get one from a `--json` listing
+(`things today -j | jq -r '.[0].uuid'`) or from the `--agent` brief, which
+prints it. Never act on a row number. The numbered list a plain listing prints
+is a convenience for a person reading a terminal, and its numbers come from a
+single cache file shared by everyone on the machine, so another agent or the
+user can renumber it between your listing and your write. A UUID names the same
+item forever.
+
+A `--json` listing does not write that cache: JSON output has no row numbers,
+so there is nothing for it to record, and this way a scripted run cannot move
+the numbers a person is working from. Plain listings still write it, and each
+one overwrites the last.
+
 ## Hand a task to an agent
 
 `things show <ref> --agent` prints the item as a self-contained Markdown
@@ -63,9 +79,10 @@ brief instead of the aligned detail view. It reads as a prompt: what the
 item is, what the user wrote in it, and the exact commands that act on it.
 
 ```sh
-things show 3 --agent | claude -p "action this"
-claude "$(things show 3 --agent)"
-things show 3 --agent > brief.md
+uuid=$(things today -j | jq -r '.[0].uuid')
+things show "$uuid" --agent | claude -p "action this"
+claude "$(things show "$uuid" --agent)"
+things show "$uuid" --agent > brief.md
 ```
 
 ````text
@@ -115,8 +132,9 @@ the status did not change, so a zero exit means it landed.
 A few things about the brief are deliberate:
 
 - **Every command names the UUID.** A title can match several tasks and a
-  numeric index only holds until the next listing, so neither is safe for
-  an agent that will run its own `list` along the way.
+  numeric index belongs to whichever plain listing last wrote the cache —
+  which may be the user's, not yours, and may be hours old — so neither is
+  safe for an agent that will run its own `list` along the way.
 - **The notes are quarantined.** They sit inside a fence wide enough that
   nothing in them can close it, and the brief says they are content, not
   instructions. A note carrying its own headings or a command block stays
@@ -153,7 +171,8 @@ turns it off for good.
 the CLI:
 
 ```sh
-things show 3 --agent | claude -p "action this" --allowedTools "Bash(things:*)"
+uuid=$(things today -j | jq -r '.[0].uuid')
+things show "$uuid" --agent | claude -p "action this" --allowedTools "Bash(things:*)"
 ```
 
 With the skill installed, Claude already knows the write rules below. It
