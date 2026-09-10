@@ -476,7 +476,7 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 	if project.Type != model.TypeProject {
 		return &wrongKindError{
 			Token: "not a project",
-			Kind:  "to-do",
+			Kind:  "task",
 			Query: c.Project,
 			UUID:  project.UUID,
 			Title: project.Title,

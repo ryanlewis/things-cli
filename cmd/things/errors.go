@@ -21,8 +21,14 @@ import (
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
-	Error   string           `json:"error"`
-	Message string           `json:"message"`
+	Error   string `json:"error"`
+	Message string `json:"message"`
+	// Kind names the sort of thing the failure is about, in the CLI's own
+	// vocabulary: "task", "project", "area" or "tag". A to-do is a "task"
+	// here as it is in `type` on a task row — no JSON value the CLI emits
+	// spells it "to-do", which is the `import` payload's word (issue #219).
+	// Prose is not bound by this: Message and the agent brief still call a
+	// to-do a to-do where that is what reads naturally.
 	Kind    string           `json:"kind,omitempty"`
 	Query   string           `json:"query,omitempty"`
 	UUID    string           `json:"uuid,omitempty"`
@@ -77,7 +83,7 @@ func (e *notFoundError) Error() string {
 // wrongKindError is a reference that resolved to the wrong sort of item for
 // the command: a project handed to `edit`, which would otherwise open
 // things:///update with a project id and leave Things showing a "does not
-// exist" dialog (issue #189), or a to-do handed to `project edit` (issue
+// exist" dialog (issue #189), or a task handed to `project edit` (issue
 // #191). Kind names what the reference turned out to be, so a caller can
 // retry against the right command.
 type wrongKindError struct {
@@ -91,7 +97,7 @@ type wrongKindError struct {
 	Title string
 	// Retry is the command that does handle this kind, spelled out rather
 	// than derived from Kind — "project" happens to read as a command name,
-	// but "to-do" does not.
+	// but "task" does not.
 	Retry string
 }
 

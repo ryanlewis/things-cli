@@ -34,6 +34,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 
 - `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq '.[] | select(.status=="open")'`.
 - `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq '.[] | select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells a to-do `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.
+- **A to-do is a `task` in every JSON value the CLI emits** — `type` on a row, `kind` in an error payload — matching the word this skill uses throughout. The single exception is an `import` payload, which is Things' own format and spells it `"to-do"`.
 - `"repeating": true` marks an item Things treats as repeating; the field is omitted otherwise. A project appearing as a row in a task listing carries `"type": "project"`.
 - `things projects` reports `start`, `startBucket`, `startDate` and `deadline` under the same names and encodings a to-do uses, so a scheduled project reads the same way without a per-project `show`. `startDate` and `deadline` are omitted when unset.
 - Every named view except `inbox` lists projects alongside to-dos, as the app does — scheduled in `today`/`upcoming`/`anytime`, deferred in `someday`, closed in `logbook`, trashed in `trash`, due in `deadlines`. Split them on `"type"` — `jq '.[] | select(.type=="project")'` for the projects, `.[] | select(.type=="task")` for the to-dos. Plain output tags a project row `(project)`.
@@ -50,8 +51,8 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 {"error": "not found", "message": "task not found: milk", "kind": "task", "query": "milk"}
 {"error": "not a task", "message": "\"Chores\" is a project; use things project edit",
  "kind": "project", "query": "Chores", "uuid": "...", "title": "Chores"}
-{"error": "not a project", "message": "\"Post letter\" is a to-do; use things edit",
- "kind": "to-do", "query": "Post letter", "uuid": "...", "title": "Post letter"}
+{"error": "not a project", "message": "\"Post letter\" is a task; use things edit",
+ "kind": "task", "query": "Post letter", "uuid": "...", "title": "Post letter"}
 {"error": "error", "message": "..."}
 ```
 
