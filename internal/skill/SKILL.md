@@ -178,8 +178,10 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # tasks by deadline.
     # Tell them apart by "type" ("project") or the plain-text
     # "(project)" tag. A project has no parent project, so --project never
-    # matches one; --area does. repeating carries project templates for its
-    # own reason. A bare --project/--area/--tag with no view named follows the
+    # matches one; --area does. --project naming a repeating project
+    # template lists nothing, since a template's tasks are hidden with it;
+    # stdout is still [] and a one-line note on stderr says why.
+    # repeating carries project templates for its own reason. A bare --project/--area/--tag with no view named follows the
     # same rule, so --area/--tag return project rows and --project does not.
     # inbox stays task-only. So does anytime, and for the opposite reason:
     # every active project is trivially anytime, so the app groups its tasks
