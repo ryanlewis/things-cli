@@ -409,3 +409,38 @@ func TestPrintTaskDetailMarksProjects(t *testing.T) {
 		t.Errorf("to-do detail gained a Type line:\n%s", out)
 	}
 }
+
+// A scheduled project renders its dates under the same JSON names and in the
+// same YYYY-MM-DD form as a scheduled to-do, so callers read one vocabulary
+// (issue #202).
+func TestPrintProjectsJSONScheduling(t *testing.T) {
+	start := model.ThingsDate(132813696)    // 2026-09-07
+	deadline := model.ThingsDate(132814464) // 2026-09-13
+	projects := []model.Project{{
+		UUID: "p1", Title: "Runbook audit",
+		Start: model.StartAnytime, StartBucket: 0,
+		StartDate: &start, Deadline: &deadline,
+	}}
+	var buf bytes.Buffer
+	if err := Print(&buf, projects, true); err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+
+	var got []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("parse json: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 project, got %d", len(got))
+	}
+	for field, want := range map[string]any{
+		"start":       float64(model.StartAnytime),
+		"startBucket": float64(0),
+		"startDate":   "2026-09-07",
+		"deadline":    "2026-09-13",
+	} {
+		if got[0][field] != want {
+			t.Errorf("%s: got %v, want %v", field, got[0][field], want)
+		}
+	}
+}

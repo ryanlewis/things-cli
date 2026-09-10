@@ -14,6 +14,10 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 			t.uuid,
 			COALESCE(t.title, ''),
 			COALESCE(t.status, 0),
+			COALESCE(t.start, 0),
+			COALESCE(t.startBucket, 0),
+			t.startDate,
+			t.deadline,
 			COALESCE(a.uuid, ''),
 			COALESCE(a.title, ''),
 			COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
@@ -55,12 +59,20 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 		var p model.Project
 		var tagsStr string
 		var status sql.NullInt64
-		if err := rows.Scan(&p.UUID, &p.Title, &status, &p.AreaUUID, &p.AreaTitle, &tagsStr, &p.TaskCount, &p.OpenCount); err != nil {
+		var startDate, deadline sql.NullFloat64
+		if err := rows.Scan(
+			&p.UUID, &p.Title, &status,
+			&p.Start, &p.StartBucket, &startDate, &deadline,
+			&p.AreaUUID, &p.AreaTitle, &tagsStr,
+			&p.TaskCount, &p.OpenCount,
+		); err != nil {
 			return nil, fmt.Errorf("scanning project: %w", err)
 		}
 		if status.Valid {
 			p.Status = model.Status(status.Int64)
 		}
+		p.StartDate = thingsDate(startDate)
+		p.Deadline = thingsDate(deadline)
 		if tagsStr != "" {
 			p.Tags = strings.Split(tagsStr, "\x1f")
 		}

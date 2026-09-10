@@ -157,3 +157,55 @@ func TestListProjectsWithoutRecurrenceColumn(t *testing.T) {
 		t.Errorf("got %d, want 3: %+v", len(projects), projects)
 	}
 }
+
+// A project can be scheduled just like a to-do. ListProjects used to drop
+// those columns, so `things projects -j` reported no start date for a project
+// that had one while `things show` reported it (issue #202).
+func TestListProjectsCarriesScheduling(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, "index",
+		 start, startBucket, startDate, deadline) VALUES
+		('sched', 'Runbook audit', 1, 0, 0, 1, 1, 0, 132813696, 132814464),
+		('anytime', 'No dates',    1, 0, 0, 2, 1, 0, NULL, NULL)`)
+
+	projects, err := d.ListProjects("", false)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	byUUID := map[string]model.Project{}
+	for _, p := range projects {
+		byUUID[p.UUID] = p
+	}
+
+	sched, ok := byUUID["sched"]
+	if !ok {
+		t.Fatalf("scheduled project missing: %+v", projects)
+	}
+	if sched.Start != model.StartAnytime {
+		t.Errorf("start: got %d, want %d", sched.Start, model.StartAnytime)
+	}
+	if sched.StartBucket != 0 {
+		t.Errorf("startBucket: got %d, want 0", sched.StartBucket)
+	}
+	if sched.StartDate == nil {
+		t.Fatal("startDate: got nil, want 2026-09-07")
+	}
+	if got := sched.StartDate.String(); got != "2026-09-07" {
+		t.Errorf("startDate: got %s, want 2026-09-07", got)
+	}
+	if sched.Deadline == nil {
+		t.Fatal("deadline: got nil, want 2026-09-13")
+	}
+	if got := sched.Deadline.String(); got != "2026-09-13" {
+		t.Errorf("deadline: got %s, want 2026-09-13", got)
+	}
+
+	plain, ok := byUUID["anytime"]
+	if !ok {
+		t.Fatalf("unscheduled project missing: %+v", projects)
+	}
+	if plain.StartDate != nil || plain.Deadline != nil {
+		t.Errorf("unscheduled project should carry no dates: %+v", plain)
+	}
+}

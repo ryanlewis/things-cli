@@ -181,9 +181,19 @@ type ChecklistItem struct {
 }
 
 type Project struct {
-	UUID      string   `json:"uuid"`
-	Title     string   `json:"title"`
-	Status    Status   `json:"status"`
+	UUID  string `json:"uuid"`
+	Title string `json:"title"`
+
+	Status Status `json:"status"`
+
+	// Start, StartBucket, StartDate and Deadline carry the same encodings and
+	// JSON names as the matching Task fields, so a caller reads a scheduled
+	// project the way it reads a scheduled to-do (issue #202).
+	Start       int         `json:"start"`
+	StartBucket int         `json:"startBucket"`
+	StartDate   *ThingsDate `json:"startDate,omitempty"`
+	Deadline    *ThingsDate `json:"deadline,omitempty"`
+
 	AreaUUID  string   `json:"areaUUID,omitempty"`
 	AreaTitle string   `json:"areaTitle,omitempty"`
 	Tags      []string `json:"tags,omitempty"`

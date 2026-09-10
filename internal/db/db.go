@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/ryanlewis/things-cli/internal/model"
 )
 
 type DB struct {
@@ -64,4 +66,17 @@ func (d *DB) Close() error {
 // NewFromSQL wraps an existing *sql.DB. Test-only; production code uses Open.
 func NewFromSQL(sqlDB *sql.DB) *DB {
 	return &DB{db: sqlDB}
+}
+
+// thingsDate decodes a nullable Things date column (startDate, deadline) into
+// the model's bit-encoded date. A NULL column — an unscheduled item — yields
+// nil rather than the zero date, which would decode to a nonsense day.
+// scanTask in tasks.go still inlines the same two decodes; folding it onto
+// this helper is left to whoever next edits that file.
+func thingsDate(v sql.NullFloat64) *model.ThingsDate {
+	if !v.Valid {
+		return nil
+	}
+	d := model.ThingsDate(int64(v.Float64))
+	return &d
 }
