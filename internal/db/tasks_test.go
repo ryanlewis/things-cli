@@ -84,6 +84,21 @@ func TestProjectFilterableView(t *testing.T) {
 	}
 }
 
+// HidesTemplateContentsView is what decides whether an empty project listing
+// is explained by the repeating-template note, so pin the three views that
+// keep a template's to-dos rather than derive them from the table.
+func TestHidesTemplateContentsView(t *testing.T) {
+	shows := map[string]bool{"trash": true, "logbook": true, "repeating": true}
+	for view := range views {
+		if got := HidesTemplateContentsView(view); got != !shows[view] {
+			t.Errorf("HidesTemplateContentsView(%q) = %v, want %v", view, got, !shows[view])
+		}
+	}
+	if !HidesTemplateContentsView("bogus") {
+		t.Error("HidesTemplateContentsView(\"bogus\") = false, want true")
+	}
+}
+
 func TestValidView(t *testing.T) {
 	known := []string{"today", "inbox", "upcoming", "anytime", "someday", "repeating", "logbook", "trash", "deadlines", "project"}
 	for _, v := range known {

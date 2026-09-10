@@ -129,6 +129,11 @@ Project templates are marked `(project)` in plain output and carry
 The tasks inside a project template are hidden along with it, since they
 would otherwise list against a project `things projects` does not report.
 `trash` and `logbook` still show them once they are trashed or closed.
+Naming a project template with `--project` therefore lists nothing on those
+views, and the CLI prints a one-line note on stderr saying so. Under `--json`
+the note stays on stderr, so stdout is still an empty array. On `trash`,
+`logbook` and `repeating`, which keep templates, there is no note: an empty
+listing there means nothing has been trashed or closed yet.
 
 `things search` is a lookup rather than a view, so it returns templates too.
 Results carry `"repeating": true`.

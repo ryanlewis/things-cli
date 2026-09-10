@@ -417,3 +417,79 @@ func TestRecurrenceColForAlias(t *testing.T) {
 		t.Errorf("recurrenceColFor(p) with no column = %q, want %q", got, "NULL")
 	}
 }
+
+// NamesRepeatingProject is what turns an empty project listing into an
+// explanation, so it has to recognise the template by uuid and by title, and
+// say no to everything else — including an ordinary project and a repeating
+// to-do, neither of which explains an empty listing (issue #174).
+func TestNamesRepeatingProject(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.project("p-tmpl", "Weekly review", 1, someday(), repeats())
+	fx.project("p-real", "Ship it", 2, anytime())
+	fx.todo("t-tmpl", "Water plants", 3, someday(), repeats())
+
+	cases := []struct {
+		ref  string
+		want bool
+	}{
+		{"p-tmpl", true},
+		{"Weekly review", true},
+		{"weekly review", true}, // titles match case-insensitively, as filters do
+		{"p-real", false},
+		{"Ship it", false},
+		{"t-tmpl", false}, // a repeating to-do is not a repeating project
+		{"Water plants", false},
+		{"Weekly", false}, // the filter matches a title whole, not as a substring
+		{"", false},
+	}
+	for _, tc := range cases {
+		got, err := d.NamesRepeatingProject(tc.ref)
+		if err != nil {
+			t.Fatalf("NamesRepeatingProject(%q): %v", tc.ref, err)
+		}
+		if got != tc.want {
+			t.Errorf("NamesRepeatingProject(%q) = %v, want %v", tc.ref, got, tc.want)
+		}
+	}
+}
+
+// A title carrying LIKE's wildcards is matched literally, the way the filters
+// have since issue #266, so a reference cannot claim a template it does not
+// name.
+func TestNamesRepeatingProjectMatchesLiterally(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.project("p-tmpl", "100% review", 1, someday(), repeats())
+
+	for ref, want := range map[string]bool{"100% review": true, "100_ review": false, "%": false} {
+		got, err := d.NamesRepeatingProject(ref)
+		if err != nil {
+			t.Fatalf("NamesRepeatingProject(%q): %v", ref, err)
+		}
+		if got != want {
+			t.Errorf("NamesRepeatingProject(%q) = %v, want %v", ref, got, want)
+		}
+	}
+}
+
+// On a schema carrying no recurrence column nothing repeats, so the check is
+// false for every reference rather than an error.
+func TestNamesRepeatingProjectWithoutRecurrenceColumn(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	if _, err := sqlDB.Exec(`ALTER TABLE TMTask DROP COLUMN rt1_recurrenceRule`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES ('p-tmpl', 'Weekly review', 1, 0, 0, 1)`,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	d := &DB{db: sqlDB}
+
+	got, err := d.NamesRepeatingProject("Weekly review")
+	if err != nil {
+		t.Fatalf("NamesRepeatingProject: %v", err)
+	}
+	if got {
+		t.Error("nothing repeats on a schema with no recurrence column")
+	}
+}

@@ -3,6 +3,8 @@ package db
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ryanlewis/things-cli/internal/model"
 )
 
 // recurrenceColumns are the TMTask columns that have carried a to-do's
@@ -101,4 +103,22 @@ func (d *DB) tableColumns(table string) (map[string]bool, error) {
 func (d *DB) taskQuery() string {
 	d.probeRepeating()
 	return d.repeatQuery
+}
+
+// NamesRepeatingProject reports whether ref resolves to a repeating project
+// template. It matches the reference the way a --project filter does: the uuid
+// exactly, or the title literally and case-insensitively, wildcards escaped.
+//
+// It exists to answer why a project listing came back empty. Since issue #171
+// the to-dos inside a repeating project template are excluded from every open
+// view, so `things --project <template>` lists nothing at all and, without
+// this, says nothing about why.
+func (d *DB) NamesRepeatingProject(ref string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM TMTask t WHERE t.type = ? AND ` +
+		d.recurrenceCol() + ` IS NOT NULL AND (t.uuid = ? OR t.title LIKE ?` + escapeClause + `))`
+	var found int
+	if err := d.db.QueryRow(query, int(model.TypeProject), ref, literalLike(ref)).Scan(&found); err != nil {
+		return false, fmt.Errorf("checking for a repeating project: %w", err)
+	}
+	return found != 0, nil
 }

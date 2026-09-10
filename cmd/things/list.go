@@ -93,6 +93,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	if err := output.PrintTaskList(d.Stdout, tasks, d.JSON, viewLabel); err != nil {
 		return err
 	}
+	noteEmptyRepeatingProject(d, database, view, project, len(tasks))
 	return printAgentHint(d, len(tasks))
 }
 
@@ -125,6 +126,34 @@ func (c *ListCmd) commandLine(d *Deps, view, project string) string {
 		parts = append(parts, "--include-completed")
 	}
 	return strings.Join(parts, " ")
+}
+
+// noteEmptyRepeatingProject explains an empty listing whose --project named a
+// repeating project template. Since issue #171 the to-dos inside one are kept
+// out of every open view, so the listing is empty by design and said nothing
+// about why (issue #174).
+//
+// The note goes to the warning stream in both modes, so a --json consumer
+// still reads a well-formed array on stdout.
+//
+// It is held back on the views that keep templates — trash, logbook and
+// repeating — where a template's to-dos do list once they are trashed or
+// closed. An empty logbook there means none has closed yet, not that the view
+// hides them, and saying otherwise would send the reader away from the one
+// view that would have shown the row.
+//
+// A failure of the extra lookup is swallowed rather than returned: the listing
+// itself already succeeded, and a note that could not be worked out is not a
+// reason to fail a read that did.
+func noteEmptyRepeatingProject(d *Deps, database *db.DB, view, project string, listed int) {
+	if project == "" || listed > 0 || !db.HidesTemplateContentsView(view) {
+		return
+	}
+	repeating, err := database.NamesRepeatingProject(project)
+	if err != nil || !repeating {
+		return
+	}
+	fmt.Fprintf(d.errOut(), "note: %q is a repeating project template, so its to-dos are not listed; `things repeating` lists the templates themselves\n", project)
 }
 
 func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
