@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
+	"time"
 
+	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -17,7 +20,8 @@ import (
 // still prints nothing — only the read commands emit JSON on success.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
-// "not a project", or "error" for a failure with no structure worth naming.
+// "not a project", "stale list cache", or "error" for a failure with no
+// structure worth naming.
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
@@ -124,6 +128,76 @@ func (e *ambiguousRefError) Error() string { return e.msg }
 
 func (e *ambiguousRefError) Unwrap() error { return e.inner }
 
+// staleCacheError is a numeric reference to a listing old enough that its row
+// numbers have probably moved (issue #265). The row is refused rather than
+// acted on: the UUID behind it still exists, so acting would silently hit
+// whatever item has drifted into that position.
+type staleCacheError struct {
+	Query string // the reference as typed, e.g. "2"
+	Row   int
+	Last  cache.LastList
+}
+
+func (e *staleCacheError) Error() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "task #%d comes from a stale list cache", e.Row)
+	if e.Last.WrittenAt.IsZero() {
+		// A file written before 0.8.0 records no time, so there is nothing
+		// to age it by and no listing to name.
+		b.WriteString(" written by an older things-cli; re-run your listing")
+	} else {
+		fmt.Fprintf(&b, ": the rows were listed %s ago, older than the %s a row number is good for", overDuration(time.Since(e.Last.WrittenAt)), humanDuration(cache.MaxAge))
+		if e.Last.Command != "" {
+			fmt.Fprintf(&b, ". Re-run `%s`", e.Last.Command)
+		} else {
+			b.WriteString(". Re-run your listing")
+		}
+	}
+	b.WriteString(" and use the new row number, or pass the task's uuid.")
+	return b.String()
+}
+
+// humanDuration renders a span the way the error message needs to read it:
+// coarse, and never more precise than the reader can act on. Duration's own
+// String would print "4h0m0s".
+func humanDuration(d time.Duration) string {
+	switch {
+	case d < time.Hour:
+		return plural(int(d.Minutes()), "minute")
+	case d < 48*time.Hour:
+		return plural(int(d.Hours()), "hour")
+	default:
+		return plural(int(d.Hours()/24), "day")
+	}
+}
+
+// overDuration renders a span that is known to exceed the bound it is being
+// compared against. humanDuration truncates, so a listing 4h05m old would
+// otherwise read as "4 hours ago, older than the 4 hours a row number is good
+// for" — a sentence that contradicts itself in the commonest case of all, a
+// row number used shortly after it expired. Saying "over 4 hours" keeps the
+// comparison true without inventing precision.
+func overDuration(d time.Duration) string {
+	unit := 24 * time.Hour
+	switch {
+	case d < time.Hour:
+		unit = time.Minute
+	case d < 48*time.Hour:
+		unit = time.Hour
+	}
+	if d%unit != 0 {
+		return "over " + humanDuration(d)
+	}
+	return humanDuration(d)
+}
+
+func plural(n int, unit string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, unit)
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
+}
+
 // errorPayload classifies err into the JSON shape. It is the single place that
 // maps Go error types onto the wire format — add a case here rather than
 // formatting JSON at a call site.
@@ -177,6 +251,14 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Query = wrongKind.Query
 		payload.UUID = wrongKind.UUID
 		payload.Title = wrongKind.Title
+		return payload
+	}
+
+	var stale *staleCacheError
+	if errors.As(err, &stale) {
+		payload.Error = "stale list cache"
+		payload.Kind = "task"
+		payload.Query = stale.Query
 		return payload
 	}
 

@@ -81,7 +81,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	cacheTaskUUIDs(d, tasks)
+	cacheTaskUUIDs(d, c.commandLine(d, view, project), tasks)
 
 	// A filtered listing off a view is a slice of that view, not the whole
 	// project/area/tag — label it so the group header can't be read as the
@@ -94,6 +94,37 @@ func (c *ListCmd) Run(d *Deps) error {
 		return err
 	}
 	return printAgentHint(d, len(tasks))
+}
+
+// commandLine renders the listing as the user could type it again, for the
+// cache to record alongside the rows (issue #265). It is built from the
+// resolved view and project rather than the raw arguments, so `things "Some
+// Project"` and `things --project "Some Project"` both come back as the
+// spelling that always works. --db comes along when the flag supplied it, so
+// the re-run reads the database this listing came from rather than the default.
+func (c *ListCmd) commandLine(d *Deps, view, project string) string {
+	parts := append([]string{"things"}, globalFlags(d)...)
+	// "project" is not a view name a user can type; it is what a bare filter
+	// resolves to, and the filter flags below say the same thing.
+	if view != "project" {
+		parts = append(parts, view)
+	}
+	for _, f := range []struct{ flag, value string }{
+		{"--project", project},
+		{"--area", c.Area},
+		{"--tag", c.Tag},
+		{"--on", c.On},
+		{"--from", c.From},
+		{"--to", c.To},
+	} {
+		if f.value != "" {
+			parts = append(parts, f.flag, quoteArg(f.value))
+		}
+	}
+	if c.IncludeCompleted {
+		parts = append(parts, "--include-completed")
+	}
+	return strings.Join(parts, " ")
 }
 
 func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
@@ -224,7 +255,9 @@ func (c *SearchCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	cacheTaskUUIDs(d, tasks)
+	command := append([]string{"things"}, globalFlags(d)...)
+	command = append(command, "search", quoteArg(c.Query))
+	cacheTaskUUIDs(d, strings.Join(command, " "), tasks)
 	// Search results are a listing like `list`, backed by the same cache, so
 	// they share PrintTaskList's path (and hint) rather than the bare Print
 	// ListCmd used to diverge to; an empty view label prints identically to

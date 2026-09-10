@@ -399,6 +399,23 @@ CLI cannot use — they are how you find out what is wrong with it.
 (`things show 3`) work across invocations. Clear it by deleting that
 file or by running any plain list command, which overwrites it.
 
+The cache records when the listing ran and which command printed it.
+A row number is good for four hours; past that a numeric reference is
+refused rather than acted on, because the rows behind it have probably
+moved. The error names the listing to re-run:
+
+```console
+$ things complete 2
+Error: task #2 comes from a stale list cache: the rows were listed over 2 days ago, older than the 4 hours a row number is good for. Re-run `things today` and use the new row number, or pass the task's uuid.
+```
+
+Re-running that listing renumbers the rows and clears the refusal. A
+UUID is never refused, and neither is a title. A cache file written by
+a version before 0.8.0 records no time, so the first numeric reference
+after upgrading is refused until you list again. The named listing
+carries `--db` when the flag supplied one, so it re-reads the database
+the rows came from.
+
 A `--json` listing never writes the cache. JSON output carries no row
 numbers, so it has nothing to record, and the file is one shared cache
 per machine rather than one per shell — writing it from a scripted run

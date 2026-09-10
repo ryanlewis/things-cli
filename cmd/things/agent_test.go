@@ -75,8 +75,8 @@ func TestShowAgentBriefLeavesLastListCacheAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLastList: %v", err)
 	}
-	if strings.Join(before, ",") != strings.Join(after, ",") {
-		t.Errorf("last-list cache changed from %v to %v", before, after)
+	if strings.Join(before.UUIDs, ",") != strings.Join(after.UUIDs, ",") {
+		t.Errorf("last-list cache changed from %v to %v", before.UUIDs, after.UUIDs)
 	}
 }
 

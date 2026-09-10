@@ -263,8 +263,8 @@ func TestRunListDateFilterEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLastList: %v", err)
 	}
-	if len(got) != 1 || got[0] != "task-1" {
-		t.Errorf("--on today: got %v, want [task-1]", got)
+	if len(got.UUIDs) != 1 || got.UUIDs[0] != "task-1" {
+		t.Errorf("--on today: got %v, want [task-1]", got.UUIDs)
 	}
 
 	if err := runWith(t, database, "list", "today", "--on", tomorrow); err != nil {
@@ -274,8 +274,8 @@ func TestRunListDateFilterEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLastList: %v", err)
 	}
-	if len(got) != 0 {
-		t.Errorf("--on tomorrow: got %v, want empty", got)
+	if len(got.UUIDs) != 0 {
+		t.Errorf("--on tomorrow: got %v, want empty", got.UUIDs)
 	}
 }
 
@@ -602,7 +602,7 @@ func TestRunListThenResolveByIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLastList: %v", err)
 	}
-	if len(got) == 0 {
+	if len(got.UUIDs) == 0 {
 		t.Fatal("expected cached uuids")
 	}
 }
@@ -656,7 +656,7 @@ func TestRunListJSONLeavesExistingLastListCacheAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLastList: %v", err)
 	}
-	if len(before) == 0 {
+	if len(before.UUIDs) == 0 {
 		t.Fatal("plain list wrote no uuids")
 	}
 
@@ -668,8 +668,8 @@ func TestRunListJSONLeavesExistingLastListCacheAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLastList: %v", err)
 	}
-	if strings.Join(before, ",") != strings.Join(after, ",") {
-		t.Errorf("last-list cache changed from %v to %v", before, after)
+	if strings.Join(before.UUIDs, ",") != strings.Join(after.UUIDs, ",") {
+		t.Errorf("last-list cache changed from %v to %v", before.UUIDs, after.UUIDs)
 	}
 
 	// And "1" still resolves to row 1 of the plain listing.
@@ -677,8 +677,8 @@ func TestRunListJSONLeavesExistingLastListCacheAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveTask(\"1\"): %v", err)
 	}
-	if task.UUID != before[0] {
-		t.Errorf("resolveTask(\"1\") = %s, want %s", task.UUID, before[0])
+	if task.UUID != before.UUIDs[0] {
+		t.Errorf("resolveTask(\"1\") = %s, want %s", task.UUID, before.UUIDs[0])
 	}
 }
 
@@ -715,12 +715,12 @@ func TestRunListFilterDefaultsToAllOpenTasks(t *testing.T) {
 			for _, uuid := range tc.want {
 				want[uuid] = true
 			}
-			if len(got) != len(want) {
-				t.Fatalf("got %v, want %v", got, tc.want)
+			if len(got.UUIDs) != len(want) {
+				t.Fatalf("got %v, want %v", got.UUIDs, tc.want)
 			}
-			for _, uuid := range got {
+			for _, uuid := range got.UUIDs {
 				if !want[uuid] {
-					t.Errorf("unexpected uuid %q in %v", uuid, got)
+					t.Errorf("unexpected uuid %q in %v", uuid, got.UUIDs)
 				}
 			}
 		})

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -16,9 +17,15 @@ import (
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// Try numeric index from last list
 	if n, err := strconv.Atoi(ref); err == nil && n >= 1 {
-		uuids, cacheErr := cache.ReadLastList()
-		if cacheErr == nil && n <= len(uuids) {
-			t, err := database.GetTaskByUUID(uuids[n-1])
+		last, cacheErr := cache.ReadLastList()
+		if cacheErr == nil && n <= len(last.UUIDs) {
+			// The row exists in the cache, so this reference is a row number
+			// and nothing else. Refuse it when the listing behind it is old
+			// enough that the rows have probably moved (issue #265).
+			if last.Stale(time.Now()) {
+				return nil, &staleCacheError{Query: ref, Row: n, Last: last}
+			}
+			t, err := database.GetTaskByUUID(last.UUIDs[n-1])
 			if err != nil {
 				return nil, err
 			}
@@ -91,7 +98,11 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 //
 // The guard lives here, not at the call sites, so ListCmd and SearchCmd
 // cannot drift apart.
-func cacheTaskUUIDs(d *Deps, tasks []model.Task) {
+//
+// command is the listing as the user could re-type it, recorded alongside the
+// UUIDs so a later numeric ref that has gone stale can name the listing to
+// re-run (issue #265).
+func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 	if d.JSON {
 		return
 	}
@@ -99,7 +110,42 @@ func cacheTaskUUIDs(d *Deps, tasks []model.Task) {
 	for i, t := range tasks {
 		uuids[i] = t.UUID
 	}
-	if err := cache.WriteLastList(uuids); err != nil {
+	entry := cache.LastList{WrittenAt: time.Now(), Command: command, UUIDs: uuids}
+	if err := cache.WriteLastList(entry); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to cache task list: %v\n", err)
 	}
+}
+
+// quoteArg renders one argument as the user would have to type it. Anything
+// that is not a bare word is wrapped in single quotes, which a shell takes
+// literally: double quotes would still expand `$rate` or a backtick, and an
+// unquoted value breaks on a space or on the metacharacters an ordinary name
+// carries — an area called `R&D` pasted back unquoted runs two commands.
+func quoteArg(s string) string {
+	if s != "" && !strings.ContainsFunc(s, needsQuote) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// needsQuote reports whether r stops a value being a bare shell word. The safe
+// set is a whitelist, so a character a shell treats specially cannot slip
+// through by having been forgotten here.
+func needsQuote(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return false
+	}
+	return !strings.ContainsRune("-_./:=@+,", r)
+}
+
+// globalFlags renders the global flags a re-run of a listing needs to reach the
+// same rows. Only --db qualifies: the rest change how a listing prints, not
+// which items it holds. A path the config file supplied is left out, since a
+// re-run picks that up on its own.
+func globalFlags(d *Deps) []string {
+	if d.DBPath == "" || d.config().SetsDB(d.DBPath) {
+		return nil
+	}
+	return []string{"--db", quoteArg(d.DBPath)}
 }
