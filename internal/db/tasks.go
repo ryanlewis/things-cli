@@ -849,11 +849,21 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	//
 	// The catch-all view goes further, widening past the open set as well: it
 	// answers with the project's whole contents rather than a slice of a list.
+	// Trash goes the other way and keeps the guard — see its case below.
 	switch {
 	case opts.Project == "":
 		where += " AND " + untrashedParent
 	case view == "project":
 		where = closedProjectContents
+	case view == "trash":
+		// Trash keeps the guard even under --project. Its rows are the ones
+		// thrown away on their own account, and a to-do thrown away out of a
+		// project that is itself in the Trash is reachable nowhere, as in the
+		// app — the line README, agents.md and SKILL.md all state. Lifting it
+		// here would surface exactly that row, and contradict the catch-all
+		// view's own answer for the same project: closedProjectContents pins
+		// t.trashed = 0, so such a child is not part of the contents either.
+		where += " AND " + untrashedParent
 	}
 	if !spec.includesTemplates {
 		// The template row itself, which carries the recurrence rule.

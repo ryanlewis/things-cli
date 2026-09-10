@@ -2479,6 +2479,46 @@ func TestNamedTrashedProjectLiftsTheTrashedParentGuard(t *testing.T) {
 	}
 }
 
+// Trash is the one view the guard stays on. A to-do thrown away out of a
+// project that is itself in the Trash is in neither the app's Trash nor the
+// project's contents — `things --project <uuid>` pins t.trashed = 0 — so
+// naming the project must not be a back door to it.
+func TestNamedTrashedProjectKeepsTheGuardOnTrash(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('proj-gone', 'Binned', 1, 0, 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
+		('kid-binned', 'Thrown away out of a binned project', 0, 0, 1, 1, 0, 'proj-gone', 2)`)
+
+	// Unfiltered, Trash is the project's own row and nothing beneath it.
+	all, err := d.ListTasks("trash", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(all), []string{"proj-gone"}) {
+		t.Errorf("trash unfiltered: got %v, want [proj-gone]", uuidsOf(all))
+	}
+
+	named, err := d.ListTasks("trash", TaskFilter{Project: "proj-gone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(named) != 0 {
+		t.Errorf("trash --project proj-gone: got %v, want none", uuidsOf(named))
+	}
+
+	// And the catch-all's answer for the same project agrees.
+	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-gone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(contents) != 0 {
+		t.Errorf("--project proj-gone: got %v, want none", uuidsOf(contents))
+	}
+}
+
 // The guard reaches the project through a heading, so lifting it has to as
 // well: a to-do filed under a heading carries t.heading and leaves t.project
 // NULL (issue #139).

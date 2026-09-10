@@ -306,10 +306,9 @@ also means the day sweep above reports the project rather than the tasks
 the contents, name the project: `things --project <uuid> -j` on a closed or
 trashed project returns its tasks whatever their status, and
 `things show <uuid> --agent` lists them under `## Tasks` with `[x]`, `[~]` or
-`[ ]` on each row. Naming the project reaches its tasks inside a view as well,
-in every view that takes `--project`: `things anytime --project <uuid> -j` on a
-trashed project lists its open tasks, and
-`things today --project <uuid> --include-completed -j` on a closed project
+`[ ]` on each row. Naming the project reaches its tasks inside a view as well:
+`things anytime --project <uuid> -j` on a trashed project lists its open tasks,
+and `things today --project <uuid> --include-completed -j` on a closed project
 returns the tasks it closed today rather than an empty list. A task thrown
 away out of a project that is itself in the Trash is reachable nowhere,
 matching the app.

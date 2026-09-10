@@ -5666,7 +5666,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.trashed = 1 AND t.type IN (0, 1) AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
+ WHERE t.trashed = 1 AND t.type IN (0, 1) AND COALESCE(p.trashed, 0) = 0 AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
 
 ### view=trash includeCompleted=false filters=area
 ARGS: []interface {}{"Work", "Work"}
@@ -5911,7 +5911,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.trashed = 1 AND t.type IN (0, 1) AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
+ WHERE t.trashed = 1 AND t.type IN (0, 1) AND COALESCE(p.trashed, 0) = 0 AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
 
 ### view=trash includeCompleted=false filters=all
 ARGS: []interface {}{"Launch v2", "Launch v2", "Work", "Work", "urgent", 132813696, 132814464}
@@ -5946,7 +5946,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.trashed = 1 AND t.type IN (0, 1) AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
+ WHERE t.trashed = 1 AND t.type IN (0, 1) AND COALESCE(p.trashed, 0) = 0 AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
 
 ### view=trash includeCompleted=true filters=none
 ARGS: []interface {}(nil)
@@ -6016,7 +6016,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.trashed = 1 AND t.type IN (0, 1) AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
+ WHERE t.trashed = 1 AND t.type IN (0, 1) AND COALESCE(p.trashed, 0) = 0 AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
 
 ### view=trash includeCompleted=true filters=area
 ARGS: []interface {}{"Work", "Work"}
@@ -6261,7 +6261,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.trashed = 1 AND t.type IN (0, 1) AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
+ WHERE t.trashed = 1 AND t.type IN (0, 1) AND COALESCE(p.trashed, 0) = 0 AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
 
 ### view=trash includeCompleted=true filters=all
 ARGS: []interface {}{"Launch v2", "Launch v2", "Work", "Work", "urgent", 132813696, 132814464}
@@ -6296,7 +6296,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.trashed = 1 AND t.type IN (0, 1) AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
+ WHERE t.trashed = 1 AND t.type IN (0, 1) AND COALESCE(p.trashed, 0) = 0 AND (p.uuid = ? OR p.title LIKE ? ESCAPE '\') AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY t."index" ASC, t.uuid ASC
 
 ### view=upcoming includeCompleted=false filters=none
 ARGS: []interface {}(nil)
