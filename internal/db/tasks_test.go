@@ -1447,3 +1447,162 @@ func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
 		t.Errorf("--include-completed: proj-done missing from %v", uuidsOf(got))
 	}
 }
+
+// seedSomedayAndLogbook seeds the two ends of a project's life that issue #206
+// covers — a project deferred to Someday and a completed project in the
+// Logbook — next to the rows that must stay out: a Someday-start repeating
+// project template and its child, a trashed project, and a heading.
+func seedSomedayAndLogbook(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('area-work', 'Work', 1, 1)`)
+
+	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	stopLate := model.TimeToUnix(time.Now().Add(-1 * time.Hour))
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate,
+		 area, "index") VALUES
+		('proj-someday',  'Learn Welsh',  1, 0, 0, 2, 0, NULL, NULL, 'area-work', 1),
+		('todo-someday',  'Read a book',  0, 0, 0, 2, 0, NULL, NULL, 'area-work', 2),
+		('proj-logged',   'Site rebuild', 1, 3, 0, 1, 0, NULL, ?,    'area-work', 3),
+		('todo-logged',   'Ship the CSS', 0, 3, 0, 1, 0, NULL, ?,    NULL,        4)`,
+		stopLate, stopEarly)
+
+	// Trashed rows belong to the trash view, not to Someday or the Logbook.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
+		('proj-someday-trashed', 'Dropped idea', 1, 0, 1, 2, 0, NULL, NULL, 5),
+		('proj-logged-trashed',  'Dropped work', 1, 3, 1, 1, 0, NULL, ?,    6)`, stopEarly)
+
+	// A Someday-start repeating project template is filed under Repeating, not
+	// under the bucket its row carries, and its children come with it
+	// (issues #147, #171).
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule)
+		VALUES ('proj-template', 'Annual review', 1, 0, 0, 2, 0, NULL, 7, x'0102')`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
+		VALUES ('todo-in-template', 'Draft agenda', 0, 0, 0, 2, 0, NULL, 'proj-template', 8)`)
+
+	// A heading (type 2) is structure inside a project, never a list row.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
+		('head-someday', 'Phase one', 2, 0, 0, 2, 0, NULL, NULL, 'proj-someday', 9),
+		('head-logged',  'Phase two', 2, 3, 0, 1, 0, NULL, ?,    'proj-logged',  10)`, stopEarly)
+}
+
+// Things shows a project deferred to Someday in its Someday list, and a
+// completed project in its Logbook. The CLI's two views were pinned to to-dos,
+// so both project rows were invisible (issue #206).
+func TestListTasksSomedayAndLogbookIncludeProjects(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayAndLogbook(t, d)
+
+	cases := []struct {
+		view    string
+		want    []string
+		project string
+	}{
+		{"someday", []string{"proj-someday", "todo-someday"}, "proj-someday"},
+		{"logbook", []string{"proj-logged", "todo-logged"}, "proj-logged"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.view, func(t *testing.T) {
+			got, err := d.ListTasks(tc.view, TaskFilter{})
+			if err != nil {
+				t.Fatalf("ListTasks(%q): %v", tc.view, err)
+			}
+			if !sameSet(uuidsOf(got), tc.want) {
+				t.Errorf("view %q: got %v, want %v", tc.view, uuidsOf(got), tc.want)
+			}
+			for _, task := range got {
+				if task.UUID != tc.project {
+					continue
+				}
+				if task.Type != model.TypeProject {
+					t.Errorf("%s: got type %d, want %d", task.UUID, task.Type, model.TypeProject)
+				}
+			}
+		})
+	}
+}
+
+// Widening the two views to projects must not widen them to everything
+// project-shaped: a Someday-start repeating project template, the to-dos
+// inside it, trashed projects and headings all stay out.
+func TestListTasksSomedayLogbookProjectExclusions(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayAndLogbook(t, d)
+
+	excluded := map[string][]string{
+		"someday": {"proj-template", "todo-in-template", "proj-someday-trashed", "head-someday"},
+		"logbook": {"proj-logged-trashed", "head-logged"},
+	}
+	for view, uuids := range excluded {
+		got, err := d.ListTasks(view, TaskFilter{})
+		if err != nil {
+			t.Fatalf("ListTasks(%q): %v", view, err)
+		}
+		for _, uuid := range uuids {
+			for _, task := range got {
+				if task.UUID == uuid {
+					t.Errorf("view %q: %s should not be listed", view, uuid)
+				}
+			}
+		}
+	}
+
+	// The template itself still belongs to Repeating, which already carried
+	// project templates.
+	got, err := d.ListTasks("repeating", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating): %v", err)
+	}
+	if !sameSet(uuidsOf(got), []string{"proj-template"}) {
+		t.Errorf("repeating: got %v, want [proj-template]", uuidsOf(got))
+	}
+}
+
+// The Logbook orders by completion date, newest first, and a project row is
+// ordered by its own stopDate like any other row.
+func TestListTasksLogbookOrderWithProject(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayAndLogbook(t, d)
+
+	got, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"proj-logged", "todo-logged"}
+	if !reflect.DeepEqual(uuidsOf(got), want) {
+		t.Errorf("logbook order: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// A project row has no parent project, so --project can never match it in
+// these two views either; --area still finds it, because a project carries its
+// own area.
+func TestListTasksSomedayProjectRowsAndFilters(t *testing.T) {
+	d := newTestDB(t)
+	seedSomedayAndLogbook(t, d)
+
+	byUUID, err := d.ListTasks("someday", TaskFilter{Project: "proj-someday"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byUUID) != 0 {
+		t.Errorf("--project proj-someday: got %v, want none", uuidsOf(byUUID))
+	}
+
+	byArea, err := d.ListTasks("someday", TaskFilter{Area: "area-work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"proj-someday", "todo-someday"}
+	if !sameSet(uuidsOf(byArea), want) {
+		t.Errorf("--area area-work: got %v, want %v", uuidsOf(byArea), want)
+	}
+}

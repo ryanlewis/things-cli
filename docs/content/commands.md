@@ -21,21 +21,25 @@ things <view>          # shortcut: things inbox, things today, etc.
 Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
 `repeating`, `logbook`, `trash`, `deadlines`.
 
-`today`, `upcoming` and `anytime` list projects as well as to-dos, matching
-what Things shows in those lists — a project is scheduled the same way a
-to-do is, so a project put in Today is a row in Today. Project rows are
-marked `(project)` in plain output and carry `"type": 1` in JSON, so
-`jq 'select(.type==1)'` picks them out. A project has no parent project, so
-`--project` never matches one; `--area` does, because a project carries its
-own area. The other views stay to-do only.
+`today`, `upcoming`, `anytime`, `someday` and `logbook` list projects as well
+as to-dos, matching what Things shows in those lists — a project is scheduled
+the same way a to-do is, so a project put in Today is a row in Today, one
+deferred to Someday is a row in Someday, and a completed project is a row in
+the Logbook under its completion date. Project rows are marked `(project)` in
+plain output and carry `"type": 1` in JSON, so `jq 'select(.type==1)'` picks
+them out. A project has no parent project, so `--project` never matches one;
+`--area` does, because a project carries its own area. `repeating` carries
+project templates too, for the reason below; `inbox`, `trash` and `deadlines`
+stay to-do only.
 
 `repeating` lists repeating to-do and project templates. The items a template
 generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
 `things projects` and the rest; the template itself appears only here — plus
-`trash` or `logbook` for a to-do template that ends up there, since those two
-report what the database holds. Both are to-do lists, so a project template
-never shows in them. Project templates are marked `(project)` in plain output
-and carry `"type": 1` in JSON.
+`trash` or `logbook` for a template that ends up there, since those two report
+what the database holds. `trash` is to-do only, so a project template never
+shows there; `logbook` carries projects, so a logged project template would.
+Project templates are marked `(project)` in plain output and carry
+`"type": 1` in JSON.
 
 The to-dos inside a project template are hidden along with it, since they
 would otherwise list against a project `things projects` does not report.

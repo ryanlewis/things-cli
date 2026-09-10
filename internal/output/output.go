@@ -157,11 +157,13 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			current, other = &currentProject, &currentArea
 		}
 		if r.groupKey != *current || *other != sentinel {
-			// today/upcoming/anytime list a scheduled project as a row of its
-			// own (issue #201), and its to-dos sort straight after it. Their
-			// project group header would restate the title on the line above,
-			// so fold them under the row instead of repeating it. The group
-			// state still advances, so a later group breaks as usual.
+			// today, upcoming, anytime, someday and logbook list a project as
+			// a row of its own (issues #201, #206). Where the view's order
+			// puts its to-dos straight after that row, their project group
+			// header would restate the title on the line above, so fold them
+			// under the row instead of repeating it. Where the order separates
+			// them the header still prints, which is what it is for. The group
+			// state advances either way, so a later group breaks as usual.
 			foldsIntoRowAbove := r.isProjectGroup && r.groupKey == prevUUID
 			if !foldsIntoRowAbove {
 				if currentProject != sentinel || currentArea != sentinel {
