@@ -36,8 +36,12 @@ func printAgentHint(d *Deps, listed int) error {
 }
 
 // showAgentBrief renders the Markdown brief `things show --agent` prints. A
-// project also lists its open to-dos, each with the UUID an agent needs to act
-// on it. The to-do UUIDs are deliberately not written to the last-list cache:
+// project also lists the to-dos filed under it, each with the UUID an agent
+// needs to act on it — the open ones while the project is open, and its whole
+// contents once the project is closed or trashed, which is what the catch-all
+// view answers for a named project since issue #229.
+//
+// The to-do UUIDs are deliberately not written to the last-list cache:
 // the cache backs the numeric refs from the last listing, and a brief is not a
 // listing.
 func showAgentBrief(d *Deps, database *db.DB, task *model.Task, items []model.ChecklistItem) error {

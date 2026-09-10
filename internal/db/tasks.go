@@ -199,14 +199,17 @@ const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate 
 // on start/startBucket/startDate and the Logbook rejected them on the day
 // (issue #230).
 //
-// The parent clause is the last piece of the same argument: ListTasks drops a
-// to-do whose project is trashed from every view but trash and logbook, so
-// Today cannot be holding one, and the Logbook has to keep it.
+// It used to carry a trashed-parent clause of its own, back when trash and
+// logbook were exempt from untrashedParent and the Logbook had to keep a
+// to-do under a trashed project. Issue #229 made untrashedParent
+// unconditional, so the Logbook — the only caller — already sees none of
+// those rows and the clause could never change the answer.
 //
-// COALESCE makes the negation null-safe. start and startBucket are nullable
-// columns, and a NULL there would leave the AND chain NULL, which "NOT" leaves
-// NULL too — dropping the row out of the Logbook by accident.
-const heldByToday = todayScheduled + " AND " + stillUnderToday + " AND COALESCE(p.trashed, 0) = 0"
+// COALESCE at the call site makes the negation null-safe. start and
+// startBucket are nullable columns, and a NULL there would leave the AND chain
+// NULL, which "NOT" leaves NULL too — dropping the row out of the Logbook by
+// accident.
+const heldByToday = todayScheduled + " AND " + stillUnderToday
 
 // todayWhere builds the today view's WHERE clause. By default only open tasks
 // are returned. With includeCompleted, completed/cancelled items are kept while
@@ -242,17 +245,36 @@ var viewFilters = map[string]string{
 	// beside the completed ones, so the view carries status 2 as well as 3
 	// (issue #210). Callers tell the two apart by `status`, which reads
 	// "cancelled" or "completed" in JSON and prints [~] or [x] in plain output.
-	// Logbook is the exact complement of what Today keeps under
-	// --include-completed, so a closed item is in one list or the other and
-	// never in both: Things moves an item out of Today and into the Logbook at
-	// the same moment (issue #230). The complement is taken over heldByToday,
-	// not over the day alone — a closed item Today never held is logged
-	// straight away, whatever day it closed on.
-	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND COALESCE(" + heldByToday + ", 0) = 0 AND " + todoOrProject,
+	// Over the rows both views can carry, Logbook is the exact complement of
+	// what Today keeps under --include-completed, so such a closed item is in
+	// one list or the other and never in both: Things moves an item out of
+	// Today and into the Logbook at the same moment (issue #230). The
+	// complement is taken over heldByToday, not over the day alone — a closed
+	// item Today never held is logged straight away, whatever day it closed
+	// on. The fold below narrows what "both views can carry" means: a closed
+	// to-do inside a closed or trashed project is in neither list, and is
+	// reached by naming the project.
+	//
+	// A closed project is one row, not a row plus its contents: the app folds
+	// the to-dos of a closed project into the project's own Logbook row and
+	// lists none of them separately. Measured on 10 Sep 2026, the app's Logbook
+	// held no to-do at all whose parent project was closed, against 328 such
+	// rows in the CLI (issue #229). COALESCE keeps an unparented row — p.uuid
+	// NULL — in the view. The trashed-parent half of the fold is the clause
+	// ListTasks appends for every view.
+	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND COALESCE(" + heldByToday + ", 0) = 0 AND COALESCE(p.status, 0) NOT IN (2, 3) AND " + todoOrProject,
 	// Trash carries projects as well as to-dos: trashing a project in the
 	// app puts the project row itself in Trash, and `things projects` filters
 	// trashed rows, so pinning t.type = 0 here left a trashed project visible
 	// nowhere (issue #212).
+	//
+	// Trash folds a trashed project's children into its row, the way the
+	// Logbook folds a closed project's, and that fold is the trashed-parent
+	// clause ListTasks appends. It deliberately does not fold a *closed*
+	// project's children: the app's Trash held 23 to-dos whose parent project
+	// was closed but not trashed, and none whose parent was trashed. Throwing
+	// away a to-do out of a finished project is an ordinary thing to do, and
+	// the project is not in Trash to fold it into (issue #229).
 	"trash": "t.trashed = 1 AND " + todoOrProject,
 	// Deadlines carries projects too: a project takes a deadline exactly as a
 	// to-do does, `things projects` reports it, and agents.md advertises this
@@ -271,11 +293,12 @@ var viewFilters = map[string]string{
 	// (issue #165).
 	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	// The catch-all open set: also the default view for a bare --project/
-	// --area/--tag filter. It carries projects for the same reason the named
-	// views do — `things --area Work` is a sweep of that area, and the area's
-	// own projects are part of what the app shows there (issue #222). A
-	// --project filter still returns no project rows: a project has no parent
-	// project of its own, so p.uuid never matches.
+	// --area/--tag filter. `things --project X` on a closed or trashed project
+	// widens past "open" — see closedProjectContents. It carries projects for
+	// the same reason the named views do — `things --area Work` is a sweep of
+	// that area, and the area's own projects are part of what the app shows
+	// there (issue #222). A --project filter still returns no project rows: a
+	// project has no parent project of its own, so p.uuid never matches.
 	"project": "t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 }
 
@@ -340,16 +363,17 @@ var viewOrderBy = map[string]string{
 // it.
 const indexOrderBy = `ORDER BY t."index" ASC` + uuidTiebreak
 
-// viewsIncludingTrashedProjects lists the views that keep to-dos whose project
-// is in the trash. Trashing a project in Things leaves its child rows at
-// trashed = 0, so without a guard they outlive the project and go on listing
-// as ordinary open tasks (issue #155, the same class as #142/#143). trash and
-// logbook are the exceptions: they report what the database holds, and a to-do
-// whose project was trashed belongs in trash.
-var viewsIncludingTrashedProjects = map[string]bool{
-	"trash":   true,
-	"logbook": true,
-}
+// untrashedParent excludes to-dos whose project is in the trash, in every
+// view. Trashing a project in Things leaves its child rows at trashed = 0, so
+// without this they outlive the project and go on listing as ordinary open
+// tasks (issue #155, the same class as #142/#143).
+//
+// trash and logbook used to be exempt, on the argument that they report what
+// the database holds. The app disagrees: measured on 10 Sep 2026 it showed no
+// such row in either list, folding those to-dos into the trashed project's own
+// row instead — 77 rows in the CLI's logbook and 4 in its trash (issue #229).
+// With the exemption gone the clause is unconditional.
+const untrashedParent = "COALESCE(p.trashed, 0) = 0"
 
 // viewsIncludingTemplates lists the views that keep repeating templates in
 // their results. Everywhere else templates are filtered out: Things files a
@@ -368,6 +392,34 @@ func ValidView(name string) bool {
 	return ok
 }
 
+// closedProjectContents is the catch-all view's WHERE clause when --project
+// names a project that is itself closed or trashed. Asking for such a project's
+// contents and getting nothing back is the wrong answer: since issue #229 the
+// Logbook and Trash fold a closed or trashed project's to-dos into the project
+// row, so naming the project is the only way left to reach them, and the
+// catch-all view's "t.status = 0" would return none.
+//
+// It is what the app answers. `to dos of project id <closed project>` returned
+// 78 for a project holding 65 completed, 13 cancelled and 3 trashed children,
+// and 49 for one holding 42 and 7 — so the status pin drops and t.trashed = 0
+// stays. A trashed child of a closed project is in Trash on its own account
+// and is not part of the project's contents.
+//
+// The parent test is evaluated against the named project because --project
+// constrains p to it. When that project is open the clause reduces to the
+// ordinary open set, so `things --project <open project>` is unchanged.
+const closedProjectContents = "(" + parentClosedOrTrashed + " OR t.status = 0) AND t.trashed = 0 AND " + todoOrProject
+
+// parentClosedOrTrashed is true for a row whose parent project has been closed
+// or thrown away. p is resolved through COALESCE(t.project, h.project), so a
+// to-do filed under a project heading is judged by its heading's project.
+//
+// Both halves COALESCE so an unparented row — p.uuid NULL — reads false rather
+// than NULL. A bare "p.status IN (2, 3)" would be NULL there, and NULL OR
+// false is NULL, which would drop every closed unparented row out of any
+// caller that ORs this with a status test.
+const parentClosedOrTrashed = "(COALESCE(p.status, 0) IN (2, 3) OR COALESCE(p.trashed, 0) = 1)"
+
 func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	where, ok := viewFilters[view]
 	if !ok {
@@ -376,8 +428,14 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	if view == "today" && opts.IncludeCompleted {
 		where = todayWhere(true)
 	}
-	if !viewsIncludingTrashedProjects[view] {
-		where += " AND COALESCE(p.trashed, 0) = 0"
+	// Naming a closed or trashed project asks for its contents, so the
+	// catch-all view widens past the open set and past the trashed-parent
+	// guard, which would otherwise strip exactly the rows being asked for.
+	contentsOfClosedProject := view == "project" && opts.Project != ""
+	if contentsOfClosedProject {
+		where = closedProjectContents
+	} else {
+		where += " AND " + untrashedParent
 	}
 	if !viewsIncludingTemplates[view] {
 		// The template row itself, which carries the recurrence rule.

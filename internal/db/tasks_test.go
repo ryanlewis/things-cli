@@ -340,7 +340,7 @@ func TestLogbookKeepsItemsClosedTodayOutsideToday(t *testing.T) {
 // Trashing a project leaves its children at trashed = 0, and every view but
 // trash and logbook drops them, so the Logbook is the only list that can hold
 // a to-do closed today under a trashed project (issue #230).
-func TestLogbookKeepsClosedTodayUnderTrashedProject(t *testing.T) {
+func TestClosedTodayUnderTrashedProjectIsReachable(t *testing.T) {
 	d := newTestDB(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index")
@@ -357,12 +357,22 @@ func TestLogbookKeepsClosedTodayUnderTrashedProject(t *testing.T) {
 	if len(inToday) != 0 {
 		t.Errorf("today = %v, want empty — the parent is trashed", uuidsOf(inToday))
 	}
+	// It is not in the logbook either: issue #229 folds a trashed project's
+	// to-dos into the project's Trash row. What issue #230 needs is that the
+	// row has somewhere to be, and naming the project is where.
 	logged, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sameSet([]string{"t-closed"}, uuidsOf(logged)) {
-		t.Errorf("logbook = %v, want {t-closed}", uuidsOf(logged))
+	if len(logged) != 0 {
+		t.Errorf("logbook = %v, want empty — the parent is trashed", uuidsOf(logged))
+	}
+	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-binned"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet([]string{"t-closed"}, uuidsOf(contents)) {
+		t.Errorf("--project proj-binned = %v, want {t-closed}", uuidsOf(contents))
 	}
 }
 
@@ -938,10 +948,11 @@ func TestListTasksExcludesTrashedProjectThroughHeading(t *testing.T) {
 	}
 }
 
-// trash and logbook report what the database holds rather than what Things
-// would show as actionable, so they keep the children of a trashed project.
-// Without this the guard would silently swallow them.
-func TestTrashAndLogbookKeepTrashedProjectChildren(t *testing.T) {
+// A trashed project is one row in Trash, not a row plus its contents: the app
+// folds its to-dos into the project's row and lists none of them separately,
+// in trash or in logbook (issue #229). Naming the project is what returns
+// them, so nothing here is swallowed — it is reached a different way.
+func TestTrashAndLogbookFoldTrashedProjectChildren(t *testing.T) {
 	d := newTestDB(t)
 
 	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
@@ -951,14 +962,15 @@ func TestTrashAndLogbookKeepTrashedProjectChildren(t *testing.T) {
 		('t-binned', 'Trashed child',   0, 0, 1, 1, 0, 'proj-gone', 1),
 		('t-logged', 'Completed child', 0, 3, 0, 1, 0, 'proj-gone', 2)`)
 
-	// trash also carries the trashed project row itself now (issue #212);
-	// logbook does not, because a trashed row is not logged.
+	// trash carries the trashed project row itself (issue #212); logbook
+	// carries nothing here, because a trashed row is not logged and the
+	// project's children are folded into its Trash row.
 	for _, tc := range []struct {
 		view string
 		want []string
 	}{
-		{"trash", []string{"proj-gone", "t-binned"}},
-		{"logbook", []string{"t-logged"}},
+		{"trash", []string{"proj-gone"}},
+		{"logbook", nil},
 	} {
 		got, err := d.ListTasks(tc.view, TaskFilter{})
 		if err != nil {
@@ -967,6 +979,124 @@ func TestTrashAndLogbookKeepTrashedProjectChildren(t *testing.T) {
 		if !sameSet(uuidsOf(got), tc.want) {
 			t.Errorf("view %q: got %v, want %v", tc.view, uuidsOf(got), tc.want)
 		}
+	}
+
+	// The folded child is reachable by naming the project. The trashed child
+	// is not, and matches the app: asking Things for a trashed project's
+	// contents returns nothing for a row already in the Trash on its own
+	// account.
+	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-gone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(contents), []string{"t-logged"}) {
+		t.Errorf("--project proj-gone: got %v, want [t-logged]", uuidsOf(contents))
+	}
+}
+
+// seedClosedProjectContents builds the shape issue #229 is about: a closed
+// project and a trashed one, each holding children in several states, plus an
+// open project as the control.
+func seedClosedProjectContents(t *testing.T, d *DB) {
+	t.Helper()
+
+	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, stopDate, "index") VALUES
+		('proj-done',    'Finished',  1, 3, 0, ?,    1),
+		('proj-binned',  'Binned',    1, 0, 1, NULL, 2),
+		('proj-open',    'Live',      1, 0, 0, NULL, 3)`, stop)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, stopDate, project, "index") VALUES
+		('done-completed', 'Shipped',   0, 3, 0, 1, 0, ?,    'proj-done',   4),
+		('done-cancelled', 'Dropped',   0, 2, 0, 1, 0, ?,    'proj-done',   5),
+		('done-trashed',   'Binned',    0, 0, 1, 1, 0, NULL, 'proj-done',   6),
+		('done-open',      'Left over', 0, 0, 0, 1, 0, NULL, 'proj-done',   7),
+		('binned-logged',  'Logged',    0, 3, 0, 1, 0, ?,    'proj-binned', 8),
+		('open-todo',      'To do',     0, 0, 0, 1, 0, NULL, 'proj-open',   9)`,
+		stop, stop, stop)
+}
+
+// The app folds a closed project's to-dos into the project's own Logbook row
+// and lists none of them separately, so the CLI does too (issue #229). Trash
+// is not the same case: a to-do thrown away out of a finished project is in
+// Trash on its own account, and the project is not there to fold it into.
+func TestLogbookFoldsClosedProjectChildren(t *testing.T) {
+	d := newTestDB(t)
+	seedClosedProjectContents(t, d)
+
+	logged, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only the closed project itself. Its completed and cancelled children are
+	// folded into it, and binned-logged is folded into the trashed project.
+	if !sameSet(uuidsOf(logged), []string{"proj-done"}) {
+		t.Errorf("logbook: got %v, want [proj-done]", uuidsOf(logged))
+	}
+
+	binned, err := d.ListTasks("trash", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// done-trashed keeps its Trash row even though its project is closed.
+	if !sameSet(uuidsOf(binned), []string{"proj-binned", "done-trashed"}) {
+		t.Errorf("trash: got %v, want [proj-binned done-trashed]", uuidsOf(binned))
+	}
+}
+
+// Naming a closed or trashed project returns its contents whatever their
+// status — otherwise the rows the Logbook and Trash now fold away would be
+// reachable nowhere. It is what the app answers for `to dos of project id`:
+// the closed and cancelled children, and not the trashed one, which is in the
+// Trash on its own account (issue #229).
+func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
+	d := newTestDB(t)
+	seedClosedProjectContents(t, d)
+
+	cases := []struct {
+		name    string
+		project string
+		want    []string
+	}{
+		{"closed project", "proj-done", []string{"done-completed", "done-cancelled", "done-open"}},
+		{"closed project by title", "Finished", []string{"done-completed", "done-cancelled", "done-open"}},
+		{"trashed project", "proj-binned", []string{"binned-logged"}},
+		// The control: an open project is unchanged, still open rows only.
+		{"open project", "proj-open", []string{"open-todo"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.ListTasks("project", TaskFilter{Project: tc.project})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(got), tc.want) {
+				t.Errorf("--project %s: got %v, want %v", tc.project, uuidsOf(got), tc.want)
+			}
+		})
+	}
+}
+
+// The widening is scoped to a named project. A bare --area sweep is still the
+// open set: it must not start returning the closed contents of every closed
+// project in the area.
+func TestAreaFilterDoesNotWidenToClosedContents(t *testing.T) {
+	d := newTestDB(t)
+	seedClosedProjectContents(t, d)
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('ar', 'Work', 1, 1)`)
+	mustExec(t, d, `UPDATE TMTask SET area = 'ar' WHERE uuid IN ('proj-done', 'proj-open')`)
+
+	got, err := d.ListTasks("project", TaskFilter{Area: "ar"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The open project, its open to-do, and the closed project's one open
+	// child. Nothing closed, and no row of the closed project's contents.
+	want := []string{"proj-open", "open-todo", "done-open"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("--area ar: got %v, want %v", uuidsOf(got), want)
 	}
 }
 

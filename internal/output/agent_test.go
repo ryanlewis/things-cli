@@ -203,6 +203,51 @@ func TestPrintAgentBriefProjectWithNoTodos(t *testing.T) {
 	}
 }
 
+// A closed project's brief lists its contents whatever their status since
+// issue #229, so "Open to-dos" would be a lie and a bare title would read as
+// something still to do. The heading drops "Open" and each row is marked.
+func TestPrintAgentBriefClosedProjectMarksTodoStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		project *model.Task
+	}{
+		{"completed", &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusCompleted}},
+		{"cancelled", &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusCancelled}},
+		{"trashed", &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusOpen, Trashed: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			todos := []model.Task{
+				{UUID: "todo-1", Title: "Cut RC build", Status: model.StatusCompleted},
+				{UUID: "todo-2", Title: "Write notes", Status: model.StatusCancelled},
+				{UUID: "todo-3", Title: "Left over", Status: model.StatusOpen},
+			}
+			got := briefText(t, AgentBrief{Task: tc.project, Todos: todos})
+
+			for _, want := range []string{
+				"## To-dos\n",
+				"- [x] Cut RC build — `todo-1`",
+				"- [~] Write notes — `todo-2`",
+				"- [ ] Left over — `todo-3`",
+			} {
+				if !strings.Contains(got, want) {
+					t.Errorf("closed project brief does not contain %q\n%s", want, got)
+				}
+			}
+			if strings.Contains(got, "## Open to-dos") {
+				t.Errorf("closed project brief still calls its contents open\n%s", got)
+			}
+		})
+	}
+}
+
+func TestPrintAgentBriefClosedProjectWithNoTodos(t *testing.T) {
+	project := &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusCompleted}
+	got := briefText(t, AgentBrief{Task: project})
+	if !strings.Contains(got, "None — the project has no to-dos.") {
+		t.Errorf("closed project brief does not say it is empty\n%s", got)
+	}
+}
+
 // A title carrying a newline would otherwise break out of the heading or the
 // list item it is rendered into.
 func TestPrintAgentBriefFoldsMultilineTitles(t *testing.T) {

@@ -9,8 +9,10 @@ import (
 )
 
 // AgentBrief is the material `things show <ref> --agent` renders: the item
-// itself, its checklist, and — when the item is a project — the open to-dos
-// filed under it.
+// itself, its checklist, and — when the item is a project — the to-dos filed
+// under it. For an open project those are its open to-dos; for a closed or
+// trashed one they are its contents whatever their status, since issue #229
+// made naming the project the only way to reach them.
 type AgentBrief struct {
 	Task      *model.Task
 	Checklist []model.ChecklistItem
@@ -70,12 +72,24 @@ func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 	}
 
 	if t.Type == model.TypeProject {
-		s.WriteString("\n## Open to-dos\n\n")
+		// A closed or trashed project has no open to-dos by definition, and
+		// since issue #229 the listing returns its contents whatever their
+		// status — so "Open to-dos" would be a lie and a bare title would read
+		// as something still to do. Mark each row instead.
+		heading, empty, marked := "Open to-dos", "no open to-dos", false
+		if t.Status != model.StatusOpen || t.Trashed {
+			heading, empty, marked = "To-dos", "no to-dos", true
+		}
+		fmt.Fprintf(&s, "\n## %s\n\n", heading)
 		if len(b.Todos) == 0 {
-			s.WriteString("None — the project has no open to-dos.\n")
+			fmt.Fprintf(&s, "None — the project has %s.\n", empty)
 		}
 		for _, todo := range b.Todos {
-			fmt.Fprintf(&s, "- %s — `%s`\n", singleLine(todo.Title), todo.UUID)
+			mark := ""
+			if marked {
+				mark = statusIcon(todo.Status) + " "
+			}
+			fmt.Fprintf(&s, "- %s%s — `%s`\n", mark, singleLine(todo.Title), todo.UUID)
 		}
 	}
 

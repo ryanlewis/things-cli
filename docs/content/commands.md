@@ -63,9 +63,21 @@ files the day's closed items straight away. `things today --include-completed`
 shows the ones still waiting. Everything else closed goes to `logbook` at once,
 today's closes included: a to-do ticked off in the Inbox, in Anytime, or ahead
 of its date in Upcoming was never under Today, so nothing holds it back. A
-closed item is therefore in exactly one of the two lists at any moment, never
-both and never neither. `--include-completed` works on `today` alone; with a
+closed item whose project is still open is therefore in exactly one of the two
+lists at any moment, never both and never neither; one closed inside a project
+that is itself closed or trashed is in neither, for the reason the next
+paragraph gives. `--include-completed` works on `today` alone; with a
 filter, name the view: `things today -p "Launch v2" --include-completed`.
+
+A closed project is one row in `logbook`, not a row plus its contents. The
+app folds a closed project's to-dos into the project's own row and lists none
+of them separately, and `trash` does the same for a trashed project. To reach
+those to-dos, name the project: `things --project <uuid>` on a closed or
+trashed project returns its contents whatever their status, which is what the
+app answers for the same question. A to-do you threw away out of a project is
+the exception — it keeps its own `trash` row, because it is in the Trash on
+its own account rather than through its project. A to-do thrown away out of a
+project that is itself in the Trash is reachable nowhere, as in the app.
 
 `someday` is the app's Someday list: the deferred things you have not filed
 under a project. A to-do inside a project stays inside it however it is
