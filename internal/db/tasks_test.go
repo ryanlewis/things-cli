@@ -118,7 +118,8 @@ func TestListTasksViews(t *testing.T) {
 		// template, so it belongs to repeating and nowhere else (issue #147).
 		{"someday", []string{"t-someday"}},
 		{"repeating", []string{"t-repeat"}},
-		{"logbook", []string{"t-done"}},
+		// The Logbook carries cancelled beside completed (issue #210).
+		{"logbook", []string{"t-done", "t-cancelled"}},
 		{"trash", []string{"t-trashed"}},
 		{"deadlines", []string{"t-deadline"}},
 	}
@@ -1849,5 +1850,171 @@ func TestListTasksDeadlinesProjectRowsAndFilters(t *testing.T) {
 	}
 	if len(byUUID) != 0 {
 		t.Errorf("--project dl-proj-mid: got %v, want none", uuidsOf(byUUID))
+	}
+}
+
+func seedLogbookCancelled(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('area-lab', 'Lab', 1, 1)`)
+
+	// Stop dates interleave the two statuses, and "index" runs against that
+	// order, so a view that grouped by status or fell back to "index" would
+	// return these in a different sequence.
+	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
+	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
+	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
+	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, stopDate, area, "index") VALUES
+		('log-todo-done',   'Wrote it up',  0, 3, 0, 1, 0, ?, 'area-lab', 4),
+		('log-proj-cancel', 'Dropped work', 1, 2, 0, 1, 0, ?, 'area-lab', 3),
+		('log-todo-cancel', 'Dropped task', 0, 2, 0, 1, 0, ?, 'area-lab', 2),
+		('log-proj-done',   'Shipped it',   1, 3, 0, 1, 0, ?, 'area-lab', 1)`,
+		newest, newer, older, oldest)
+
+	// Open rows are not logged, and a trashed row belongs to trash however it
+	// was closed.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, stopDate, "index") VALUES
+		('log-open',           'Still going',  0, 0, 0, 1, 0, NULL, 5),
+		('log-cancel-trashed', 'Binned',       0, 2, 1, 1, 0, ?,    6)`, older)
+
+	// A heading is structure inside a project, never a list row.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, stopDate, project, "index") VALUES
+		('log-head', 'Phase one', 2, 2, 0, ?, 'log-proj-done', 7)`, older)
+}
+
+// The Logbook is where Things files everything closed, not just everything
+// finished: a cancelled to-do or project is logged beside the completed ones,
+// but the view filtered status = 3 alone, so cancelled items never appeared
+// (issue #210).
+func TestListTasksLogbookIncludesCancelled(t *testing.T) {
+	d := newTestDB(t)
+	seedLogbookCancelled(t, d)
+
+	got, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(logbook): %v", err)
+	}
+	want := []string{"log-todo-done", "log-proj-cancel", "log-todo-cancel", "log-proj-done"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("logbook: got %v, want %v", uuidsOf(got), want)
+	}
+
+	// status tells the two kinds of closure apart, for both types.
+	wantStatus := map[string]model.Status{
+		"log-todo-done":   model.StatusCompleted,
+		"log-proj-done":   model.StatusCompleted,
+		"log-todo-cancel": model.StatusCancelled,
+		"log-proj-cancel": model.StatusCancelled,
+	}
+	for _, task := range got {
+		if want, ok := wantStatus[task.UUID]; ok && task.Status != want {
+			t.Errorf("%s: got status %v, want %v", task.UUID, task.Status, want)
+		}
+	}
+	for _, uuid := range []string{"log-proj-done", "log-proj-cancel"} {
+		for _, task := range got {
+			if task.UUID == uuid && task.Type != model.TypeProject {
+				t.Errorf("%s: got type %v, want %v", uuid, task.Type, model.TypeProject)
+			}
+		}
+	}
+}
+
+// Cancelled rows are ordered by stopDate with the completed ones rather than
+// forming a block of their own, newest first like the rest of the Logbook.
+func TestListTasksLogbookCancelledOrder(t *testing.T) {
+	d := newTestDB(t)
+	seedLogbookCancelled(t, d)
+
+	got, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"log-todo-done", "log-proj-cancel", "log-todo-cancel", "log-proj-done"}
+	if !reflect.DeepEqual(uuidsOf(got), want) {
+		t.Errorf("logbook order: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// Widening the Logbook to cancelled must not widen it to everything closed:
+// open rows, a trashed cancelled row and a cancelled heading stay out.
+func TestListTasksLogbookCancelledExclusions(t *testing.T) {
+	d := newTestDB(t)
+	seedLogbookCancelled(t, d)
+
+	got, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(logbook): %v", err)
+	}
+	for _, uuid := range []string{"log-open", "log-cancel-trashed", "log-head"} {
+		for _, task := range got {
+			if task.UUID == uuid {
+				t.Errorf("logbook: %s should not be listed", uuid)
+			}
+		}
+	}
+}
+
+// A cancelled row is filtered like any other: --area finds it through the area
+// it carries, and --project cannot match a project row.
+func TestListTasksLogbookCancelledFilters(t *testing.T) {
+	d := newTestDB(t)
+	seedLogbookCancelled(t, d)
+
+	byArea, err := d.ListTasks("logbook", TaskFilter{Area: "area-lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"log-todo-done", "log-proj-cancel", "log-todo-cancel", "log-proj-done"}
+	if !sameSet(uuidsOf(byArea), want) {
+		t.Errorf("--area area-lab: got %v, want %v", uuidsOf(byArea), want)
+	}
+
+	byUUID, err := d.ListTasks("logbook", TaskFilter{Project: "log-proj-cancel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byUUID) != 0 {
+		t.Errorf("--project log-proj-cancel: got %v, want none", uuidsOf(byUUID))
+	}
+}
+
+// The cancelled widening must not reach the views that select open rows: a
+// cancelled to-do is not in today, anytime, someday, upcoming or the catch-all.
+func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
+	d := newTestDB(t)
+	seedLogbookCancelled(t, d)
+
+	// The logbook seed rows are all start = 1 with no startDate, so on their
+	// own they could never appear in today, upcoming or someday whatever their
+	// status — the assertion below would hold even if those views stopped
+	// filtering on status. Seed a cancelled row shaped to land in each of
+	// them, so only `t.status = 0` keeps it out.
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+	stopped := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
+		('cancel-today',    'Was due today', 0, 2, 0, 1, 0, ?,    ?, 8),
+		('cancel-upcoming', 'Was scheduled', 0, 2, 0, 2, 0, ?,    ?, 9),
+		('cancel-someday',  'Was deferred',  0, 2, 0, 2, 0, NULL, ?, 10)`,
+		today, stopped, tomorrow, stopped, stopped)
+
+	for _, view := range []string{"today", "upcoming", "anytime", "someday", "project"} {
+		got, err := d.ListTasks(view, TaskFilter{})
+		if err != nil {
+			t.Fatalf("ListTasks(%q): %v", view, err)
+		}
+		for _, task := range got {
+			if task.Status == model.StatusCancelled {
+				t.Errorf("view %q: cancelled row %s should not be listed", view, task.UUID)
+			}
+		}
 	}
 }

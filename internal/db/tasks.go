@@ -137,11 +137,11 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 // lists the project itself in Today, Upcoming and Anytime, so those views
 // carry both kinds (issue #201, the same UI-parity argument as #106). Someday
 // and Logbook are the same story at the other two ends of a project's life: a
-// project deferred to Someday is a row in Someday, and a completed project is
-// a row in the Logbook under its completion date (issue #206). A trashed
-// project is a row in the app's Trash (issue #212). Deadlines is the same
-// argument about a different column: a project carries a deadline the way a
-// to-do does (issue #213).
+// project deferred to Someday is a row in Someday, and a closed project —
+// completed or cancelled — is a row in the Logbook under its stopDate
+// (issues #206, #210). A trashed project is a row in the app's Trash (issue
+// #212). Deadlines is the same argument about a different column: a project
+// carries a deadline the way a to-do does (issue #213).
 //
 // Repeating carries both for its own reason (issue #165). Headings (type 2)
 // are structure inside a project, never rows in a list, so they stay out.
@@ -165,7 +165,12 @@ var viewFilters = map[string]string{
 	"upcoming": "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	"anytime":  "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	"someday":  "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
-	"logbook":  "t.status = 3 AND t.trashed = 0 AND " + todoOrProject,
+	// The Logbook is where Things files everything closed, not just everything
+	// finished: cancelling a to-do or a project logs it under its stopDate
+	// beside the completed ones, so the view carries status 2 as well as 3
+	// (issue #210). Callers tell the two apart by `status`, which reads
+	// "cancelled" or "completed" in JSON and prints [~] or [x] in plain output.
+	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND " + todoOrProject,
 	// Trash carries projects as well as to-dos: trashing a project in the
 	// app puts the project row itself in Trash, and `things projects` filters
 	// trashed rows, so pinning t.type = 0 here left a trashed project visible

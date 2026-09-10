@@ -32,11 +32,12 @@ A title can match several items. Under `--json` an ambiguous reference is an err
 
 Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees the command never blocks on a prompt.
 
-- `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq 'select(.status=="open")'`.
-- `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq 'select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells a to-do `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.
+- `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq '.[] | select(.status=="open")'`.
+- `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq '.[] | select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells a to-do `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.
 - `"repeating": true` marks an item Things treats as repeating; the field is omitted otherwise. A project appearing as a row in a task listing carries `"type": "project"`.
 - `things projects` reports `start`, `startBucket`, `startDate` and `deadline` under the same names and encodings a to-do uses, so a scheduled project reads the same way without a per-project `show`. `startDate` and `deadline` are omitted when unset.
-- The `today`, `upcoming`, `anytime`, `someday` and `logbook` views list projects alongside to-dos, as the app does — scheduled in the first three, deferred in `someday`, completed in `logbook`. Split them on `"type"` — `jq 'select(.type=="project")'` for the projects, `select(.type=="task")` for the to-dos. Plain output tags a project row `(project)`.
+- Every named view except `inbox` lists projects alongside to-dos, as the app does — scheduled in `today`/`upcoming`/`anytime`, deferred in `someday`, closed in `logbook`, trashed in `trash`, due in `deadlines`. Split them on `"type"` — `jq '.[] | select(.type=="project")'` for the projects, `.[] | select(.type=="task")` for the to-dos. Plain output tags a project row `(project)`.
+- `logbook` is everything closed, not just everything finished: cancelled items sit beside completed ones, as they do in the app's Logbook. Split them on `"status"` — `"completed"` or `"cancelled"`; plain output prints `[x]` and `[~]`. Filter with `jq '.[] | select(.status=="completed")'` when you mean finished rather than closed.
 - `things projects` also reports `taskCount` and `openCount`. `taskCount` is every untrashed to-do in the project; `openCount` is the ones still open. The difference is the ones that are no longer open, which means completed or cancelled. To-dos filed under a project heading count towards both; the heading rows themselves never do, and neither do trashed to-dos or checklist items. Both numbers are Things' own bookkeeping, read straight from the database rather than recounted by the CLI.
 - Human output is styled and column-aligned; colour auto-disables when piping or under `NO_COLOR`. `--color=always|never` overrides. JSON is unaffected.
 
@@ -158,7 +159,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # every named view except inbox lists projects as rows too, since Things
     # schedules a project the same way it schedules a to-do and shows the
     # project itself in those lists: scheduled in today/upcoming/anytime,
-    # deferred in someday, completed in logbook under its completion date,
+    # deferred in someday, closed in logbook under its stopDate (completed
+    # and cancelled both, told apart by "status"),
     # trashed in trash, and due in deadlines — a project takes a deadline the
     # way a to-do does, ordered in among the to-dos by deadline.
     # Tell them apart by "type" ("project") or the plain-text

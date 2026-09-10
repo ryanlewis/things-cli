@@ -37,16 +37,23 @@ Available views: `today`, `inbox`, `upcoming`, `anytime`, `someday`,
 Every view above except `inbox` lists projects as well as to-dos, matching
 what Things shows in those lists — a project is scheduled the same way a
 to-do is, so a project put in Today is a row in Today, one deferred to
-Someday is a row in Someday, a completed project is a row in the Logbook
-under its completion date, and a trashed one is a row in Trash. `deadlines`
+Someday is a row in Someday, a closed project is a row in the Logbook
+under its stop date, and a trashed one is a row in Trash. `deadlines`
 is the same argument about a different column: a project takes a deadline the
 way a to-do does, and project rows are ordered in among the to-dos by
 deadline. Project rows are marked `(project)` in plain output and carry
-`"type": "project"` in JSON, so `jq 'select(.type=="project")'` picks them
+`"type": "project"` in JSON, so `jq '.[] | select(.type=="project")'` picks them
 out. A project has no parent project, so `--project` never matches one;
 `--area` does, because a project carries its own area. `repeating` carries
 project templates too, for the reason below. `inbox` stays to-do only: an
 inbox item has not been filed anywhere yet, so it is never a project.
+
+`logbook` is everything closed, not just everything finished. Cancelling a
+to-do or a project logs it under its stop date beside the completed ones, the
+way the app's Logbook shows both, so the view returns cancelled rows too.
+`status` tells them apart — `"completed"` or `"cancelled"` in JSON, `[x]` and
+`[~]` in plain output — so filter on it when you mean finished rather than
+closed: `things logbook -j | jq '.[] | select(.status=="completed")'`.
 
 `repeating` lists repeating to-do and project templates. The items a template
 generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
@@ -59,7 +66,7 @@ Project templates are marked `(project)` in plain output and carry
 
 The to-dos inside a project template are hidden along with it, since they
 would otherwise list against a project `things projects` does not report.
-`trash` and `logbook` still show them once they are trashed or logged.
+`trash` and `logbook` still show them once they are trashed or closed.
 
 `things search` is a lookup rather than a view, so it returns templates too.
 Results carry `"repeating": true`.
