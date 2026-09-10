@@ -28,15 +28,19 @@ things skill install pi        # Pi
 things skill list              # what is installed where
 ```
 
-| Agent | Default path |
-| --- | --- |
-| `claude` | `~/.claude/skills/things-cli/` |
-| `codex` | `~/.codex/skills/things-cli/` |
-| `pi` | `~/.pi/agent/skills/things-cli/` |
+| Agent | Default path | Relocated by |
+| --- | --- | --- |
+| `claude` | `~/.claude/skills/things-cli/` | `$CLAUDE_CONFIG_DIR` |
+| `codex` | `~/.codex/skills/things-cli/` | `$CODEX_HOME` |
+| `pi` | `~/.pi/agent/skills/things-cli/` | `$PI_CODING_AGENT_DIR` |
 
-If `$CLAUDE_CONFIG_DIR` is set, `claude` installs under
-`$CLAUDE_CONFIG_DIR/skills/things-cli/` instead, matching wherever Claude
-Code keeps its config.
+Each of these agents can be told to keep its config somewhere other than the
+default, using the environment variable in the last column. When one is set,
+`things` installs under `<value>/skills/things-cli/` instead, so the skill
+lands where that agent actually reads from. `things` resolves the value the
+same way the agent does: no relative-path rewriting for any of them, and a
+leading `~` is expanded only for `$PI_CODING_AGENT_DIR`, because Pi expands it
+too and the other two do not. `things skill list` prints the path it resolved.
 
 `--path DIR` installs somewhere else, such as a project-local
 `.claude/skills/` or `.agents/skills/`. `-y` skips the overwrite prompt.

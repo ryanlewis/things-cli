@@ -88,9 +88,27 @@ func TestAgentsSorted(t *testing.T) {
 	}
 }
 
+// agentConfigEnv maps each agent to the environment variable that relocates
+// its config directory. Keep it in step with the DefaultDir implementations.
+var agentConfigEnv = map[string]string{
+	"claude": "CLAUDE_CONFIG_DIR",
+	"codex":  "CODEX_HOME",
+	"pi":     "PI_CODING_AGENT_DIR",
+}
+
+// clearAgentConfigEnv stops a developer or CI runner who has one of these
+// variables exported from steering a test that means to exercise the $HOME
+// fallback.
+func clearAgentConfigEnv(t *testing.T) {
+	t.Helper()
+	for _, env := range agentConfigEnv {
+		t.Setenv(env, "")
+	}
+}
+
 func TestAgentDefaultDir(t *testing.T) {
 	t.Setenv("HOME", "/tmp/fake-home")
-	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	clearAgentConfigEnv(t)
 	for _, tc := range []struct {
 		agent, want string
 	}{
@@ -114,20 +132,113 @@ func TestAgentDefaultDir(t *testing.T) {
 	}
 }
 
-func TestClaudeDefaultDirHonoursConfigDir(t *testing.T) {
-	t.Setenv("HOME", "/tmp/fake-home")
-	t.Setenv("CLAUDE_CONFIG_DIR", "/tmp/custom-claude")
-	a, err := Lookup("claude")
-	if err != nil {
-		t.Fatalf("Lookup(claude): %v", err)
+// TestAgentDefaultDirHonoursConfigEnv covers the set case: the variable
+// replaces the whole home-relative default, and is used exactly as given.
+func TestAgentDefaultDirHonoursConfigEnv(t *testing.T) {
+	for _, name := range allAgents {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HOME", "/tmp/fake-home")
+			clearAgentConfigEnv(t)
+			t.Setenv(agentConfigEnv[name], "/tmp/custom-"+name)
+			a, err := Lookup(name)
+			if err != nil {
+				t.Fatalf("Lookup(%s): %v", name, err)
+			}
+			dir, err := a.DefaultDir()
+			if err != nil {
+				t.Fatalf("DefaultDir: %v", err)
+			}
+			want := filepath.Join("/tmp/custom-"+name, "skills", "things-cli")
+			if dir != want {
+				t.Errorf("DefaultDir = %q, want %q", dir, want)
+			}
+		})
 	}
-	dir, err := a.DefaultDir()
-	if err != nil {
-		t.Fatalf("DefaultDir: %v", err)
+}
+
+// TestAgentDefaultDirTildeMatchesAgent pins each agent's tilde rule. The value
+// has to resolve the way that agent resolves it, or the skill lands where the
+// agent never looks: Claude Code and Codex use the value verbatim, while Pi
+// expands a leading tilde before reading from $PI_CODING_AGENT_DIR.
+func TestAgentDefaultDirTildeMatchesAgent(t *testing.T) {
+	cases := map[string]string{
+		"claude": filepath.Join("~/relocated", "skills", "things-cli"),
+		"codex":  filepath.Join("~/relocated", "skills", "things-cli"),
+		"pi":     filepath.Join("/tmp/fake-home", "relocated", "skills", "things-cli"),
 	}
-	want := filepath.Join("/tmp/custom-claude", "skills", "things-cli")
-	if dir != want {
-		t.Errorf("DefaultDir = %q, want %q", dir, want)
+	if len(cases) != len(allAgents) {
+		t.Fatalf("cases cover %d agents, want %d — add the new agent's tilde rule", len(cases), len(allAgents))
+	}
+	for _, name := range allAgents {
+		t.Run(name, func(t *testing.T) {
+			want, ok := cases[name]
+			if !ok {
+				t.Fatalf("no tilde rule pinned for %s", name)
+			}
+			t.Setenv("HOME", "/tmp/fake-home")
+			clearAgentConfigEnv(t)
+			t.Setenv(agentConfigEnv[name], "~/relocated")
+			a, err := Lookup(name)
+			if err != nil {
+				t.Fatalf("Lookup(%s): %v", name, err)
+			}
+			dir, err := a.DefaultDir()
+			if err != nil {
+				t.Fatalf("DefaultDir: %v", err)
+			}
+			if dir != want {
+				t.Errorf("DefaultDir = %q, want %q", dir, want)
+			}
+		})
+	}
+}
+
+// TestAgentDefaultDirRelativeValueUsedVerbatim pins the rest of the
+// no-rewriting rule: a relative value is passed through untouched for every
+// agent, tilde rule or not.
+func TestAgentDefaultDirRelativeValueUsedVerbatim(t *testing.T) {
+	for _, name := range allAgents {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HOME", "/tmp/fake-home")
+			clearAgentConfigEnv(t)
+			t.Setenv(agentConfigEnv[name], "relocated")
+			a, err := Lookup(name)
+			if err != nil {
+				t.Fatalf("Lookup(%s): %v", name, err)
+			}
+			dir, err := a.DefaultDir()
+			if err != nil {
+				t.Fatalf("DefaultDir: %v", err)
+			}
+			want := filepath.Join("relocated", "skills", "things-cli")
+			if dir != want {
+				t.Errorf("DefaultDir = %q, want %q", dir, want)
+			}
+		})
+	}
+}
+
+// TestAgentDefaultDirNoHome checks the error path rather than the bare
+// relative path the old filepath.Join(os.Getenv("HOME"), ...) produced, which
+// install would have created under whatever directory the user happened to be
+// standing in.
+func TestAgentDefaultDirNoHome(t *testing.T) {
+	for _, name := range allAgents {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HOME", "")
+			clearAgentConfigEnv(t)
+			a, err := Lookup(name)
+			if err != nil {
+				t.Fatalf("Lookup(%s): %v", name, err)
+			}
+			dir, err := a.DefaultDir()
+			if err == nil {
+				t.Fatalf("DefaultDir = %q, want an error", dir)
+			}
+			if !strings.Contains(err.Error(), agentConfigEnv[name]) {
+				t.Errorf("error %q does not name $%s", err, agentConfigEnv[name])
+			}
+		})
 	}
 }
 

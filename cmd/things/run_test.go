@@ -166,6 +166,13 @@ func isolateHome(t *testing.T) string {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv(config.EnvVar, "")
+	// The skill installers resolve their target from these before falling back
+	// to HOME, so a developer or CI runner with one exported would otherwise
+	// have a test read or write their real agent config directory. Keep in step
+	// with the DefaultDir implementations in internal/skill.
+	for _, env := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR"} {
+		t.Setenv(env, "")
+	}
 	return home
 }
 

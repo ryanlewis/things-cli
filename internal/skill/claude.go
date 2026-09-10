@@ -1,10 +1,5 @@
 package skill
 
-import (
-	"os"
-	"path/filepath"
-)
-
 func init() { register(claudeAgent{}) }
 
 type claudeAgent struct{}
@@ -15,11 +10,7 @@ func (claudeAgent) Name() string { return "claude" }
 // directory. Claude Code lets users relocate that directory via
 // $CLAUDE_CONFIG_DIR, so honour it when set and fall back to ~/.claude.
 func (claudeAgent) DefaultDir() (string, error) {
-	configDir := os.Getenv("CLAUDE_CONFIG_DIR")
-	if configDir == "" {
-		configDir = filepath.Join(os.Getenv("HOME"), ".claude")
-	}
-	return filepath.Join(configDir, "skills", "things-cli"), nil
+	return resolveAgentDir("CLAUDE_CONFIG_DIR", verbatimTilde, ".claude")
 }
 
 func (claudeAgent) Files() map[string][]byte { return sharedFiles }

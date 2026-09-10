@@ -40,6 +40,54 @@ var sharedFiles = map[string][]byte{
 	"SKILL.md": []byte(SkillMD()),
 }
 
+// tildeRule says whether an agent expands a leading tilde in its own config
+// directory variable. We have to match the agent exactly: expanding where the
+// agent does not — or leaving it alone where the agent expands — installs the
+// skill somewhere the agent never looks.
+type tildeRule bool
+
+const (
+	// verbatimTilde hands the value to the filesystem as given, which is what
+	// Claude Code and Codex do. Claude Code goes further and refuses to start
+	// unless $CLAUDE_CONFIG_DIR is absolute.
+	verbatimTilde tildeRule = false
+	// expandsTilde rewrites a leading "~" or "~/" to $HOME first, which is
+	// what Pi does to $PI_CODING_AGENT_DIR before reading from it.
+	expandsTilde tildeRule = true
+)
+
+// resolveAgentDir returns the skill directory for an agent whose config
+// directory can be relocated with envVar, falling back to $HOME joined with
+// fallback when the variable is unset or empty. Beyond the agent's own tilde
+// rule the value is used exactly as given — no relative-path rewriting.
+func resolveAgentDir(envVar string, tilde tildeRule, fallback ...string) (string, error) {
+	home := os.Getenv("HOME")
+	base := os.Getenv(envVar)
+	switch {
+	case base == "":
+		if home == "" {
+			return "", fmt.Errorf("cannot locate the skill directory: neither $%s nor $HOME is set", envVar)
+		}
+		base = filepath.Join(append([]string{home}, fallback...)...)
+	case tilde == expandsTilde && home != "":
+		base = expandHomeTilde(base, home)
+	}
+	return filepath.Join(base, "skills", "things-cli"), nil
+}
+
+// expandHomeTilde rewrites a leading "~" or "~/" to home. Anything else — a
+// "~user" form, a bare relative path — is left alone, matching the expansion
+// Pi applies to $PI_CODING_AGENT_DIR.
+func expandHomeTilde(path, home string) string {
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
 // Agent renders and locates the skill for a particular AI coding agent.
 type Agent interface {
 	Name() string
