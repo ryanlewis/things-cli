@@ -509,7 +509,7 @@ func TestRunProjectEditRefusesTodoReference(t *testing.T) {
 	if len(*captured) != 0 {
 		t.Errorf("no URL should be opened, got %v", *captured)
 	}
-	if want := `"Post letter" is a to-do; use things edit`; err.Error() != want {
+	if want := `"Post letter" is a task; use things edit`; err.Error() != want {
 		t.Errorf("message = %q, want %q", err.Error(), want)
 	}
 
@@ -517,8 +517,10 @@ func TestRunProjectEditRefusesTodoReference(t *testing.T) {
 	if payload.Error != "not a project" {
 		t.Errorf("error = %q, want %q (%s)", payload.Error, "not a project", raw)
 	}
-	if payload.Kind != "to-do" {
-		t.Errorf("kind = %q, want %q", payload.Kind, "to-do")
+	// A to-do is a "task" in every CLI JSON value, matching `type` on a task
+	// row; "to-do" is the import payload's word alone (issue #219).
+	if payload.Kind != "task" {
+		t.Errorf("kind = %q, want %q", payload.Kind, "task")
 	}
 	if payload.Query != "Post letter" {
 		t.Errorf("query = %q, want %q", payload.Query, "Post letter")

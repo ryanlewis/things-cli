@@ -93,7 +93,7 @@ the same route, so `--json` never leaves a usage block on stdout. Without
 on. Today that is a project handed to `edit`: the payload carries `kind` —
 what the reference turned out to be, not what was looked up — plus `query`,
 `uuid` and `title`, and nothing has been written. Retry with `things project
-edit`. `not a project` is the same mistake the other way round — a to-do
+edit`. `not a project` is the same mistake the other way round — a task
 handed to `project edit`, carrying the same fields, with `things edit` as the
 retry.
 
