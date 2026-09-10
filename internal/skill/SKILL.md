@@ -162,12 +162,13 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # Tasks under a project heading belong to that project — they match
     # --project and the project's --area, and report projectTitle.
     # Trashing a project leaves its tasks untrashed in the database; every
-    # view hides them anyway. A closed project is one logbook row and a trashed
-    # one is a single trash row — their tasks are folded into the project row,
-    # not listed separately. To read them, name the project: --project <uuid> on
-    # a closed or trashed project returns its contents whatever their status,
-    # and `things show <uuid> --agent` marks each row [x]/[~]/[ ]. A task
-    # thrown away out of a trashed project is reachable nowhere, as in the app.
+    # view hides them unless you name that project. A closed project is one
+    # logbook row and a trashed one is a single trash row — their tasks are
+    # folded into the project row, not listed separately. To read them, name
+    # the project: --project <uuid> on a closed or trashed project returns its
+    # contents whatever their status, and `things show <uuid> --agent` marks
+    # each row [x]/[~]/[ ]. A task thrown away out of a trashed project is
+    # reachable nowhere, as in the app.
     # Which views carry projects, stated here and nowhere else: every named
     # view except inbox and anytime lists projects as rows too, since Things
     # schedules a project the same way it schedules a task and shows the
@@ -200,7 +201,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # per the note above. Name the project to reach it: `--project <uuid>`
     # always works, and for a closed project `things today --project <uuid>
     # --include-completed` lifts the fold in the view too, for the ones it
-    # closed today. Naming a trashed project only works in the bare form.
+    # closed today. Naming a trashed project works in every view that takes
+    # --project: `things anytime --project <uuid>` on a trashed project lists
+    # its open tasks, which no unfiltered view shows.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

@@ -838,14 +838,22 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 		includeCompleted: opts.IncludeCompleted,
 		projectNamed:     opts.Project != "",
 	})
-	// Naming a closed or trashed project asks for its contents, so the
-	// catch-all view widens past the open set and past the trashed-parent
-	// guard, which would otherwise strip exactly the rows being asked for.
-	contentsOfClosedProject := view == "project" && opts.Project != ""
-	if contentsOfClosedProject {
-		where = closedProjectContents
-	} else {
+	// untrashedParent is what stops a trashed project's children outliving it
+	// in the lists. Naming a project is asking for that project's contents, so
+	// the guard comes off there — the same lift #260 made to the closed-parent
+	// fold, and for the same reason: a trashed or closed project's children are
+	// listed nowhere by default, and --project is how they are reached (issue
+	// #263). With p pinned to the named project the clause is a constant, true
+	// for an untrashed project and false for a trashed one, so lifting it can
+	// only ever affect the trashed case.
+	//
+	// The catch-all view goes further, widening past the open set as well: it
+	// answers with the project's whole contents rather than a slice of a list.
+	switch {
+	case opts.Project == "":
 		where += " AND " + untrashedParent
+	case view == "project":
+		where = closedProjectContents
 	}
 	if !spec.includesTemplates {
 		// The template row itself, which carries the recurrence rule.

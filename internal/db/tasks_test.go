@@ -2393,6 +2393,145 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 	}
 }
 
+// A trashed project's children are listed nowhere by default, and naming the
+// project is how they are reached — the rule the closed-parent case already
+// followed. Asked directly, the app returns a trashed project's untrashed
+// children whatever their status: measured on 10 Sep 2026, one trashed project
+// with 2 untrashed open children answered 2, and one with 12 children answered
+// its 11 untrashed ones. Every view but the catch-all zeroed those rows on the
+// trashed-parent guard before the filter could ask for them (issue #263).
+func TestNamedTrashedProjectLiftsTheTrashedParentGuard(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	// view → the columns beyond the shared ones that put a row in that view.
+	cases := []struct {
+		view    string
+		columns string
+		values  string
+	}{
+		{"inbox", "start, startBucket", "0, 0"},
+		{"today", "start, startBucket, startDate", fmt.Sprintf("1, 0, %d", today)},
+		{"upcoming", "start, startBucket, startDate", fmt.Sprintf("2, 0, %d", tomorrow)},
+		{"anytime", "start, startBucket", "1, 0"},
+		{"deadlines", "start, startBucket, deadline", fmt.Sprintf("1, 0, %d", tomorrow)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.view, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+				('proj-gone', 'Binned', 1, 0, 1, 1),
+				('proj-live', 'Live',   1, 0, 0, 2)`)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, project, "index", `+tc.columns+`) VALUES
+				('under-gone', 'Child of binned', 0, 0, 0, 'proj-gone', 3, `+tc.values+`),
+				('under-live', 'Child of live',   0, 0, 0, 'proj-live', 4, `+tc.values+`)`)
+
+			// Unfiltered, the guard still applies: the trashed project's child
+			// is not in the list.
+			all, err := d.ListTasks(tc.view, TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(all), []string{"under-live"}) {
+				t.Errorf("%s unfiltered: got %v, want [under-live]", tc.view, uuidsOf(all))
+			}
+
+			// Naming the trashed project returns its child.
+			named, err := d.ListTasks(tc.view, TaskFilter{Project: "proj-gone"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(named), []string{"under-gone"}) {
+				t.Errorf("%s --project proj-gone: got %v, want [under-gone]", tc.view, uuidsOf(named))
+			}
+
+			// By title as well as by uuid, since --project takes either.
+			byTitle, err := d.ListTasks(tc.view, TaskFilter{Project: "Binned"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(byTitle), []string{"under-gone"}) {
+				t.Errorf("%s --project Binned: got %v, want [under-gone]", tc.view, uuidsOf(byTitle))
+			}
+
+			// An untrashed project is unaffected: the lifted clause was true
+			// for it either way.
+			live, err := d.ListTasks(tc.view, TaskFilter{Project: "proj-live"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(live), []string{"under-live"}) {
+				t.Errorf("%s --project proj-live: got %v, want [under-live]", tc.view, uuidsOf(live))
+			}
+
+			// The child itself stays out of the trash: it was never thrown
+			// away on its own account.
+			binned, err := d.ListTasks("trash", TaskFilter{Project: "proj-gone"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(binned), []string{}) {
+				t.Errorf("%s: trash --project proj-gone: got %v, want none", tc.view, uuidsOf(binned))
+			}
+		})
+	}
+}
+
+// The guard reaches the project through a heading, so lifting it has to as
+// well: a to-do filed under a heading carries t.heading and leaves t.project
+// NULL (issue #139).
+func TestNamedTrashedProjectLiftsTheGuardThroughAHeading(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('proj-gone', 'Binned',    1, 0, 1, 1),
+		('head-1',    'A heading', 2, 0, 0, 2)`)
+	mustExec(t, d, `UPDATE TMTask SET project = 'proj-gone' WHERE uuid = 'head-1'`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, heading, "index") VALUES
+		('under-head', 'Under the heading', 0, 0, 0, 1, 0, 'head-1', 3)`)
+
+	got, err := d.ListTasks("anytime", TaskFilter{Project: "proj-gone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(got), []string{"under-head"}) {
+		t.Errorf("anytime --project proj-gone: got %v, want [under-head]", uuidsOf(got))
+	}
+}
+
+// A closed child of a trashed project is in the Logbook's scope but folded out
+// of the unfiltered list. Naming the project reaches it, the same way it
+// reaches a closed project's closed children.
+func TestNamedTrashedProjectReachesItsClosedChildren(t *testing.T) {
+	d := newTestDB(t)
+	stopped := model.TimeToUnix(time.Now().AddDate(0, 0, -3))
+
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
+		('proj-gone', 'Binned', 1, 0, 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, stopDate, project, "index") VALUES
+		('under-done', 'Closed under binned', 0, 3, 0, 1, 0, ?, 'proj-gone', 2)`, stopped)
+
+	all, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 0 {
+		t.Errorf("logbook unfiltered: got %v, want none", uuidsOf(all))
+	}
+
+	named, err := d.ListTasks("logbook", TaskFilter{Project: "proj-gone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(named), []string{"under-done"}) {
+		t.Errorf("logbook --project proj-gone: got %v, want [under-done]", uuidsOf(named))
+	}
+}
+
 // The fold makes a closed project one row rather than a row plus its contents.
 // Naming that project is asking for the contents, so the fold comes off — the
 // answer `things --project <uuid>` and `show --agent` already give. Without
