@@ -170,7 +170,7 @@ func TestCacheTaskUUIDs(t *testing.T) {
 	tasks := []model.Task{
 		{UUID: "u1"}, {UUID: "u2"}, {UUID: "u3"},
 	}
-	cacheTaskUUIDs(tasks)
+	cacheTaskUUIDs(&Deps{}, tasks)
 
 	got, err := cache.ReadLastList()
 	if err != nil {

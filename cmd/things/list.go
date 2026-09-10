@@ -81,7 +81,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	cacheTaskUUIDs(tasks)
+	cacheTaskUUIDs(d, tasks)
 
 	// A filtered listing off a view is a slice of that view, not the whole
 	// project/area/tag — label it so the group header can't be read as the
@@ -224,7 +224,7 @@ func (c *SearchCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	cacheTaskUUIDs(tasks)
+	cacheTaskUUIDs(d, tasks)
 	// Search results are a listing like `list`, backed by the same cache, so
 	// they share PrintTaskList's path (and hint) rather than the bare Print
 	// ListCmd used to diverge to; an empty view label prints identically to

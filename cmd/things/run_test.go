@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -567,6 +568,81 @@ func TestRunListThenResolveByIndex(t *testing.T) {
 	}
 	if len(got) == 0 {
 		t.Fatal("expected cached uuids")
+	}
+}
+
+// A JSON listing must not write the last-list cache (issue #246). JSON output
+// carries no row numbers, so it can never be the listing a numeric ref points
+// back at — and the cache is one shared file per machine, so an agent running
+// `--json` alongside a person at a terminal would otherwise renumber the rows
+// that person is reading from.
+func TestRunListJSONDoesNotWriteLastListCache(t *testing.T) {
+	cases := [][]string{
+		{"-j", "list", "inbox"},
+		{"-j", "search", "milk"},
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			database := seedFullDB(t)
+			if err := runWith(t, database, args...); err != nil {
+				t.Fatalf("run %v: %v", args, err)
+			}
+			if _, err := cache.ReadLastList(); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("ReadLastList after %v: err = %v, want a missing cache file", args, err)
+			}
+		})
+	}
+}
+
+// --json is also settable from the config file, and a user who defaults it on
+// never sees a row number at all — the guard has to hold on that path too.
+func TestRunListConfigJSONDoesNotWriteLastListCache(t *testing.T) {
+	isolateHome(t)
+	path := writeConfig(t, "json = true\n")
+	database := seedFullDB(t)
+	if err := runWith(t, database, "--config", path, "list", "inbox"); err != nil {
+		t.Fatalf("list inbox with json = true: %v", err)
+	}
+	if _, err := cache.ReadLastList(); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("ReadLastList: err = %v, want a missing cache file", err)
+	}
+}
+
+// The JSON run leaves the existing cache in place rather than clearing it: the
+// plain listing a moment earlier is still the one its reader can see, so the
+// numbers they read stay pointing where they did.
+func TestRunListJSONLeavesExistingLastListCacheAlone(t *testing.T) {
+	database := seedFullDB(t)
+	if err := runWith(t, database, "list", "inbox"); err != nil {
+		t.Fatalf("list inbox: %v", err)
+	}
+	before, err := cache.ReadLastList()
+	if err != nil {
+		t.Fatalf("ReadLastList: %v", err)
+	}
+	if len(before) == 0 {
+		t.Fatal("plain list wrote no uuids")
+	}
+
+	// A different view, so a cache write here would be visible as a change.
+	if err := runWith(t, database, "-j", "list", "today"); err != nil {
+		t.Fatalf("list today --json: %v", err)
+	}
+	after, err := cache.ReadLastList()
+	if err != nil {
+		t.Fatalf("ReadLastList: %v", err)
+	}
+	if strings.Join(before, ",") != strings.Join(after, ",") {
+		t.Errorf("last-list cache changed from %v to %v", before, after)
+	}
+
+	// And "1" still resolves to row 1 of the plain listing.
+	task, err := resolveTask(&Deps{}, "1", database)
+	if err != nil {
+		t.Fatalf("resolveTask(\"1\"): %v", err)
+	}
+	if task.UUID != before[0] {
+		t.Errorf("resolveTask(\"1\") = %s, want %s", task.UUID, before[0])
 	}
 }
 

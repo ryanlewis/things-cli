@@ -342,7 +342,7 @@ things -a Work                    # tasks in an area
 ```
 
 Output groups by project or area; numeric indices are stable for follow-up
-commands until the next listing:
+commands until the next plain listing:
 
 ```text
 $ things
@@ -369,6 +369,11 @@ $ things
 `<task>` accepts a UUID, a numeric index from the last list, or a title
 substring. When a title matches multiple tasks, an interactive prompt picks
 between them; non-TTY callers get the match list as an error.
+
+The numeric index is for interactive use: it comes from the last plain-text
+listing, the only kind that prints numbers. A `--json` listing prints none and
+records none, so scripts and agents leave your numbering alone — they act on
+the `uuid` instead. See [Working with agents](https://things.rlew.io/agents/).
 
 ```sh
 things show 3                     # task #3 from the last list
