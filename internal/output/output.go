@@ -68,6 +68,7 @@ func printJSON(w io.Writer, v any) error {
 
 func printTasks(w io.Writer, tasks []model.Task) error {
 	type row struct {
+		uuid                           string
 		num, status, title, tags, date string
 		groupKey, groupTitle           string
 		isProjectGroup                 bool
@@ -99,6 +100,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		}
 
 		r := row{
+			uuid:   t.UUID,
 			num:    fmt.Sprintf("%d.", i+1),
 			status: styledStatus(t.Status),
 			title:  title,
@@ -147,6 +149,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 
 	const sentinel = "\x00"
 	currentProject, currentArea := sentinel, sentinel
+	prevUUID := ""
 	for _, r := range rows {
 		current := &currentArea
 		other := &currentProject
@@ -154,15 +157,24 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			current, other = &currentProject, &currentArea
 		}
 		if r.groupKey != *current || *other != sentinel {
-			if currentProject != sentinel || currentArea != sentinel {
-				fmt.Fprintln(w)
-			}
-			if r.groupTitle != "" {
-				fmt.Fprintf(w, "    %s\n", headerStyle.Render(r.groupTitle))
+			// today/upcoming/anytime list a scheduled project as a row of its
+			// own (issue #201), and its to-dos sort straight after it. Their
+			// project group header would restate the title on the line above,
+			// so fold them under the row instead of repeating it. The group
+			// state still advances, so a later group breaks as usual.
+			foldsIntoRowAbove := r.isProjectGroup && r.groupKey == prevUUID
+			if !foldsIntoRowAbove {
+				if currentProject != sentinel || currentArea != sentinel {
+					fmt.Fprintln(w)
+				}
+				if r.groupTitle != "" {
+					fmt.Fprintf(w, "    %s\n", headerStyle.Render(r.groupTitle))
+				}
 			}
 			*current = r.groupKey
 			*other = sentinel
 		}
+		prevUUID = r.uuid
 
 		cols := []string{
 			padCol(numW, r.num),

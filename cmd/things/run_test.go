@@ -696,3 +696,57 @@ func TestRunShowPrefersGeneratedTodoOverTemplate(t *testing.T) {
 		t.Error("resolved the template, not the generated to-do")
 	}
 }
+
+// A project scheduled for Today is a row in the app's Today list, so it is a
+// row in `things today` too (issue #201). Plain text marks it "(project)" so a
+// reader can tell it from a to-do; JSON already carried "type".
+func TestRunListTodayIncludesScheduledProject(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask
+			(uuid, title, type, status, trashed, start, startBucket, startDate,
+			 todayIndexReferenceDate, "index", todayIndex) VALUES
+			('proj-audit', 'Runbook audit', 1, 0, 0, 1, 0, ?, ?, 1, 2005),
+			('todo-milk',  'Buy milk',      0, 0, 0, 1, 0, ?, ?, 2, 1)`,
+		today, today, today, today,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	database := db.NewFromSQL(sqlDB)
+
+	out, err := runOut(t, database, "--json", "list", "today")
+	if err != nil {
+		t.Fatalf("run --json list today: %v", err)
+	}
+	var tasks []model.Task
+	if err := json.Unmarshal([]byte(out), &tasks); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	var project *model.Task
+	for i := range tasks {
+		if tasks[i].UUID == "proj-audit" {
+			project = &tasks[i]
+		}
+	}
+	if project == nil {
+		t.Fatalf("today omitted the scheduled project: %+v", tasks)
+	}
+	if project.Type != model.TypeProject {
+		t.Errorf("type = %d, want %d", project.Type, model.TypeProject)
+	}
+
+	plain, err := runOut(t, database, "list", "today")
+	if err != nil {
+		t.Fatalf("run list today: %v", err)
+	}
+	if !strings.Contains(plain, "Runbook audit") {
+		t.Errorf("plain output missing the project:\n%s", plain)
+	}
+	if !strings.Contains(plain, "(project)") {
+		t.Errorf("plain output does not mark the project row:\n%s", plain)
+	}
+	if strings.Contains(plain, "Buy milk (project)") {
+		t.Errorf("plain output marked a to-do as a project:\n%s", plain)
+	}
+}

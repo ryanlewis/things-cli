@@ -1231,3 +1231,219 @@ func keysOf(m map[string]*model.Task) []string {
 	sort.Strings(out)
 	return out
 }
+
+// seedScheduledProjects seeds projects scheduled the way Things schedules
+// them — start/startBucket/startDate/todayIndex on the project row itself —
+// next to the rows that must stay out of the scheduling views: a repeating
+// project template and its child, a trashed project, and a heading.
+func seedScheduledProjects(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('area-work', 'Work', 1, 1),
+		('area-home', 'Home', 1, 2)`)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	tomorrow := today + (1 << 7)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, area, "index", todayIndex) VALUES
+		('proj-today',    'Runbook audit', 1, 0, 0, 1, 0, ?,    ?,    'area-work', 5, 2005),
+		('proj-upcoming', 'Q4 planning',   1, 0, 0, 2, 0, ?,    NULL, 'area-work', 6, 0),
+		('proj-anytime',  'Backlog',       1, 0, 0, 1, 0, NULL, NULL, 'area-work', 7, 0),
+		('proj-trashed',  'Abandoned',     1, 0, 1, 1, 0, ?,    ?,    'area-work', 8, 0)`,
+		today, today, tomorrow, today, today)
+
+	// A repeating project template is filed under Repeating, not under the
+	// bucket its row carries, and its children come with it (issues #147, #171).
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, area, "index", rt1_recurrenceRule)
+		VALUES ('proj-template', 'Monthly review', 1, 0, 0, 1, 0, ?, 'area-work', 9, x'0102')`, today)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
+		VALUES ('todo-in-template', 'Draft agenda', 0, 0, 0, 1, 0, ?, 'proj-template', 10)`, today)
+
+	// A heading (type 2) is structure inside a project, never a list row.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
+		VALUES ('head-1', 'Phase one', 2, 0, 0, 1, 0, ?, 'proj-today', 11)`, today)
+
+	// To-dos for company: one inside the scheduled project, one loose in the
+	// same area, one top-level.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, project, area, "index", todayIndex) VALUES
+		('todo-in-proj', 'Read logs',  0, 0, 0, 1, 0, ?, ?, 'proj-today', NULL,        12, 3000),
+		('todo-in-area', 'Call bank',  0, 0, 0, 1, 0, ?, ?, NULL,         'area-work', 13, 1),
+		('todo-loose',   'Buy milk',   0, 0, 0, 1, 0, ?, ?, NULL,         NULL,        14, 7)`,
+		today, today, today, today, today, today)
+}
+
+// Things shows a project scheduled for Today in its Today list, and the same
+// for Upcoming and Anytime; the CLI's views used to be pinned to to-dos, so a
+// scheduled project was invisible (issue #201).
+func TestListTasksViewsIncludeProjects(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+
+	cases := []struct {
+		view string
+		want []string
+	}{
+		{"today", []string{"proj-today", "todo-in-proj", "todo-in-area", "todo-loose"}},
+		{"upcoming", []string{"proj-upcoming"}},
+		{"anytime", []string{"proj-today", "proj-anytime", "todo-in-proj", "todo-in-area", "todo-loose"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.view, func(t *testing.T) {
+			got, err := d.ListTasks(tc.view, TaskFilter{})
+			if err != nil {
+				t.Fatalf("ListTasks(%q): %v", tc.view, err)
+			}
+			if !sameSet(uuidsOf(got), tc.want) {
+				t.Errorf("view %q: got %v, want %v", tc.view, uuidsOf(got), tc.want)
+			}
+			for _, task := range got {
+				if task.UUID == "proj-today" || task.UUID == "proj-upcoming" || task.UUID == "proj-anytime" {
+					if task.Type != model.TypeProject {
+						t.Errorf("%s: got type %d, want %d", task.UUID, task.Type, model.TypeProject)
+					}
+				}
+			}
+		})
+	}
+}
+
+// Widening the views to projects must not widen them to everything project-
+// shaped: repeating project templates, the to-dos inside them, trashed
+// projects and headings all stay out.
+func TestListTasksProjectsExcludedFromViews(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+
+	excluded := []string{"proj-template", "todo-in-template", "proj-trashed", "head-1"}
+	for _, view := range []string{"today", "anytime"} {
+		got, err := d.ListTasks(view, TaskFilter{})
+		if err != nil {
+			t.Fatalf("ListTasks(%q): %v", view, err)
+		}
+		for _, uuid := range excluded {
+			for _, task := range got {
+				if task.UUID == uuid {
+					t.Errorf("view %q: %s should not be listed", view, uuid)
+				}
+			}
+		}
+	}
+
+	// The template itself still belongs to Repeating, which already carried
+	// project templates.
+	got, err := d.ListTasks("repeating", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(repeating): %v", err)
+	}
+	if !sameSet(uuidsOf(got), []string{"proj-template"}) {
+		t.Errorf("repeating: got %v, want [proj-template]", uuidsOf(got))
+	}
+}
+
+// A project row has no parent project, so --project can never match it: the
+// filter narrows to the project's contents, not the project itself. --area
+// still finds it, because a project carries its own area.
+func TestListTasksProjectRowsAndFilters(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+
+	byUUID, err := d.ListTasks("today", TaskFilter{Project: "proj-today"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byUUID), []string{"todo-in-proj"}) {
+		t.Errorf("--project proj-today: got %v, want [todo-in-proj]", uuidsOf(byUUID))
+	}
+
+	byTitle, err := d.ListTasks("today", TaskFilter{Project: "Runbook audit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byTitle), []string{"todo-in-proj"}) {
+		t.Errorf("--project 'Runbook audit': got %v, want [todo-in-proj]", uuidsOf(byTitle))
+	}
+
+	byArea, err := d.ListTasks("today", TaskFilter{Area: "area-work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// todo-in-proj inherits area-work through proj-today (the pa join).
+	want := []string{"proj-today", "todo-in-proj", "todo-in-area"}
+	if !sameSet(uuidsOf(byArea), want) {
+		t.Errorf("--area area-work: got %v, want %v", uuidsOf(byArea), want)
+	}
+
+	otherArea, err := d.ListTasks("today", TaskFilter{Area: "area-home"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherArea) != 0 {
+		t.Errorf("--area area-home: got %v, want none", uuidsOf(otherArea))
+	}
+}
+
+// The today ordering keys on the parent project's index, which a project row
+// leaves NULL. It therefore sits in its area's group next to that area's
+// unparented to-dos, ordered against them by todayIndex, and ahead of the
+// to-dos of any project with a non-zero index.
+func TestListTasksTodayOrderWithProjects(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+
+	got, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"todo-loose", "todo-in-area", "proj-today", "todo-in-proj"}
+	if !reflect.DeepEqual(uuidsOf(got), want) {
+		t.Errorf("today order: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// --include-completed carries project rows too: a project completed today and
+// not yet logged is still on the app's Today list.
+func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
+	d := newTestDB(t)
+	seedScheduledProjects(t, d)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stopToday := model.TimeToUnix(time.Now().Add(-1 * time.Minute))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, area, "index", todayIndex)
+		VALUES ('proj-done', 'Shipped', 1, 3, 0, 1, 0, ?, ?, ?, 'area-work', 20, 9000)`,
+		today, today, stopToday)
+
+	got, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range got {
+		if task.UUID == "proj-done" {
+			t.Fatal("completed project should be excluded by default")
+		}
+	}
+
+	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, task := range got {
+		if task.UUID == "proj-done" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("--include-completed: proj-done missing from %v", uuidsOf(got))
+	}
+}
