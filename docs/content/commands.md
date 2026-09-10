@@ -87,20 +87,25 @@ open is therefore either in `logbook` or in a list still showing it, never both
 and never neither — but `today` and `anytime` overlap each other, since a task
 scheduled for today is in the Anytime bucket too, so sweeping both means
 merging them on `uuid`. One closed inside a project that is itself closed or
-trashed is in none of the three — not `logbook`, not `today`, not `anytime` —
-for the reason the next paragraph gives. `--include-completed`
-works on `today` and `anytime`; with a filter, name the view:
-`things today -p "Launch v2" --include-completed`.
+trashed is in none of the three unfiltered lists — not `logbook`, not `today`,
+not `anytime` — for the reason the next paragraph gives. Naming that project
+brings it back. `--include-completed` works on `today` and `anytime`; with a
+filter, name the view: `things today -p "Launch v2" --include-completed`
+returns the tasks of a closed "Launch v2" that closed today, rather than
+nothing.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none
 of them separately, and `trash` does the same for a trashed project. To reach
 those tasks, name the project: `things --project <uuid>` on a closed or
 trashed project returns its contents whatever their status, which is what the
-app answers for the same question. A task you threw away out of a project is
-the exception — it keeps its own `trash` row, because it is in the Trash on
-its own account rather than through its project. A task thrown away out of a
-project that is itself in the Trash is reachable nowhere, as in the app.
+app answers for the same question. Naming a closed project on `today` or
+`anytime` with `--include-completed` lifts the fold there too, so a slice of
+those contents is reachable without leaving the view. A task you threw away
+out of a project is the exception — it keeps its own `trash` row, because it
+is in the Trash on its own account rather than through its project. A task
+thrown away out of a project that is itself in the Trash is reachable nowhere,
+as in the app.
 
 `someday` is the app's Someday list: the deferred things you have not filed
 under a project. A task inside a project stays inside it however it is
