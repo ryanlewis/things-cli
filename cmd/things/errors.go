@@ -57,10 +57,16 @@ type jsonErrorItem struct {
 
 // jsonErrorMatch is one candidate of an ambiguous reference — enough for a
 // caller to pick one and retry with the UUID.
+//
+// Type is there because the candidates need not be the same kind of thing: an
+// exact title can match a project and a to-do at once, and which one the
+// caller meant decides whether the retry is `things edit <uuid>` or
+// `things project edit <uuid>` (issue #194).
 type jsonErrorMatch struct {
-	UUID    string `json:"uuid"`
-	Title   string `json:"title"`
-	Project string `json:"project,omitempty"`
+	UUID    string         `json:"uuid"`
+	Title   string         `json:"title"`
+	Type    model.TaskType `json:"type"`
+	Project string         `json:"project,omitempty"`
 }
 
 // notFoundError is a lookup that resolved to nothing. Kind names what was
@@ -188,7 +194,7 @@ func errorPayload(err error) jsonErrorPayload {
 func matchList(tasks []model.Task) []jsonErrorMatch {
 	out := make([]jsonErrorMatch, len(tasks))
 	for i, t := range tasks {
-		out[i] = jsonErrorMatch{UUID: t.UUID, Title: t.Title, Project: t.ProjectTitle}
+		out[i] = jsonErrorMatch{UUID: t.UUID, Title: t.Title, Type: t.Type, Project: t.ProjectTitle}
 	}
 	return out
 }

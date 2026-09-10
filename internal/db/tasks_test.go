@@ -1489,6 +1489,115 @@ func TestGetTaskAmbiguousListsInstanceFirst(t *testing.T) {
 	}
 }
 
+// --- exact titles shared by more than one row (issue #194) ---
+
+// A project and a to-do can carry the same title. Neither is the obvious
+// target, so the lookup reports both rather than handing back whichever sorted
+// first: picking silently was what sent `things project edit <title>` to the
+// to-do and then advised a retry that edited it.
+func TestGetTaskExactTitleAmbiguousAcrossKinds(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.project("proj-chores", "Chores", 1)
+	fx.todo("todo-chores", "Chores", 2, anytime())
+
+	_, err := d.GetTask("Chores")
+	var ambig *AmbiguousTaskError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if !sameSet(uuidsOf(ambig.Matches), []string{"proj-chores", "todo-chores"}) {
+		t.Fatalf("matches = %v, want both rows", uuidsOf(ambig.Matches))
+	}
+	byUUID := map[string]model.TaskType{}
+	for _, m := range ambig.Matches {
+		byUUID[m.UUID] = m.Type
+	}
+	// The kind travels with each candidate: it is what tells the caller which
+	// of `things edit` and `things project edit` to retry with.
+	if byUUID["proj-chores"] != model.TypeProject {
+		t.Errorf("proj-chores type = %v", byUUID["proj-chores"])
+	}
+	if byUUID["todo-chores"] != model.TypeTask {
+		t.Errorf("todo-chores type = %v", byUUID["todo-chores"])
+	}
+}
+
+// Two to-dos of the same kind are no more decidable than two of different
+// kinds, and the index order that used to settle it is not a preference the
+// user expressed.
+func TestGetTaskExactTitleAmbiguousBetweenTodos(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.todo("todo-a", "Call the vet", 1, anytime())
+	fx.todo("todo-b", "Call the vet", 2, anytime())
+
+	_, err := d.GetTask("Call the vet")
+	var ambig *AmbiguousTaskError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if !sameSet(uuidsOf(ambig.Matches), []string{"todo-a", "todo-b"}) {
+		t.Errorf("matches = %v", uuidsOf(ambig.Matches))
+	}
+}
+
+// The template drops out of a larger set the same way it drops out of a pair:
+// the ambiguity check runs on what survives preferInstances, so the candidates
+// reported are the instances alone rather than the template as well.
+func TestGetTaskExactTitleDropsTemplateFromCandidates(t *testing.T) {
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
+	fx.todo("inst-water-2", "Water plants", 3, anytimeOn(today))
+
+	// Two instances behind one template: the template drops out, and the
+	// remaining pair is reported.
+	_, err := d.GetTask("Water plants")
+	var ambig *AmbiguousTaskError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if !sameSet(uuidsOf(ambig.Matches), []string{"inst-water", "inst-water-2"}) {
+		t.Errorf("matches = %v, want the two instances", uuidsOf(ambig.Matches))
+	}
+}
+
+// A template only stands in for an instance of its own kind. A repeating
+// project and an ordinary to-do sharing a title are two candidates, not one:
+// dropping the project template because the to-do is not repeating would send
+// `things project edit <title>` to the to-do again (issue #194).
+func TestGetTaskExactTitleKeepsTemplateOfAnotherKind(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.project("tpl-chores", "Chores", 1, repeats())
+	fx.todo("todo-chores", "Chores", 2, anytime())
+
+	_, err := d.GetTask("Chores")
+	var ambig *AmbiguousTaskError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if !sameSet(uuidsOf(ambig.Matches), []string{"tpl-chores", "todo-chores"}) {
+		t.Errorf("matches = %v, want both rows", uuidsOf(ambig.Matches))
+	}
+}
+
+// A closed or trashed row carrying the title is not a candidate, so it cannot
+// turn a single open match into an ambiguity.
+func TestGetTaskExactTitleIgnoresClosedAndTrashed(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.todo("open-one", "File taxes", 1, anytime())
+	fx.todo("done-one", "File taxes", 2, completed(1_600_000_000))
+	fx.todo("gone-one", "File taxes", 3, anytime(), trashed())
+
+	got, err := d.GetTask("File taxes")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.UUID != "open-one" {
+		t.Errorf("got %q, want open-one", got.UUID)
+	}
+}
+
 // With no recurrence column the ordering expression is a constant, so title
 // lookups fall back to plain index order rather than failing.
 func TestTitleLookupsWithoutRecurrenceColumn(t *testing.T) {
@@ -1499,21 +1608,33 @@ func TestTitleLookupsWithoutRecurrenceColumn(t *testing.T) {
 	if _, err := sqlDB.Exec(
 		`INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
 			('a', 'Water plants', 0, 0, 0, 1),
-			('b', 'Water plants', 0, 0, 0, 2)`,
+			('b', 'Water plants', 0, 0, 0, 2),
+			('c', 'Water the tree', 0, 0, 0, 3)`,
 	); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	d := &DB{db: sqlDB}
 
-	got, err := d.GetTask("Water plants")
+	got, err := d.GetTask("Water the tree")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.UUID != "a" {
-		t.Errorf("got %q, want the lowest index", got.UUID)
+	if got.UUID != "c" {
+		t.Errorf("got %q, want c", got.UUID)
 	}
 
-	matches, err := d.FindTasksByTitle("Water")
+	// With no recurrence column no row reads as a template, so neither of the
+	// two same-titled rows can be preferred over the other and both come back
+	// as candidates (issue #194).
+	var ambig *AmbiguousTaskError
+	if _, err := d.GetTask("Water plants"); !errors.As(err, &ambig) {
+		t.Fatalf("GetTask: %v, want AmbiguousTaskError", err)
+	}
+	if !sameSet(uuidsOf(ambig.Matches), []string{"a", "b"}) {
+		t.Errorf("got %v", uuidsOf(ambig.Matches))
+	}
+
+	matches, err := d.FindTasksByTitle("Water plants")
 	if err != nil {
 		t.Fatalf("FindTasksByTitle: %v", err)
 	}

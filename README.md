@@ -78,16 +78,17 @@ $ things show milk --json; echo "exit=$?"
   "kind": "task",
   "query": "milk",
   "matches": [
-    { "uuid": "A1B2...", "title": "Buy milk", "project": "Chores" },
-    { "uuid": "C3D4...", "title": "Buy oat milk" }
+    { "uuid": "A1B2...", "title": "Buy milk", "type": "task", "project": "Chores" },
+    { "uuid": "C3D4...", "title": "Buy oat milk", "type": "task" }
   ]
 }
 exit=1
 ```
 
-Retry with one of the `matches[].uuid` values. Argument and flag errors take
-the same route, so `--json` never leaves a usage block on stdout. Without
-`--json`, errors stay a plain `Error: ...` line on stderr, unchanged.
+Retry with one of the `matches[].uuid` values; `matches[].type` says whether
+that uuid belongs to `things edit` or `things project edit`. Argument and flag
+errors take the same route, so `--json` never leaves a usage block on stdout.
+Without `--json`, errors stay a plain `Error: ...` line on stderr, unchanged.
 
 `not a task` means the reference resolved to something the command cannot act
 on. Today that is a project handed to `edit`: the payload carries `kind` —
@@ -368,9 +369,11 @@ $ things
 
 `<task>` accepts a UUID, a numeric index from the last list, or a title
 substring. The substring is matched literally and case-insensitively — `%` and
-`_` are characters to find, not wildcards. When a title matches multiple tasks,
-an interactive prompt picks between them; non-TTY callers get the match list as
-an error.
+`_` are characters to find, not wildcards. When a title matches multiple
+tasks, an interactive prompt picks between them; non-TTY callers get the match
+list as an error. An exact title counts the same way: a project and a to-do
+that share one are reported as candidates rather than resolved to whichever
+sorts first.
 
 The numeric index is for interactive use: it comes from the last plain-text
 listing, the only kind that prints numbers. A `--json` listing prints none and

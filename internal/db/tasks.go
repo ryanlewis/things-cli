@@ -981,6 +981,10 @@ func (d *DB) GetTasksByUUIDs(uuids []string) (map[string]*model.Task, error) {
 	return found, nil
 }
 
+// GetTask resolves a reference to one open task: a uuid, then an exact title,
+// then a substring of a title. Both title paths report an AmbiguousTaskError
+// when the reference leaves more than one candidate standing, so the caller
+// picks by uuid rather than being handed a row this package chose for it.
 func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	t, err := d.GetTaskByUUID(uuidOrTitle)
 	if err != nil {
@@ -990,17 +994,15 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 		return t, nil
 	}
 
-	// Try exact title match. Only one row comes back, so the ordering is the
-	// whole decision: templates last (issue #156).
-	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
-		" GROUP BY t.uuid " + d.templatesLastOrder() + " LIMIT 1"
-	row := d.db.QueryRow(query, uuidOrTitle)
-	task, err := scanTask(row)
-	if err == nil {
-		return &task, nil
+	exact, err := d.findTasksByExactTitle(uuidOrTitle)
+	if err != nil {
+		return nil, err
 	}
-	if err != sql.ErrNoRows {
-		return nil, fmt.Errorf("querying task by title: %w", err)
+	if candidates := preferInstances(exact); len(candidates) > 0 {
+		if len(candidates) == 1 {
+			return &candidates[0], nil
+		}
+		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
 	}
 
 	// Try LIKE match — return all matches for disambiguation
@@ -1016,6 +1018,54 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	default:
 		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: matches}
 	}
+}
+
+// findTasksByExactTitle returns every open task carrying exactly this title.
+// It used to be a LIMIT 1 query, which made the ordering the whole decision
+// and hid the rest of the matches: a project and a to-do can share a title,
+// and whichever sorted first became the write target with no sign that a
+// second candidate existed, so `things project edit <title>` could land on the
+// to-do (issue #194). The ordering is still templatesLastOrder so callers that
+// do take the first row read the rows in the order the rest of the package
+// uses.
+func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
+	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+		" GROUP BY t.uuid " + d.templatesLastOrder()
+	return d.collectTasks(query, title)
+}
+
+// preferInstances drops a repeating template from a set of same-titled matches
+// as long as an ordinary row of the same kind is there to take its place, and
+// returns the set unchanged otherwise.
+//
+// This is the one preference the title lookup still makes, and it is the same
+// one templatesLastOrder encodes: a repeating to-do exists twice, as the
+// template carrying the recurrence rule and as the instance generated from it,
+// sharing its title, and the template is never what the reference means
+// because writes to it are refused outright (issues #143, #156). Treating that
+// pair as ambiguous would put a disambiguation prompt in front of every
+// repeating to-do.
+//
+// The kinds are kept apart because a template only stands in for an instance
+// of its own kind: a repeating project and a to-do sharing a title are still
+// two candidates, and dropping the project because the to-do is not repeating
+// would resolve `things project edit <title>` to the to-do again — the very
+// silence issue #194 is about.
+func preferInstances(matches []model.Task) []model.Task {
+	hasInstance := map[model.TaskType]bool{}
+	for _, m := range matches {
+		if !m.Repeating {
+			hasInstance[m.Type] = true
+		}
+	}
+	out := make([]model.Task, 0, len(matches))
+	for _, m := range matches {
+		if m.Repeating && hasInstance[m.Type] {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // FindTasksByTitle returns the open tasks whose title contains substr. The

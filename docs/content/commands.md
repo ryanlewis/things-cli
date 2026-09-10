@@ -197,6 +197,12 @@ case-insensitively. There is no wildcard syntax: `%` and `_` are characters
 to find, so `things show "20_30 review"` finds the task spelled with an
 underscore and not the one spelled with a colon.
 
+A title matching more than one item is reported rather than guessed at: an
+interactive run prints the candidates and asks which one, and a non-TTY run
+returns them as an error. That holds for an exact title too — a project and a
+to-do that share one are both offered, instead of the lookup picking whichever
+sorts first.
+
 After any plain list or `search`, numeric indices stay valid until the
 next one. A listing's order is fixed, so the same list run twice numbers
 the same items the same way — but the numbers still move as items are

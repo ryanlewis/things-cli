@@ -50,7 +50,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 
 ```json
 {"error": "ambiguous task", "message": "...", "kind": "task", "query": "milk",
- "matches": [{"uuid": "...", "title": "Buy milk", "project": "Chores"}]}
+ "matches": [{"uuid": "...", "title": "Buy milk", "type": "task", "project": "Chores"}]}
 {"error": "not found", "message": "task not found: milk", "kind": "task", "query": "milk"}
 {"error": "not a task", "message": "\"Chores\" is a project; use things project edit",
  "kind": "project", "query": "Chores", "uuid": "...", "title": "Chores"}
@@ -59,7 +59,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 {"error": "error", "message": "..."}
 ```
 
-On `ambiguous task`, retry with one of `matches[].uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
+On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries its `type`, and a title a project and a to-do share is reported this way rather than resolving to one of them, so `type` tells you whether the uuid you picked wants `things edit` or `things project edit`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
 
 `import` fails per item, so its two failures add an `items` array — act on that rather than parsing `message`:
 
