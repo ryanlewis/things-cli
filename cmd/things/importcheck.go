@@ -164,10 +164,15 @@ func wantedStatus(attrs map[string]any) (model.Status, bool) {
 // importRefusalItem is one payload item the pre-write check refused, and one
 // entry of the `items` array a --json consumer reads (issue #161).
 type importRefusalItem struct {
-	Path    string
-	ID      string
-	Title   string
-	Kind    string // "to-do" or "project", as the message names it
+	Path  string
+	ID    string
+	Title string
+	// Kind is "task" or "project", the word Error() puts in the message. It
+	// matches the `kind` an error payload carries, though jsonItems does not
+	// emit it — the `items` array has no kind field (issue #245). The `import`
+	// payload's own spelling of a task is "to-do", the format's word, not the
+	// CLI's.
+	Kind    string
 	Blocked []string
 }
 
@@ -263,7 +268,7 @@ func prepareImport(d *Deps, database *db.DB, data []byte) (*importPlan, error) {
 		if len(blocked) == 0 || !task.Repeating {
 			continue
 		}
-		kind := "to-do"
+		kind := "task"
 		if task.Type == model.TypeProject {
 			kind = "project"
 		}

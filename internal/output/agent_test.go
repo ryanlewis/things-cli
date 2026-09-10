@@ -50,7 +50,7 @@ func TestPrintAgentBriefTask(t *testing.T) {
 
 	for _, want := range []string{
 		"# Cut RC build",
-		"A Things3 to-do",
+		"A Things3 task",
 		"- UUID: `task-uuid`",
 		"- Status: open",
 		"- Project: Launch v2",
@@ -94,7 +94,7 @@ func TestPrintAgentBriefCommandsUseUUID(t *testing.T) {
 func TestPrintAgentBriefOmitsEmptySections(t *testing.T) {
 	task := &model.Task{UUID: "task-uuid", Title: "Bare", Status: model.StatusOpen}
 	got := briefText(t, AgentBrief{Task: task})
-	for _, unwanted := range []string{"## Notes", "## Checklist", "## Open to-dos"} {
+	for _, unwanted := range []string{"## Notes", "## Checklist", "## Open tasks"} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("brief contains %q for a to-do with nothing in it\n%s", unwanted, got)
 		}
@@ -127,7 +127,7 @@ func TestPrintAgentBriefRepeating(t *testing.T) {
 	if !strings.Contains(got, "- Repeats: yes") {
 		t.Errorf("brief does not report the repeat\n%s", got)
 	}
-	if !strings.Contains(got, "This is a repeating to-do.") {
+	if !strings.Contains(got, "This is a repeating task.") {
 		t.Errorf("brief does not warn that status writes are refused\n%s", got)
 	}
 	// The CLI refuses a status write on a repeating item, so offering the
@@ -172,7 +172,7 @@ func TestPrintAgentBriefProject(t *testing.T) {
 
 	for _, want := range []string{
 		"A Things3 project",
-		"## Open to-dos",
+		"## Open tasks",
 		"- Cut RC build — `todo-1`",
 		"- Write notes — `todo-2`",
 		"things project edit proj-uuid --notes",
@@ -182,7 +182,7 @@ func TestPrintAgentBriefProject(t *testing.T) {
 		// brief has to say what that takes with it.
 		"things complete proj-uuid --yes",
 		"things cancel proj-uuid --yes",
-		"complete it AND every to-do under it",
+		"complete it AND every task under it",
 		"do not pass it unless closing the whole project",
 	} {
 		if !strings.Contains(got, want) {
@@ -198,13 +198,13 @@ func TestPrintAgentBriefProject(t *testing.T) {
 func TestPrintAgentBriefProjectWithNoTodos(t *testing.T) {
 	project := &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject}
 	got := briefText(t, AgentBrief{Task: project})
-	if !strings.Contains(got, "None — the project has no open to-dos.") {
+	if !strings.Contains(got, "None — the project has no open tasks.") {
 		t.Errorf("project brief does not say the project is empty\n%s", got)
 	}
 }
 
 // A closed project's brief lists its contents whatever their status since
-// issue #229, so "Open to-dos" would be a lie and a bare title would read as
+// issue #229, so "Open tasks" would be a lie and a bare title would read as
 // something still to do. The heading drops "Open" and each row is marked.
 func TestPrintAgentBriefClosedProjectMarksTodoStatus(t *testing.T) {
 	for _, tc := range []struct {
@@ -224,7 +224,7 @@ func TestPrintAgentBriefClosedProjectMarksTodoStatus(t *testing.T) {
 			got := briefText(t, AgentBrief{Task: tc.project, Todos: todos})
 
 			for _, want := range []string{
-				"## To-dos\n",
+				"## Tasks\n",
 				"- [x] Cut RC build — `todo-1`",
 				"- [~] Write notes — `todo-2`",
 				"- [ ] Left over — `todo-3`",
@@ -233,7 +233,7 @@ func TestPrintAgentBriefClosedProjectMarksTodoStatus(t *testing.T) {
 					t.Errorf("closed project brief does not contain %q\n%s", want, got)
 				}
 			}
-			if strings.Contains(got, "## Open to-dos") {
+			if strings.Contains(got, "## Open tasks") {
 				t.Errorf("closed project brief still calls its contents open\n%s", got)
 			}
 		})
@@ -243,7 +243,7 @@ func TestPrintAgentBriefClosedProjectMarksTodoStatus(t *testing.T) {
 func TestPrintAgentBriefClosedProjectWithNoTodos(t *testing.T) {
 	project := &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusCompleted}
 	got := briefText(t, AgentBrief{Task: project})
-	if !strings.Contains(got, "None — the project has no to-dos.") {
+	if !strings.Contains(got, "None — the project has no tasks.") {
 		t.Errorf("closed project brief does not say it is empty\n%s", got)
 	}
 }
@@ -258,7 +258,7 @@ func TestPrintAgentBriefFoldsMultilineTitles(t *testing.T) {
 		t.Errorf("heading not folded onto one line\n%s", got)
 	}
 	if !strings.Contains(got, "- Cut RC build — `todo-1`") {
-		t.Errorf("to-do title not folded onto one line\n%s", got)
+		t.Errorf("task title not folded onto one line\n%s", got)
 	}
 }
 

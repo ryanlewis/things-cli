@@ -248,16 +248,10 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks and projects with a deadline |
 
-Every view above except `inbox` and `anytime` lists projects as well as
-to-dos, because Things schedules and files a project exactly as it does a
-to-do — a project put in Today is a row in Today, a closed one is a row in the
-Logbook, a trashed one a row in Trash, and one with a deadline a row in
-`deadlines`. Project rows are marked `(project)` in plain output and carry
-`"type": "project"` in JSON. A bare `-p`/`-a`/`-t` filter with no view named
-follows the same rule. `anytime` is to-do only: every active project is
-trivially "anytime", so the app groups each project's to-dos under the project
-name rather than listing the project among them, and `things projects` is how
-to sweep the projects themselves.
+Every view above except `inbox` and `anytime` lists projects as well as tasks,
+marked `(project)` in plain output and `"type": "project"` in JSON. The
+[commands page](https://things.rlew.io/commands/) covers the filters that
+match a project, and `things skill show` states the rule in full.
 
 Trashing a project in Things leaves its to-dos untrashed in the database, so
 every view above hides to-dos whose project is in the trash. A closed project
@@ -697,8 +691,8 @@ An `operation: update` item goes through the same repeating check as `edit`. If 
 ```text
 $ things import --file reschedule.json
 Error: 2 of 3 update items change attributes Things does not allow on repeating items, and drops the request silently (https://culturedcode.com/things/support/articles/2803573/). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:
-  [1] (id abc…): "Water plants" is a repeating to-do — when, deadline
-  [2].attributes.items[0] (id def…): "Take the bins out" is a repeating to-do — canceled
+  [1] (id abc…): "Water plants" is a repeating task — when, deadline
+  [2].attributes.items[0] (id def…): "Take the bins out" is a repeating task — canceled
 ```
 
 The refusal is all-or-nothing because the URL scheme takes one payload and gives no per-item result: there is no way to send the rest and report what was skipped. Each offending item is named by its position in the payload (nested items included), its id, its title and the blocked attributes, so a payload can be fixed in one pass. `--no-verify` does not lift the refusal — it is a documented restriction, not a read-back.

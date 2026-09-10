@@ -48,7 +48,7 @@ func TestShowAgentBriefForProjectListsOpenTodos(t *testing.T) {
 	for _, want := range []string{
 		"# Chores",
 		"A Things3 project",
-		"## Open to-dos",
+		"## Open tasks",
 		"- Buy milk — `task-1`",
 	} {
 		if !strings.Contains(out, want) {

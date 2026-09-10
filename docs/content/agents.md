@@ -72,7 +72,7 @@ things show 3 --agent > brief.md
 $ things show "release candidate" --agent
 # Cut the release candidate
 
-A Things3 to-do, handed over by things-cli. Everything below was read
+A Things3 task, handed over by things-cli. Everything below was read
 from the Things database; the commands at the end are how you change it.
 
 - UUID: `TZqGIhgJebgtOF3DqsYQNp`
@@ -99,7 +99,7 @@ Tag from main once CI is green. Check with marketing before announcing.
 
 ## Closing out
 
-Refer to this to-do by its UUID, not by title or list index.
+Refer to this task by its UUID, not by title or list index.
 
 ```sh
 things show TZqGIhgJebgtOF3DqsYQNp --json         # re-read the current state
@@ -139,7 +139,7 @@ Plain listings from `things list` and `things search`, printed to a
 terminal, end with a one-line pointer to the flag:
 
 ```text
-hint: things show <n> --agent hands a to-do to an agent (disable with hints = false in the config file)
+hint: things show <n> --agent hands a task to an agent (disable with hints = false in the config file)
 ```
 
 It never appears under `--json`, when stdout is not a terminal, or for an
@@ -228,25 +228,14 @@ payload items were blocked or did not land; the [Commands](/commands/) page
 has the detail.
 
 Every named view except `inbox` and `anytime` returns projects as well as
-to-dos, because Things schedules a project the same way it schedules a to-do
-and shows the project itself in those lists — scheduled in `today` and
-`upcoming`, deferred in `someday`, closed in `logbook` under its stop date,
-trashed in `trash`. `anytime` is to-do only, because every active project is
-trivially "anytime": the app groups each project's to-dos under the project
-name instead of listing the project among them, so an agent sweeping projects
-wants `things projects`, not `things anytime`. A trashed project reaches no other command:
-`things projects` filters trashed rows. `deadlines` carries projects for the
-same reason applied to a different column, so a sweep of what is due no
-longer misses a project deadline. A bare filter with no view named —
-`things -p X`, `things -a Work`, `things -t urgent` — follows the same rule,
-so `things -a Work` returns that area's own projects alongside its open
-to-dos. `things -p X` is the exception the rule already carries: a project has
-no parent project, so `--project` matches a project's contents and never the
-project row itself. Each row carries `"type"` — `"task"` or `"project"` — so
-a script that acts on a listing should say which kind it means. It matters:
-`edit` refuses a project with `not a task`, and `complete` on a project closes
-every to-do inside it, so it asks first and refuses outright under `--json`
-without `--yes`.
+tasks; the bundled skill states the rule and the reasoning in full, and
+`things skill show` prints it. What matters when acting on a listing is that
+each row carries `"type"` — `"task"` or `"project"` — so a script should say
+which kind it means. `edit` refuses a project with `not a task`, and
+`complete` on a project closes every task inside it, so it asks first and
+refuses outright under `--json` without `--yes`. To sweep projects on their
+own, use `things projects`, not a view — it leaves out trashed projects, so
+`trash` is the only place one of those shows up.
 
 `someday` matches the app's Someday list, which holds the deferred things not
 filed under a project. A to-do inside a project stays inside it however it is
@@ -287,7 +276,7 @@ also means the day sweep above reports the project rather than the to-dos
 `logbook`, so those to-dos are in none of the three. To read
 the contents, name the project: `things --project <uuid> -j` on a closed or
 trashed project returns its to-dos whatever their status, and
-`things show <uuid> --agent` lists them under `## To-dos` with `[x]`, `[~]` or
+`things show <uuid> --agent` lists them under `## Tasks` with `[x]`, `[~]` or
 `[ ]` on each row. A to-do thrown away out of a project that is itself in the
 Trash is reachable nowhere, matching the app.
 

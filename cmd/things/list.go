@@ -64,7 +64,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	// could never match a row (issue #211). Say so rather than print an empty
 	// list, the same way an impossible date filter is rejected.
 	if project != "" && !db.ProjectFilterableView(view) {
-		return fmt.Errorf("--project is not supported on the %q view: it lists only items with no parent project; use `things --project %q` for a project's own to-dos", view, project)
+		return fmt.Errorf("--project is not supported on the %q view: it lists only items with no parent project; use `things --project %q` for a project's own tasks", view, project)
 	}
 
 	filter := db.TaskFilter{

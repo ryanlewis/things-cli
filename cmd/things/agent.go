@@ -14,7 +14,7 @@ import (
 // agentHint is the pointer printed under a plain task listing. The numeric
 // index is the handle the reader already has in front of them; --agent is what
 // they cannot discover from the listing itself.
-const agentHint = "things show <n> --agent hands a to-do to an agent (disable with hints = false in the config file)"
+const agentHint = "things show <n> --agent hands a task to an agent (disable with hints = false in the config file)"
 
 // isStdoutTTY reports whether stdout is a terminal, using the same package and
 // the same Cygwin allowance as isInteractive does for stdin. It is a var so
@@ -36,12 +36,12 @@ func printAgentHint(d *Deps, listed int) error {
 }
 
 // showAgentBrief renders the Markdown brief `things show --agent` prints. A
-// project also lists the to-dos filed under it, each with the UUID an agent
+// project also lists the tasks filed under it, each with the UUID an agent
 // needs to act on it — the open ones while the project is open, and its whole
 // contents once the project is closed or trashed, which is what the catch-all
 // view answers for a named project since issue #229.
 //
-// The to-do UUIDs are deliberately not written to the last-list cache:
+// The task UUIDs are deliberately not written to the last-list cache:
 // the cache backs the numeric refs from the last listing, and a brief is not a
 // listing.
 func showAgentBrief(d *Deps, database *db.DB, task *model.Task, items []model.ChecklistItem) error {

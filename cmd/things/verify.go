@@ -23,7 +23,7 @@ var (
 )
 
 // checkRepeating refuses a write that Things would silently drop. Things
-// rejects status, when, deadline and duplicate changes on repeating to-dos and
+// rejects status, when, deadline and duplicate changes on repeating tasks and
 // projects without reporting an error, so an attempt would look like success.
 // blocked lists the attributes this command is about to change; it is empty
 // when nothing restricted was requested.
@@ -31,7 +31,9 @@ func checkRepeating(task *model.Task, blocked []string) error {
 	if !task.Repeating || len(blocked) == 0 {
 		return nil
 	}
-	kind := "to-do"
+	// "task", not "to-do": the word the JSON and the lookup errors use, so a
+	// refusal reads the same way as the error beside it (issue #245).
+	kind := "task"
 	if task.Type == model.TypeProject {
 		kind = "project"
 	}
