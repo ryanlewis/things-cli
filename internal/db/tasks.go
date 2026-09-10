@@ -25,18 +25,6 @@ type TaskFilter struct {
 	To   *model.ThingsDate
 }
 
-// dateFilterableViews lists the views where --on/--from/--to make sense.
-// Excluded: inbox tasks have no startDate; trash is trashed-only; logbook
-// items have a stopDate but no meaningful startDate filter; someday requires
-// startDate IS NULL, so a startDate range could never match anything.
-var dateFilterableViews = map[string]bool{
-	"today":     true,
-	"upcoming":  true,
-	"anytime":   true,
-	"deadlines": true,
-	"project":   true,
-}
-
 // CompletableView reports whether --include-completed applies to the view.
 // The answer comes off the view's own spec, and it is the same field that
 // widens the status test when the flag is set, so the question the CLI asks
@@ -57,24 +45,18 @@ func CompletableViewNames() []string {
 	return names
 }
 
-// DateFilterableView reports whether --on/--from/--to apply to the view.
+// DateFilterableView reports whether --on/--from/--to apply to the view. An
+// unknown name is not date-filterable: it has no spec, and a zero spec does
+// not support the filter.
 func DateFilterableView(view string) bool {
-	return dateFilterableViews[view]
+	return views[view].supportsDateFilter
 }
 
-// viewsWithoutProjectFilter lists the views a --project filter can never match
-// in. someday keeps only rows with no parent project (issue #211), so pairing
-// it with --project asks for the contents of a project the view has already
-// excluded: the two clauses contradict, and the listing is empty whatever the
-// project holds. Rejecting the combination beats printing an empty list, the
-// same call issue #124 made for date filters on this view.
-var viewsWithoutProjectFilter = map[string]bool{
-	"someday": true,
-}
-
-// ProjectFilterableView reports whether --project applies to the view.
+// ProjectFilterableView reports whether --project applies to the view. The
+// flag it reads is the negative one, so an unknown name stays filterable, as
+// it was when this read a map of the views that refuse the filter.
 func ProjectFilterableView(view string) bool {
-	return !viewsWithoutProjectFilter[view]
+	return !views[view].rejectsProjectFilter
 }
 
 // repeatingPlaceholder is substituted with the probed recurrence column
@@ -340,15 +322,16 @@ const (
 // viewSpec is one list view: what it selects, how it is arranged, and how it
 // answers the flags that change either.
 //
-// The four of those used to be spread across four maps — the WHERE in
-// viewFilters, the ORDER BY in viewOrderBy with a fallback to indexOrderBy,
-// and a flag each in viewsIncludingTemplates and completableViews — so adding
-// or changing a view meant finding all four, and every parity change in the
-// week to 10 Sep 2026 edited more than one of them (issue #240).
+// All of that used to be spread across six maps — the WHERE in viewFilters,
+// the ORDER BY in viewOrderBy with a fallback to indexOrderBy, and a flag each
+// in viewsIncludingTemplates, completableViews, dateFilterableViews and
+// viewsWithoutProjectFilter — so adding or changing a view meant finding all
+// six, and every parity change in the week to 10 Sep 2026 edited more than one
+// of them (issue #240).
 //
-// dateFilterableViews and viewsWithoutProjectFilter are still maps of their
-// own: they gate flag validation at the CLI boundary rather than composing
-// SQL. Folding them in here would finish the job and is a small follow-up.
+// The last two of those gate flag validation at the CLI boundary rather than
+// composing SQL, which is why #240 folded the four SQL-shaping maps first and
+// these two after. Adding a view is now one entry here and nothing else.
 //
 // The WHERE is composed from the fields rather than written out per view, in a
 // fixed slot order: scope, then status, then trashed, then the view's own
@@ -392,6 +375,30 @@ type viewSpec struct {
 	// answer against, and its list matched the CLI exactly, so it is left out
 	// rather than guessed at.
 	supportsIncludeCompleted bool
+
+	// supportsDateFilter marks the views --on/--from/--to make sense in.
+	// Excluded: inbox tasks have no startDate; trash is trashed-only; logbook
+	// items have a stopDate but no meaningful startDate filter; someday
+	// requires startDate IS NULL, so a startDate range could never match
+	// anything; and repeating lists templates rather than scheduled items, so
+	// "what falls in this date range" is not a question that view answers —
+	// the instances a template generates are ordinary rows in the dated views.
+	// What a template's own startDate means was not measured: the database
+	// this was checked against on 10 Sep 2026 held no repeating items at all.
+	supportsDateFilter bool
+
+	// rejectsProjectFilter marks the views a --project filter can never match
+	// in. someday keeps only rows with no parent project (issue #211), so
+	// pairing it with --project asks for the contents of a project the view
+	// has already excluded: the two clauses contradict, and the listing is
+	// empty whatever the project holds. Rejecting the combination beats
+	// printing an empty list, the same call issue #124 made for date filters
+	// on this view.
+	//
+	// It is the one flag here stated in the negative, because it has one
+	// holder and the default is to allow the filter. That also keeps an
+	// unknown view name filterable, which is what the map it replaced did.
+	rejectsProjectFilter bool
 
 	// includesTemplates marks the views that keep repeating templates in their
 	// results. Everywhere else templates are filtered out: Things files a
@@ -438,12 +445,12 @@ func (s viewSpec) where(includeCompleted bool) string {
 	return strings.Join(parts, " AND ")
 }
 
-// views is the table: one row per list view, and the only place a view's SQL
-// is described.
+// views is the table: one row per list view, and the only place a view is
+// described.
 var views = map[string]viewSpec{
 	"today": {
 		scope: todayScheduled, status: openRows, trashed: untrashedRows,
-		includesProjects: true, supportsIncludeCompleted: true,
+		includesProjects: true, supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Today takes the shared grouping and then todayIndex, which is the
 		// one signal the app orders within a group by. Measured against the
 		// app on 10 Sep 2026 over a 27-row Today, these keys reproduce its
@@ -471,7 +478,7 @@ var views = map[string]viewSpec{
 	},
 	"upcoming": {
 		scope: upcomingScheduled, status: openRows, trashed: untrashedRows,
-		includesProjects: true,
+		includesProjects: true, supportsDateFilter: true,
 		// Upcoming is a diary, so it reads by date and not by list position.
 		// The app orders it by start date and then by todayIndex, which is the
 		// within-day position it also keys Today on; the view listed in bare
@@ -494,7 +501,7 @@ var views = map[string]viewSpec{
 	// rolls over, and Anytime is a list like Today (issue #238).
 	"anytime": {
 		scope: anytimeBucket, status: openRows, trashed: untrashedRows,
-		supportsIncludeCompleted: true,
+		supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Anytime groups the way the app presents it: the project is the
 		// header above its own to-dos, not a row among them. The view listed
 		// in bare t."index" order before, so a project's to-dos interleaved
@@ -514,8 +521,9 @@ var views = map[string]viewSpec{
 	// project, not left looking unparented.
 	"someday": {
 		scope: somedayDeferred, status: openRows, trashed: untrashedRows,
-		extra:            []string{unparented},
-		includesProjects: true,
+		extra:                []string{unparented},
+		includesProjects:     true,
+		rejectsProjectFilter: true,
 		// Someday is arranged like today and anytime. Its filter keeps only
 		// rows with no parent project, so the two project keys are constant
 		// across the listing and it reduces to unfiled items, then areas, then
@@ -589,8 +597,8 @@ var views = map[string]viewSpec{
 	// forming a block of their own.
 	"deadlines": {
 		scope: hasDeadline, status: openRows, trashed: untrashedRows,
-		includesProjects: true,
-		orderBy:          "ORDER BY t.deadline ASC, t.\"index\" ASC" + uuidTiebreak,
+		includesProjects: true, supportsDateFilter: true,
+		orderBy: "ORDER BY t.deadline ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
 	// Things' Repeating list: the templates that generate to-dos and
 	// projects, not the items they generate. A template carries the
@@ -617,7 +625,7 @@ var views = map[string]viewSpec{
 	// project has no parent project of its own, so p.uuid never matches.
 	"project": {
 		status: openRows, trashed: untrashedRows,
-		includesProjects: true,
+		includesProjects: true, supportsDateFilter: true,
 		// A single-project listing keeps its start/index order (the area and
 		// project keys are constant across it), while a filter that spans
 		// projects — `things --area X`, `things --tag y` — groups by area then
