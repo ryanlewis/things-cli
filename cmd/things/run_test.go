@@ -794,7 +794,9 @@ func TestRunListTodayIncludesScheduledProject(t *testing.T) {
 // already carried "type".
 func TestRunListSomedayAndLogbookIncludeProjects(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	stopDate := model.TimeToUnix(time.Now().Add(-1 * time.Hour))
+	// An earlier calendar day: an item closed today is still under Today
+	// rather than in the Logbook (issue #230).
+	stopDate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
 	if _, err := sqlDB.Exec(
 		`INSERT INTO TMTask
 			(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES

@@ -162,16 +162,62 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 // are structure inside a project, never rows in a list, so they stay out.
 const todoOrProject = "t.type IN (0, 1)"
 
+// stillUnderToday is the app's rule for a closed item Things has not yet filed
+// into the Logbook. Two conditions hold at once, and measuring against the app
+// on 10 Sep 2026 is what established the pair (issue #230).
+//
+// The calendar day is the boundary Things actually keeps: the app's Today held
+// six closed items, all closed that day, while its Logbook held forty items
+// closed on the three previous days — every one of them with a stopDate after
+// manualLogDate. So manualLogDate alone cannot be the rule, or those forty
+// would still be under Today.
+//
+// manualLogDate is the second condition rather than a discarded one, because
+// it is what "Log Completed Now" sets: it files the day's closed items
+// immediately instead of waiting for midnight, and dropping it would leave the
+// menu command with no effect. The user's manualLogDate was five days old
+// throughout the measurement, so both conditions held for all six rows; they
+// could only be told apart by closing something in the live app, which the
+// measurement deliberately did not do.
+//
+// COALESCE guards a NULL stopDate. Without it the comparison is NULL, and the
+// logbook's negation of this clause is NULL too, which would silently drop a
+// closed row carrying no stopDate out of both lists.
+const stillUnderToday = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime')`
+
+// todayScheduled is the today view's scheduling test: the rows Things files
+// under Today at all. It is named because the Logbook needs it too — the
+// Logbook only withholds a closed item while Today is still holding it, and
+// Today never holds a row this test rejects.
+const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL"
+
+// heldByToday is the full test for a closed row Today is still showing, and so
+// the exact set the Logbook withholds. The scheduling test is half of it: a
+// to-do closed straight out of the Inbox, out of Anytime or ahead of its date
+// out of Upcoming is never under Today, so the Logbook takes it the moment it
+// closes. Without that half those rows list nowhere at all — Today rejects them
+// on start/startBucket/startDate and the Logbook rejected them on the day
+// (issue #230).
+//
+// The parent clause is the last piece of the same argument: ListTasks drops a
+// to-do whose project is trashed from every view but trash and logbook, so
+// Today cannot be holding one, and the Logbook has to keep it.
+//
+// COALESCE makes the negation null-safe. start and startBucket are nullable
+// columns, and a NULL there would leave the AND chain NULL, which "NOT" leaves
+// NULL too — dropping the row out of the Logbook by accident.
+const heldByToday = todayScheduled + " AND " + stillUnderToday + " AND COALESCE(p.trashed, 0) = 0"
+
 // todayWhere builds the today view's WHERE clause. By default only open tasks
 // are returned. With includeCompleted, completed/cancelled items are kept while
-// Things still shows them in Today — i.e. until "Log Completed Now" bumps
-// TMSettings.manualLogDate past their stopDate (UI-parity, see issue #106).
+// Things still shows them in Today — see stillUnderToday for the rule (issues
+// #106, #230).
 func todayWhere(includeCompleted bool) string {
 	status := "t.status = 0"
 	if includeCompleted {
-		status = "(t.status = 0 OR (t.status IN (2, 3) AND t.stopDate > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0)))"
+		status = "(t.status = 0 OR (t.status IN (2, 3) AND " + stillUnderToday + "))"
 	}
-	return "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND " + status + " AND t.trashed = 0 AND " + todoOrProject
+	return todayScheduled + " AND " + status + " AND t.trashed = 0 AND " + todoOrProject
 }
 
 var viewFilters = map[string]string{
@@ -196,7 +242,13 @@ var viewFilters = map[string]string{
 	// beside the completed ones, so the view carries status 2 as well as 3
 	// (issue #210). Callers tell the two apart by `status`, which reads
 	// "cancelled" or "completed" in JSON and prints [~] or [x] in plain output.
-	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND " + todoOrProject,
+	// Logbook is the exact complement of what Today keeps under
+	// --include-completed, so a closed item is in one list or the other and
+	// never in both: Things moves an item out of Today and into the Logbook at
+	// the same moment (issue #230). The complement is taken over heldByToday,
+	// not over the day alone — a closed item Today never held is logged
+	// straight away, whatever day it closed on.
+	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND COALESCE(" + heldByToday + ", 0) = 0 AND " + todoOrProject,
 	// Trash carries projects as well as to-dos: trashing a project in the
 	// app puts the project row itself in Trash, and `things projects` filters
 	// trashed rows, so pinning t.type = 0 here left a trashed project visible
