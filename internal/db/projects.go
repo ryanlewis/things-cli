@@ -71,14 +71,8 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 		if status.Valid {
 			p.Status = model.Status(status.Int64)
 		}
-		if startDate.Valid {
-			d := model.ThingsDate(int64(startDate.Float64))
-			p.StartDate = &d
-		}
-		if deadline.Valid {
-			d := model.ThingsDate(int64(deadline.Float64))
-			p.Deadline = &d
-		}
+		p.StartDate = thingsDate(startDate)
+		p.Deadline = thingsDate(deadline)
 		if tagsStr != "" {
 			p.Tags = strings.Split(tagsStr, "\x1f")
 		}

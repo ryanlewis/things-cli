@@ -167,6 +167,11 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
 - **Status is a string enum**, `"open"`, `"completed"` or `"cancelled"`,
   not the raw Things integer. `"repeating": true` marks a repeating item
   and is omitted otherwise.
+- **Projects carry scheduling too.** `things projects` reports `start`,
+  `startBucket`, `startDate` and `deadline` under the same names and
+  encodings a to-do uses, so a scheduled project reads the same way
+  without a per-project `show`. `startDate` and `deadline` are omitted
+  when unset.
 
 ```console
 $ things show milk --json; echo "exit=$?"
