@@ -1540,10 +1540,10 @@ func TestGetTaskExactTitleAmbiguousBetweenTodos(t *testing.T) {
 	}
 }
 
-// The template-and-instance pair is the exception, and it stays one: the
-// ambiguity check runs on what survives preferInstances, so a repeating to-do
-// resolves to its instance instead of prompting on every reference to it.
-func TestGetTaskExactTitleTemplatePairIsNotAmbiguous(t *testing.T) {
+// The template drops out of a larger set the same way it drops out of a pair:
+// the ambiguity check runs on what survives preferInstances, so the candidates
+// reported are the instances alone rather than the template as well.
+func TestGetTaskExactTitleDropsTemplateFromCandidates(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
@@ -1559,6 +1559,44 @@ func TestGetTaskExactTitleTemplatePairIsNotAmbiguous(t *testing.T) {
 	}
 	if !sameSet(uuidsOf(ambig.Matches), []string{"inst-water", "inst-water-2"}) {
 		t.Errorf("matches = %v, want the two instances", uuidsOf(ambig.Matches))
+	}
+}
+
+// A template only stands in for an instance of its own kind. A repeating
+// project and an ordinary to-do sharing a title are two candidates, not one:
+// dropping the project template because the to-do is not repeating would send
+// `things project edit <title>` to the to-do again (issue #194).
+func TestGetTaskExactTitleKeepsTemplateOfAnotherKind(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.project("tpl-chores", "Chores", 1, repeats())
+	fx.todo("todo-chores", "Chores", 2, anytime())
+
+	_, err := d.GetTask("Chores")
+	var ambig *AmbiguousTaskError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if !sameSet(uuidsOf(ambig.Matches), []string{"tpl-chores", "todo-chores"}) {
+		t.Errorf("matches = %v, want both rows", uuidsOf(ambig.Matches))
+	}
+}
+
+// The template preference is per kind. A repeating project stands in for a
+// project instance, never for a to-do, so dropping it because an unrelated
+// to-do shares its title would resolve `things project edit <title>` to the
+// to-do again — the silence issue #194 is about.
+func TestGetTaskExactTitleTemplateProjectKeepsItsPlace(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.project("proj-tmpl", "Weekly review", 1, someday(), repeats())
+	fx.todo("todo-review", "Weekly review", 2, anytime())
+
+	_, err := d.GetTask("Weekly review")
+	var ambig *AmbiguousTaskError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("wrong error type: %T: %v", err, err)
+	}
+	if !sameSet(uuidsOf(ambig.Matches), []string{"proj-tmpl", "todo-review"}) {
+		t.Errorf("matches = %v, want both rows", uuidsOf(ambig.Matches))
 	}
 }
 

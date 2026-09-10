@@ -1034,9 +1034,9 @@ func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
 	return d.collectTasks(query, title)
 }
 
-// preferInstances drops repeating templates from a set of same-titled matches
-// as long as an ordinary row is there to take their place, and returns the set
-// unchanged otherwise.
+// preferInstances drops a repeating template from a set of same-titled matches
+// as long as an ordinary row of the same kind is there to take its place, and
+// returns the set unchanged otherwise.
 //
 // This is the one preference the title lookup still makes, and it is the same
 // one templatesLastOrder encodes: a repeating to-do exists twice, as the
@@ -1044,19 +1044,28 @@ func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
 // sharing its title, and the template is never what the reference means
 // because writes to it are refused outright (issues #143, #156). Treating that
 // pair as ambiguous would put a disambiguation prompt in front of every
-// repeating to-do. It is not a preference between kinds: a project and a to-do
-// sharing a title both survive this and reach the caller as an ambiguity.
+// repeating to-do.
+//
+// The kinds are kept apart because a template only stands in for an instance
+// of its own kind: a repeating project and a to-do sharing a title are still
+// two candidates, and dropping the project because the to-do is not repeating
+// would resolve `things project edit <title>` to the to-do again — the very
+// silence issue #194 is about.
 func preferInstances(matches []model.Task) []model.Task {
-	instances := make([]model.Task, 0, len(matches))
+	hasInstance := map[model.TaskType]bool{}
 	for _, m := range matches {
 		if !m.Repeating {
-			instances = append(instances, m)
+			hasInstance[m.Type] = true
 		}
 	}
-	if len(instances) == 0 {
-		return matches
+	out := make([]model.Task, 0, len(matches))
+	for _, m := range matches {
+		if m.Repeating && hasInstance[m.Type] {
+			continue
+		}
+		out = append(out, m)
 	}
-	return instances
+	return out
 }
 
 // FindTasksByTitle returns the open tasks whose title contains substr. The

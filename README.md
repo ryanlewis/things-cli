@@ -87,9 +87,8 @@ exit=1
 
 Retry with one of the `matches[].uuid` values; `matches[].type` says whether
 that uuid belongs to `things edit` or `things project edit`. Argument and flag
-errors take
-the same route, so `--json` never leaves a usage block on stdout. Without
-`--json`, errors stay a plain `Error: ...` line on stderr, unchanged.
+errors take the same route, so `--json` never leaves a usage block on stdout.
+Without `--json`, errors stay a plain `Error: ...` line on stderr, unchanged.
 
 `not a task` means the reference resolved to something the command cannot act
 on. Today that is a project handed to `edit`: the payload carries `kind` —
