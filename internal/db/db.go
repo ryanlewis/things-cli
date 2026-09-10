@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -71,12 +72,23 @@ func NewFromSQL(sqlDB *sql.DB) *DB {
 // thingsDate decodes a nullable Things date column (startDate, deadline) into
 // the model's bit-encoded date. A NULL column — an unscheduled item — yields
 // nil rather than the zero date, which would decode to a nonsense day.
-// scanTask in tasks.go still inlines the same two decodes; folding it onto
-// this helper is left to whoever next edits that file.
 func thingsDate(v sql.NullFloat64) *model.ThingsDate {
 	if !v.Valid {
 		return nil
 	}
 	d := model.ThingsDate(int64(v.Float64))
 	return &d
+}
+
+// unixTime is the same for the absolute-timestamp columns (stopDate,
+// creationDate): fractional seconds since the Unix epoch, as model.UnixToTime
+// reads them. A NULL column yields nil rather than the epoch itself, which
+// would read as a real instant in 1970 — the difference between "never
+// closed" and "closed on 1 January 1970" (issue #224).
+func unixTime(v sql.NullFloat64) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	ts := model.UnixToTime(v.Float64)
+	return &ts
 }
