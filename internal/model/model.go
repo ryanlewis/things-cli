@@ -29,19 +29,19 @@ const (
 // human-readable string so scripts and agents never have to decode the magic
 // ints — the same treatment Status gets.
 //
-// Only "todo" and "project" ever reach output: every list view pins the type
+// Only "task" and "project" ever reach output: every list view pins the type
 // in SQL and every lookup applies the notHeading filter, so a heading row is
 // never returned (see internal/db/tasks.go). "heading" is defined because the
 // codec has to be total over the three codes the database uses.
 type TaskType int
 
 // typeNames is the single source of truth for the name<->code mapping used by
-// String, MarshalJSON, and UnmarshalJSON. TypeTask renders as "todo", which is
+// String, MarshalJSON, and UnmarshalJSON. TypeTask renders as "task", which is
 // deliberately not the "to-do" that Things' own JSON URL scheme uses for the
 // same concept in a `things import` payload — that payload is Things'
 // vocabulary, not the CLI's, and the two are not interchangeable.
 var typeNames = map[TaskType]string{
-	TypeTask:    "todo",
+	TypeTask:    "task",
 	TypeProject: "project",
 	TypeHeading: "heading",
 }
@@ -54,7 +54,7 @@ func (t TaskType) String() string {
 }
 
 // MarshalJSON renders a recognized type as its string name
-// ("todo"/"project"/"heading"). An unrecognized raw Things code is preserved
+// ("task"/"project"/"heading"). An unrecognized raw Things code is preserved
 // as its integer so the value round-trips losslessly rather than collapsing to
 // a lossy "unknown" string.
 func (t TaskType) MarshalJSON() ([]byte, error) {
@@ -70,7 +70,7 @@ func (t TaskType) MarshalJSON() ([]byte, error) {
 func (t *TaskType) UnmarshalJSON(data []byte) error {
 	// Per the json.Unmarshaler convention, a JSON null is a no-op: leave the
 	// existing value untouched rather than silently coercing it to
-	// TaskType(0) ("todo").
+	// TaskType(0) ("task").
 	if string(data) == "null" {
 		return nil
 	}

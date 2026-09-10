@@ -241,7 +241,7 @@ func TestTaskTypeMarshalJSON(t *testing.T) {
 		taskType TaskType
 		want     string
 	}{
-		{TypeTask, `"todo"`},
+		{TypeTask, `"task"`},
 		{TypeProject, `"project"`},
 		{TypeHeading, `"heading"`},
 		{TaskType(99), `99`}, // unrecognized code preserved as its raw int
@@ -262,7 +262,7 @@ func TestTaskTypeUnmarshalJSON(t *testing.T) {
 		in   string
 		want TaskType
 	}{
-		{`"todo"`, TypeTask},
+		{`"task"`, TypeTask},
 		{`"project"`, TypeProject},
 		{`"heading"`, TypeHeading},
 		{`0`, TypeTask},      // legacy integer input
@@ -280,7 +280,7 @@ func TestTaskTypeUnmarshalJSON(t *testing.T) {
 		}
 	}
 	// A JSON null is a no-op: it must leave the existing value untouched rather
-	// than silently coercing it to TaskType(0) ("todo").
+	// than silently coercing it to TaskType(0) ("task").
 	pre := TypeProject
 	if err := json.Unmarshal([]byte(`null`), &pre); err != nil {
 		t.Fatalf("Unmarshal(null): %v", err)
@@ -323,7 +323,7 @@ func TestTaskTypeString(t *testing.T) {
 		taskType TaskType
 		want     string
 	}{
-		{TypeTask, "todo"},
+		{TypeTask, "task"},
 		{TypeProject, "project"},
 		{TypeHeading, "heading"},
 		{TaskType(99), "unknown"},

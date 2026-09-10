@@ -12,7 +12,7 @@ accept `-j` / `--json` for structured output. Run `things --help` or
 
 In JSON, `status` and `type` are string enums rather than the raw Things
 integers. `status` is `"open"`, `"completed"` or `"cancelled"`, and appears
-on to-dos, projects and checklist items. `type` is `"todo"` or `"project"`,
+on to-dos, projects and checklist items. `type` is `"task"` or `"project"`,
 and appears on task rows only — `projects`, `areas` and `tags` rows carry no
 `type`. Headings are never returned by any command, so the third Things type
 never reaches the output. In v0.7.0 and earlier `type` was the integer `0`,
