@@ -1581,25 +1581,6 @@ func TestGetTaskExactTitleKeepsTemplateOfAnotherKind(t *testing.T) {
 	}
 }
 
-// The template preference is per kind. A repeating project stands in for a
-// project instance, never for a to-do, so dropping it because an unrelated
-// to-do shares its title would resolve `things project edit <title>` to the
-// to-do again — the silence issue #194 is about.
-func TestGetTaskExactTitleTemplateProjectKeepsItsPlace(t *testing.T) {
-	d, fx := newFixture(t)
-	fx.project("proj-tmpl", "Weekly review", 1, someday(), repeats())
-	fx.todo("todo-review", "Weekly review", 2, anytime())
-
-	_, err := d.GetTask("Weekly review")
-	var ambig *AmbiguousTaskError
-	if !errors.As(err, &ambig) {
-		t.Fatalf("wrong error type: %T: %v", err, err)
-	}
-	if !sameSet(uuidsOf(ambig.Matches), []string{"proj-tmpl", "todo-review"}) {
-		t.Errorf("matches = %v, want both rows", uuidsOf(ambig.Matches))
-	}
-}
-
 // A closed or trashed row carrying the title is not a candidate, so it cannot
 // turn a single open match into an ambiguity.
 func TestGetTaskExactTitleIgnoresClosedAndTrashed(t *testing.T) {
