@@ -196,6 +196,14 @@ to retry with. The two import failures carry an `items` array naming which
 payload items were blocked or did not land; the [Commands](/commands/) page
 has the detail.
 
+`today`, `upcoming` and `anytime` return projects as well as to-dos, because
+Things schedules a project the same way it schedules a to-do and shows it in
+those lists. Each row carries `"type"` — `0` for a to-do, `1` for a project —
+so a script that acts on a listing should say which kind it means. It matters:
+`edit` refuses a project with `not a task`, and `complete` on a project closes
+every to-do inside it, so it asks first and refuses outright under `--json`
+without `--yes`.
+
 Some patterns that fall out of this:
 
 ```sh
@@ -207,7 +215,8 @@ things complete "$uuid"
 things deadlines -j | jq '.[] | select(.deadline < "2026-10-01") | {title, deadline}'
 
 # Reschedule a whole area. Not transactional: partial failures stick.
-things upcoming --area Work -j | jq -r '.[].uuid' |
+# select(.type==0) keeps scheduled projects out of `things edit`.
+things upcoming --area Work -j | jq -r '.[] | select(.type==0) | .uuid' |
   while read -r uuid; do things edit "$uuid" --when monday; done
 
 # Bulk create or update in one call via the Things JSON URL scheme.

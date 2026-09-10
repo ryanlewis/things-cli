@@ -35,6 +35,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 - `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq 'select(.status=="open")'`.
 - `"repeating": true` marks an item Things treats as repeating; the field is omitted otherwise. Projects also carry `"type": 1`.
 - `things projects` reports `start`, `startBucket`, `startDate` and `deadline` under the same names and encodings a to-do uses, so a scheduled project reads the same way without a per-project `show`. `startDate` and `deadline` are omitted when unset.
+- The `today`, `upcoming` and `anytime` views list scheduled projects alongside to-dos, as the app does. Split them on `"type"` — `jq 'select(.type==1)'` for the projects, `select(.type==0)` for the to-dos. Plain output tags a project row `(project)`.
 - Human output is styled and column-aligned; colour auto-disables when piping or under `NO_COLOR`. `--color=always|never` overrides. JSON is unaffected.
 
 **A failure under `--json` prints one JSON object to stdout and exits non-zero.** Branch on the exit status and read the failure off stdout — not stderr. On success the read commands print their result there and the write commands print nothing — except `tag add`, which reports what it created and what it skipped. `error` is a stable token; `message` is the human text.
@@ -152,6 +153,11 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # --project and the project's --area, and report projectTitle.
     # Trashing a project leaves its to-dos untrashed in the database; every
     # view hides them anyway, except trash and logbook.
+    # today, upcoming and anytime list scheduled projects as rows too, since
+    # Things schedules a project the same way it schedules a to-do. Tell them
+    # apart by "type" (1 = project) or the plain-text "(project)" tag. A
+    # project has no parent project, so --project never matches one; --area
+    # does. Other views stay to-do only.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
     # --include-completed is today-only: items Things hasn't logged out yet.

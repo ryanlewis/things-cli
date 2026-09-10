@@ -388,6 +388,38 @@ func TestPrintTasksMarksProjects(t *testing.T) {
 	}
 }
 
+// today/upcoming/anytime list a scheduled project as a row, and its own to-dos
+// sort straight after it (issue #201). The to-dos' project group header would
+// restate the title on the line above, so it is suppressed — the title must
+// appear exactly once. A project group that does not follow its own row still
+// gets its header.
+func TestPrintTasksNoRepeatedProjectHeader(t *testing.T) {
+	tasks := []model.Task{
+		{UUID: "p1", Title: "Runbook audit", Type: model.TypeProject, Status: model.StatusOpen,
+			AreaUUID: "a1", AreaTitle: "Work"},
+		{UUID: "t1", Title: "Read logs", Type: model.TypeTask, Status: model.StatusOpen,
+			ProjectUUID: "p1", ProjectTitle: "Runbook audit"},
+		{UUID: "t2", Title: "Draft memo", Type: model.TypeTask, Status: model.StatusOpen,
+			ProjectUUID: "p2", ProjectTitle: "Q4 planning"},
+	}
+	var buf bytes.Buffer
+	if err := Print(&buf, tasks, false); err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+	out := buf.String()
+
+	if n := strings.Count(out, "Runbook audit"); n != 1 {
+		t.Errorf("%q appears %d times, want 1:\n%s", "Runbook audit", n, out)
+	}
+	if !strings.Contains(out, "Work") {
+		t.Errorf("area header missing:\n%s", out)
+	}
+	// A project the listing does not carry as a row keeps its header.
+	if !strings.Contains(out, "Q4 planning") {
+		t.Errorf("unrelated project header missing:\n%s", out)
+	}
+}
+
 // `things show` on a project template must not print a block indistinguishable
 // from a to-do's (issue #165). To-do detail output stays as it was.
 func TestPrintTaskDetailMarksProjects(t *testing.T) {

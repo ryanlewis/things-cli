@@ -131,6 +131,15 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	return t, nil
 }
 
+// todoOrProject is the TMTask type set for the views that carry both kinds.
+// Things schedules a project exactly as it schedules a to-do — start,
+// startBucket, startDate and todayIndex all live on the project row — and
+// lists the project itself in Today, Upcoming and Anytime, so those views
+// carry both kinds (issue #201, the same UI-parity argument as #106).
+// Repeating carries both for its own reason (issue #165). Headings (type 2)
+// are structure inside a project, never rows in a list, so they stay out.
+const todoOrProject = "t.type IN (0, 1)"
+
 // todayWhere builds the today view's WHERE clause. By default only open tasks
 // are returned. With includeCompleted, completed/cancelled items are kept while
 // Things still shows them in Today — i.e. until "Log Completed Now" bumps
@@ -140,14 +149,14 @@ func todayWhere(includeCompleted bool) string {
 	if includeCompleted {
 		status = "(t.status = 0 OR (t.status IN (2, 3) AND t.stopDate > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0)))"
 	}
-	return "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND " + status + " AND t.trashed = 0 AND t.type = 0"
+	return "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL AND " + status + " AND t.trashed = 0 AND " + todoOrProject
 }
 
 var viewFilters = map[string]string{
 	"today":     todayWhere(false),
 	"inbox":     "t.start = 0 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	"upcoming":  "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
-	"anytime":   "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	"upcoming":  "t.start = 2 AND t.startDate IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
+	"anytime":   "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	"someday":   "t.start = 2 AND t.startDate IS NULL AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
 	"logbook":   "t.status = 3 AND t.trashed = 0 AND t.type = 0",
 	"trash":     "t.trashed = 1 AND t.type = 0",
@@ -156,19 +165,19 @@ var viewFilters = map[string]string{
 	// projects, not the items they generate. A template carries the
 	// recurrence rule; each generated instance is an ordinary row with no
 	// rule of its own, so "{{repeating}} IS NOT NULL" selects templates
-	// alone (issue #147). Unlike every other view this one is not pinned to
-	// t.type = 0: a project can repeat too, and the app's Repeating list
-	// shows both kinds, so the view carries project templates as well and
-	// `things projects` leaves them out (issue #165).
-	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND t.type IN (0, 1)",
+	// alone (issue #147). It carries projects as well as to-dos: a project
+	// can repeat too, and the app's Repeating list shows both kinds, so the
+	// view carries project templates and `things projects` leaves them out
+	// (issue #165).
+	"repeating": repeatingPlaceholder + " IS NOT NULL AND t.status = 0 AND t.trashed = 0 AND " + todoOrProject,
 	// The catch-all open set: also the default view for a bare --project/
 	// --area/--tag filter.
 	"project": "t.status = 0 AND t.trashed = 0 AND t.type = 0",
 }
 
 // notHeading excludes project headings (TMTask type 2) from the lookup
-// queries. The list views restrict to t.type = 0 outright, but a lookup has to
-// keep returning projects as well as to-dos — show, edit, complete, cancel and
+// queries. Most list views pin t.type = 0 outright, but a lookup has to keep
+// returning projects as well as to-dos — show, edit, complete, cancel and
 // open all resolve projects through GetTask/GetTaskByUUID — so it excludes the
 // heading type rather than pinning the task type (issue #146).
 var notHeading = fmt.Sprintf("COALESCE(t.type, 0) != %d", model.TypeHeading)
@@ -186,6 +195,12 @@ var viewOrderBy = map[string]string{
 	// area come before area-only items in higher-index areas, matching the
 	// Things app. Within each group, sort by status (open before completed),
 	// then todayIndexReferenceDate DESC, then todayIndex ASC.
+	//
+	// A project row scheduled for Today (issue #201) has no parent project of
+	// its own, so p.* is NULL and it lands in its area's group keyed on
+	// COALESCE(p."index", 0) = 0, alongside that area's unparented to-dos and
+	// ahead of the to-dos of any project with a non-zero index. Its own
+	// todayIndex then places it, the same signal the app orders Today by.
 	"today": "ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.status ASC, t.todayIndexReferenceDate DESC, t.todayIndex ASC",
 	// Project view: a single-project listing keeps its start/index order (the
 	// area and project keys are constant across it), while a filter that spans
