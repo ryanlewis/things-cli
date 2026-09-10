@@ -2262,6 +2262,82 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 	}
 }
 
+// Filter values are matched literally, not as LIKE patterns. `--project '%'`
+// used to match every project — and since issue #260 lift the closed-project
+// fold for all of them at once — and a title holding a `%` or a `_` matched
+// more than itself (issue #262).
+func TestFilterValuesMatchLiterally(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('ar-pct',   '100% Work', 1, 1),
+		('ar-plain', 'Home',      1, 2)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
+		('proj-pct',   '100% Done',  1, 0, 0, 'ar-pct',   1),
+		('proj-under', 'A_B',        1, 0, 0, 'ar-plain', 2),
+		('proj-plain', 'AxB',        1, 0, 0, 'ar-plain', 3)`)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
+		('tg-pct',   '50%',  1),
+		('tg-plain', '50ish', 2)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, area, "index") VALUES
+		('in-pct',   'Under the percent project', 0, 0, 0, 1, 0, 'proj-pct',   NULL, 4),
+		('in-under', 'Under A_B',                 0, 0, 0, 1, 0, 'proj-under', NULL, 5),
+		('in-plain', 'Under AxB',                 0, 0, 0, 1, 0, 'proj-plain', NULL, 6),
+		('in-home',  'Loose in Home',             0, 0, 0, 1, 0, NULL,         'ar-plain', 7)`)
+	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES
+		('in-pct', 'tg-pct'), ('in-plain', 'tg-plain')`)
+
+	cases := []struct {
+		name   string
+		filter TaskFilter
+		want   []string
+	}{
+		// A bare wildcard is a title now, and no project is called "%".
+		{"project percent wildcard", TaskFilter{Project: "%"}, nil},
+		{"area percent wildcard", TaskFilter{Area: "%"}, nil},
+		{"tag percent wildcard", TaskFilter{Tag: "%"}, nil},
+		// A literal % in the title still matches itself.
+		{"project with a percent", TaskFilter{Project: "100% Done"}, []string{"in-pct"}},
+		{"area with a percent", TaskFilter{Area: "100% Work"}, []string{"proj-pct", "in-pct"}},
+		{"tag with a percent", TaskFilter{Tag: "50%"}, []string{"in-pct"}},
+		// An underscore is a character, not "any character": A_B must not
+		// match AxB.
+		{"underscore is literal", TaskFilter{Project: "A_B"}, []string{"in-under"}},
+		{"underscore does not match any char", TaskFilter{Project: "AxB"}, []string{"in-plain"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.ListTasks("project", tc.filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(got), tc.want) {
+				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
+			}
+		})
+	}
+
+	// Matching stays case-insensitive, as it was before the escaping.
+	got, err := d.ListTasks("project", TaskFilter{Project: "100% done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(got), []string{"in-pct"}) {
+		t.Errorf("lowercased title: got %v, want [in-pct]", uuidsOf(got))
+	}
+
+	// A uuid still matches exactly, through the equality arm rather than LIKE.
+	byUUID, err := d.ListTasks("project", TaskFilter{Project: "proj-pct"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byUUID), []string{"in-pct"}) {
+		t.Errorf("by uuid: got %v, want [in-pct]", uuidsOf(byUUID))
+	}
+}
+
 // The lift is scoped to a named project. A view filtered by area or tag alone
 // is still the folded set, or naming an area would quietly reopen every closed
 // project in it.
