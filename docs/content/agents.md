@@ -247,14 +247,18 @@ shows them. `status` separates them, `"completed"` or `"cancelled"`, so an
 agent asked what actually got done should filter on it rather than assume
 every logbook row is a success.
 
-An item you tick off in Today is not in `logbook` yet — Things keeps it under
-Today until the day rolls over, or until `things log` files it early. Anything
-closed outside Today goes straight to `logbook`, including today's closes. The
-two lists partition the closed items whose project is still open, and neither
-one is a whole day on its own, so an agent reporting on a day's work sweeps
-both — `things today
---include-completed -j` plus `things logbook -j` filtered on `stopDate` — and
-an agent reporting on history needs `logbook` alone.
+An item you tick off in Today or in Anytime is not in `logbook` yet — Things
+keeps it where it was until the day rolls over, or until `things log` files it
+early, and `--include-completed` is how to see those on either view. Anything
+closed outside both goes straight to `logbook`, including today's closes.
+`logbook` is disjoint from the other two, but `today` and `anytime` are not
+disjoint from each other: a to-do scheduled for today sits in the Anytime
+bucket as well, so it comes back from both. None of the three is a whole day on
+its own, so an agent reporting on a day's work sweeps all three — `things today
+--include-completed -j` and `things anytime --include-completed -j` plus
+`things logbook -j` filtered on `stopDate` — and merges them on `uuid` rather
+than concatenating, or it counts the scheduled ones twice. An agent reporting
+on history needs `logbook` alone.
 
 A closed project is one `logbook` row, not a row plus its contents, and a
 trashed project is one `trash` row the same way — the app folds their to-dos

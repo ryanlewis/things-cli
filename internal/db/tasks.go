@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -13,9 +14,10 @@ type TaskFilter struct {
 	Area    string
 	Tag     string
 
-	// IncludeCompleted keeps completed/cancelled items in the today view that
-	// Things has not yet logged out of Today (UI-parity). Without it, today
-	// returns only open tasks. Ignored by every other view.
+	// IncludeCompleted keeps completed/cancelled items that Things has not yet
+	// logged out of the list they are in (UI-parity). It reaches the views
+	// CompletableView reports — today and anytime — and without it those views
+	// return only open tasks. Ignored by every other view.
 	IncludeCompleted bool
 
 	On   *model.ThingsDate
@@ -33,6 +35,32 @@ var dateFilterableViews = map[string]bool{
 	"anytime":   true,
 	"deadlines": true,
 	"project":   true,
+}
+
+// completableViews lists the views --include-completed applies to: the lists
+// the app keeps a just-closed item visible in until the day rolls over. today
+// and anytime are both such lists (issues #106, #238). someday would be too if
+// it behaved the same way, but there was no item closed out of Someday in the
+// data on 10 Sep 2026 to measure the app's answer against, and its list
+// matched the CLI exactly, so it is left out rather than guessed at.
+var completableViews = map[string]bool{
+	"today":   true,
+	"anytime": true,
+}
+
+// CompletableView reports whether --include-completed applies to the view.
+func CompletableView(view string) bool {
+	return completableViews[view]
+}
+
+// CompletableViewNames lists those views in a stable order, for error text.
+func CompletableViewNames() []string {
+	names := make([]string, 0, len(completableViews))
+	for name := range completableViews {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // DateFilterableView reports whether --on/--from/--to apply to the view.
@@ -59,6 +87,13 @@ func ProjectFilterableView(view string) bool {
 // reference by (*DB).taskQuery — the column name varies across Things schema
 // versions, and a schema carrying none resolves it to NULL.
 const repeatingPlaceholder = "{{repeating}}"
+
+// repeatingParentPlaceholder is the same for the `p` alias — the row's
+// resolved parent project — so a static filter can ask "is this the child of a
+// repeating project template?". ListTasks substitutes it the same way; unlike
+// repeatingPlaceholder it never reaches baseTaskQuery, which has no `p`
+// recurrence column in its select list.
+const repeatingParentPlaceholder = "{{repeating_parent}}"
 
 // baseTaskQuery selects a task with its project, heading, area and tags.
 //
@@ -162,7 +197,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 // are structure inside a project, never rows in a list, so they stay out.
 const todoOrProject = "t.type IN (0, 1)"
 
-// stillUnderToday is the app's rule for a closed item Things has not yet filed
+// closedTodayUnlogged is the app's rule for a closed item Things has not yet filed
 // into the Logbook. Two conditions hold at once, and measuring against the app
 // on 10 Sep 2026 is what established the pair (issue #230).
 //
@@ -183,7 +218,7 @@ const todoOrProject = "t.type IN (0, 1)"
 // COALESCE guards a NULL stopDate. Without it the comparison is NULL, and the
 // logbook's negation of this clause is NULL too, which would silently drop a
 // closed row carrying no stopDate out of both lists.
-const stillUnderToday = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime')`
+const closedTodayUnlogged = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime')`
 
 // todayScheduled is the today view's scheduling test: the rows Things files
 // under Today at all. It is named because the Logbook needs it too — the
@@ -191,13 +226,38 @@ const stillUnderToday = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDat
 // Today never holds a row this test rejects.
 const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL"
 
-// heldByToday is the full test for a closed row Today is still showing, and so
-// the exact set the Logbook withholds. The scheduling test is half of it: a
-// to-do closed straight out of the Inbox, out of Anytime or ahead of its date
-// out of Upcoming is never under Today, so the Logbook takes it the moment it
-// closes. Without that half those rows list nowhere at all — Today rejects them
-// on start/startBucket/startDate and the Logbook rejected them on the day
-// (issue #230).
+// heldInPlace is the set the Logbook withholds: the closed rows some other
+// view is still showing where the app leaves them. Today is one such view and
+// Anytime is the other, so the test is the union of the two (issues #230,
+// #238), and the Logbook takes anything neither of them holds.
+//
+// The scheduling half matters as much as the day: a to-do closed straight out
+// of the Inbox, or ahead of its date out of Upcoming, is under neither list,
+// so the Logbook takes it the moment it closes. Withholding it on the day
+// alone would leave it listed nowhere at all (issue #230).
+//
+// Anytime's half is not redundant with Today's. A to-do can sit in the Anytime
+// bucket with no start date, which Today rejects, and Anytime is where the app
+// goes on showing it for the rest of the day. Today's half is not redundant
+// either: it carries project rows, which Anytime does not.
+//
+// notATemplate is the third half of the test and the reason for it is the same
+// "listed nowhere at all" hazard: today and anytime both drop repeating
+// templates and the contents of repeating project templates, while the Logbook
+// keeps them (viewsIncludingTemplates), so withholding such a row would take
+// it out of every list. Both halves are "IS NULL" tests, which are never NULL
+// themselves, so they cannot turn a true held-test into NULL.
+const heldInPlace = "(((" + heldByToday + ") OR (" + heldByAnytime + ")) AND " + notATemplate + ")"
+
+// notATemplate excludes the rows today and anytime never carry: the template
+// row itself, and a to-do inside a repeating project template, which carries
+// no rule of its own — only its project does (issue #171).
+const notATemplate = repeatingPlaceholder + " IS NULL AND " + repeatingParentPlaceholder + " IS NULL"
+
+// heldByAnytime is the Anytime half — the bucket test the view itself uses.
+const heldByAnytime = "t.start = 1 AND t.type = 0 AND " + closedTodayUnlogged
+
+// heldByToday is the Today half.
 //
 // It used to carry a trashed-parent clause of its own, back when trash and
 // logbook were exempt from untrashedParent and the Logbook had to keep a
@@ -209,18 +269,31 @@ const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate 
 // startBucket are nullable columns, and a NULL there would leave the AND chain
 // NULL, which "NOT" leaves NULL too — dropping the row out of the Logbook by
 // accident.
-const heldByToday = todayScheduled + " AND " + stillUnderToday
+const heldByToday = todayScheduled + " AND " + closedTodayUnlogged
 
-// todayWhere builds the today view's WHERE clause. By default only open tasks
-// are returned. With includeCompleted, completed/cancelled items are kept while
-// Things still shows them in Today — see stillUnderToday for the rule (issues
-// #106, #230).
-func todayWhere(includeCompleted bool) string {
-	status := "t.status = 0"
-	if includeCompleted {
-		status = "(t.status = 0 OR (t.status IN (2, 3) AND " + stillUnderToday + "))"
+// openOrJustClosed is the status test for the views that --include-completed
+// applies to. By default only open rows; with the flag, also the rows the app
+// is still showing in place because they were closed today and not yet logged.
+// Shared so today and anytime cannot answer the question differently.
+func openOrJustClosed(includeCompleted bool) string {
+	if !includeCompleted {
+		return "t.status = 0"
 	}
-	return todayScheduled + " AND " + status + " AND t.trashed = 0 AND " + todoOrProject
+	return "(t.status = 0 OR (t.status IN (2, 3) AND " + closedTodayUnlogged + "))"
+}
+
+// todayWhere builds the today view's WHERE clause (issues #106, #230).
+func todayWhere(includeCompleted bool) string {
+	return todayScheduled + " AND " + openOrJustClosed(includeCompleted) + " AND t.trashed = 0 AND " + todoOrProject
+}
+
+// anytimeWhere builds the anytime view's WHERE clause. The app keeps an item
+// closed today visible in whatever list it was in until the day rolls over,
+// and Anytime is a list like Today, so --include-completed works here on the
+// same rule (issue #238). Without the flag the view is open rows only, as
+// before. See the viewFilters entry for why anytime carries no project rows.
+func anytimeWhere(includeCompleted bool) string {
+	return "t.start = 1 AND " + openOrJustClosed(includeCompleted) + " AND t.trashed = 0 AND t.type = 0"
 }
 
 var viewFilters = map[string]string{
@@ -237,7 +310,7 @@ var viewFilters = map[string]string{
 	// applied to this view (issue #217). Today keeps its project rows — a
 	// project scheduled for a day is a row in the app's Today — and so do
 	// upcoming and someday, where a project has actually been put somewhere.
-	"anytime": "t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0",
+	"anytime": anytimeWhere(false),
 	// Someday is the app's list of deferred things you have not filed under a
 	// project. A to-do inside a project stays inside it however it is deferred:
 	// the app shows it greyed within the project and keeps it out of the global
@@ -255,15 +328,17 @@ var viewFilters = map[string]string{
 	// beside the completed ones, so the view carries status 2 as well as 3
 	// (issue #210). Callers tell the two apart by `status`, which reads
 	// "cancelled" or "completed" in JSON and prints [~] or [x] in plain output.
-	// Over the rows both views can carry, Logbook is the exact complement of
-	// what Today keeps under --include-completed, so such a closed item is in
-	// one list or the other and never in both: Things moves an item out of
-	// Today and into the Logbook at the same moment (issue #230). The
-	// complement is taken over heldByToday, not over the day alone — a closed
-	// item Today never held is logged straight away, whatever day it closed
-	// on. The fold below narrows what "both views can carry" means: a closed
-	// to-do inside a closed or trashed project is in neither list, and is
-	// reached by naming the project.
+	// Over the rows these views can carry, Logbook is the exact complement of
+	// what today and anytime keep under --include-completed, so such a closed
+	// item is in the Logbook or in one of those lists and never in both:
+	// Things moves an item out of its list and into the Logbook at the same
+	// moment (issues #230, #238). The complement is taken over heldInPlace,
+	// not over the day alone — a closed item no list held is logged straight
+	// away, whatever day it closed on. today and anytime overlap each other,
+	// though: a to-do scheduled for today sits in the Anytime bucket too, so a
+	// sweep across both dedupes by uuid. The fold below narrows what "these
+	// views can carry" means: a closed to-do inside a closed or trashed
+	// project is in neither list, and is reached by naming the project.
 	//
 	// A closed project is one row, not a row plus its contents: the app folds
 	// the to-dos of a closed project into the project's own Logbook row and
@@ -272,7 +347,7 @@ var viewFilters = map[string]string{
 	// rows in the CLI (issue #229). COALESCE keeps an unparented row — p.uuid
 	// NULL — in the view. The trashed-parent half of the fold is the clause
 	// ListTasks appends for every view.
-	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND COALESCE(" + heldByToday + ", 0) = 0 AND COALESCE(p.status, 0) NOT IN (2, 3) AND " + todoOrProject,
+	"logbook": "t.status IN (2, 3) AND t.trashed = 0 AND COALESCE(" + heldInPlace + ", 0) = 0 AND COALESCE(p.status, 0) NOT IN (2, 3) AND " + todoOrProject,
 	// Trash carries projects as well as to-dos: trashing a project in the
 	// app puts the project row itself in Trash, and `things projects` filters
 	// trashed rows, so pinning t.type = 0 here left a trashed project visible
@@ -493,8 +568,15 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown view: %s", view)
 	}
-	if view == "today" && opts.IncludeCompleted {
-		where = todayWhere(true)
+	if opts.IncludeCompleted {
+		// The views that can show a row the app has not logged out yet. Both
+		// rebuild from the same helper rather than patching the stored string.
+		switch view {
+		case "today":
+			where = todayWhere(true)
+		case "anytime":
+			where = anytimeWhere(true)
+		}
 	}
 	// Naming a closed or trashed project asks for its contents, so the
 	// catch-all view widens past the open set and past the trashed-parent
@@ -562,6 +644,9 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	// filters carry a placeholder that only a live DB can resolve. On a
 	// schema with no such column it degrades to NULL: "IS NULL" makes the
 	// exclusion a no-op and "IS NOT NULL" leaves the repeating view empty.
+	// The parent-alias placeholder is substituted first; the two literals do
+	// not overlap, so the order is belt and braces rather than load-bearing.
+	where = strings.ReplaceAll(where, repeatingParentPlaceholder, d.recurrenceColFor("p"))
 	where = strings.ReplaceAll(where, repeatingPlaceholder, d.recurrenceCol())
 
 	query := d.taskQuery() + " WHERE " + where + " GROUP BY t.uuid " + orderBy

@@ -74,14 +74,19 @@ An item you tick off in Today is not in `logbook` yet. Things keeps it under
 Today for the rest of the day and files it into the Logbook when the day rolls
 over, or sooner if you run `things log` — the app's "Log Completed Now", which
 files the day's closed items straight away. `things today --include-completed`
-shows the ones still waiting. Everything else closed goes to `logbook` at once,
-today's closes included: a to-do ticked off in the Inbox, in Anytime, or ahead
-of its date in Upcoming was never under Today, so nothing holds it back. A
-closed item whose project is still open is therefore in exactly one of the two
-lists at any moment, never both and never neither; one closed inside a project
-that is itself closed or trashed is in neither, for the reason the next
-paragraph gives. `--include-completed` works on `today` alone; with a
-filter, name the view: `things today -p "Launch v2" --include-completed`.
+shows the ones still waiting. `anytime` behaves the same way and takes the
+same flag, because the app goes on showing a just-closed item there too.
+Everything else closed goes to `logbook` at once, today's closes included: a
+to-do ticked off in the Inbox, or ahead of its date in Upcoming, is under
+neither list, so nothing holds it back. A closed item whose project is still
+open is therefore either in `logbook` or in a list still showing it, never both
+and never neither — but `today` and `anytime` overlap each other, since a to-do
+scheduled for today is in the Anytime bucket too, so sweeping both means
+merging them on `uuid`. One closed inside a project that is itself closed or
+trashed is in neither `logbook` nor `today`, for the reason the next paragraph
+gives. `--include-completed`
+works on `today` and `anytime`; with a filter, name the view:
+`things today -p "Launch v2" --include-completed`.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's to-dos into the project's own row and lists none
