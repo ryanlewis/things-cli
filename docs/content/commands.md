@@ -56,6 +56,17 @@ way the app's Logbook shows both, so the view returns cancelled rows too.
 `[~]` in plain output — so filter on it when you mean finished rather than
 closed: `things logbook -j | jq '.[] | select(.status=="completed")'`.
 
+An item you tick off in Today is not in `logbook` yet. Things keeps it under
+Today for the rest of the day and files it into the Logbook when the day rolls
+over, or sooner if you run `things log` — the app's "Log Completed Now", which
+files the day's closed items straight away. `things today --include-completed`
+shows the ones still waiting. Everything else closed goes to `logbook` at once,
+today's closes included: a to-do ticked off in the Inbox, in Anytime, or ahead
+of its date in Upcoming was never under Today, so nothing holds it back. A
+closed item is therefore in exactly one of the two lists at any moment, never
+both and never neither. `--include-completed` works on `today` alone; with a
+filter, name the view: `things today -p "Launch v2" --include-completed`.
+
 `someday` is the app's Someday list: the deferred things you have not filed
 under a project. A to-do inside a project stays inside it however it is
 deferred, so `someday` returns Someday projects and unparented Someday to-dos,

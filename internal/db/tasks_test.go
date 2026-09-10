@@ -153,7 +153,10 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	// subtraction would underflow the day field to 0 on the 1st.
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	yesterday := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -1)))
-	stopToday := model.TimeToUnix(time.Now().Add(-1 * time.Minute))
+	// Now, not "a minute ago": the calendar day decides membership since issue
+	// #230, and a minute before midnight falls on the previous day. 25 hours
+	// back is safely not today whatever the hour.
+	stopToday := model.TimeToUnix(time.Now())
 	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
 
 	// Completed today, not yet logged.
@@ -187,17 +190,34 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 		t.Fatalf("default: expected {t-today, t-evening}, got %v", uuidsOf(got))
 	}
 
-	// IncludeCompleted (pre-log): unlogged completed and cancelled items reappear.
+	// IncludeCompleted (pre-log): the items closed today reappear. The one
+	// closed yesterday does not — Things filed it into the Logbook when the
+	// day rolled over, whatever manualLogDate says (issue #230).
 	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
 	if err != nil {
 		t.Fatalf("ListTasks today --include-completed: %v", err)
 	}
-	want := []string{"t-today", "t-evening", "t-just-done", "t-done-yesterday", "t-cancelled-today"}
+	want := []string{"t-today", "t-evening", "t-just-done", "t-cancelled-today"}
 	if !sameSet(want, uuidsOf(got)) {
 		t.Fatalf("pre-log: expected %v, got %v", want, uuidsOf(got))
 	}
 
-	// Simulate "Log Completed Now": bump manualLogDate past both stopDates.
+	// And the Logbook is the complement: it holds the one closed yesterday and
+	// neither of the two closed today. t-cancelled carries no stopDate at all,
+	// so it also proves the NULL guard keeps such a row in the Logbook rather
+	// than letting the negated clause drop it out of both lists.
+	logged, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks logbook: %v", err)
+	}
+	wantLogged := []string{"t-done", "t-cancelled", "t-done-yesterday"}
+	if !sameSet(wantLogged, uuidsOf(logged)) {
+		t.Fatalf("pre-log logbook: expected %v, got %v", wantLogged, uuidsOf(logged))
+	}
+
+	// Simulate "Log Completed Now": bump manualLogDate past every stopDate.
+	// That is the second half of the rule — it files the day's closed items
+	// straight away instead of waiting for midnight.
 	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 
@@ -207,6 +227,142 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	}
 	if !sameSet([]string{"t-today", "t-evening"}, uuidsOf(got)) {
 		t.Fatalf("post-log: expected {t-today, t-evening}, got %v", uuidsOf(got))
+	}
+
+	// The two rows that left Today arrive in the Logbook in the same move.
+	logged, err = d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks logbook: %v", err)
+	}
+	wantLogged = []string{"t-done", "t-cancelled", "t-done-yesterday", "t-just-done", "t-cancelled-today"}
+	if !sameSet(wantLogged, uuidsOf(logged)) {
+		t.Fatalf("post-log logbook: expected %v, got %v", wantLogged, uuidsOf(logged))
+	}
+}
+
+// The two lists partition the closed items: whatever the day and whatever
+// manualLogDate says, a closed item is in exactly one of them, never both and
+// never neither (issue #230). The today view only carries items scheduled for
+// today, so the partition is asserted over that set.
+func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(time.Now()))
+
+	cases := []struct {
+		name         string
+		stopDate     float64
+		manualLogSet bool
+		// wantUnderToday is spelled out per case rather than derived, so the
+		// test states the rule instead of restating the implementation.
+		wantUnderToday bool
+	}{
+		{"closed today, not logged", model.TimeToUnix(time.Now()), false, true},
+		{"closed today, logged", model.TimeToUnix(time.Now()), true, false},
+		{"closed yesterday, not logged", model.TimeToUnix(time.Now().Add(-25 * time.Hour)), false, false},
+		{"closed yesterday, logged", model.TimeToUnix(time.Now().Add(-25 * time.Hour)), true, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
+				VALUES ('t-closed', 'Closed', 0, 3, 0, 1, 0, ?, ?, 1)`, today, tc.stopDate)
+			if tc.manualLogSet {
+				future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+				mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
+			}
+
+			inToday, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			inLogbook, err := d.ListTasks("logbook", TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(inToday)+len(inLogbook) != 1 {
+				t.Errorf("today=%v logbook=%v: want the row in exactly one list", uuidsOf(inToday), uuidsOf(inLogbook))
+			}
+			// It stays under Today only while both conditions hold.
+			if got := len(inToday) == 1; got != tc.wantUnderToday {
+				t.Errorf("under Today = %v, want %v", got, tc.wantUnderToday)
+			}
+		})
+	}
+}
+
+// A closed item the today view never carries — completed out of the Inbox,
+// out of Upcoming, out of Anytime — belongs in the Logbook the moment it is
+// closed, whatever calendar day that is. Today only ever shows rows scheduled
+// for today, so excluding "closed today" from the Logbook outright would leave
+// these rows in no list at all (issue #230).
+func TestLogbookKeepsItemsClosedTodayOutsideToday(t *testing.T) {
+	future := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3)))
+	stopNow := model.TimeToUnix(time.Now())
+
+	cases := []struct {
+		uuid        string
+		start       int
+		startBucket int
+		startDate   any
+	}{
+		{"t-closed-inbox", 0, 0, nil},       // closed straight out of the Inbox
+		{"t-closed-anytime", 1, 0, nil},     // closed out of Anytime — no startDate
+		{"t-closed-upcoming", 2, 0, future}, // closed out of Upcoming, ahead of its date
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.uuid, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
+				VALUES (?, 'Closed', 0, 3, 0, ?, ?, ?, ?, 1)`,
+				tc.uuid, tc.start, tc.startBucket, tc.startDate, stopNow)
+
+			logged, err := d.ListTasks("logbook", TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet([]string{tc.uuid}, uuidsOf(logged)) {
+				t.Errorf("logbook = %v, want {%s}", uuidsOf(logged), tc.uuid)
+			}
+			inToday, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(inToday) != 0 {
+				t.Errorf("today = %v, want empty", uuidsOf(inToday))
+			}
+		})
+	}
+}
+
+// Trashing a project leaves its children at trashed = 0, and every view but
+// trash and logbook drops them, so the Logbook is the only list that can hold
+// a to-do closed today under a trashed project (issue #230).
+func TestLogbookKeepsClosedTodayUnderTrashedProject(t *testing.T) {
+	d := newTestDB(t)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index")
+		VALUES ('proj-binned', 'Binned', 1, 0, 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index")
+		VALUES ('t-closed', 'Closed', 0, 3, 0, 1, 0, ?, ?, 'proj-binned', 2)`,
+		today, model.TimeToUnix(time.Now()))
+
+	inToday, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inToday) != 0 {
+		t.Errorf("today = %v, want empty — the parent is trashed", uuidsOf(inToday))
+	}
+	logged, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet([]string{"t-closed"}, uuidsOf(logged)) {
+		t.Errorf("logbook = %v, want {t-closed}", uuidsOf(logged))
 	}
 }
 
@@ -1540,8 +1696,11 @@ func seedSomedayAndLogbook(t *testing.T, d *DB) {
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
 		('area-work', 'Work', 1, 1)`)
 
+	// Both stop dates fall on an earlier calendar day: an item closed today is
+	// still under Today, not in the Logbook (issue #230). stopLate is the
+	// later of the two, which is what the logbook ordering test keys on.
 	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	stopLate := model.TimeToUnix(time.Now().Add(-1 * time.Hour))
+	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
 
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate,

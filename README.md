@@ -270,7 +270,7 @@ Filters:
 | `--on DATE` | Only tasks scheduled on `YYYY-MM-DD` (or RFC3339); on `deadlines`, filters by deadline |
 | `--from DATE` | Only tasks scheduled on or after the date |
 | `--to DATE` | Only tasks scheduled on or before the date |
-| `--include-completed` | On `today` only: also show completed/cancelled items Things hasn't logged out of Today yet |
+| `--include-completed` | On `today` only: also show items closed today that Things hasn't logged out of Today yet |
 
 `-p`/`-a`/`-t` name what to list, so on their own they cover every open
 task in the project, area, or tag — not just the ones scheduled for today.
@@ -322,6 +322,9 @@ items have no start date, so they can't be date-filtered, and neither can
 `repeating` templates) — and `--on` can't be combined with `--from`/`--to`.
 `--include-completed` applies to the `today` view only, so with a filter it
 needs the view spelled out: `things today -p "Launch v2" --include-completed`.
+It shows the items you ticked off in Today that Things still keeps there;
+`logbook` holds every other closed item, today's closes outside Today included,
+so a closed item is in exactly one of the two lists.
 
 Examples:
 

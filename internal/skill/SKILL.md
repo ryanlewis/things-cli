@@ -174,7 +174,11 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # Only inbox stays to-do only.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
-    # --include-completed is today-only: items Things hasn't logged out yet.
+    # --include-completed is today-only: items ticked off in Today that Things
+    # hasn't logged out yet. logbook holds every other closed item, including
+    # things closed today from Inbox/Anytime/Upcoming, so a closed item is in
+    # exactly one of the two lists — for a whole day's closes sweep both and
+    # filter logbook on stopDate.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

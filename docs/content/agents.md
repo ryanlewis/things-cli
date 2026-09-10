@@ -244,6 +244,14 @@ shows them. `status` separates them, `"completed"` or `"cancelled"`, so an
 agent asked what actually got done should filter on it rather than assume
 every logbook row is a success.
 
+An item you tick off in Today is not in `logbook` yet — Things keeps it under
+Today until the day rolls over, or until `things log` files it early. Anything
+closed outside Today goes straight to `logbook`, including today's closes. The
+two lists partition the closed items and neither one is a whole day on its own,
+so an agent reporting on a day's work sweeps both — `things today
+--include-completed -j` plus `things logbook -j` filtered on `stopDate` — and
+an agent reporting on history needs `logbook` alone.
+
 Some patterns that fall out of this:
 
 ```sh
