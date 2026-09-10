@@ -244,13 +244,13 @@ project literally called `Inbox` would need `things -p Inbox`.
 | `anytime` | Anytime list |
 | `someday` | Someday list |
 | `repeating` | Repeating to-do and project templates |
-| `logbook` | Completed tasks |
+| `logbook` | Completed and cancelled tasks |
 | `trash` | Trashed tasks |
 | `deadlines` | Tasks and projects with a deadline |
 
 Every view above except `inbox` lists projects as well as to-dos, because
 Things schedules and files a project exactly as it does a to-do — a project
-put in Today is a row in Today, a completed one is a row in the Logbook, a
+put in Today is a row in Today, a closed one is a row in the Logbook, a
 trashed one a row in Trash, and one with a deadline a row in `deadlines`.
 Project rows are marked `(project)` in plain output and carry `"type":
 "project"` in JSON. A bare `-p`/`-a`/`-t` filter with no view named is
