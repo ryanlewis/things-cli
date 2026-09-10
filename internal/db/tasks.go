@@ -589,9 +589,22 @@ const closedProjectContents = "(" + parentClosedOrTrashed + " OR t.status = 0) A
 const parentClosedOrTrashed = "(" + parentClosed + " OR COALESCE(p.trashed, 0) = 1)"
 
 func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
+	query, args, err := d.buildListQuery(view, opts)
+	if err != nil {
+		return nil, err
+	}
+	return d.collectTasks(query, args...)
+}
+
+// buildListQuery composes a view's WHERE clause with the caller's filters and
+// the view's ORDER BY, and returns the SQL ListTasks runs. Splitting it out of
+// ListTasks gives the golden SQL test something to call: the text this returns
+// is the contract every list view rests on, and TestListQueryGoldenSQL pins
+// all of it (issue #240).
+func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error) {
 	where, ok := viewFilters[view]
 	if !ok {
-		return nil, fmt.Errorf("unknown view: %s", view)
+		return "", nil, fmt.Errorf("unknown view: %s", view)
 	}
 	if opts.IncludeCompleted {
 		// The views that can show a row the app has not logged out yet. Both
@@ -675,7 +688,7 @@ func (d *DB) ListTasks(view string, opts TaskFilter) ([]model.Task, error) {
 	where = strings.ReplaceAll(where, repeatingPlaceholder, d.recurrenceCol())
 
 	query := d.taskQuery() + " WHERE " + where + " GROUP BY t.uuid " + orderBy
-	return d.collectTasks(query, args...)
+	return query, args, nil
 }
 
 func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
