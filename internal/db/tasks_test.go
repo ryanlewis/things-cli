@@ -791,19 +791,21 @@ func TestTrashAndLogbookKeepTrashedProjectChildren(t *testing.T) {
 		('t-binned', 'Trashed child',   0, 0, 1, 1, 0, 'proj-gone', 1),
 		('t-logged', 'Completed child', 0, 3, 0, 1, 0, 'proj-gone', 2)`)
 
+	// trash also carries the trashed project row itself now (issue #212);
+	// logbook does not, because a trashed row is not logged.
 	for _, tc := range []struct {
 		view string
-		want string
+		want []string
 	}{
-		{"trash", "t-binned"},
-		{"logbook", "t-logged"},
+		{"trash", []string{"proj-gone", "t-binned"}},
+		{"logbook", []string{"t-logged"}},
 	} {
 		got, err := d.ListTasks(tc.view, TaskFilter{})
 		if err != nil {
 			t.Fatalf("ListTasks(%q): %v", tc.view, err)
 		}
-		if !sameSet(uuidsOf(got), []string{tc.want}) {
-			t.Errorf("view %q: got %v, want [%s]", tc.view, uuidsOf(got), tc.want)
+		if !sameSet(uuidsOf(got), tc.want) {
+			t.Errorf("view %q: got %v, want %v", tc.view, uuidsOf(got), tc.want)
 		}
 	}
 }
@@ -1604,5 +1606,98 @@ func TestListTasksSomedayProjectRowsAndFilters(t *testing.T) {
 	want := []string{"proj-someday", "todo-someday"}
 	if !sameSet(uuidsOf(byArea), want) {
 		t.Errorf("--area area-work: got %v, want %v", uuidsOf(byArea), want)
+	}
+}
+
+func seedTrashedProjects(t *testing.T, d *DB) {
+	t.Helper()
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('area-home', 'Home', 1, 1)`)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, area, "index") VALUES
+		('trash-proj',      'Dropped project', 1, 0, 1, 1, 0, 'area-home', 1),
+		('trash-proj-done', 'Shelved rebuild', 1, 3, 1, 1, 0, 'area-home', 2),
+		('trash-todo',      'Dropped to-do',   0, 0, 1, 1, 0, 'area-home', 3)`)
+
+	// Live rows never belong to the trash view, whichever kind they are.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, area, "index") VALUES
+		('live-proj', 'Still going', 1, 0, 0, 1, 0, 'area-home', 4),
+		('live-todo', 'Still to do', 0, 0, 0, 1, 0, 'area-home', 5)`)
+
+	// A heading (type 2) is structure inside a project, never a list row —
+	// not even once its project has been trashed.
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, project, "index") VALUES
+		('trash-head', 'Phase one', 2, 0, 1, 'trash-proj', 6)`)
+}
+
+// Things puts a trashed project in its Trash list, and `things projects`
+// filters trashed rows, so pinning the view to to-dos left a trashed project
+// visible nowhere (issue #212).
+func TestListTasksTrashIncludesProjects(t *testing.T) {
+	d := newTestDB(t)
+	seedTrashedProjects(t, d)
+
+	got, err := d.ListTasks("trash", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(trash): %v", err)
+	}
+	want := []string{"trash-proj", "trash-proj-done", "trash-todo"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("trash: got %v, want %v", uuidsOf(got), want)
+	}
+
+	for _, task := range got {
+		if task.UUID != "trash-proj" && task.UUID != "trash-proj-done" {
+			continue
+		}
+		if task.Type != model.TypeProject {
+			t.Errorf("%s: got type %v, want %v", task.UUID, task.Type, model.TypeProject)
+		}
+	}
+}
+
+// Widening trash to projects must not widen it to everything project-shaped:
+// headings and live rows of either kind stay out.
+func TestListTasksTrashProjectExclusions(t *testing.T) {
+	d := newTestDB(t)
+	seedTrashedProjects(t, d)
+
+	got, err := d.ListTasks("trash", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(trash): %v", err)
+	}
+	for _, uuid := range []string{"trash-head", "live-proj", "live-todo"} {
+		for _, task := range got {
+			if task.UUID == uuid {
+				t.Errorf("trash: %s should not be listed", uuid)
+			}
+		}
+	}
+}
+
+// A trashed project carries its own area, so --area finds it; it has no parent
+// project of its own, so --project can never match it.
+func TestListTasksTrashProjectRowsAndFilters(t *testing.T) {
+	d := newTestDB(t)
+	seedTrashedProjects(t, d)
+
+	byArea, err := d.ListTasks("trash", TaskFilter{Area: "area-home"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(byArea), []string{"trash-proj", "trash-proj-done", "trash-todo"}) {
+		t.Errorf("--area area-home: got %v", uuidsOf(byArea))
+	}
+
+	byUUID, err := d.ListTasks("trash", TaskFilter{Project: "trash-proj"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byUUID) != 0 {
+		t.Errorf("--project trash-proj: got %v, want none", uuidsOf(byUUID))
 	}
 }

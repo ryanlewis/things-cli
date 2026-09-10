@@ -288,8 +288,8 @@ the database holds.
 Projects repeat the same way, so `things repeating` lists project templates
 too — marked `(project)` in plain output, `"type": "project"` in JSON — and
 `things projects` leaves them out. To-do templates come first, then project
-templates. `trash` and `logbook` are to-do lists, so a project template never
-shows there.
+templates. `trash` and `logbook` carry projects too, so a trashed or logged
+project template shows there.
 
 The to-dos inside a project template are hidden along with it. They carry no
 recurrence rule of their own, so they are recognised by their project rather
