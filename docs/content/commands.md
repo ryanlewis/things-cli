@@ -45,8 +45,9 @@ deadline. Project rows are marked `(project)` in plain output and carry
 `"type": "project"` in JSON, so `jq '.[] | select(.type=="project")'` picks them
 out. A project has no parent project, so `--project` never matches one;
 `--area` does, because a project carries its own area. `repeating` carries
-project templates too, for the reason below. `inbox` stays to-do only: an
-inbox item has not been filed anywhere yet, so it is never a project.
+project templates too, for the reason below. A bare `-p`/`-a`/`-t` filter with
+no view named follows the same rule. `inbox` stays to-do only: an inbox item
+has not been filed anywhere yet, so it is never a project.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
 to-do or a project logs it under its stop date beside the completed ones, the
@@ -80,10 +81,10 @@ would otherwise list against a project `things projects` does not report.
 Results carry `"repeating": true`.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. On their
-own the filters cover every open to-do in the project, area, or tag — to-dos
-only, so an area's own projects are not rows here; add a view and the filter
-applies within it, with the view named in the output and project rows
-included as above:
+own the filters cover everything open in the project, area, or tag — so
+`things -a Work` lists that area's own projects as well as its to-dos, while
+`-p` still returns a project's contents rather than the project row. Add a
+view and the filter applies within it, with the view named in the output:
 
 ```sh
 things -p "Launch v2"                # every open to-do in the project

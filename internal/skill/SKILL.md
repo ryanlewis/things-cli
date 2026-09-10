@@ -150,7 +150,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # views: today, inbox, upcoming, anytime, someday, repeating, logbook, trash, deadlines
     # shortcut: `things today`, `things inbox`, etc.
     # bare `things` is today — but --project/--area/--tag alone list every open
-    # to-do in that project/area/tag. Name a view to scope the filter to it
+    # to-do in that project/area/tag, and --area/--tag list the projects filed
+    # there too. Name a view to scope the filter to it
     # (`things today --project X`); plain output then prints a `view: <name>`
     # line so a slice isn't read as the whole project.
     # Tasks under a project heading belong to that project — they match
@@ -167,9 +168,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # Tell them apart by "type" ("project") or the plain-text
     # "(project)" tag. A project has no parent project, so --project never
     # matches one; --area does. repeating carries project templates for its
-    # own reason. Only inbox stays to-do only — plus a bare --project/--area/
-    # --tag with no view named, which lists to-dos, so name a view when the
-    # project rows matter.
+    # own reason. A bare --project/--area/--tag with no view named follows the
+    # same rule, so --area/--tag return project rows and --project does not.
+    # Only inbox stays to-do only.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
     # --include-completed is today-only: items Things hasn't logged out yet.

@@ -253,8 +253,8 @@ Things schedules and files a project exactly as it does a to-do — a project
 put in Today is a row in Today, a closed one is a row in the Logbook, a
 trashed one a row in Trash, and one with a deadline a row in `deadlines`.
 Project rows are marked `(project)` in plain output and carry `"type":
-"project"` in JSON. A bare `-p`/`-a`/`-t` filter with no view named is
-to-do only.
+"project"` in JSON. A bare `-p`/`-a`/`-t` filter with no view named follows
+the same rule.
 
 Trashing a project in Things leaves its to-dos untrashed in the database, so
 every view above hides to-dos whose project is in the trash — `trash` and
