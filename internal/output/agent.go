@@ -30,10 +30,7 @@ type AgentBrief struct {
 // as written whether or not stdout is a terminal.
 func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 	t := b.Task
-	kind := "task"
-	if t.Type == model.TypeProject {
-		kind = "project"
-	}
+	kind := kindWord(t)
 
 	var s strings.Builder
 	fmt.Fprintf(&s, "# %s\n\n", singleLine(t.Title))
@@ -75,7 +72,7 @@ func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 		}
 	}
 
-	if t.Type == model.TypeProject {
+	if isProject(t) {
 		// A closed or trashed project has no open tasks by definition, and
 		// since issue #229 the listing returns its contents whatever their
 		// status — so "Open tasks" would be a lie and a bare title would read
@@ -146,7 +143,7 @@ func closingOut(b AgentBrief, kind string) string {
 	cmds := []command{
 		{fmt.Sprintf("things show %s --json", t.UUID), "re-read the current state"},
 	}
-	if t.Type == model.TypeProject {
+	if isProject(t) {
 		cmds = append(cmds, command{
 			fmt.Sprintf("things project edit %s --notes \"...\"", t.UUID),
 			"replace the notes (--append-notes adds to them)",
@@ -196,7 +193,7 @@ func closingOut(b AgentBrief, kind string) string {
 	}
 	s.WriteString(codeBlock(cmds))
 
-	if t.Type == model.TypeProject && !t.Repeating {
+	if isProject(t) && !t.Repeating {
 		s.WriteString("\nCompleting or cancelling a project changes the status of every task under\n")
 		s.WriteString("it, so the CLI asks first and refuses outright when it cannot prompt — as a\n")
 		s.WriteString("command run by an agent cannot. `--yes` answers that question in advance;\n")
@@ -249,12 +246,16 @@ func whenText(t *model.Task) string {
 	return t.Start.String()
 }
 
+// checklistLine renders one checklist item as a Markdown task list item.
+// Markdown has one box for "not open", so a cancelled item is ticked like a
+// completed one and then says which it was — in the word model.Status gives
+// it, the same one the JSON carries.
 func checklistLine(item model.ChecklistItem) string {
 	switch item.Status {
 	case model.StatusCompleted:
 		return fmt.Sprintf("- [x] %s\n", singleLine(item.Title))
 	case model.StatusCancelled:
-		return fmt.Sprintf("- [x] %s (cancelled)\n", singleLine(item.Title))
+		return fmt.Sprintf("- [x] %s (%s)\n", singleLine(item.Title), model.StatusCancelled)
 	default:
 		return fmt.Sprintf("- [ ] %s\n", singleLine(item.Title))
 	}

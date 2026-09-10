@@ -137,8 +137,9 @@ func styledTags(tags []string) string {
 }
 
 // termWidth returns the terminal width, falling back to 120 for non-TTY
-// (pipes, tests).
-func termWidth() int {
+// (pipes, tests). It is a var, like nowFn, so a test can pin a width instead
+// of depending on how the test binary's stdout happens to be attached.
+var termWidth = func() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
 		return w
 	}
