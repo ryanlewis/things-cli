@@ -172,6 +172,12 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   encodings a to-do uses, so a scheduled project reads the same way
   without a per-project `show`. `startDate` and `deadline` are omitted
   when unset.
+- **Projects carry their progress too.** `things projects` reports
+  `taskCount`, every untrashed to-do in the project, and `openCount`, the
+  ones still open. The difference is the ones no longer open, which means
+  completed or cancelled. To-dos under a project heading count towards
+  both; the heading rows themselves never do, and neither do trashed
+  to-dos or checklist items.
 
 ```console
 $ things show milk --json; echo "exit=$?"
@@ -221,7 +227,22 @@ things upcoming --area Work -j | jq -r '.[] | select(.type==0) | .uuid' |
 
 # Bulk create or update in one call via the Things JSON URL scheme.
 things import --file payload.json
+
+# Projects whose work has landed, for a reconcile that offers to close them.
+things projects -j | jq -r '.[] | select(.openCount == 0 and .taskCount > 0) | .title'
 ```
+
+`taskCount > 0` keeps out empty projects, which have nothing done rather
+than everything done. It does not tell done from cancelled: a project
+whose to-dos were all cancelled matches too, so confirm before offering
+to close one. Plain output marks the same projects with a filled `●`
+progress icon, so an agent reading plain output is not blind to them —
+under `--completed` that icon also marks every completed project,
+including empty ones. A project holding a repeating to-do never appears
+while the repeat is live: Things counts the hidden template row itself as
+an open to-do, and a template never completes. `things list -p <project>`
+hides that template, so it can report no open to-dos for a project whose
+`openCount` is 1.
 
 Colour and column alignment are for terminals; they switch off when the
 output is piped or under `NO_COLOR`, and `--json` is never styled.
