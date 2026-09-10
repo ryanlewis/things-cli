@@ -167,6 +167,14 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
 - **Status is a string enum**, `"open"`, `"completed"` or `"cancelled"`,
   not the raw Things integer. `"repeating": true` marks a repeating item
   and is omitted otherwise.
+- **Type is a string enum too**, `"todo"` or `"project"`, not the raw
+  Things integer. It rides on task rows only — `things projects` rows
+  carry no `type` — and headings are never returned, so the third Things
+  type never reaches the output. In v0.7.0 and earlier this field was the
+  integer `0`, `1` or `2`, so a filter matching on `.type==1` has to
+  become `.type=="project"`. It is not the vocabulary an `import` payload
+  takes: that format is Things' own and spells a to-do `"to-do"`, so do
+  not copy `.type` from a listing into an import item.
 - **Projects carry scheduling too.** `things projects` reports `start`,
   `startBucket`, `startDate` and `deadline` under the same names and
   encodings a to-do uses, so a scheduled project reads the same way
@@ -206,8 +214,8 @@ has the detail.
 well as to-dos, because Things schedules a project the same way it schedules a
 to-do and shows the project itself in those lists — scheduled in the first
 three, deferred in Someday, completed in the Logbook under its completion
-date. Each row carries `"type"` — `0` for a to-do, `1` for a project —
-so a script that acts on a listing should say which kind it means. It matters:
+date. Each row carries `"type"` — `"todo"` or `"project"` — so a script that
+acts on a listing should say which kind it means. It matters:
 `edit` refuses a project with `not a task`, and `complete` on a project closes
 every to-do inside it, so it asks first and refuses outright under `--json`
 without `--yes`.
@@ -223,8 +231,8 @@ things complete "$uuid"
 things deadlines -j | jq '.[] | select(.deadline < "2026-10-01") | {title, deadline}'
 
 # Reschedule a whole area. Not transactional: partial failures stick.
-# select(.type==0) keeps scheduled projects out of `things edit`.
-things upcoming --area Work -j | jq -r '.[] | select(.type==0) | .uuid' |
+# select(.type=="todo") keeps scheduled projects out of `things edit`.
+things upcoming --area Work -j | jq -r '.[] | select(.type=="todo") | .uuid' |
   while read -r uuid; do things edit "$uuid" --when monday; done
 
 # Bulk create or update in one call via the Things JSON URL scheme.

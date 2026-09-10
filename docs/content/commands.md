@@ -10,6 +10,19 @@ Read commands (`list`/views, `projects`, `areas`, `tags`, `show`, `search`)
 accept `-j` / `--json` for structured output. Run `things --help` or
 `things <subcommand> --help` for the full flag list.
 
+In JSON, `status` and `type` are string enums rather than the raw Things
+integers. `status` is `"open"`, `"completed"` or `"cancelled"`, and appears
+on to-dos, projects and checklist items. `type` is `"todo"` or `"project"`,
+and appears on task rows only — `projects`, `areas` and `tags` rows carry no
+`type`. Headings are never returned by any command, so the third Things type
+never reaches the output. In v0.7.0 and earlier `type` was the integer `0`,
+`1` or `2`, so a caller matching on `.type==1` has to become
+`.type=="project"`.
+
+The `type` values a listing reports are not the ones an `import` payload
+takes: that payload is Things' own JSON URL scheme, which spells a to-do
+`"to-do"`. Do not copy `.type` from a listing into an import item.
+
 ## Listing
 
 ```sh
@@ -26,11 +39,11 @@ as to-dos, matching what Things shows in those lists — a project is scheduled
 the same way a to-do is, so a project put in Today is a row in Today, one
 deferred to Someday is a row in Someday, and a completed project is a row in
 the Logbook under its completion date. Project rows are marked `(project)` in
-plain output and carry `"type": 1` in JSON, so `jq 'select(.type==1)'` picks
-them out. A project has no parent project, so `--project` never matches one;
-`--area` does, because a project carries its own area. `repeating` carries
-project templates too, for the reason below; `inbox`, `trash` and `deadlines`
-stay to-do only.
+plain output and carry `"type": "project"` in JSON, so
+`jq 'select(.type=="project")'` picks them out. A project has no parent
+project, so `--project` never matches one; `--area` does, because a project
+carries its own area. `repeating` carries project templates too, for the
+reason below; `inbox`, `trash` and `deadlines` stay to-do only.
 
 `repeating` lists repeating to-do and project templates. The items a template
 generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
@@ -39,7 +52,7 @@ generates are ordinary to-dos and projects and appear in `today`, `upcoming`,
 what the database holds. `trash` is to-do only, so a project template never
 shows there; `logbook` carries projects, so a logged project template would.
 Project templates are marked `(project)` in plain output and carry
-`"type": 1` in JSON.
+`"type": "project"` in JSON.
 
 The to-dos inside a project template are hidden along with it, since they
 would otherwise list against a project `things projects` does not report.
