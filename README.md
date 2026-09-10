@@ -257,8 +257,11 @@ Project rows are marked `(project)` in plain output and carry `"type":
 the same rule.
 
 Trashing a project in Things leaves its to-dos untrashed in the database, so
-every view above hides to-dos whose project is in the trash — `trash` and
-`logbook` excepted, since those report what the database holds.
+every view above hides to-dos whose project is in the trash. A closed project
+is one `logbook` row rather than a row plus its contents, and a trashed
+project is one `trash` row the same way: the app folds their to-dos into the
+project row. Name the project to read them — `things --project <uuid>` on a
+closed or trashed project returns its contents whatever their status.
 
 Filters:
 
@@ -324,7 +327,9 @@ items have no start date, so they can't be date-filtered, and neither can
 needs the view spelled out: `things today -p "Launch v2" --include-completed`.
 It shows the items you ticked off in Today that Things still keeps there;
 `logbook` holds every other closed item, today's closes outside Today included,
-so a closed item is in exactly one of the two lists.
+so a closed item whose project is still open is in exactly one of the two
+lists. One closed inside a project that is itself closed or trashed is in
+neither — see the fold described above.
 
 Examples:
 

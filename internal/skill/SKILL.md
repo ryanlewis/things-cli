@@ -158,7 +158,12 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # Tasks under a project heading belong to that project — they match
     # --project and the project's --area, and report projectTitle.
     # Trashing a project leaves its to-dos untrashed in the database; every
-    # view hides them anyway, except trash and logbook.
+    # view hides them anyway. A closed project is one logbook row and a trashed
+    # one is a single trash row — their to-dos are folded into the project row,
+    # not listed separately. To read them, name the project: --project <uuid> on
+    # a closed or trashed project returns its contents whatever their status,
+    # and `things show <uuid> --agent` marks each row [x]/[~]/[ ]. A to-do
+    # thrown away out of a trashed project is reachable nowhere, as in the app.
     # every named view except inbox lists projects as rows too, since Things
     # schedules a project the same way it schedules a to-do and shows the
     # project itself in those lists: scheduled in today/upcoming/anytime,
@@ -176,9 +181,11 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
     # --include-completed is today-only: items ticked off in Today that Things
     # hasn't logged out yet. logbook holds every other closed item, including
-    # things closed today from Inbox/Anytime/Upcoming, so a closed item is in
-    # exactly one of the two lists — for a whole day's closes sweep both and
-    # filter logbook on stopDate.
+    # things closed today from Inbox/Anytime/Upcoming, so a closed item whose
+    # project is still open is in exactly one of the two lists — for a whole
+    # day's closes sweep both and filter logbook on stopDate. One closed inside
+    # a project that is itself closed or trashed is in neither: it is folded
+    # into the project row, per the note above.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

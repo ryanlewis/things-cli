@@ -247,10 +247,23 @@ every logbook row is a success.
 An item you tick off in Today is not in `logbook` yet — Things keeps it under
 Today until the day rolls over, or until `things log` files it early. Anything
 closed outside Today goes straight to `logbook`, including today's closes. The
-two lists partition the closed items and neither one is a whole day on its own,
-so an agent reporting on a day's work sweeps both — `things today
+two lists partition the closed items whose project is still open, and neither
+one is a whole day on its own, so an agent reporting on a day's work sweeps
+both — `things today
 --include-completed -j` plus `things logbook -j` filtered on `stopDate` — and
 an agent reporting on history needs `logbook` alone.
+
+A closed project is one `logbook` row, not a row plus its contents, and a
+trashed project is one `trash` row the same way — the app folds their to-dos
+into the project row and so does the CLI. An agent counting what got done from
+`logbook` counts projects once, not once plus every to-do inside them — which
+also means the day sweep above reports the project rather than the to-dos
+`things complete <project> --yes` closed along with it. To read
+the contents, name the project: `things --project <uuid> -j` on a closed or
+trashed project returns its to-dos whatever their status, and
+`things show <uuid> --agent` lists them under `## To-dos` with `[x]`, `[~]` or
+`[ ]` on each row. A to-do thrown away out of a project that is itself in the
+Trash is reachable nowhere, matching the app.
 
 Some patterns that fall out of this:
 
