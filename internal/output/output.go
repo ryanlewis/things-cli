@@ -6,8 +6,6 @@ import (
 	"io"
 	"strings"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -66,15 +64,35 @@ func printJSON(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
+// taskColumns names the columns a task row carries, so the drop order below
+// and the cells added for each row cannot fall out of step.
+const (
+	colNum = iota
+	colStatus
+	colTitle
+	colTags
+	colDate
+)
+
 func printTasks(w io.Writer, tasks []model.Task) error {
-	type row struct {
-		uuid                           string
-		num, status, title, tags, date string
-		groupKey, groupTitle           string
-		isProjectGroup                 bool
+	// group is what a row needs beyond its cells: which project or area it
+	// belongs under, and its own UUID, so the header logic below can see
+	// whether a group's rows follow the row that names the group.
+	type group struct {
+		uuid       string
+		key, title string
+		isProject  bool
 	}
-	rows := make([]row, len(tasks))
-	var numW, statusW, titleW, tagsW, dateW int
+
+	tbl := &table{
+		gap:      columnGap,
+		maxWidth: termWidth(),
+		// The tags go first when a row will not fit, then the date: a row
+		// still says what it is and when it is due for as long as it can.
+		dropOrder: []int{colTags, colDate},
+	}
+	groups := make([]group, len(tasks))
+
 	for i, t := range tasks {
 		title := t.Title
 		if t.Status == model.StatusCompleted || t.Status == model.StatusCancelled {
@@ -87,8 +105,8 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// project templates too and `things search` can turn up a project, so
 		// say which rows are projects rather than letting them read as
 		// to-dos. Text, not just colour, so it survives --color never.
-		if t.Type == model.TypeProject {
-			title += " " + dimStyle.Render("(project)")
+		if isProject(&t) {
+			title += " " + dimStyle.Render("("+kindWord(&t)+")")
 		}
 
 		var date string
@@ -99,64 +117,34 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			date = styledDate(t.StartDate, false)
 		}
 
-		r := row{
-			uuid:   t.UUID,
-			num:    fmt.Sprintf("%d.", i+1),
-			status: styledStatus(t.Status),
-			title:  title,
-			tags:   styledTags(t.Tags),
-			date:   date,
-		}
+		tbl.row(
+			fmt.Sprintf("%d.", i+1),
+			styledStatus(t.Status),
+			title,
+			styledTags(t.Tags),
+			date,
+		)
+
+		g := group{uuid: t.UUID}
 		if t.ProjectUUID != "" {
-			r.groupKey = t.ProjectUUID
-			r.groupTitle = t.ProjectTitle
-			r.isProjectGroup = true
+			g.key, g.title, g.isProject = t.ProjectUUID, t.ProjectTitle, true
 		} else {
-			r.groupKey = t.AreaUUID
-			r.groupTitle = t.AreaTitle
+			g.key, g.title = t.AreaUUID, t.AreaTitle
 		}
-		rows[i] = r
-
-		if n := lipgloss.Width(r.num); n > numW {
-			numW = n
-		}
-		if n := lipgloss.Width(r.status); n > statusW {
-			statusW = n
-		}
-		if n := lipgloss.Width(r.title); n > titleW {
-			titleW = n
-		}
-		if n := lipgloss.Width(r.tags); n > tagsW {
-			tagsW = n
-		}
-		if n := lipgloss.Width(r.date); n > dateW {
-			dateW = n
-		}
+		groups[i] = g
 	}
 
-	width := termWidth()
-	gap := "  "
-	dropTags := false
-	dropDate := false
-	rowWidth := numW + statusW + titleW + tagsW + dateW + 4*len(gap)
-	if rowWidth > width {
-		dropTags = true
-		rowWidth = numW + statusW + titleW + dateW + 3*len(gap)
-		if rowWidth > width {
-			dropDate = true
-		}
-	}
-
+	lines := tbl.lines()
 	const sentinel = "\x00"
 	currentProject, currentArea := sentinel, sentinel
 	prevUUID := ""
-	for _, r := range rows {
+	for i, g := range groups {
 		current := &currentArea
 		other := &currentProject
-		if r.isProjectGroup {
+		if g.isProject {
 			current, other = &currentProject, &currentArea
 		}
-		if r.groupKey != *current || *other != sentinel {
+		if g.key != *current || *other != sentinel {
 			// Every view but inbox lists a project as a row of its own
 			// (issues #201, #206, #212, #213). Where the view's order
 			// puts its to-dos straight after that row, their project group
@@ -164,49 +152,23 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			// under the row instead of repeating it. Where the order separates
 			// them the header still prints, which is what it is for. The group
 			// state advances either way, so a later group breaks as usual.
-			foldsIntoRowAbove := r.isProjectGroup && r.groupKey == prevUUID
+			foldsIntoRowAbove := g.isProject && g.key == prevUUID
 			if !foldsIntoRowAbove {
 				if currentProject != sentinel || currentArea != sentinel {
 					fmt.Fprintln(w)
 				}
-				if r.groupTitle != "" {
-					fmt.Fprintf(w, "    %s\n", headerStyle.Render(r.groupTitle))
+				if g.title != "" {
+					fmt.Fprintf(w, "    %s\n", headerStyle.Render(g.title))
 				}
 			}
-			*current = r.groupKey
+			*current = g.key
 			*other = sentinel
 		}
-		prevUUID = r.uuid
+		prevUUID = g.uuid
 
-		cols := []string{
-			padCol(numW, r.num),
-			padCol(statusW, r.status),
-			padCol(titleW, r.title),
-		}
-		if !dropTags {
-			cols = append(cols, padCol(tagsW, r.tags))
-		}
-		if !dropDate {
-			cols = append(cols, r.date)
-		}
-		fmt.Fprintln(w, joinWithGap(cols, gap))
+		fmt.Fprintln(w, lines[i])
 	}
 	return nil
-}
-
-func padCol(width int, s string) string {
-	return lipgloss.NewStyle().Width(width).Render(s)
-}
-
-func joinWithGap(cols []string, gap string) string {
-	parts := make([]string, 0, len(cols)*2-1)
-	for i, c := range cols {
-		if i > 0 {
-			parts = append(parts, gap)
-		}
-		parts = append(parts, c)
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }
 
 func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) error {
@@ -221,8 +183,8 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 	// hands out indexes for project templates, so say when the thing being
 	// shown is a project rather than leaving its detail block reading as a
 	// to-do's. To-do output is unchanged.
-	if t.Type == model.TypeProject {
-		fmt.Fprintf(w, "%s%s\n", label("Type:"), "project")
+	if isProject(t) {
+		fmt.Fprintf(w, "%s%s\n", label("Type:"), kindWord(t))
 	}
 	if t.ProjectTitle != "" {
 		fmt.Fprintf(w, "%s%s\n", label("Project:"), projectStyle.Render(t.ProjectTitle))
@@ -264,82 +226,64 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 }
 
 func printProjects(w io.Writer, projects []model.Project) error {
-	type row struct{ icon, title, area, tags string }
-	rows := make([]row, len(projects))
-	var iconW, titleW, areaW int
-	for i, p := range projects {
-		r := row{
-			icon:  styledProjectIcon(p),
-			title: p.Title,
-			area:  areaStyle.Render(p.AreaTitle),
-			tags:  styledTags(p.Tags),
-		}
-		rows[i] = r
-		if n := lipgloss.Width(r.icon); n > iconW {
-			iconW = n
-		}
-		if n := lipgloss.Width(r.title); n > titleW {
-			titleW = n
-		}
-		if n := lipgloss.Width(r.area); n > areaW {
-			areaW = n
-		}
+	tbl := &table{gap: columnGap}
+	for _, p := range projects {
+		tbl.row(
+			styledProjectIcon(p),
+			p.Title,
+			areaStyle.Render(p.AreaTitle),
+			styledTags(p.Tags),
+		)
 	}
-	for _, r := range rows {
-		fmt.Fprintln(w, joinWithGap([]string{
-			padCol(iconW, r.icon),
-			padCol(titleW, r.title),
-			padCol(areaW, r.area),
-			r.tags,
-		}, "  "))
-	}
-	return nil
+	return tbl.render(w)
 }
 
 func printAreas(w io.Writer, areas []model.Area) error {
-	type row struct{ title, vis string }
-	rows := make([]row, len(areas))
-	var titleW int
-	for i, a := range areas {
-		r := row{title: a.Title}
+	tbl := &table{gap: columnGap}
+	for _, a := range areas {
+		var vis string
 		if !a.Visible {
-			r.vis = dimStyle.Render("(hidden)")
+			vis = dimStyle.Render("(hidden)")
 		}
-		rows[i] = r
-		if n := lipgloss.Width(r.title); n > titleW {
-			titleW = n
-		}
+		tbl.row(a.Title, vis)
 	}
-	for _, r := range rows {
-		fmt.Fprintln(w, joinWithGap([]string{
-			padCol(titleW, r.title),
-			r.vis,
-		}, "  "))
-	}
-	return nil
+	return tbl.render(w)
 }
 
 func printTags(w io.Writer, tags []model.Tag) error {
-	type row struct{ title, shortcut string }
-	rows := make([]row, len(tags))
-	var titleW int
-	for i, t := range tags {
-		r := row{title: t.Title}
+	tbl := &table{gap: columnGap}
+	for _, t := range tags {
+		var shortcut string
 		if t.Shortcut != "" {
-			r.shortcut = dimStyle.Render("(" + t.Shortcut + ")")
+			shortcut = dimStyle.Render("(" + t.Shortcut + ")")
 		}
-		rows[i] = r
-		if n := lipgloss.Width(r.title); n > titleW {
-			titleW = n
-		}
+		tbl.row(t.Title, shortcut)
 	}
-	for _, r := range rows {
-		fmt.Fprintln(w, joinWithGap([]string{
-			padCol(titleW, r.title),
-			r.shortcut,
-		}, "  "))
+	return tbl.render(w)
+}
+
+// isProject reports whether an item is a project rather than a to-do. Every
+// view but inbox carries a project as a row of its own, `things repeating`
+// carries project templates and `things search` can turn one up, so listing
+// rows, detail blocks and the agent brief all have to tell the two apart.
+func isProject(t *model.Task) bool {
+	return t.Type == model.TypeProject
+}
+
+// kindWord is the word for what the item is. The marker on a listing row, the
+// Type line in a detail block and the agent brief all say "task" or "project",
+// and they say it from here — in the same words the JSON `type` field carries,
+// so an agent reading a brief beside a JSON payload sees one vocabulary
+// (issue #245).
+//
+// It is not model.TaskType.String(): a heading or a code Things has yet to
+// write reads as a task on these surfaces, which is what the CLI has always
+// shown.
+func kindWord(t *model.Task) string {
+	if isProject(t) {
+		return model.TypeProject.String()
 	}
-	return nil
+	return model.TypeTask.String()
 }
 
 func statusIcon(status model.Status) string {
@@ -355,17 +299,15 @@ func statusIcon(status model.Status) string {
 	}
 }
 
+// statusText names a status for a detail block's Status line: the word the
+// JSON and the agent brief already carry, capitalised to sit beside the other
+// labels. model.Status is where the words live, here and everywhere else.
 func statusText(status model.Status) string {
-	switch status {
-	case model.StatusOpen:
-		return "Open"
-	case model.StatusCancelled:
-		return "Cancelled"
-	case model.StatusCompleted:
-		return "Completed"
-	default:
-		return "Unknown"
+	name := status.String()
+	if name == "" {
+		return name
 	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 func projectIcon(p model.Project) string {
