@@ -248,6 +248,10 @@ const parentClosed = "COALESCE(p.status, 0) IN (2, 3)"
 // show a closed row, or the same to-do is folded in one place and listed in
 // another (issue #249). It keeps an unparented row in the view.
 //
+// Those two views apply it only while no --project names the project: naming
+// a closed project is asking for its contents, so the fold comes off there.
+// See openOrJustClosed (issue #253).
+//
 // Trash is the deliberate exception rather than a third caller: it folds a
 // trashed parent's children only, for the reason its own entry in the view
 // table gives.
@@ -264,11 +268,21 @@ const parentNotClosed = "NOT (" + parentClosed + ")"
 // closed project is a different question and a riskier one — dropping it would
 // take real work out of Today — and issue #249 does not ask it. There was no
 // such row in the data on 10 Sep 2026 to measure the app's answer against.
-func openOrJustClosed(includeCompleted bool) string {
-	if !includeCompleted {
-		return "t.status = 0"
+func openOrJustClosed(o whereOpts) string {
+	if !o.includeCompleted {
+		return openRows
 	}
-	return "(t.status = 0 OR (t.status IN (2, 3) AND " + closedTodayUnlogged + " AND " + parentNotClosed + "))"
+	justClosed := closedRows + " AND " + closedTodayUnlogged
+	// The fold exists so a closed project is one row rather than a row plus
+	// its contents. Naming that project is asking for the contents, so the
+	// fold comes off — the same answer `things --project <uuid>` and
+	// `show --agent` already give (issue #253). With p pinned to the named
+	// project the clause is a constant, true for an open project and false
+	// for a closed one, so dropping it can only ever affect the closed case.
+	if !o.projectNamed {
+		justClosed += " AND " + parentNotClosed
+	}
+	return "(" + openRows + " OR (" + justClosed + "))"
 }
 
 // The row-state and row-kind tests every view is built from. They were spelled
@@ -349,7 +363,7 @@ type viewSpec struct {
 	//
 	// Where supportsIncludeCompleted is set this must hold openRows: the flag
 	// does not widen the field, it replaces it wholesale with
-	// openOrJustClosed(true), which starts from the open set. Setting the flag
+	// openOrJustClosed, which starts from the open set. Setting the flag
 	// on a view built on any other status — the Logbook's closedRows, say —
 	// would silently swap that view's status test for the open one rather than
 	// add to it.
@@ -426,13 +440,26 @@ func (s viewSpec) rowKinds() string {
 	return todoOnly
 }
 
-// where composes the view's WHERE clause. includeCompleted widens the status
-// test on the views that support it and is ignored on the rest, which is what
-// ListTasks did with it before.
-func (s viewSpec) where(includeCompleted bool) string {
+// whereOpts carries the parts of a TaskFilter that change how the WHERE is
+// composed, as against the clauses buildListQuery appends after it. Both
+// fields reach only the status test today; they are a struct rather than
+// parameters so a third does not turn every call site into a row of bare
+// booleans.
+type whereOpts struct {
+	// includeCompleted widens the status test on the views that support it
+	// and is ignored on the rest, which is what ListTasks did with it before.
+	includeCompleted bool
+
+	// projectNamed is set when --project names one project, which lifts the
+	// closed-parent fold. See openOrJustClosed for why.
+	projectNamed bool
+}
+
+// where composes the view's WHERE clause.
+func (s viewSpec) where(o whereOpts) string {
 	status := s.status
-	if includeCompleted && s.supportsIncludeCompleted {
-		status = openOrJustClosed(true)
+	if o.includeCompleted && s.supportsIncludeCompleted {
+		status = openOrJustClosed(o)
 	}
 	parts := make([]string, 0, 4+len(s.extra))
 	for _, p := range []string{s.scope, status, s.trashed} {
@@ -766,7 +793,10 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	}
 	// The spec answers --include-completed itself, on the views that support
 	// it, so there is no per-view branch here to keep in step with the table.
-	where := spec.where(opts.IncludeCompleted)
+	where := spec.where(whereOpts{
+		includeCompleted: opts.IncludeCompleted,
+		projectNamed:     opts.Project != "",
+	})
 	// Naming a closed or trashed project asks for its contents, so the
 	// catch-all view widens past the open set and past the trashed-parent
 	// guard, which would otherwise strip exactly the rows being asked for.

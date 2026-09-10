@@ -2187,6 +2187,120 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 	}
 }
 
+// The fold makes a closed project one row rather than a row plus its contents.
+// Naming that project is asking for the contents, so the fold comes off — the
+// answer `things --project <uuid>` and `show --agent` already give. Without
+// this, `things today --project "Launch v2" --include-completed` on a finished
+// project returned nothing at all (issue #253).
+func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stopToday := model.TimeToUnix(time.Now())
+
+	for _, view := range []string{"today", "anytime"} {
+		t.Run(view, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
+				('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?,    1),
+				('proj-open', 'Live',     1, 0, 0, 1, 0, ?, NULL, 2)`,
+				today, stopToday, today)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
+				('under-done', 'Folded', 0, 3, 0, 1, 0, ?, ?, 'proj-done', 3),
+				('under-open', 'Listed', 0, 3, 0, 1, 0, ?, ?, 'proj-open', 4)`,
+				today, stopToday, today, stopToday)
+
+			// Unfiltered, the fold still applies: under-done is folded away.
+			all, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, task := range all {
+				if task.UUID == "under-done" {
+					t.Errorf("%s --include-completed: the fold should still hide under-done", view)
+				}
+			}
+
+			// Naming the closed project returns its contents.
+			named, err := d.ListTasks(view, TaskFilter{Project: "proj-done", IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(named), []string{"under-done"}) {
+				t.Errorf("%s --project proj-done --include-completed: got %v, want [under-done]", view, uuidsOf(named))
+			}
+
+			// By title as well as by uuid, since --project takes either.
+			byTitle, err := d.ListTasks(view, TaskFilter{Project: "Finished", IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(byTitle), []string{"under-done"}) {
+				t.Errorf("%s --project Finished: got %v, want [under-done]", view, uuidsOf(byTitle))
+			}
+
+			// An open project is unaffected: the lifted clause was true for it
+			// either way.
+			openNamed, err := d.ListTasks(view, TaskFilter{Project: "proj-open", IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(openNamed), []string{"under-open"}) {
+				t.Errorf("%s --project proj-open: got %v, want [under-open]", view, uuidsOf(openNamed))
+			}
+
+			// And without the flag nothing changes: the fold lives inside the
+			// closed branch, so a closed child stays out whoever named it.
+			noFlag, err := d.ListTasks(view, TaskFilter{Project: "proj-done"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(noFlag) != 0 {
+				t.Errorf("%s --project proj-done (no flag): got %v, want none", view, uuidsOf(noFlag))
+			}
+		})
+	}
+}
+
+// The lift is scoped to a named project. A view filtered by area or tag alone
+// is still the folded set, or naming an area would quietly reopen every closed
+// project in it.
+func TestAreaAndTagFiltersDoNotLiftTheFold(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stopToday := model.TimeToUnix(time.Now())
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('ar', 'Work', 1, 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, area, "index")
+		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 'ar', 1)`, today, stopToday)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg', 'urgent', 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index")
+		VALUES ('under-done', 'Folded', 0, 3, 0, 1, 0, ?, ?, 'proj-done', 2)`, today, stopToday)
+	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('under-done', 'tg')`)
+
+	for _, tc := range []struct {
+		name   string
+		filter TaskFilter
+	}{
+		{"area", TaskFilter{Area: "ar", IncludeCompleted: true}},
+		{"tag", TaskFilter{Tag: "urgent", IncludeCompleted: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.ListTasks("today", tc.filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, task := range got {
+				if task.UUID == "under-done" {
+					t.Errorf("--%s lifted the fold: got %v", tc.name, uuidsOf(got))
+				}
+			}
+		})
+	}
+}
+
 // The fold sits inside the closed branch, so it can only remove a row the flag
 // just added. An open to-do under a closed project is a different question and
 // issue #249 does not ask it — dropping it would take real work out of Today.
