@@ -2,9 +2,13 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,30 +28,145 @@ type DB struct {
 	repeatQuery  string
 }
 
+const thingsGroupContainer = "JLMPQHK86H.com.culturedcode.ThingsMac"
+
+// PathDiagnosis describes how automatic Things database discovery ended. It
+// deliberately contains paths and status only, never database contents.
+type PathDiagnosis struct {
+	Home      string
+	Container string
+	Pattern   string
+	Database  string
+	Matches   []string
+	Status    string
+}
+
+// PathAccessError means macOS or the filesystem refused to enumerate or
+// inspect part of the Things app-group container. filepath.Glob silently
+// turns that case into an empty match set, which looks exactly like a missing
+// database; keeping the underlying error lets callers distinguish the two.
+type PathAccessError struct {
+	Path string
+	Err  error
+}
+
+func (e *PathAccessError) Error() string {
+	return fmt.Sprintf("cannot access the Things3 database path %s: %v", e.Path, e.Err)
+}
+
+func (e *PathAccessError) Unwrap() error { return e.Err }
+
+// PathNotFoundError means automatic discovery could enumerate the container
+// but found no Things database. Pattern is retained for the existing error
+// text and for diagnostics.
+type PathNotFoundError struct {
+	Pattern string
+}
+
+func (e *PathNotFoundError) Error() string {
+	return fmt.Sprintf("Things3 database not found at %s", e.Pattern)
+}
+
+// MultiplePathsError means more than one Things data directory contains a
+// database, so choosing one automatically would be ambiguous.
+type MultiplePathsError struct {
+	Matches []string
+}
+
+func (e *MultiplePathsError) Error() string {
+	return fmt.Sprintf("multiple Things3 databases found: %v", e.Matches)
+}
+
 // FindDBPath locates the Things3 SQLite database.
 func FindDBPath() (string, error) {
+	diagnosis, err := DiagnoseDBPath()
+	return diagnosis.Database, err
+}
+
+// DiagnoseDBPath runs automatic database discovery and returns the paths it
+// inspected even when discovery fails. It is safe for diagnostic commands:
+// it never opens the database or reads task data.
+func DiagnoseDBPath() (PathDiagnosis, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("finding home directory: %w", err)
+		return PathDiagnosis{Status: "error"}, fmt.Errorf("finding home directory: %w", err)
 	}
-	pattern := filepath.Join(home, "Library", "Group Containers",
-		"JLMPQHK86H.com.culturedcode.ThingsMac", "ThingsData-*",
+	diagnosis, err := findDBPath(home, os.ReadDir, os.Stat)
+	return diagnosis, err
+}
+
+type readDirFunc func(string) ([]os.DirEntry, error)
+type statFunc func(string) (os.FileInfo, error)
+type openFileFunc func(string) (*os.File, error)
+
+func findDBPath(home string, readDir readDirFunc, stat statFunc) (PathDiagnosis, error) {
+	container := filepath.Join(home, "Library", "Group Containers", thingsGroupContainer)
+	pattern := filepath.Join(container, "ThingsData-*",
 		"Things Database.thingsdatabase", "main.sqlite")
-	matches, err := filepath.Glob(pattern)
+	diagnosis := PathDiagnosis{Home: home, Container: container, Pattern: pattern}
+
+	entries, err := readDir(container)
 	if err != nil {
-		return "", fmt.Errorf("globbing database path: %w", err)
+		if errors.Is(err, fs.ErrPermission) {
+			diagnosis.Status = "permission_denied"
+			return diagnosis, &PathAccessError{Path: container, Err: err}
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			diagnosis.Status = "not_found"
+			return diagnosis, &PathNotFoundError{Pattern: pattern}
+		}
+		diagnosis.Status = "error"
+		return diagnosis, fmt.Errorf("reading Things3 data directory %s: %w", container, err)
 	}
+
+	var matches []string
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), "ThingsData-") {
+			continue
+		}
+		path := filepath.Join(container, entry.Name(),
+			"Things Database.thingsdatabase", "main.sqlite")
+		info, statErr := stat(path)
+		switch {
+		case statErr == nil && !info.IsDir():
+			matches = append(matches, path)
+		case statErr == nil:
+			// A directory named main.sqlite is not a database match.
+		case errors.Is(statErr, fs.ErrNotExist):
+			// This ThingsData directory has no live database.
+		case errors.Is(statErr, fs.ErrPermission):
+			diagnosis.Status = "permission_denied"
+			return diagnosis, &PathAccessError{Path: path, Err: statErr}
+		default:
+			diagnosis.Status = "error"
+			return diagnosis, fmt.Errorf("inspecting Things3 database path %s: %w", path, statErr)
+		}
+	}
+
+	diagnosis.Matches = matches
 	if len(matches) == 0 {
-		return "", fmt.Errorf("Things3 database not found at %s", pattern)
+		diagnosis.Status = "not_found"
+		return diagnosis, &PathNotFoundError{Pattern: pattern}
 	}
 	if len(matches) > 1 {
-		return "", fmt.Errorf("multiple Things3 databases found: %v", matches)
+		diagnosis.Status = "multiple"
+		return diagnosis, &MultiplePathsError{Matches: matches}
 	}
-	return matches[0], nil
+	diagnosis.Status = "ok"
+	diagnosis.Database = matches[0]
+	return diagnosis, nil
 }
 
 // Open opens a read-only connection to the Things3 database.
 func Open(path string) (*DB, error) {
+	// SQLite reduces several filesystem failures to SQLITE_CANTOPEN (14),
+	// losing the underlying EPERM/EACCES that identifies macOS privacy
+	// controls. Probe one byte first so callers can still use errors.Is with
+	// fs.ErrPermission. This does not modify the database or inspect task data.
+	if err := probeDatabaseReadable(path, os.Open); err != nil {
+		return nil, err
+	}
+
 	sqlDB, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
@@ -58,6 +177,24 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("setting query_only pragma: %w", err)
 	}
 	return &DB{db: sqlDB}, nil
+}
+
+func probeDatabaseReadable(path string, openFile openFileFunc) error {
+	file, err := openFile(path)
+	if err != nil {
+		return fmt.Errorf("opening database file for read probe: %w", err)
+	}
+
+	var header [1]byte
+	_, readErr := file.Read(header[:])
+	closeErr := file.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return fmt.Errorf("reading database file: %w", readErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("closing database file after read probe: %w", closeErr)
+	}
+	return nil
 }
 
 func (d *DB) Close() error {

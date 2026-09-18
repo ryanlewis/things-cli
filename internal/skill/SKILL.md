@@ -4,7 +4,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 
 ## Safety
 
-- **Safe to run freely**: `list`, `show`, `projects`, `areas`, `tags`, `search`, `config path`, `config show`, `skill list`, `skill show`, `version`, `completions`. The Things database is opened read-only.
+- **Safe to run freely**: `list`, `show`, `projects`, `areas`, `tags`, `search`, `doctor`, `config path`, `config show`, `skill list`, `skill show`, `version`, `completions`. The Things database is opened read-only.
 - **Writes change the user's real data**: `add`, `project add`, `edit`, `project edit`, `complete`, `cancel`, `tag add`, `log`, `import`. Confirm before the destructive ones — `complete`, `cancel`, and any bulk `edit`.
 - `open` writes nothing; it reveals an item in the Things app and pulls focus. Use it when the user wants to *see* something rather than read data back.
 - `skill install` / `skill uninstall` write to the user's agent config directory. Do not run them unasked.
@@ -239,6 +239,9 @@ things import [--file F] [--reveal] [--strict-tags | --create-tags] < payload.js
     # batch create/update via the Things JSON URL scheme
     # payload is the array at culturedcode.com/things/support/articles/2803573/
 
+things doctor
+    # diagnose automatic/overridden database selection and read-only access
+    # without querying task data; under --json branch on ok or status
 things config path | show | init [--force]
 things skill list | show [<agent>] | install <agent> [--path DIR] [-y] | uninstall <agent> [--path DIR] [-y]
 things completions <bash|zsh|fish>

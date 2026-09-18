@@ -382,6 +382,22 @@ things version       # or: things --version / things -v
 
 Prints the version, commit, and build date.
 
+## Database diagnostics
+
+`things doctor` checks how the Things database path is selected and whether
+the database can be opened read-only. It does not query task data.
+
+```sh
+things doctor
+things --json doctor
+```
+
+The report separates a missing database from a `permission_denied` result
+while enumerating `~/Library/Group Containers`. It also reports whether the
+path came from automatic discovery, `--db`, or the config file. Diagnosis
+itself exits successfully even when `ok` is `false`; scripts should inspect
+the JSON `ok` or `status` field.
+
 ## Configuration
 
 A TOML file at `~/.config/things-cli/config.toml` supplies defaults for

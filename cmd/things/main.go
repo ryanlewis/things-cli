@@ -51,6 +51,7 @@ type CLI struct {
 	Import   ImportCmd   `cmd:"" help:"Batch create/update via the Things JSON URL scheme. Reads JSON from stdin or --file."`
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
 	Conf     ConfigCmd   `cmd:"" name:"config" help:"Inspect and create the config file that supplies flag defaults."`
+	Doctor   DoctorCmd   `cmd:"" help:"Diagnose Things database discovery and access without reading task data."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 
 	Completions CompletionsCmd `cmd:"" help:"Print a shell completion script (bash|zsh|fish)."`

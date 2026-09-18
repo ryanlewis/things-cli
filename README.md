@@ -224,6 +224,23 @@ is at fault, so they keep working. A `db` path that no longer exists is
 reported when a command opens the database, so it does not disable them
 either.
 
+### Database diagnostics
+
+`things doctor` checks database discovery and opens the selected database
+read-only without querying task data. Use it when a normal command reports
+that the database is missing or cannot be opened:
+
+```sh
+things doctor
+things --json doctor
+```
+
+The report distinguishes a genuinely missing database from a
+`permission_denied` result while enumerating Things' app-group container. It
+also names whether the database path came from automatic discovery, `--db`,
+or the config file. A completed diagnosis exits successfully even when
+`ok` is `false`; scripts should branch on `ok` or `status` in the JSON report.
+
 Anything set here still loses to a flag, so `things --color never today`
 wins over `color = "always"`.
 
