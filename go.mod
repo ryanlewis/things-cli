@@ -1,18 +1,18 @@
 module github.com/ryanlewis/things-cli
 
-go 1.26
+go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.27.1
 
 require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/alecthomas/kong v1.16.1
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/mattn/go-isatty v0.0.24
-	github.com/pelletier/go-toml/v2 v2.2.4
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/willabides/kongplete v0.4.0
-	golang.org/x/term v0.45.0
-	modernc.org/sqlite v1.57.0
+	golang.org/x/term v0.46.0
+	modernc.org/sqlite v1.59.0
 )
 
 require (
@@ -37,8 +37,8 @@ require (
 	github.com/riywo/loginshell v0.0.0-20200815045211-7d26008be1ab // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	modernc.org/libc v1.74.4 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )
