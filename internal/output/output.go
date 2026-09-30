@@ -113,10 +113,11 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 	headerWidth := 0
 	if tty {
 		headerWidth = max(width-4, 1)
-		// An over-long title gives up its end, down to 40 columns, before a
-		// column is dropped from every row for it: 40 still reads as the task
-		// it names, and at 80 columns leaves room for the tags and the date.
-		// Once nothing is left to drop, it goes on down to 10 rather than
+		// Once the checklist progress and the extra start date have gone, an
+		// over-long title gives up its end, down to 40 columns, before the tags
+		// or the date are dropped from every row for it: 40 still reads as the
+		// task it names, and at 80 columns leaves room for the tags and the
+		// date. Once nothing is left to drop, it goes on down to 10 rather than
 		// wrapping under the row numbers. Only on a terminal: piped output
 		// keeps every title whole.
 		tbl.shrink = []shrinkCol{{col: colTitle, min: 10, soft: 40}}
