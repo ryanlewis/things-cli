@@ -92,9 +92,10 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		isProject  bool
 	}
 
+	width, tty := termWidth(), stdoutIsTerminal()
 	tbl := &table{
 		gap:      columnGap,
-		maxWidth: termWidth(),
+		maxWidth: width,
 		// The tags go first when a row will not fit, then the date: a row
 		// still says what it is and when it is due for as long as it can.
 		// The start date beside a deadline is the first to go: the date
@@ -104,7 +105,11 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// column were not there.
 		omitEmpty: []int{colStart},
 	}
-	if stdoutIsTerminal() {
+	// A group header is cut to fit behind its four-space indent, and, as with
+	// titles, only on a terminal: piped output keeps every header whole.
+	headerWidth := 0
+	if tty {
+		headerWidth = max(width-4, 1)
 		// Then the title is cut short rather than wrapping under the row
 		// numbers, though never so far that it stops saying what the task is.
 		// Only on a terminal: piped output keeps every title whole.
@@ -185,7 +190,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 					fmt.Fprintln(w)
 				}
 				if g.title != "" {
-					fmt.Fprintf(w, "    %s\n", headerStyle.Render(fitHeader(g.title)))
+					fmt.Fprintf(w, "    %s\n", headerStyle.Render(fitHeader(g.title, headerWidth)))
 				}
 			}
 			*current = g.key
@@ -198,14 +203,13 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 	return nil
 }
 
-// fitHeader cuts a group header short with an ellipsis so that, behind its
-// four-space indent, it fits the terminal rather than wrapping. Only on a
-// terminal, as with titles: piped output keeps every header whole.
-func fitHeader(title string) string {
-	if !stdoutIsTerminal() {
+// fitHeader cuts a group header short with an ellipsis so that it fits width
+// rather than wrapping. A width of zero keeps the header whole.
+func fitHeader(title string, width int) string {
+	if width <= 0 {
 		return title
 	}
-	return ansi.Truncate(title, max(termWidth()-4, 1), "…")
+	return ansi.Truncate(title, width, "…")
 }
 
 func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) error {
