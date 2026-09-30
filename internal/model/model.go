@@ -275,6 +275,11 @@ type Task struct {
 	// Things refuses status, when, deadline and duplicate updates on these,
 	// silently, so callers need to know before they try.
 	Repeating bool `json:"repeating,omitempty"`
+
+	// ModificationDate is Things' userModificationDate, which it bumps on
+	// every applied write. It is the one signal an edit's read-back can wait
+	// on whatever the edit changed, so it is read but not printed.
+	ModificationDate *time.Time `json:"-"`
 }
 
 type ChecklistItem struct {

@@ -30,7 +30,7 @@ type CLI struct {
 	Config  string           `help:"Path to the TOML config file (default ~/.config/things-cli/config.toml)." placeholder:"PATH"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
-	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
+	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel, an edit, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
 
 	Hints bool `help:"Print the hint line under a plain task listing. Use --no-hints to turn it off." negatable:"" default:"true"`
 
@@ -66,7 +66,7 @@ type Deps struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
-	// NoVerify skips the post-write read-back on complete/cancel.
+	// NoVerify skips the post-write read-back on complete/cancel and edits.
 	NoVerify bool
 
 	// Hints allows the pointer line printed under a plain listing. Off means

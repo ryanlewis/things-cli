@@ -111,7 +111,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN {{repeating}} IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN {{repeating}} IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -123,7 +124,7 @@ LEFT JOIN TMTag tag ON tt.tags = tag.uuid
 
 func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	var t model.Task
-	var startDate, deadline, stopDate, creationDate sql.NullFloat64
+	var startDate, deadline, stopDate, creationDate, modificationDate sql.NullFloat64
 	var tagsStr string
 	var trashed, repeating int
 
@@ -138,6 +139,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 		&tagsStr,
 		&t.Index, &t.TodayIndex,
 		&repeating,
+		&modificationDate,
 	)
 	if err != nil {
 		return t, err
@@ -149,6 +151,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	t.Deadline = thingsDate(deadline)
 	t.StopDate = unixTime(stopDate)
 	t.CreationDate = unixTime(creationDate)
+	t.ModificationDate = unixTime(modificationDate)
 	if tagsStr != "" {
 		t.Tags = strings.Split(tagsStr, "\x1f")
 	}

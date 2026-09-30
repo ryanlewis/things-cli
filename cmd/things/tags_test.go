@@ -237,7 +237,9 @@ func TestRunProjectEditWarnsOnUnknownTag(t *testing.T) {
 	database := seedFullDB(t)
 	stubExec(t)
 
-	stderr, err := runCapturingStderr(t, database, "project", "edit", "Chores", "--tags", "nope")
+	// --no-verify: the stub applies nothing, and the read-back is not what
+	// this test is about.
+	stderr, err := runCapturingStderr(t, database, "--no-verify", "project", "edit", "Chores", "--tags", "nope")
 	if err != nil {
 		t.Fatalf("run project edit: %v", err)
 	}

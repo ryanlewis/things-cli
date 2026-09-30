@@ -116,5 +116,11 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 			Reveal:       c.Reveal,
 		})
 	}
-	return applyEditStatusWrite(d, database, project, c.Complete, c.Cancel, c.Duplicate, update)
+	return applyEdit(d, database, project, c.changesFields(), c.Complete, c.Cancel, c.Duplicate, update)
+}
+
+// changesFields reports whether the edit sets any attribute besides the status.
+func (c *ProjectEditCmd) changesFields() bool {
+	return anySet(c.Title, c.Notes, c.PrependNotes, c.AppendNotes, c.When, c.Deadline,
+		c.Tags, c.AddTags, c.Area, c.AreaID)
 }

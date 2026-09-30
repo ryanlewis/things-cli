@@ -117,7 +117,7 @@ A template and its generated task share a title, so a title lookup resolves to t
 
 `import` applies the same check per item: if any `operation: update` item carries `when`, `deadline`, `completed` or `canceled` for a repeating item, the whole payload is refused before anything is sent. The value is irrelevant — `"completed": false` is refused like `"completed": true`. The URL scheme takes one payload and reports nothing per item, so there is no way to send the rest and say what was skipped.
 
-### 3. Every status change is read back
+### 3. Every status change and edit is read back
 
 After a `complete`, a `cancel`, or an `import` item setting `completed`/`canceled`, the CLI re-reads the item and exits non-zero if the status never changed. **Treat a non-zero exit as "still open" — do not report it as done.** Setting either field to `false` asks for incomplete and is read back too; `canceled` wins when both are set. An import checks every such item under one shared timeout budget, and the per-item detail is part of the error, so it survives `--json`:
 
@@ -126,7 +126,11 @@ Error: 1 of 2 requested status changes did not apply. …:
   [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. …
 ```
 
-The rest of that import is already applied — re-run with only the failed items. `--no-verify` skips this read-back and the tag one in rule 1; it does **not** skip rule 2, which is a documented rule rather than a guess about what Things did.
+The rest of that import is already applied — re-run with only the failed items.
+
+`edit` and `project edit` wait for Things to record the write (its modification date moves, and the status too if you passed `--complete`/`--cancel`), then print the item exactly as `things show` would — the same object under `--json`. **Exit 0 with the item printed means the edit is confirmed: do not `things show` it again.** A dropped edit exits non-zero with `edit did not apply: …`. An edit that sets every field to the value it already has may not register and so reports that error too. `--duplicate` edits a new copy the CLI cannot find, so nothing is read back; under `--no-verify` neither is anything. Both print a line saying the edit was sent but not confirmed — under `--json`, `{"uuid": …, "title": …, "confirmed": false, "reason": "duplicate"|"no-verify"}`.
+
+`--no-verify` skips this read-back and the tag one in rule 1; it does **not** skip rule 2, which is a documented rule rather than a guess about what Things did.
 
 ### 4. A project takes its tasks with it
 
@@ -286,7 +290,9 @@ things edit "Ship release" --when tomorrow --add-tags "priority"
 things edit "$uuid" --when "next friday"   # weekday names work
 ```
 
-Reschedule several at once — not transactional, partial failures stick:
+Put every change to one item in a single `edit` with several flags, not one `edit` per flag: each write waits for its own read-back.
+
+Reschedule several at once by looping over `--json` uuids — not transactional, partial failures stick:
 
 ```
 things upcoming --area Work -j | jq -r '.[].uuid' | \

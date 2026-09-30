@@ -53,16 +53,45 @@ func seedWritable(t *testing.T) (*db.DB, *sql.DB) {
 }
 
 // stubExecApplying mocks the write command and, as Things would, moves the
-// task to the given status so the read-back finds the change.
+// task to the given status and bumps its modification date so the read-back
+// finds the change.
 func stubExecApplying(t *testing.T, sqlDB *sql.DB, uuid string, status int) {
 	t.Helper()
 	prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
-		if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = ?`, status, uuid); err != nil {
+		if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ?, userModificationDate = COALESCE(userModificationDate, 0) + 1 WHERE uuid = ?`, status, uuid); err != nil {
 			t.Errorf("simulating Things write: %v", err)
 		}
 		return exec.Command("true")
 	})
 	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+}
+
+// bumpModificationDates moves every item's modification date forward, which
+// is the trace Things leaves of any write it applies.
+func bumpModificationDates(t *testing.T, sqlDB *sql.DB) {
+	t.Helper()
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET userModificationDate = COALESCE(userModificationDate, 0) + 1`); err != nil {
+		t.Errorf("simulating Things write: %v", err)
+	}
+}
+
+// stubExecEditing mocks an edit Things applies: it runs apply against the
+// database, as the edit would change it, and bumps the modification date.
+func stubExecEditing(t *testing.T, sqlDB *sql.DB, apply string) *int {
+	t.Helper()
+	calls := 0
+	prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
+		calls++
+		if apply != "" {
+			if _, err := sqlDB.Exec(apply); err != nil {
+				t.Errorf("simulating Things write: %v", err)
+			}
+		}
+		bumpModificationDates(t, sqlDB)
+		return exec.Command("true")
+	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+	return &calls
 }
 
 // stubExecDropping mocks a write that reports success but changes nothing —
@@ -116,8 +145,9 @@ func TestRepeatingWritesAreRefusedUpFront(t *testing.T) {
 // A repeating to-do can still be retitled or retagged — only the documented
 // attributes are blocked.
 func TestRepeatingAllowsUnrestrictedEdits(t *testing.T) {
-	database, _ := seedWritable(t)
-	stubExec(t)
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecEditing(t, sqlDB, `UPDATE TMTask SET title = 'Water the plants' WHERE uuid = 'rep-1'`)
 
 	if err := runWith(t, database, "edit", "rep-1", "--title", "Water the plants"); err != nil {
 		t.Fatalf("edit --title on a repeating to-do: %v", err)

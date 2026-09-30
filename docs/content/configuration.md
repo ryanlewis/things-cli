@@ -70,7 +70,7 @@ an error rather than a coin toss.
 | `color` | — | `"auto"` \| `"always"` \| `"never"` | `"auto"` | every command | When to colour output; `auto` means only on a terminal |
 | `hints` | — | boolean | `true` | every command | Print the hint line under a plain task listing |
 | `db` | — | path | auto-detected | every command | Where the Things3 SQLite database is; the file must exist |
-| `no_verify` | `no-verify` | boolean | `false` | `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a status change or a tag creation landed |
+| `no_verify` | `no-verify` | boolean | `false` | `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a status change, an edit, or a tag creation landed |
 | `strict_tags` | `strict-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Fail instead of writing when a tag does not exist |
 | `create_tags` | `create-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Create missing tags before writing |
 | `assume_yes` | `yes` | boolean | `false` | `complete`, `cancel` | Answer the confirmation before a project-wide status change |
@@ -132,7 +132,7 @@ commented out. Uncomment a line to change that default.
 # Leave unset to let things-cli find it. The file must exist.
 # db = "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite"
 
-# Skip the read-back that confirms a complete/cancel actually landed.
+# Skip the read-back that confirms a complete/cancel or an edit actually landed.
 # Same as --no-verify. Faster, but a write Things silently drops is
 # then reported as a success.
 # no_verify = false
@@ -351,7 +351,7 @@ that currently is.
 
 A config file can change defaults you would otherwise assume. `json =
 true` makes every command emit JSON; `no_verify = true` turns off the
-read-back that confirms a `complete` landed; `hints = false` drops the
+read-back that confirms a `complete` or an `edit` landed; `hints = false` drops the
 hint line.
 
 If you are writing something that has to behave the same on any machine,
