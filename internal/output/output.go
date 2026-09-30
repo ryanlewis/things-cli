@@ -315,8 +315,25 @@ func unusedRune(s string) (string, bool) {
 	return "", false
 }
 
+// projectColumns names the columns a project row carries, so the drop order
+// below and the cells added for each row cannot fall out of step.
+const (
+	colProjectIcon = iota
+	colProjectTitle
+	colProjectArea
+	colProjectTags
+)
+
 func printProjects(w io.Writer, projects []model.Project) error {
 	tbl := &table{gap: columnGap}
+	if stdoutIsTerminal() {
+		// On a terminal a row that will not fit gives up its tags, then its
+		// area, and then has its title cut short. Piped output keeps every
+		// column whole.
+		tbl.maxWidth = termWidth()
+		tbl.dropOrder = []int{colProjectTags, colProjectArea}
+		tbl.shrink = []shrinkCol{{col: colProjectTitle, min: 10}}
+	}
 	for _, p := range projects {
 		tbl.row(
 			styledProjectIcon(p),
