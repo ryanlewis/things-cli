@@ -52,6 +52,10 @@ CREATE TABLE TMChecklistItem (
     task     TEXT
 );
 
+-- Things indexes the parent column, and the task queries' checklist counts
+-- lean on it.
+CREATE INDEX index_TMChecklistItem_task ON TMChecklistItem (task);
+
 CREATE TABLE TMSettings (
     uuid                         TEXT PRIMARY KEY,
     uriSchemeAuthenticationToken TEXT,

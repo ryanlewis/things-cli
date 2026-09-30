@@ -276,10 +276,26 @@ type Task struct {
 	// silently, so callers need to know before they try.
 	Repeating bool `json:"repeating,omitempty"`
 
+	// ChecklistProgress counts the to-do's checklist items, so a listing can
+	// say a task has a checklist without fetching it. Nil when there is none.
+	ChecklistProgress *ChecklistProgress `json:"checklistProgress,omitempty"`
+
 	// ModificationDate is Things' userModificationDate, which it bumps on
 	// every applied write. It is the one signal an edit's read-back can wait
 	// on whatever the edit changed, so it is read but not printed.
 	ModificationDate *time.Time `json:"-"`
+}
+
+// ChecklistProgress is how many checklist items a to-do has and how many of
+// those are still open. The rest are completed or cancelled.
+type ChecklistProgress struct {
+	Total int `json:"total"`
+	Open  int `json:"open"`
+}
+
+// Done is the number of items no longer open: completed or cancelled.
+func (c ChecklistProgress) Done() int {
+	return c.Total - c.Open
 }
 
 type ChecklistItem struct {

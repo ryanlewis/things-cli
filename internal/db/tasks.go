@@ -81,7 +81,13 @@ const repeatingPlaceholder = "{{repeating}}"
 // recurrence column in its select list.
 const repeatingParentPlaceholder = "{{repeating_parent}}"
 
-// baseTaskQuery selects a task with its project, heading, area and tags.
+// baseTaskQuery selects a task with its project, heading, area and tags, and
+// how many checklist items it has and how many of those are open.
+//
+// The checklist counts are subqueries rather than a join: a join would repeat
+// each row once per item and multiply the tags GROUP_CONCAT gathers. Things
+// indexes TMChecklistItem.task, so each count is an index lookup on the rows
+// the view kept, not a scan of every checklist.
 //
 // A task filed under a project heading carries t.heading and leaves t.project
 // NULL — the heading row (a TMTask) holds the project. Resolving p through
@@ -112,7 +118,9 @@ SELECT
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
 	CASE WHEN {{repeating}} IS NOT NULL THEN 1 ELSE 0 END,
-	t.userModificationDate
+	t.userModificationDate,
+	(SELECT COUNT(*) FROM TMChecklistItem ci WHERE ci.task = t.uuid),
+	(SELECT COUNT(*) FROM TMChecklistItem ci WHERE ci.task = t.uuid AND COALESCE(ci.status, 0) = 0)
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -126,7 +134,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	var t model.Task
 	var startDate, deadline, stopDate, creationDate, modificationDate sql.NullFloat64
 	var tagsStr string
-	var trashed, repeating int
+	var trashed, repeating, checklistTotal, checklistOpen int
 
 	err := row.Scan(
 		&t.UUID, &t.Title, &t.Notes,
@@ -140,6 +148,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 		&t.Index, &t.TodayIndex,
 		&repeating,
 		&modificationDate,
+		&checklistTotal, &checklistOpen,
 	)
 	if err != nil {
 		return t, err
@@ -154,6 +163,9 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	t.ModificationDate = unixTime(modificationDate)
 	if tagsStr != "" {
 		t.Tags = strings.Split(tagsStr, "\x1f")
+	}
+	if checklistTotal > 0 {
+		t.ChecklistProgress = &model.ChecklistProgress{Total: checklistTotal, Open: checklistOpen}
 	}
 	return t, nil
 }
