@@ -534,8 +534,8 @@ func TestPrintJSONDoesNotEscapeHTMLCharacters(t *testing.T) {
 // On a narrow terminal a long value wraps with a hanging indent: each wrapped
 // line keeps to the column its text started in rather than running back to
 // column 0. The user's own line breaks and blank lines survive, a URL moves to
-// a line of its own rather than splitting, and only a token wider than the
-// space left is broken.
+// a line of its own rather than splitting at a hyphen, and only a token wider
+// than the space left is broken.
 func TestPrintTaskDetail_WrapsToTerminalWidth(t *testing.T) {
 	prev := termWidth
 	termWidth = func() int { return 40 }
@@ -544,7 +544,7 @@ func TestPrintTaskDetail_WrapsToTerminalWidth(t *testing.T) {
 	task := &model.Task{
 		UUID: "u1", Title: "Book the venue for the autumn team offsite", Status: model.StatusOpen,
 		Notes: "Call them before Friday and ask about the deposit.\n\n" +
-			"See https://example.com/venues/offsite26 for details.\n" +
+			"See https://example.com/venue-offsite26 for details.\n" +
 			"ref:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	items := []model.ChecklistItem{
@@ -564,7 +564,7 @@ Notes:
   the deposit.
   
   See
-  https://example.com/venues/offsite26
+  https://example.com/venue-offsite26
   for details.
   ref:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   aaaaaaaaaaaa
