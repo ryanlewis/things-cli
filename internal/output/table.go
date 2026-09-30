@@ -233,16 +233,16 @@ func (t *table) widths() []int {
 //  1. dropFirst gives up one column at a time;
 //  2. shrink columns give way to their soft minimum;
 //  3. dropOrder columns switch to their compact forms, one at a time;
-//  4. dropOrder gives up one column at a time, and a column step 3 shortened
-//     goes back to its full form if a drop made room for it;
-//  5. any width a compact form or a drop freed beyond the overrun goes back
-//     to the columns the soft pass cut;
-//  6. shrink columns give way to their hard minimum.
+//  4. dropOrder gives up one column at a time;
+//  5. a column step 3 shortened goes back to its full form if a later
+//     compact form or a drop made room for it;
+//  6. any width left beyond the overrun goes back to the columns the soft
+//     pass cut;
+//  7. shrink columns give way to their hard minimum.
 //
-// So a wide terminal
-// keeps everything and a narrow one loses as little as it can, the end of an
-// over-long cell before a column on every row, and a column worth less than
-// that before either.
+// So a wide terminal keeps everything and a narrow one loses as little as it
+// can, the end of an over-long cell before a column on every row, and a
+// column worth less than that before either.
 func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 	keep = make([]bool, len(widths))
 	cut = make([]bool, len(widths))
@@ -258,15 +258,12 @@ func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 	t.shrinkTo(widths, keep, cut, true)
 	compacted := t.compactTier(widths, keep, compact, t.dropOrder)
 	dropped := t.drop(widths, keep, compact, t.dropOrder)
-	if dropped {
-		// A drop can free enough for a column the compact tier shortened to
-		// go back to its full form.
-		t.expand(widths, full, keep, compact, t.dropOrder)
-	}
 	if compacted || dropped {
-		// A compact form or a drop can free more than the row was over by:
-		// hand the rest back to the columns the soft pass cut, in the order
-		// they gave it up.
+		// A later compact form or a drop can free enough for a column the
+		// compact tier shortened to go back to its full form, and more than
+		// the row was over by: hand the rest back to the columns the soft
+		// pass cut, in the order they gave it up.
+		t.expand(widths, full, keep, compact, t.dropOrder)
 		t.regrow(widths, full, keep, cut)
 	}
 	t.shrinkTo(widths, keep, cut, false)
@@ -327,11 +324,8 @@ func (t *table) drop(widths []int, keep, compact []bool, order []int) bool {
 			continue
 		}
 		freed = true
-		if w, ok := t.compactWidth(c); ok && w < widths[c] {
-			widths[c], compact[c] = w, true
-			if t.fits(widths, keep) {
-				break
-			}
+		if t.compactTier(widths, keep, compact, []int{c}) && t.fits(widths, keep) {
+			break
 		}
 		keep[c] = false
 	}

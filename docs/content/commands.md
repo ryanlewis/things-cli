@@ -172,7 +172,8 @@ checklist progress goes first, then that extra start date. If the row is
 still too wide, a title longer than 40 columns is cut to 40 with `…`, so
 one long title does not cost every row its tags or date. Next the tags
 switch to a short form, the first tag and a count of the rest
-(`[waiting-on-pos… +2]`), and the dates to one relative to today
+(`[waiting-on-pos… +2]`, or `[waiting-on-pos…]` for a lone long tag),
+and the dates to one relative to today
 (`today`, `tomorrow`, `due:Fri`, `3d ago`, `2 Oct`, with the year only
 when it is not this one). Only if that still does not fit do the tags go,
 and then the date. Then the title is cut further, down to 10. A project
