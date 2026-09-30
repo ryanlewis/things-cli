@@ -332,7 +332,7 @@ func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
 	// pointing at a list printed elsewhere would name detail the consumer
 	// cannot see.
 	var failures []importVerifyItem
-	for i, res := range verifyStatuses(database, wants, verifyTimeout) {
+	for i, res := range verifyStatuses(database, wants, d.readBackTimeout()) {
 		if res.err == nil {
 			continue
 		}

@@ -167,6 +167,7 @@ func isolateHome(t *testing.T) string {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv(config.EnvVar, "")
+	t.Setenv(verifyTimeoutEnv, "")
 	// The skill installers resolve their target from these before falling back
 	// to HOME, so a developer or CI runner with one exported would otherwise
 	// have a test read or write their real agent config directory. Keep in step
@@ -176,6 +177,9 @@ func isolateHome(t *testing.T) string {
 	}
 	return home
 }
+
+// verifyTimeoutEnv is the environment variable behind --verify-timeout.
+const verifyTimeoutEnv = "THINGS_CLI_VERIFY_TIMEOUT"
 
 // runStreams parses args, runs the command against database, and returns both
 // of the handler's output streams.
@@ -200,7 +204,7 @@ func runStreams(t *testing.T, database *db.DB, args ...string) (string, string, 
 	if cfgErr != nil && !diagnosesConfig(ctx) {
 		return "", "", cfgErr
 	}
-	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify, Hints: cli.Hints, Config: cfg}
+	deps := &Deps{DB: database, JSON: cli.JSON, Stdout: &stdout, Stderr: &stderr, NoVerify: cli.NoVerify, VerifyTimeout: cli.VerifyTimeout, Hints: cli.Hints, Config: cfg}
 	var runErr error
 	withSilentStdout(t, func() {
 		runErr = ctx.Run(deps)

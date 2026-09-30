@@ -16,9 +16,11 @@ const repeatingDocsURL = "https://culturedcode.com/things/support/articles/28035
 
 // Read-back tuning. Things gives write commands no callback (issue #19), so
 // the only confirmation available is re-reading the database until the change
-// lands. Vars rather than consts so tests can shrink them.
+// lands. Vars rather than consts so tests can shrink them. verifyTimeout is
+// only the fallback for a Deps built without --verify-timeout's value; see
+// (*Deps).readBackTimeout.
 var (
-	verifyTimeout  = 10 * time.Second
+	verifyTimeout  = 5 * time.Second
 	verifyInterval = 100 * time.Millisecond
 	verifySleep    = time.Sleep
 )
@@ -194,8 +196,8 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 
 // verifyStatus re-reads a single item until its status matches want, and
 // reports an error if it never does.
-func verifyStatus(database *db.DB, task *model.Task, want model.Status) error {
-	return verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, verifyTimeout)[0].err
+func verifyStatus(database *db.DB, task *model.Task, want model.Status, budget time.Duration) error {
+	return verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, budget)[0].err
 }
 
 // applyStatusWrite runs a status-changing write and confirms it landed, unless
@@ -207,7 +209,7 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 	if d.NoVerify {
 		return nil
 	}
-	return verifyStatus(database, task, want)
+	return verifyStatus(database, task, want, d.readBackTimeout())
 }
 
 // applyEdit runs an `edit` / `project edit` update, waits for it to land, and
@@ -246,7 +248,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, ca
 	if changed || want != task.Status {
 		res := verifyStatuses(database, []statusWant{{
 			uuid: task.UUID, title: task.Title, want: want, edit: changed, since: task.ModificationDate,
-		}}, verifyTimeout)[0]
+		}}, d.readBackTimeout())[0]
 		if res.err != nil {
 			return res.err
 		}

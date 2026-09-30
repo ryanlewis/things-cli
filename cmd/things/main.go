@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/mattn/go-isatty"
@@ -31,6 +32,8 @@ type CLI struct {
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
 	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel, an edit, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
+
+	VerifyTimeout time.Duration `help:"How long the read-back waits before reporting a write as not applied, e.g. 5s or 2500ms. Overrides $THINGS_CLI_VERIFY_TIMEOUT." name:"verify-timeout" type:"verifytimeout" default:"5s"`
 
 	Hints bool `help:"Print the hint line under a plain task listing. Use --no-hints to turn it off." negatable:"" default:"true"`
 
@@ -69,6 +72,10 @@ type Deps struct {
 	// NoVerify skips the post-write read-back on complete/cancel and edits.
 	NoVerify bool
 
+	// VerifyTimeout is how long that read-back waits for a write to show up.
+	// Zero means a Deps built by hand in a test; see readBackTimeout.
+	VerifyTimeout time.Duration
+
 	// Hints allows the pointer line printed under a plain listing. Off means
 	// the user has said they know the CLI; see printAgentHint for the other
 	// conditions that suppress it.
@@ -90,6 +97,16 @@ func (d *Deps) config() *config.File {
 		d.Config = &config.File{Source: config.SourceDefault}
 	}
 	return d.Config
+}
+
+// readBackTimeout is the budget for confirming a write landed. main always
+// sets VerifyTimeout from --verify-timeout; a Deps without one falls back to
+// the package default, which tests shrink.
+func (d *Deps) readBackTimeout() time.Duration {
+	if d.VerifyTimeout > 0 {
+		return d.VerifyTimeout
+	}
+	return verifyTimeout
 }
 
 // errOut is where warnings go. Tests leave Stderr nil and capture os.Stderr,
@@ -214,7 +231,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify, Hints: cli.Hints, Config: cfg}
+	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify, VerifyTimeout: cli.VerifyTimeout, Hints: cli.Hints, Config: cfg}
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {
