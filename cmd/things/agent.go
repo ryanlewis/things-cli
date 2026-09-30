@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/mattn/go-isatty"
+	"golang.org/x/term"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -16,12 +17,20 @@ import (
 // they cannot discover from the listing itself.
 const agentHint = "things show <n> --agent hands a task to an agent (disable with hints = false in the config file)"
 
-// isStdoutTTY reports whether stdout is a terminal, using the same package and
-// the same Cygwin allowance as isInteractive does for stdin. It is a var so
-// tests can stub it — nothing in a test writes to a real terminal.
-var isStdoutTTY = func() bool {
+// stdoutTerminal reports whether stdout is a terminal, using the same package
+// and the same Cygwin allowance as isInteractive does for stdin, and its width
+// (0 when it cannot be read). One answer decides both whether the hint prints
+// and how it wraps, so the two cannot disagree. It is a var so tests can stub
+// it — nothing in a test writes to a real terminal.
+var stdoutTerminal = func() (width int, ok bool) {
 	fd := os.Stdout.Fd()
-	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
+	if !isatty.IsTerminal(fd) && !isatty.IsCygwinTerminal(fd) {
+		return 0, false
+	}
+	if w, _, err := term.GetSize(int(fd)); err == nil && w > 0 {
+		width = w
+	}
+	return width, true
 }
 
 // printAgentHint writes the --agent pointer under a listing. It is suppressed
@@ -29,10 +38,14 @@ var isStdoutTTY = func() bool {
 // is reading the output and a hint is noise in its input; for an empty listing,
 // because there is no <n> to show; and when hints are turned off.
 func printAgentHint(d *Deps, listed int) error {
-	if d.JSON || !d.Hints || listed == 0 || !isStdoutTTY() {
+	if d.JSON || !d.Hints || listed == 0 {
 		return nil
 	}
-	return output.PrintHint(d.Stdout, agentHint)
+	width, ok := stdoutTerminal()
+	if !ok {
+		return nil
+	}
+	return output.PrintHint(d.Stdout, agentHint, width)
 }
 
 // showAgentBrief renders the Markdown brief `things show --agent` prints. A

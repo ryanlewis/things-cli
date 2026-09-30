@@ -227,7 +227,7 @@ func goldenCases(t *testing.T) []goldenCase {
 			return PrintTaskList(w, tasks, true, "today")
 		}},
 		{name: "hint", write: func(w io.Writer) error {
-			return PrintHint(w, "run `things show 1` for the detail")
+			return PrintHint(w, "run `things show 1` for the detail", 120)
 		}},
 		{name: "brief/task", write: func(w io.Writer) error {
 			return PrintAgentBrief(w, AgentBrief{Task: detail, Checklist: items})
@@ -293,7 +293,7 @@ func goldenCases(t *testing.T) []goldenCase {
 		goldenCase{
 			name:  "hint@30",
 			width: 30,
-			write: func(w io.Writer) error { return PrintHint(w, "run `things show 1` for the detail") },
+			write: func(w io.Writer) error { return PrintHint(w, "run `things show 1` for the detail", 30) },
 		},
 	)
 	cases = append(cases, goldenCase{
