@@ -275,6 +275,7 @@ func TestDropEmptySpans(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"\x1b[2mW\x1b[m\x1b[2m…\x1b[m\x1b[2m\x1b[m\x1b[9m\x1b[m", "\x1b[2mW\x1b[m\x1b[2m…\x1b[m"},
 		{"\x1b[1mA\x1b[2m\x1b[m", "\x1b[1mA\x1b[2m\x1b[m"},
+		{"\x1b[1mA\x1b[2m\x1b[m\x1b[3m\x1b[m", "\x1b[1mA\x1b[2m\x1b[m"},
 		{"plain…", "plain…"},
 	}
 	for _, tt := range tests {
