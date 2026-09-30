@@ -412,6 +412,32 @@ func TestPrintTasksMarksProjects(t *testing.T) {
 	}
 }
 
+// Dates switch to their compact form only on a terminal: piped output keeps
+// the full date or drops it, since "3d ago" goes stale in a saved file.
+func TestPrintTasksPipedKeepsFullDates(t *testing.T) {
+	prevWidth, prevTerm, prevNow := termWidth, stdoutIsTerminal, nowFn
+	t.Cleanup(func() { termWidth, stdoutIsTerminal, nowFn = prevWidth, prevTerm, prevNow })
+	nowFn = func() time.Time { return time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local) }
+	// "1.  [ ]  " and a 20-column title leave 10 for the date: too few for
+	// "due:2026-05-08", enough for "due:Fri".
+	termWidth = func() int { return 41 }
+
+	tasks := []model.Task{{
+		UUID: "t1", Title: "Twenty column title.", Type: model.TypeTask, Status: model.StatusOpen,
+		Deadline: mustDate(2026, 5, 8),
+	}}
+	for _, tty := range []bool{false, true} {
+		stdoutIsTerminal = func() bool { return tty }
+		var buf bytes.Buffer
+		if err := Print(&buf, tasks, false); err != nil {
+			t.Fatalf("Print: %v", err)
+		}
+		if compact := strings.Contains(buf.String(), "due:Fri"); compact != tty {
+			t.Errorf("tty=%v: compact date=%v:\n%s", tty, compact, buf.String())
+		}
+	}
+}
+
 // Titles are cut to the width only on a terminal: piped output falls back to
 // 120 columns, and cutting there would hide text from grep and from agents.
 func TestPrintTasksPipedKeepsTitlesWhole(t *testing.T) {
