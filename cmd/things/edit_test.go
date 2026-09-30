@@ -83,6 +83,23 @@ func TestEditWaitsForModificationDateToMove(t *testing.T) {
 	}
 }
 
+// A write that leaves an earlier modification date still landed: the item's
+// last change may have come from a device whose clock runs ahead of this one.
+func TestEditAcceptsEarlierModificationDate(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET userModificationDate = 1790000000.5`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	stubExecEditing(t, sqlDB, `UPDATE TMTask SET userModificationDate = 1789999990 WHERE uuid = 'one-1'`)
+	// stubExecEditing bumps by one after apply, so the date ends up earlier
+	// than the seeded value but different from it.
+	if err := runWith(t, database, "edit", "one-1", "--title", "Post the letter"); err != nil {
+		t.Fatalf("edit with an earlier modification date: %v", err)
+	}
+}
+
 // A field edit Things drops fails the same way a dropped status change does,
 // for every kind of field — the modification date is the one signal for all.
 func TestDroppedFieldEditFails(t *testing.T) {

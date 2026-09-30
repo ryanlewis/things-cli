@@ -66,12 +66,15 @@ func restrictedEdits(when, deadline *string, complete, cancel, duplicate bool) [
 
 // statusWant pairs an item with the status a write asked Things to move it to.
 //
-// edit marks the read-back for an `edit` / `project edit` write, which also
-// waits for the item's modification date to move past since. Things bumps it
-// on every write it applies, so it covers every field an edit can change —
-// comparing fields one by one could not, since `--when "next friday"` or
-// `--append-notes` give nothing exact to compare against. since is nil when
-// the item had no modification date before the write; any date then counts.
+// edit marks the read-back for an `edit` / `project edit` write that changes
+// fields, which also waits for the item's modification date to differ from
+// since. Things bumps it on every write it applies, so it covers every field
+// an edit can change — comparing fields one by one could not, since `--when
+// "next friday"` or `--append-notes` give nothing exact to compare against.
+// Any change counts, not only a later date: an item last modified on a device
+// whose clock runs ahead of this Mac's gets an earlier date from this write.
+// since is nil when the item had no modification date before the write; any
+// date then counts.
 type statusWant struct {
 	uuid  string
 	title string
@@ -88,7 +91,7 @@ func (w statusWant) landed(current *model.Task) bool {
 	if !w.edit {
 		return true
 	}
-	return current.ModificationDate != nil && (w.since == nil || current.ModificationDate.After(*w.since))
+	return current.ModificationDate != nil && (w.since == nil || !current.ModificationDate.Equal(*w.since))
 }
 
 // statusResult is the outcome for one item of a batch read-back. err is nil
@@ -218,7 +221,8 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 // new copy whose uuid the CLI never learns while the original is expected to
 // stay as it was. An edit that asks for nothing new (no field flags, and any
 // status it names is already the item's) has nothing to wait for; the item
-// is printed as it stands.
+// is printed as it stands. A status-only edit waits for the status alone, the
+// same check `complete` and `cancel` make.
 func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, cancel, duplicate bool, update func() error) error {
 	if err := update(); err != nil {
 		return err
@@ -240,7 +244,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, ca
 	current := task
 	if changed || want != task.Status {
 		res := verifyStatuses(database, []statusWant{{
-			uuid: task.UUID, title: task.Title, want: want, edit: true, since: task.ModificationDate,
+			uuid: task.UUID, title: task.Title, want: want, edit: changed, since: task.ModificationDate,
 		}}, verifyTimeout)[0]
 		if res.err != nil {
 			return res.err
