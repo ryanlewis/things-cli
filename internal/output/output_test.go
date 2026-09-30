@@ -159,8 +159,8 @@ func TestPrintTags(t *testing.T) {
 }
 
 func TestPrintTaskDetail(t *testing.T) {
-	created := time.Date(2026, 4, 10, 9, 30, 0, 0, time.UTC)
-	stopped := time.Date(2026, 4, 14, 17, 0, 0, 0, time.UTC)
+	created := time.Date(2026, 4, 10, 9, 30, 0, 0, time.Local)
+	stopped := time.Date(2026, 4, 14, 17, 0, 0, 0, time.Local)
 	task := &model.Task{
 		UUID: "u1", Title: "T1", Status: model.StatusCompleted,
 		ProjectTitle: "Proj", AreaTitle: "Work", HeadingTitle: "H",
@@ -198,6 +198,30 @@ func TestPrintTaskDetail(t *testing.T) {
 		"[x] step1",
 		"[ ] step2",
 	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("detail missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// The database hands back creation and stop times in UTC. The detail block
+// prints them without a zone, so they have to be local: printed as UTC, a to-do
+// closed at 00:30 BST reads as stopped the day before.
+func TestPrintTaskDetail_TimestampsInLocalTime(t *testing.T) {
+	orig := time.Local
+	time.Local = time.FixedZone("BST", 60*60)
+	t.Cleanup(func() { time.Local = orig })
+
+	created := model.UnixToTime(model.TimeToUnix(time.Date(2026, 9, 29, 8, 15, 0, 0, time.UTC)))
+	stopped := model.UnixToTime(model.TimeToUnix(time.Date(2026, 9, 29, 23, 30, 0, 0, time.UTC)))
+	task := &model.Task{UUID: "u1", Title: "T1", CreationDate: &created, StopDate: &stopped}
+
+	var buf bytes.Buffer
+	if err := PrintTaskWithChecklist(&buf, task, nil, false); err != nil {
+		t.Fatalf("PrintTaskWithChecklist: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"Created:  2026-09-29 09:15", "Stopped:  2026-09-30 00:30"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("detail missing %q:\n%s", want, out)
 		}
