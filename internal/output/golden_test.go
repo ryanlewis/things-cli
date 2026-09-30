@@ -251,6 +251,31 @@ func goldenCases(t *testing.T) []goldenCase {
 
 	// The task listing at three widths: wide enough for every column, narrow
 	// enough to drop the tags column, and narrower still so the date goes too.
+	// A list where some tasks carry a checklist, wide enough for its progress
+	// column, narrow enough that the column is the first to go, and narrower.
+	checklisted := []model.Task{
+		{
+			UUID: "k1", Title: "Pack for the trip", Type: model.TypeTask, Status: model.StatusOpen,
+			AreaUUID: "a2", AreaTitle: "Home", Tags: []string{"travel"}, Deadline: thingsDate(t, "2026-09-12"),
+			ChecklistProgress: &model.ChecklistProgress{Total: 5, Open: 3},
+		},
+		{
+			UUID: "k2", Title: "Water the plants", Type: model.TypeTask, Status: model.StatusOpen,
+			AreaUUID: "a2", AreaTitle: "Home",
+		},
+		{
+			UUID: "k3", Title: "Renew the passport", Type: model.TypeTask, Status: model.StatusCompleted,
+			AreaUUID: "a2", AreaTitle: "Home", Tags: []string{"admin"},
+			ChecklistProgress: &model.ChecklistProgress{Total: 12, Open: 0},
+		},
+	}
+	for _, width := range []int{120, 55, 40} {
+		cases = append(cases, goldenCase{
+			name:  fmt.Sprintf("print/tasks-checklist@%d", width),
+			width: width,
+			write: func(w io.Writer) error { return Print(w, checklisted, false) },
+		})
+	}
 	for _, width := range []int{120, 80, 40} {
 		cases = append(cases,
 			goldenCase{
