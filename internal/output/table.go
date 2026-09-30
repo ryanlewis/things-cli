@@ -53,9 +53,10 @@ func (t *table) row(cells ...string) {
 	t.rows = append(t.rows, cells)
 }
 
-// tail gives the last row's cell in column c an ending that a cut leaves
-// whole: the cell measures and prints as its text followed by s, and when the
-// column is cut short the ellipsis goes into the text before s.
+// tail gives one cell, column c of the row just added, an ending that a cut
+// leaves whole; other rows are untouched. The cell measures and prints as its
+// text followed by s, and when the column is cut short the ellipsis goes into
+// the text before s.
 func (t *table) tail(c int, s string) {
 	if len(t.rows) == 0 || s == "" {
 		return

@@ -123,3 +123,27 @@ func TestTableTail(t *testing.T) {
 		})
 	}
 }
+
+// A tail belongs to its own row's cell: rows without one around it are cut
+// as usual, with no tail of their own, to the same column width.
+func TestTableTailMixedRows(t *testing.T) {
+	tbl := &table{
+		gap:      columnGap,
+		maxWidth: 14,
+		shrink:   []shrinkCol{{col: 1, min: 2}},
+	}
+	tbl.row("1.", "a long to-do")
+	tbl.row("2.", "a long project")
+	tbl.tail(1, " (p)")
+	tbl.row("3.", "another to-do")
+	want := []string{"1.  a long to…", "2.  a lon… (p)", "3.  another t…"}
+	got := tbl.lines()
+	if len(got) != len(want) {
+		t.Fatalf("got %d lines, want %d: %q", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
