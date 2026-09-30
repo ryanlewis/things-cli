@@ -48,13 +48,13 @@ The script reads three optional environment variables:
 
 ```sh
 # Install somewhere other than /usr/local/bin
-INSTALL_DIR=$HOME/.local/bin curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR=$HOME/.local/bin sh
 
 # Pin a specific version (defaults to the latest release)
-VERSION=vX.Y.Z curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | VERSION=vX.Y.Z sh
 
 # Override the asset download base URL (for mirrors / testing)
-RELEASE_BASE_URL=https://example.com/things curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | RELEASE_BASE_URL=https://example.com/things sh
 ```
 
 ## go install
