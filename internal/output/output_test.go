@@ -537,9 +537,10 @@ func TestPrintJSONDoesNotEscapeHTMLCharacters(t *testing.T) {
 // a line of its own rather than splitting at a hyphen, and only a token wider
 // than the space left is broken.
 func TestPrintTaskDetail_WrapsToTerminalWidth(t *testing.T) {
-	prev := termWidth
+	prevWidth, prevTerm := termWidth, stdoutIsTerminal
 	termWidth = func() int { return 40 }
-	t.Cleanup(func() { termWidth = prev })
+	stdoutIsTerminal = func() bool { return true }
+	t.Cleanup(func() { termWidth, stdoutIsTerminal = prevWidth, prevTerm })
 
 	task := &model.Task{
 		UUID: "u1", Title: "Book the venue for the autumn team offsite", Status: model.StatusOpen,
@@ -574,5 +575,26 @@ Checklist:
 `
 	if got := buf.String(); got != want {
 		t.Errorf("detail at 40 columns:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// Output that is not going to a terminal is not wrapped: a script or agent
+// reading a piped detail block gets each line of a note whole, with only the
+// note's own line breaks, rather than breaks at an assumed width.
+func TestPrintTaskDetail_NoWrapWhenNotATerminal(t *testing.T) {
+	prev := stdoutIsTerminal
+	stdoutIsTerminal = func() bool { return false }
+	t.Cleanup(func() { stdoutIsTerminal = prev })
+
+	long := strings.Repeat("word ", 40) + "end"
+	task := &model.Task{UUID: "u1", Title: long, Status: model.StatusOpen, Notes: long + "\nsecond"}
+
+	var buf bytes.Buffer
+	if err := PrintTaskWithChecklist(&buf, task, nil, false); err != nil {
+		t.Fatalf("PrintTaskWithChecklist: %v", err)
+	}
+	want := "Title:    " + long + "\nUUID:     u1\nStatus:   Open\nNotes:\n  " + long + "\n  second\n"
+	if got := buf.String(); got != want {
+		t.Errorf("unwrapped detail:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
