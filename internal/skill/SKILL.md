@@ -198,6 +198,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # `things projects`.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
+    # upcoming also lists an undated anytime task due after today, filed (and
+    # filtered) under its deadline, as the app's Upcoming does — so that task
+    # comes back from both upcoming and anytime; dedupe a sweep on uuid.
     # --include-completed works on today and anytime: items ticked off in that
     # list which Things hasn't logged out yet. logbook holds every other closed
     # item, including things closed today from Inbox/Upcoming, so a closed item

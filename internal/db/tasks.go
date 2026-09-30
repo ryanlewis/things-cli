@@ -195,6 +195,13 @@ const closedTodayUnlogged = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLo
 // Today never holds a row this test rejects.
 const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL"
 
+// thingsToday is today's local date in the ThingsDate encoding
+// (year<<16 | month<<12 | day<<7), so it compares directly with startDate and
+// deadline. It reads the day the same way closedTodayUnlogged does.
+const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16) | ` +
+	`(CAST(strftime('%m', 'now', 'localtime') AS INTEGER) << 12) | ` +
+	`(CAST(strftime('%d', 'now', 'localtime') AS INTEGER) << 7))`
+
 // heldInPlace is the set the Logbook withholds: the closed rows some other
 // view is still showing where the app leaves them. Today is one such view and
 // Anytime is the other, so the test is the union of the two (issues #230,
@@ -328,7 +335,21 @@ const (
 	// once it carries a date and in Someday while it does not.
 	upcomingScheduled = "t.start = 2 AND t.startDate IS NOT NULL"
 	somedayDeferred   = "t.start = 2 AND t.startDate IS NULL"
-	hasDeadline       = "t.deadline IS NOT NULL"
+	// upcomingDue is the other way into Upcoming: an Anytime to-do with no
+	// start date but a deadline after today, which the app lists under the
+	// deadline's day. Measured on 30 Sep 2026, the app's Upcoming held both
+	// such to-dos in the data and the CLI neither. The measurement had no
+	// project of this shape, and no to-do that also carried a start date, so
+	// both are left out rather than guessed at.
+	upcomingDue = "t.start = 1 AND t.startDate IS NULL AND t.type = 0 AND t.deadline > " + thingsToday
+	// upcomingScope is Upcoming's whole scope: the two ways in, either of
+	// which is enough.
+	upcomingScope = "((" + upcomingScheduled + ") OR (" + upcomingDue + "))"
+	// upcomingDate is the day Upcoming files a row under — its start date,
+	// or for an upcomingDue row, which has none, its deadline. It is both the
+	// view's sort key and the column --on/--from/--to compare.
+	upcomingDate = "COALESCE(t.startDate, t.deadline)"
+	hasDeadline  = "t.deadline IS NOT NULL"
 	// isTemplate selects the rows that carry a recurrence rule — the templates
 	// themselves, not the items they generate (issue #147).
 	isTemplate = repeatingPlaceholder + " IS NOT NULL"
@@ -517,13 +538,14 @@ var views = map[string]viewSpec{
 		orderBy: indexOrderBy,
 	},
 	"upcoming": {
-		scope: upcomingScheduled, status: openRows, trashed: untrashedRows,
+		scope: upcomingScope, status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsDateFilter: true,
 		// Upcoming is a diary, so it reads by date and not by list position.
 		// The app orders it by start date and then by todayIndex, which is the
 		// within-day position it also keys Today on; the view listed in bare
 		// t."index" order before, which interleaved the dates (issue #217).
-		orderBy: "ORDER BY t.startDate ASC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
+		// A to-do there only by its deadline sorts by that day in the same way.
+		orderBy: "ORDER BY " + upcomingDate + " ASC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
 	// Anytime is the one scheduled view that does not carry project rows, and
 	// that is the app's own shape rather than an inconsistency. Every active
@@ -911,8 +933,11 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 		// ThingsDate is bit-encoded year<<16|month<<12|day<<7 — directly
 		// comparable across (year, month, day), so no decode is needed.
 		col := "t.startDate"
-		if view == "deadlines" {
+		switch view {
+		case "deadlines":
 			col = "t.deadline"
+		case "upcoming":
+			col = upcomingDate
 		}
 		if opts.On != nil {
 			where += " AND " + col + " = ?"

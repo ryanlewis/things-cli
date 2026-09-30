@@ -211,9 +211,12 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   not the raw Things integer. It is the list an item falls back to when it
   carries no date, so it does not on its own say which list the app shows
   the item in: a dated `"anytime"` row is in Today, a dated `"someday"` row
-  is in Upcoming, and only an undated one is in Someday. In v0.7.0 and
-  earlier this field was the integer `0`, `1` or `2`, so a filter matching
-  on `.start==2` has to become `.start=="someday"`. `startBucket` beside it
+  is in Upcoming, and only an undated one is in Someday. An undated
+  `"anytime"` task with a deadline after today is in Upcoming too, under
+  the deadline's day, as well as in Anytime, so a sweep across `upcoming`
+  and `anytime` merges on `uuid`. In v0.7.0 and earlier this field was the
+  integer `0`, `1` or `2`, so a filter matching on `.start==2` has to
+  become `.start=="someday"`. `startBucket` beside it
   is still an integer — `1` is the app's This Evening section, `0` is
   everything else.
 - **Projects carry scheduling too.** `things projects` reports `start`,

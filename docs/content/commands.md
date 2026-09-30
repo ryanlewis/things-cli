@@ -66,6 +66,9 @@ ends at unfiled items and then areas.
 `today` then orders within a group by the position Things keeps for the day,
 which leaves an item closed today where it was rather than moving it to the
 end. `upcoming` reads by date instead, the way the app's own Upcoming does.
+Like the app, it also lists an undated Anytime task whose deadline is still to
+come, under the deadline's day, and `--on`/`--from`/`--to` match it on that
+day.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
 task or a project logs it under its stop date beside the completed ones, the
