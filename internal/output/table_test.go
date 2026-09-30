@@ -1,6 +1,7 @@
 package output
 
 import (
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -174,5 +175,65 @@ func TestTableShrinkSoftFirst(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// A drop that frees more than the row was over by gives the rest back to the
+// title the soft pass cut, rather than leaving it at its soft minimum.
+func TestTableRegrowAfterDrop(t *testing.T) {
+	title := strings.Repeat("t", 75)
+	tbl := &table{
+		gap:       columnGap,
+		maxWidth:  70,
+		dropOrder: []int{3},
+		shrink:    []shrinkCol{{col: 2, min: 10, soft: 40}},
+	}
+	tbl.row("1.", "[ ]", title, "[work, waiting]", "due:2026-10-02")
+	// 2+3+40+15+14 plus four gaps is 82: the tags go, freeing 17 where 12
+	// was needed, and the title takes back the 5 left over.
+	want := "1.  [ ]  " + strings.Repeat("t", 44) + "…  due:2026-10-02"
+	if got := tbl.lines()[0]; got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+// Across every width, a row that can fit does fit, a column dropped at one
+// width stays dropped at every narrower one, and regrow never undoes a drop.
+func TestTableFitNeverOverruns(t *testing.T) {
+	build := func(maxWidth int) *table {
+		tbl := &table{
+			gap:       columnGap,
+			maxWidth:  maxWidth,
+			dropOrder: []int{3, 4},
+			shrink:    []shrinkCol{{col: 2, min: 10, soft: 40}},
+		}
+		tbl.row("1.", "[ ]", strings.Repeat("a", 75), "[work, waiting]", "due:2026-10-02")
+		tbl.row("2.", "[ ]", "a long project title to cut", "", "2026-09-28")
+		tbl.tail(2, " (project)")
+		tbl.row("3.", "[ ]", "short", "[x]", "")
+		return tbl
+	}
+	// The narrowest a row can go: number, status and the title at its floor
+	// (the tail plus one character and the ellipsis), with two gaps.
+	floor := 2 + 3 + len(" (project)") + 2 + 4
+	prevKept := -1
+	for w := 100; w >= 1; w-- {
+		tbl := build(w)
+		keep, _ := tbl.fit(tbl.widths())
+		kept := 0
+		for _, k := range keep {
+			if k {
+				kept++
+			}
+		}
+		if prevKept >= 0 && kept > prevKept {
+			t.Errorf("width %d keeps %d columns, more than %d at width %d", w, kept, prevKept, w+1)
+		}
+		prevKept = kept
+		for i, line := range build(w).lines() {
+			if lw := lipgloss.Width(line); lw > max(w, floor) {
+				t.Errorf("width %d: line %d is %d wide: %q", w, i, lw, line)
+			}
+		}
 	}
 }
