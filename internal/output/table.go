@@ -3,7 +3,9 @@ package output
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -17,9 +19,11 @@ const columnGap = "  "
 // padded and joined — the work each list printer in this package used to do
 // for itself, with its own row struct and its own width loop.
 //
-// Every column is padded to its widest cell except the last one kept, which
-// goes out as it is: padding at the end of a row buys nothing, and on a narrow
-// terminal it can carry the row past the edge and wrap it onto a blank line.
+// Every column is padded to its widest cell, and each row ends at its last
+// cell with something in it, which goes out as it is: padding, gaps or an
+// empty styled span at the end of a row buy nothing, show up when the row is
+// copied, and on a narrow terminal can carry it past the edge and wrap it
+// onto a blank line.
 type table struct {
 	// gap separates two columns.
 	gap string
@@ -89,7 +93,22 @@ func (t *table) cut(i, c int, cell string, width int) string {
 	}
 	tail := t.tails[[2]int{i, c}]
 	head := cell[:len(cell)-len(tail)]
-	return ansi.Truncate(head, width-lipgloss.Width(tail), "…") + tail
+	return dropEmptySpans(ansi.Truncate(head, width-lipgloss.Width(tail), "…")) + tail
+}
+
+// emptySpans matches a run of styles each opened and reset with nothing
+// between, at the end of a string.
+var emptySpans = regexp.MustCompile(`(?:\x1b\[[0-9;]+m\x1b\[m)+$`)
+
+// dropEmptySpans removes the empty styled spans ansi.Truncate leaves behind
+// for the characters it cut from text styled one character at a time. It only
+// does so after a reset, so what it removes can never leave a style open.
+func dropEmptySpans(s string) string {
+	loc := emptySpans.FindStringIndex(s)
+	if loc == nil || !strings.HasSuffix(s[:loc[0]], "\x1b[m") {
+		return s
+	}
+	return s[:loc[0]]
 }
 
 // lines renders one line per row, in the order the rows went in, so a caller
@@ -97,16 +116,11 @@ func (t *table) cut(i, c int, cell string, width int) string {
 func (t *table) lines() []string {
 	widths := t.widths()
 	keep, cut := t.fit(widths)
-	last := -1
-	for c := range widths {
-		if keep[c] {
-			last = c
-		}
-	}
 
 	lines := make([]string, len(t.rows))
 	for i := range t.rows {
-		cols := make([]string, 0, len(widths))
+		cells := make([]string, len(widths))
+		end := -1
 		for c, width := range widths {
 			if !keep[c] {
 				continue
@@ -115,11 +129,21 @@ func (t *table) lines() []string {
 			if cut[c] {
 				cell = t.cut(i, c, cell, width)
 			}
-			if c == last {
-				cols = append(cols, cell)
+			cells[c] = cell
+			if lipgloss.Width(cell) > 0 {
+				end = c
+			}
+		}
+		cols := make([]string, 0, len(widths))
+		for c, width := range widths {
+			if !keep[c] || c > end {
 				continue
 			}
-			cols = append(cols, padCol(width, cell))
+			if c == end {
+				cols = append(cols, cells[c])
+				continue
+			}
+			cols = append(cols, padCol(width, cells[c]))
 		}
 		lines[i] = joinWithGap(cols, t.gap)
 	}
@@ -279,6 +303,9 @@ func padCol(width int, s string) string {
 }
 
 func joinWithGap(cols []string, gap string) string {
+	if len(cols) == 0 {
+		return ""
+	}
 	parts := make([]string, 0, len(cols)*2-1)
 	for i, c := range cols {
 		if i > 0 {

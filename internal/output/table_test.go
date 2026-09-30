@@ -15,9 +15,9 @@ func TestTableShrink(t *testing.T) {
 		maxWidth int
 		want     []string
 	}{
-		{"fits", 0, []string{"1.  a long title here  x", "2.  short              "}},
-		{"cut", 16, []string{"1.  a long t…  x", "2.  short      "}},
-		{"floor", 8, []string{"1.  a lo…  x", "2.  short  "}},
+		{"fits", 0, []string{"1.  a long title here  x", "2.  short"}},
+		{"cut", 16, []string{"1.  a long t…  x", "2.  short"}},
+		{"floor", 8, []string{"1.  a lo…  x", "2.  short"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -41,8 +41,8 @@ func TestTableShrink(t *testing.T) {
 	}
 }
 
-// The last kept column goes out unpadded, so a dropped trailing column leaves
-// no padding behind to carry a row past the terminal edge.
+// A row ends at its last cell with something in it, so a dropped trailing
+// column, or an empty one, leaves no padding behind.
 func TestTableLastKeptColumnUnpadded(t *testing.T) {
 	tbl := &table{gap: columnGap, maxWidth: 14, dropOrder: []int{2}}
 	tbl.row("1.", "a", "2026-09-10")
@@ -250,5 +250,36 @@ func TestTableSoftBelowMinDropsFirst(t *testing.T) {
 	tbl.row("1.", "abcdefghijklmnop", "tag")
 	if got, want := tbl.lines()[0], "1.  abcdefghijklmnop"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A row whose last cells are empty, or hold only an empty styled span, ends
+// at its last cell with something in it; an empty row is an empty line.
+func TestTableRowEndsAtLastFilledCell(t *testing.T) {
+	tbl := &table{gap: columnGap}
+	tbl.row("1.", "title", "[tag]", "date")
+	tbl.row("2.", "t", "", "\x1b[2m\x1b[m")
+	tbl.row("3.", "", "[x]", "")
+	tbl.row("", "", "", "")
+	want := []string{"1.  title  [tag]  date", "2.  t", "3.         [x]", ""}
+	for i, got := range tbl.lines() {
+		if got != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got, want[i])
+		}
+	}
+}
+
+// A cut leaves no empty styled spans behind it, and never removes a reset
+// that closes a style still open.
+func TestDropEmptySpans(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"\x1b[2mW\x1b[m\x1b[2m…\x1b[m\x1b[2m\x1b[m\x1b[9m\x1b[m", "\x1b[2mW\x1b[m\x1b[2m…\x1b[m"},
+		{"\x1b[1mA\x1b[2m\x1b[m", "\x1b[1mA\x1b[2m\x1b[m"},
+		{"plain…", "plain…"},
+	}
+	for _, tt := range tests {
+		if got := dropEmptySpans(tt.in); got != tt.want {
+			t.Errorf("dropEmptySpans(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
