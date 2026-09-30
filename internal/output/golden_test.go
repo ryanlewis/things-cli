@@ -249,8 +249,6 @@ func goldenCases(t *testing.T) []goldenCase {
 		}},
 	}
 
-	// The task listing at three widths: wide enough for every column, narrow
-	// enough to drop the tags column, and narrower still so the date goes too.
 	// A list where some tasks carry a checklist, wide enough for its progress
 	// column, narrow enough that the column is the first to go, and narrower.
 	checklisted := []model.Task{
@@ -276,6 +274,8 @@ func goldenCases(t *testing.T) []goldenCase {
 			write: func(w io.Writer) error { return Print(w, checklisted, false) },
 		})
 	}
+	// The task listing at three widths: wide enough for every column, narrow
+	// enough to drop the tags column, and narrower still so the date goes too.
 	for _, width := range []int{120, 80, 40} {
 		cases = append(cases,
 			goldenCase{
