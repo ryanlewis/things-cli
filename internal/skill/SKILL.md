@@ -123,12 +123,12 @@ After a `complete`, a `cancel`, or an `import` item setting `completed`/`cancele
 
 ```
 Error: 1 of 2 requested status changes did not apply. …:
-  [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. …
+  [1]: status change did not apply: "File taxes" (one-2) is still open after 5s. …
 ```
 
 The rest of that import is already applied — re-run with only the failed items.
 
-`edit` and `project edit` wait for Things to record the write (the item's modification date changes; with `--complete`/`--cancel` the status must change too, and a status-only edit is checked on the status alone), then print the item exactly as `things show` would — the same object under `--json`. **Exit 0 with the item printed means the edit is confirmed: do not `things show` it again.** A dropped edit exits non-zero with `edit did not apply: …` after a 10s wait. An edit that only re-sets values the item already has is caught before the wait and succeeds when every flag is `--title`, `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a `--deadline` date. Any other flag — `--when` included — or an English phrase still waits, and a no-op there reports the same error. **On that error, run `things show <uuid>` before retrying: if the item already shows what you asked for, it is done; do not retry blindly.** `--duplicate` edits a new copy the CLI cannot find, so nothing is read back; under `--no-verify` neither is anything. Both print a line saying the edit was sent but not confirmed — under `--json`, `{"uuid": …, "title": …, "confirmed": false, "reason": "duplicate"|"no-verify"}`.
+`edit` and `project edit` wait for Things to record the write (the item's modification date changes; with `--complete`/`--cancel` the status must change too, and a status-only edit is checked on the status alone), then print the item exactly as `things show` would — the same object under `--json`. **Exit 0 with the item printed means the edit is confirmed: do not `things show` it again.** A dropped edit exits non-zero with `edit did not apply: …` after the read-back wait (5s by default; see `--verify-timeout` below). An edit that only re-sets values the item already has is caught before the wait and succeeds when every flag is `--title`, `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a `--deadline` date. Any other flag — `--when` included — or an English phrase still waits, and a no-op there reports the same error. **On that error, run `things show <uuid>` before retrying: if the item already shows what you asked for, it is done; do not retry blindly.** `--duplicate` edits a new copy the CLI cannot find, so nothing is read back; under `--no-verify` neither is anything. Both print a line saying the edit was sent but not confirmed — under `--json`, `{"uuid": …, "title": …, "confirmed": false, "reason": "duplicate"|"no-verify"}`.
 
 `--no-verify` skips this read-back and the tag one in rule 1; it does **not** skip rule 2, which is a documented rule rather than a guess about what Things did.
 
@@ -142,7 +142,7 @@ The rest of that import is already applied — re-run with only the failed items
 
 ## The config file changes the defaults
 
-The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CONFIG_HOME/things-cli/config.toml`; `--config PATH` or `$THINGS_CLI_CONFIG` overrides) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `hints`, `db`, `no_verify`, `strict_tags`, `create_tags`, `assume_yes`.
+The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CONFIG_HOME/things-cli/config.toml`; `--config PATH` or `$THINGS_CLI_CONFIG` overrides) that changes what the flags default to. Precedence is flag > config file > built-in default; `verify_timeout` alone also reads `$THINGS_CLI_VERIFY_TIMEOUT`, which beats the file. Keys: `json`, `color`, `hints`, `db`, `no_verify`, `verify_timeout`, `strict_tags`, `create_tags`, `assume_yes`.
 
 **The defaults you would otherwise assume may not hold.** `json = true` makes every command emit JSON; `no_verify = true` turns off rule 3 and the tag read-back in rule 1; `assume_yes = true` removes the confirmation in rule 4 (on `complete` and `cancel` only — never on `skill install`/`uninstall`).
 
@@ -152,7 +152,7 @@ The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CO
 
 ## Command reference
 
-Global flags, valid on every command: `-j/--json`, `--color=auto|always|never`, `--db PATH`, `--config PATH`, `--no-verify`, `--no-hints`, `-v/--version`.
+Global flags, valid on every command: `-j/--json`, `--color=auto|always|never`, `--db PATH`, `--config PATH`, `--no-verify`, `--verify-timeout DURATION` (how long a write's read-back waits, default `5s`; must be above zero — use `--no-verify` to skip it), `--no-hints`, `-v/--version`.
 
 ```
 things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--include-completed]

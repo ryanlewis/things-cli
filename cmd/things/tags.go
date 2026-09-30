@@ -267,7 +267,7 @@ func (c *TagAddCmd) Run(d *Deps) error {
 	}
 
 	if len(created) > 0 && !d.NoVerify {
-		if err := verifyTagsCreated(database, created); err != nil {
+		if err := verifyTagsCreated(database, created, d.readBackTimeout()); err != nil {
 			// The creations were sent, so say which ones — otherwise a
 			// verification failure looks like nothing happened.
 			fmt.Fprintf(d.errOut(), "sent to Things before the failure: %s\n", strings.Join(created, ", "))
@@ -291,8 +291,8 @@ func (c *TagAddCmd) Run(d *Deps) error {
 // creation Things dropped is not reported as success. Things writes the tag to
 // its SQLite database a moment after AppleScript returns, hence the poll.
 // --no-verify skips it.
-func verifyTagsCreated(database *db.DB, names []string) error {
-	deadline := time.Now().Add(verifyTimeout)
+func verifyTagsCreated(database *db.DB, names []string, budget time.Duration) error {
+	deadline := time.Now().Add(budget)
 	for {
 		missing, err := database.UnknownTags(names)
 		switch {
@@ -304,7 +304,7 @@ func verifyTagsCreated(database *db.DB, names []string) error {
 			return nil
 		case !time.Now().Before(deadline):
 			return fmt.Errorf("tag creation did not apply: %s still missing from the Things database after %s. Things accepted the command and then dropped it silently — check that Things3 is running",
-				strings.Join(missing, ", "), verifyTimeout)
+				strings.Join(missing, ", "), budget)
 		}
 		verifySleep(verifyInterval)
 	}

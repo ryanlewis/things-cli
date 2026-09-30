@@ -16,10 +16,14 @@ import (
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
-// fastVerify shrinks the read-back poll so failure cases don't spend ten
-// seconds waiting for a status that will never change.
+// fastVerify shrinks the read-back poll so failure cases don't spend seconds
+// waiting for a status that will never change. The environment variable
+// carries the short budget through a parsed command line; the package var
+// covers a Deps built by hand.
 func fastVerify(t *testing.T) {
 	t.Helper()
+	isolateHome(t)
+	t.Setenv(verifyTimeoutEnv, "20ms")
 	timeout, interval, sleep := verifyTimeout, verifyInterval, verifySleep
 	verifyTimeout = 20 * time.Millisecond
 	verifyInterval = time.Millisecond
@@ -233,7 +237,7 @@ func TestVerifyStatusTaskDisappeared(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 
-	err = verifyStatus(database, task, 3)
+	err = verifyStatus(database, task, 3, verifyTimeout)
 	if err == nil || !strings.Contains(err.Error(), "no longer exists") {
 		t.Fatalf("verifyStatus after delete = %v, want a not-found error", err)
 	}
@@ -252,7 +256,7 @@ func TestVerifyStatusPersistentReadErrorSurfaces(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	err = verifyStatus(database, task, 3)
+	err = verifyStatus(database, task, 3, verifyTimeout)
 	if err == nil || !strings.Contains(err.Error(), "verifying status change") {
 		t.Fatalf("verifyStatus with an unreadable database = %v, want a read error", err)
 	}
@@ -342,7 +346,7 @@ func TestVerifyStatusReportsTheItemThatDidNotChange(t *testing.T) {
 	if err != nil || task == nil {
 		t.Fatalf("seed lookup: %v", err)
 	}
-	err = verifyStatus(database, task, model.StatusCompleted)
+	err = verifyStatus(database, task, model.StatusCompleted, verifyTimeout)
 	if err == nil {
 		t.Fatal("expected a failure, got nil")
 	}

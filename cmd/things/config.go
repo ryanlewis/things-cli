@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -29,10 +30,31 @@ func parserOptions(cfg *config.File) []kong.Option {
 			"skill_agents":  skill.AgentNames(),
 		},
 	}
+	opts = append(opts, kong.NamedMapper("verifytimeout", verifyTimeoutMapper{}))
 	if cfg != nil {
 		opts = append(opts, kong.Resolvers(cfg.Resolver()))
 	}
 	return opts
+}
+
+// verifyTimeoutMapper decodes --verify-timeout with the same rule the config
+// file and $THINGS_CLI_VERIFY_TIMEOUT are held to. kong's own duration mapper
+// takes zero and negative values, which would report every write as not
+// applied. Values from the file or the environment were checked when they
+// were read, so an error here can only be about the flag, which kong names.
+type verifyTimeoutMapper struct{}
+
+func (verifyTimeoutMapper) Decode(ctx *kong.DecodeContext, target reflect.Value) error {
+	var s string
+	if err := ctx.Scan.PopValueInto("duration", &s); err != nil {
+		return err
+	}
+	d, err := config.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("%v — to skip the read-back entirely, use --no-verify", err)
+	}
+	target.SetInt(int64(d))
+	return nil
 }
 
 // loadConfig resolves which config file applies to this invocation and reads
@@ -50,6 +72,12 @@ func loadConfig(args []string) (*config.File, error) {
 	}
 	f, loadErr := config.Load(path)
 	f.Source = source
+	// The environment is read even when the file failed, so its overrides
+	// still reach the diagnostic commands that run regardless. The file's
+	// error is the one reported when both are wrong.
+	if envErr := f.ReadEnv(); loadErr == nil {
+		loadErr = envErr
+	}
 	return f, loadErr
 }
 
@@ -145,11 +173,14 @@ func (c *ConfigShowCmd) Run(d *Deps) error {
 	// the point of running this at all, so report which file failed and why.
 	// Under --json the error alone carries the path: a plain header on stdout
 	// would sit in front of the JSON object and break the consumer parsing it.
-	if cfg.Err != nil {
+	if cfg.Err != nil || cfg.EnvErr != nil {
 		if !d.JSON && cfg.Path != "" {
 			fmt.Fprintf(d.Stdout, "config: %s (%s)\n", cfg.Path, existence(cfg))
 		}
-		return cfg.Err
+		if cfg.Err != nil {
+			return cfg.Err
+		}
+		return cfg.EnvErr
 	}
 	settings := cfg.Settings()
 

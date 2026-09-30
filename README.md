@@ -198,6 +198,7 @@ snake_case form.
 | `hints` | `--hints` / `--no-hints` | boolean | `true` |
 | `db` | `--db` | string path (must exist) | auto-detected |
 | `no_verify` | `--no-verify` | boolean | `false` |
+| `verify_timeout` | `--verify-timeout` | duration string, e.g. `"2500ms"` | `"5s"` |
 | `strict_tags` | `--strict-tags` | boolean | `false` |
 | `create_tags` | `--create-tags` | boolean | `false` |
 | `assume_yes` | `--yes` | boolean | `false` |
@@ -636,7 +637,7 @@ changes](#reading-back-an-imports-status-changes).
 
 ```text
 $ things cancel W1gBDJPFpwUQrdP5Am5K7J
-Error: status change did not apply: "Renew insurance" (W1gBDJPFpwUQrdP5Am5K7J) is still open after 10s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
+Error: status change did not apply: "Renew insurance" (W1gBDJPFpwUQrdP5Am5K7J) is still open after 5s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
 $ echo $?
 1
 ```
@@ -722,7 +723,7 @@ After the payload is sent, every update item that set `completed` or `canceled` 
 ```text
 $ things import --file finish.json
 Error: 1 of 2 requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:
-  [1]: status change did not apply: "File taxes" (one-2) is still open after 10s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
+  [1]: status change did not apply: "File taxes" (one-2) is still open after 5s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app
 $ echo $?
 1
 ```

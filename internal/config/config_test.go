@@ -150,6 +150,7 @@ json = true
 color = "never"
 hints = false
 no_verify = true
+verify_timeout = "2500ms"
 strict_tags = true
 `)
 	f, err := Load(path)
@@ -159,8 +160,8 @@ strict_tags = true
 	if !f.Exists {
 		t.Error("Exists = false for a file that is there")
 	}
-	want := map[string]any{"json": true, "color": "never", "hints": false, "no_verify": true, "strict_tags": true, "db": "", "create_tags": false, "assume_yes": false}
-	source := map[string]string{"json": "config", "color": "config", "hints": "config", "no_verify": "config", "strict_tags": "config", "db": "default", "create_tags": "default", "assume_yes": "default"}
+	want := map[string]any{"json": true, "color": "never", "hints": false, "no_verify": true, "verify_timeout": "2500ms", "strict_tags": true, "db": "", "create_tags": false, "assume_yes": false}
+	source := map[string]string{"json": "config", "color": "config", "hints": "config", "no_verify": "config", "verify_timeout": "config", "strict_tags": "config", "db": "default", "create_tags": "default", "assume_yes": "default"}
 	for _, s := range f.Settings() {
 		if s.Value != want[s.Key] {
 			t.Errorf("%s = %v, want %v", s.Key, s.Value, want[s.Key])
@@ -192,12 +193,16 @@ func TestLoadRejectsBadFiles(t *testing.T) {
 		body string
 		want []string
 	}{
-		{"unknown key", "nope = 1\n", []string{"unknown key", `"nope"`, "json, color, hints, db, no_verify, strict_tags, create_tags, assume_yes"}},
+		{"unknown key", "nope = 1\n", []string{"unknown key", `"nope"`, "json, color, hints, db, no_verify, verify_timeout, strict_tags, create_tags, assume_yes"}},
 		{"malformed", "json = \n", []string{"invalid TOML", "line 1"}},
 		{"wrong type", `json = "yes"` + "\n", []string{`key "json" must be a boolean`, "got string"}},
 		{"table value", "[json]\na = 1\n", []string{`key "json" must be a boolean`, "got table"}},
 		{"bad enum", `color = "pink"` + "\n", []string{`key "color" must be one of`, "auto, always, never"}},
 		{"duplicate spelling", "no_verify = true\nno-verify = false\n", []string{`key "no_verify" is set twice`}},
+		{"zero timeout", `verify_timeout = "0s"` + "\n", []string{`key "verify_timeout" must be a positive duration`, `got "0s"`, "no_verify = true"}},
+		{"negative timeout", `verify_timeout = "-1s"` + "\n", []string{`key "verify_timeout" must be a positive duration`, `got "-1s"`}},
+		{"unparsable timeout", `verify_timeout = "soon"` + "\n", []string{`key "verify_timeout" must be a positive duration`, `got "soon"`}},
+		{"bare number timeout", "verify_timeout = 5\n", []string{`key "verify_timeout" must be a string`, "got number"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -379,6 +384,84 @@ func TestKeyNamesAreUniqueAndSnakeCase(t *testing.T) {
 		}
 		if strings.Contains(k.Name, "-") {
 			t.Errorf("key %q should be snake_case", k.Name)
+		}
+	}
+}
+
+// The environment variable sits between the flag and the file: it beats a
+// value the file sets, and reports itself as the source.
+func TestEnvBeatsFile(t *testing.T) {
+	t.Setenv("THINGS_CLI_VERIFY_TIMEOUT", "750ms")
+	f, err := Load(write(t, `verify_timeout = "3s"`+"\n"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, _ := resolveFlag(t, f, "verify-timeout"); got != "3s" {
+		t.Errorf("before ReadEnv, resolved %v, want the file's 3s", got)
+	}
+	if err := f.ReadEnv(); err != nil {
+		t.Fatalf("ReadEnv: %v", err)
+	}
+	got, err := resolveFlag(t, f, "verify-timeout")
+	if err != nil || got != "750ms" {
+		t.Errorf("resolved %v (err %v), want the environment's 750ms", got, err)
+	}
+	for _, s := range f.Settings() {
+		if s.Key == "verify_timeout" && (s.Value != "750ms" || s.Source != SourceEnv) {
+			t.Errorf("verify_timeout setting = %v from %q, want 750ms from %q", s.Value, s.Source, SourceEnv)
+		}
+	}
+}
+
+// An empty variable is unset, as it is for $THINGS_CLI_CONFIG.
+func TestEmptyEnvLeavesFileInPlace(t *testing.T) {
+	t.Setenv("THINGS_CLI_VERIFY_TIMEOUT", "")
+	f, err := Load(write(t, `verify_timeout = "3s"`+"\n"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := f.ReadEnv(); err != nil {
+		t.Fatalf("ReadEnv: %v", err)
+	}
+	if got, _ := resolveFlag(t, f, "verify-timeout"); got != "3s" {
+		t.Errorf("resolved %v, want the file's 3s", got)
+	}
+}
+
+func TestReadEnvRejectsBadTimeout(t *testing.T) {
+	for _, v := range []string{"0", "0s", "-5s", "soon", "5"} {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("THINGS_CLI_VERIFY_TIMEOUT", v)
+			f, err := Load(write(t, `verify_timeout = "3s"`+"\n"))
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			err = f.ReadEnv()
+			if err == nil {
+				t.Fatal("ReadEnv: want error, got nil")
+			}
+			if f.EnvErr != err {
+				t.Errorf("EnvErr = %v, want the returned error", f.EnvErr)
+			}
+			for _, want := range []string{"$THINGS_CLI_VERIFY_TIMEOUT", "must be a positive duration", `"` + v + `"`, "--no-verify"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			// The bad value supplies nothing; the file's value still stands.
+			if got, _ := resolveFlag(t, f, "verify-timeout"); got != "3s" {
+				t.Errorf("resolved %v, want the file's 3s", got)
+			}
+		})
+	}
+}
+
+// Resolver applies an environment value with no command or exclusion checks,
+// which is only right while no such key carries a variable.
+func TestEnvKeysHaveNoRestrictions(t *testing.T) {
+	for _, k := range Keys {
+		if k.Env != "" && (len(k.Commands) > 0 || len(k.Excludes) > 0) {
+			t.Errorf("key %q has $%s but also Commands or Excludes, which the resolver does not apply to the environment", k.Name, k.Env)
 		}
 	}
 }

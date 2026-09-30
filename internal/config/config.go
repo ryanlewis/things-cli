@@ -1,6 +1,7 @@
 // Package config loads persistent defaults for the things CLI from a TOML
-// file. The file only seeds kong's flag resolution, so precedence stays
-// flag > config file > built-in default with no second code path.
+// file and, for the keys that have one, an environment variable. Both only
+// seed kong's flag resolution, so precedence stays flag > environment >
+// config file > built-in default with no second code path.
 package config
 
 import (
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kong"
 	toml "github.com/pelletier/go-toml/v2"
@@ -58,6 +60,8 @@ type Key struct {
 	Enum     []string // permitted values, for keys with a fixed set
 	Excludes []string // keys this one cannot be combined with
 	Commands []string // commands whose flags this key may seed; empty means all
+	Duration bool     // a string holding a positive Go duration, e.g. "5s"
+	Env      string   // environment variable that overrides the file, if any
 	Comment  []string // template comment, one line per entry
 	Example  string   // template assignment, written commented out
 }
@@ -118,6 +122,20 @@ var Keys = []Key{
 			"then reported as a success.",
 		},
 		Example: "no_verify = false",
+	},
+	{
+		Name:     "verify_timeout",
+		Flag:     "verify-timeout",
+		Default:  "5s",
+		Duration: true,
+		Env:      "THINGS_CLI_VERIFY_TIMEOUT",
+		Comment: []string{
+			"How long to wait for that read-back before reporting the write as not",
+			`applied. A Go duration such as "5s" or "2500ms"; must be above zero.`,
+			"Same as --verify-timeout. $THINGS_CLI_VERIFY_TIMEOUT overrides this",
+			"file, and the flag overrides both. To skip the wait, use no_verify.",
+		},
+		Example: `verify_timeout = "5s"`,
 	},
 	{
 		Name:     "strict_tags",
@@ -224,6 +242,13 @@ type File struct {
 	// values holds only the keys the file actually set, under their canonical
 	// names.
 	values map[string]any
+
+	// EnvErr is why a setting's environment variable could not be used. It is
+	// kept apart from Err because the file itself is fine.
+	EnvErr error
+
+	// env holds the valid environment overrides ReadEnv found, by key name.
+	env map[string]string
 }
 
 // Load reads and validates the config file at path. The file is optional, so
@@ -327,6 +352,11 @@ func coerce(key Key, value any) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("key %q must be a string, got %s", key.Name, typeName(value))
 		}
+		if key.Duration {
+			if _, err := ParseDuration(s); err != nil {
+				return nil, fmt.Errorf("key %q %v — to skip the read-back entirely, set no_verify = true", key.Name, err)
+			}
+		}
 		if len(key.Enum) > 0 && !contains(key.Enum, s) {
 			return nil, fmt.Errorf("key %q must be one of %s, got %q",
 				key.Name, strings.Join(key.Enum, ", "), s)
@@ -335,6 +365,44 @@ func coerce(key Key, value any) (any, error) {
 	default:
 		return nil, fmt.Errorf("key %q has an unsupported type %T", key.Name, key.Default)
 	}
+}
+
+// ParseDuration reads a duration setting. Zero and negative values are refused:
+// a wait of nothing is what --no-verify is for, and would otherwise report
+// every write as not applied. The error reads as the tail of a sentence that
+// names where the value came from.
+func ParseDuration(s string) (time.Duration, error) {
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("must be a positive duration such as \"5s\" or \"2500ms\", got %q", s)
+	}
+	return d, nil
+}
+
+// ReadEnv picks up the settings that have their own environment variable. An
+// unset or empty variable leaves the setting alone, as $THINGS_CLI_CONFIG
+// does. A value that cannot be used is recorded in EnvErr and returned, and
+// supplies nothing.
+func (f *File) ReadEnv() error {
+	f.env = map[string]string{}
+	f.EnvErr = nil
+	for _, k := range Keys {
+		if k.Env == "" {
+			continue
+		}
+		v := os.Getenv(k.Env)
+		if v == "" {
+			continue
+		}
+		if k.Duration {
+			if _, err := ParseDuration(v); err != nil {
+				f.EnvErr = fmt.Errorf("$%s %v — to skip the read-back entirely, use --no-verify", k.Env, err)
+				return f.EnvErr
+			}
+		}
+		f.env[k.Name] = v
+	}
+	return nil
 }
 
 func contains(haystack []string, needle string) bool {
@@ -379,7 +447,7 @@ func tomlErrorText(err error) string {
 type Setting struct {
 	Key    string `json:"key"`
 	Value  any    `json:"value"`
-	Source string `json:"source"` // "config" or "default"
+	Source string `json:"source"` // "env", "config" or "default"
 }
 
 // Settings reports the default that applies to each key once the file is taken
@@ -391,6 +459,9 @@ func (f *File) Settings() []Setting {
 		if f != nil {
 			if v, ok := f.values[k.Name]; ok {
 				s.Value, s.Source = v, "config"
+			}
+			if v, ok := f.env[k.Name]; ok {
+				s.Value, s.Source = v, SourceEnv
 			}
 		}
 		out = append(out, s)
@@ -409,8 +480,12 @@ func (f *File) JSON() bool {
 	return v
 }
 
-// Resolver seeds kong's flag resolution from the file. It returns nil for any
-// flag the file does not mention, leaving kong's own default in place.
+// Resolver seeds kong's flag resolution from the file and the environment
+// overrides ReadEnv found, the environment winning. It returns nil for any
+// flag neither mentions, leaving kong's own default in place.
+//
+// The environment goes through here rather than kong's env tag because kong
+// applies that tag before any resolver runs, so the file would beat it.
 func (f *File) Resolver() kong.Resolver {
 	values := map[string]any{}
 	excludes := map[string][]string{}
@@ -437,6 +512,15 @@ func (f *File) Resolver() kong.Resolver {
 			values[k.Flag] = v
 			excludes[k.Flag] = excludingFlags(k)
 			commands[k.Flag] = k.Commands
+		}
+	}
+	if f != nil {
+		// Only keys with no exclusions or command restrictions carry an
+		// environment variable, so the value alone is all that needs setting.
+		for _, k := range Keys {
+			if v, ok := f.env[k.Name]; ok {
+				values[k.Flag] = v
+			}
 		}
 	}
 	return kong.ResolverFunc(func(_ *kong.Context, parent *kong.Path, flag *kong.Flag) (any, error) {
