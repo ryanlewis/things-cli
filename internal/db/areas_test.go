@@ -64,13 +64,16 @@ func TestListAreasEmpty(t *testing.T) {
 
 func TestFindAreaUUIDIgnoresCase(t *testing.T) {
 	d := newTestDB(t)
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('a1', 'Work', 1, 0)`)
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('a1', 'Work', 1, 0), ('a2', 'Café', 1, 1)`)
 
-	got, err := d.FindAreaUUID("work")
-	if err != nil {
-		t.Fatalf("FindAreaUUID: %v", err)
-	}
-	if got != "a1" {
-		t.Errorf("FindAreaUUID(work) = %q, want a1", got)
+	for ref, want := range map[string]string{"work": "a1", "a1": "a1", "CAFÉ": "a2", "missing": ""} {
+		got, err := d.FindAreaUUID(ref)
+		if err != nil {
+			t.Fatalf("FindAreaUUID(%q): %v", ref, err)
+		}
+		if got != want {
+			t.Errorf("FindAreaUUID(%q) = %q, want %q", ref, got, want)
+		}
 	}
 }
