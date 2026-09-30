@@ -61,3 +61,16 @@ func TestListAreasEmpty(t *testing.T) {
 		t.Fatalf("expected empty, got %d", len(areas))
 	}
 }
+
+func TestFindAreaUUIDIgnoresCase(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('a1', 'Work', 1, 0)`)
+
+	got, err := d.FindAreaUUID("work")
+	if err != nil {
+		t.Fatalf("FindAreaUUID: %v", err)
+	}
+	if got != "a1" {
+		t.Errorf("FindAreaUUID(work) = %q, want a1", got)
+	}
+}
