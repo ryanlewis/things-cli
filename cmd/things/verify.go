@@ -159,8 +159,8 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 				// Only an edit can get here: the status is right but the
 				// modification date never moved.
 				results[i] = statusResult{
-					err: fmt.Errorf("edit did not apply: %q (%s) was not modified within %s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app. An edit that sets every field to the value it already has may not register as a change",
-						w.title, w.uuid, budget),
+					err: fmt.Errorf("edit did not apply: %q (%s) was not modified within %s. Either Things dropped the command — check that Things3 is running — or every value in the edit was one the item already had, which Things does not record as a change. Run `things show %s` to see which before retrying; do not retry blindly",
+						w.title, w.uuid, budget, w.uuid),
 					got:      current.Status,
 					observed: true,
 				}

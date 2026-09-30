@@ -287,7 +287,8 @@ things edit 3 --title "Buy oat milk"
 If the item never changes within ten seconds, `edit` exits non-zero with
 `edit did not apply: …` — Things accepted the command and dropped it, so
 check that Things3 is running. An edit that sets every field to the value
-it already has may not register as a change and reports the same error.
+it already has may not register as a change and reports the same error,
+so on that error check the item with `things show` before retrying.
 An edit with nothing to change (no field flags, or `--complete` on a task
 that is already complete) prints the item without waiting.
 
