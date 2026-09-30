@@ -45,7 +45,7 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 		// The same --area flag as the list filters, escaped the same way so
 		// the two commands cannot disagree about what a name matches
 		// (issue #262).
-		query += " AND (a.uuid = ? OR a.title LIKE ?" + escapeClause + ")"
+		query += " AND (a.uuid = ? OR fold(a.title) LIKE ?" + escapeClause + ")"
 		args = append(args, areaFilter, literalLike(areaFilter))
 	}
 
