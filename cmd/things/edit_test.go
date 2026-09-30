@@ -71,6 +71,11 @@ func TestEditWaitsForModificationDateToMove(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "edit did not apply") {
 		t.Fatalf("dropped edit = %v, want an edit-did-not-apply error", err)
 	}
+	// The error has to say what to do next: an unchanged edit and a dropped
+	// one look the same, and only a read tells them apart.
+	if !strings.Contains(err.Error(), "things show one-1") {
+		t.Errorf("error = %v, want it to point at `things show one-1`", err)
+	}
 
 	stubExecEditing(t, sqlDB, "")
 	if err := runWith(t, database, "edit", "one-1", "--title", "Post the letter"); err != nil {
