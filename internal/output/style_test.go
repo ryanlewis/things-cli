@@ -19,8 +19,15 @@ import (
 // layout/content assertions would depend on whether the test process is
 // attached to a TTY (interactive/PTY runner) or a pipe (CI). Color behavior is
 // covered explicitly by TestColorMode_* which set their own mode.
+//
+// The terminal check is pinned for the same reason: left to read the real
+// stdout, a run attached to a narrow terminal fits and wraps output the
+// assertions expect whole. Every test sees what CI sees, a pipe with
+// termWidth's 120-column fallback; a test that needs a terminal pins its own.
 func TestMain(m *testing.M) {
 	_ = SetColorMode("never")
+	stdoutIsTerminal = func() bool { return false }
+	termWidth = func() int { return 120 }
 	os.Exit(m.Run())
 }
 
