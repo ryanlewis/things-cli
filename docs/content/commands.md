@@ -272,9 +272,10 @@ things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
 ```
 
 Things reports nothing back from an edit, so the CLI waits for the item's
-modification date to move (and, with `--complete` or `--cancel`, for the
-status to change), then prints the item the way `things show` does — the
-same object under `--json`:
+modification date to change (and, with `--complete` or `--cancel`, for the
+status to change too; an edit with only one of those is checked on the
+status alone), then prints the item the way `things show` does — the same
+object under `--json`:
 
 ```sh
 things edit 3 --title "Buy oat milk"
