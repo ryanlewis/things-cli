@@ -117,7 +117,7 @@ func styledDate(d *model.ThingsDate, deadline bool) string {
 	if d == nil {
 		return ""
 	}
-	return styleDate(d, deadline, d.String())
+	return styleDate(d.String(), deadline, daysFromToday(d))
 }
 
 // styledCompactDate is styledDate's short form for a narrow terminal, relative
@@ -130,9 +130,8 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 	if d == nil {
 		return ""
 	}
-	today := startOfDay(nowFn())
-	target := startOfDay(d.ToTime())
-	days := int(math.Round(target.Sub(today).Hours() / 24))
+	days := daysFromToday(d)
+	target := d.ToTime()
 	var text string
 	switch {
 	case days == 0:
@@ -145,29 +144,36 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 		text = target.Format("Mon")
 	case days < -1 && days > -7:
 		text = fmt.Sprintf("%dd ago", -days)
-	case target.Year() == today.Year():
+	case target.Year() == nowFn().Year():
 		text = target.Format("2 Jan")
 	default:
 		text = target.Format("2 Jan 06")
 	}
-	return styleDate(d, deadline, text)
+	return styleDate(text, deadline, days)
 }
 
-// styleDate prefixes a deadline's text and colours it by how far the date is
-// from today.
-func styleDate(d *model.ThingsDate, deadline bool, text string) string {
+// daysFromToday counts the calendar days from today to d in local time,
+// negative for a date in the past. It rounds rather than truncates, so a
+// daylight-saving change, which puts two midnights 23 or 25 hours apart, does
+// not shift a day.
+func daysFromToday(d *model.ThingsDate) int {
+	today := startOfDay(nowFn())
+	target := startOfDay(d.ToTime())
+	return int(math.Round(target.Sub(today).Hours() / 24))
+}
+
+// styleDate prefixes a deadline's text and colours it by how many days the
+// date is from today.
+func styleDate(text string, deadline bool, days int) string {
 	if deadline {
 		text = "due:" + text
 	}
-
-	today := startOfDay(nowFn())
-	target := startOfDay(d.ToTime())
 	switch {
-	case target.Before(today):
+	case days < 0:
 		return dateOverdueStyle.Render(text)
-	case target.Equal(today):
+	case days == 0:
 		return dateTodayStyle.Render(text)
-	case target.Sub(today) <= 3*24*time.Hour:
+	case days <= 3:
 		return dateSoonStyle.Render(text)
 	default:
 		return dimStyle.Render(text)
