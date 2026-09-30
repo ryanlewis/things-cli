@@ -38,10 +38,10 @@ func parserOptions(cfg *config.File) []kong.Option {
 }
 
 // verifyTimeoutMapper decodes --verify-timeout with the same rule the config
-// file and $THINGS_CLI_VERIFY_TIMEOUT are held to. kong's own duration mapper
-// takes zero and negative values, which would report every write as not
-// applied. Values from the file or the environment were checked when they
-// were read, so an error here can only be about the flag, which kong names.
+// file is held to. kong's own duration mapper takes zero and negative values,
+// which would report every write as not applied. A value from the file was
+// checked when the file was read, so an error here can only be about the
+// flag, which kong names.
 type verifyTimeoutMapper struct{}
 
 func (verifyTimeoutMapper) Decode(ctx *kong.DecodeContext, target reflect.Value) error {
@@ -72,12 +72,6 @@ func loadConfig(args []string) (*config.File, error) {
 	}
 	f, loadErr := config.Load(path)
 	f.Source = source
-	// The environment is read even when the file failed, so its overrides
-	// still reach the diagnostic commands that run regardless. The file's
-	// error is the one reported when both are wrong.
-	if envErr := f.ReadEnv(); loadErr == nil {
-		loadErr = envErr
-	}
 	return f, loadErr
 }
 
@@ -173,14 +167,11 @@ func (c *ConfigShowCmd) Run(d *Deps) error {
 	// the point of running this at all, so report which file failed and why.
 	// Under --json the error alone carries the path: a plain header on stdout
 	// would sit in front of the JSON object and break the consumer parsing it.
-	if cfg.Err != nil || cfg.EnvErr != nil {
+	if cfg.Err != nil {
 		if !d.JSON && cfg.Path != "" {
 			fmt.Fprintf(d.Stdout, "config: %s (%s)\n", cfg.Path, existence(cfg))
 		}
-		if cfg.Err != nil {
-			return cfg.Err
-		}
-		return cfg.EnvErr
+		return cfg.Err
 	}
 	settings := cfg.Settings()
 

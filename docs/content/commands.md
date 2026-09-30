@@ -290,10 +290,10 @@ non-zero with `edit did not apply: …` — Things accepted the command and
 dropped it, so check that Things3 is running. The wait is five seconds by
 default; the global `--verify-timeout DURATION` flag changes it for one
 run (`--verify-timeout 2500ms`, `--verify-timeout 10s`), and
-`$THINGS_CLI_VERIFY_TIMEOUT` or `verify_timeout` in the config file
-change it for longer. It must be above zero: `--no-verify` is how to skip
-the wait. The same wait applies to `complete`, `cancel`, `tag add` and
-the status changes in an `import`. An edit that sets every field to the value
+`verify_timeout` in the config file changes it for every run. It must be
+above zero: `--no-verify` is how to skip the wait. The same wait applies
+to `complete`, `cancel`, `tag add` and the status changes in an `import`.
+An edit that sets every field to the value
 it already has is detected before the wait when every flag is `--title`,
 `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a
 `--deadline` date. It then prints the item straight away. Any other
@@ -428,9 +428,7 @@ Prints the version, commit, and build date.
 
 A TOML file at `~/.config/things-cli/config.toml` supplies defaults for
 the flags above, so you can set them once instead of typing them every
-run. Precedence is flag > config file > built-in default, and
-`verify_timeout` also has an environment variable,
-`$THINGS_CLI_VERIFY_TIMEOUT`, which sits between the flag and the file.
+run. Precedence is flag > config file > built-in default.
 
 ```sh
 things config init     # write a commented template

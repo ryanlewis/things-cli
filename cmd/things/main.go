@@ -33,7 +33,7 @@ type CLI struct {
 
 	NoVerify bool `help:"Skip the read-back that confirms a complete/cancel, an edit, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
 
-	VerifyTimeout time.Duration `help:"How long the read-back waits before reporting a write as not applied, e.g. 5s or 2500ms. Overrides $THINGS_CLI_VERIFY_TIMEOUT." name:"verify-timeout" type:"verifytimeout" default:"5s"`
+	VerifyTimeout time.Duration `help:"How long the read-back waits before reporting a write as not applied, e.g. 5s or 2500ms." name:"verify-timeout" type:"verifytimeout" default:"5s"`
 
 	Hints bool `help:"Print the hint line under a plain task listing. Use --no-hints to turn it off." negatable:"" default:"true"`
 
