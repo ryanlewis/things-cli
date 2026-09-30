@@ -132,7 +132,9 @@ func TestListTasksViews(t *testing.T) {
 		// the Things app, which lists Evening items beneath Today's main list.
 		{"today", []string{"t-today", "t-evening"}},
 		{"inbox", []string{"t-inbox", "t-in-proj"}},
-		{"upcoming", []string{"t-upcoming"}},
+		// t-deadline is an Anytime to-do due tomorrow with no start date, which
+		// the app lists in Upcoming under its deadline.
+		{"upcoming", []string{"t-deadline", "t-upcoming"}},
 		// Anytime is everything with start=1 — Today, Evening, and undated.
 		{"anytime", []string{"t-today", "t-evening", "t-anytime", "t-deadline"}},
 		// t-repeat has the same start/startDate shape as t-someday but is a
@@ -1991,6 +1993,51 @@ func TestUpcomingOrdersByDateThenTodayIndex(t *testing.T) {
 	want := []string{"soon-a", "soon-b", "late-a", "late-b"}
 	if got := uuidsOf(got); !slices.Equal(got, want) {
 		t.Errorf("upcoming order: got %v, want %v", got, want)
+	}
+}
+
+// The app's Upcoming also lists an Anytime to-do that has no start date but
+// a deadline still to come, filed under the deadline's day and ordered there
+// by todayIndex like any row scheduled for that day. Upcoming held only
+// Someday-bucket rows with a start date, so such a to-do was missing from it.
+func TestUpcomingListsAnytimeToDosDueLater(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 3)))
+	yesterday := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1)))
+
+	fx.todo("sched-tomorrow", "Scheduled tomorrow", 1, somedayOn(tomorrow), todayIndex(-100))
+	fx.todo("due-tomorrow", "Due tomorrow", 2, anytime(), deadline(tomorrow), todayIndex(-500))
+	fx.todo("sched-later", "Scheduled later", 3, somedayOn(later), todayIndex(0))
+	fx.todo("due-later", "Due later", 4, anytime(), deadline(later), todayIndex(-50))
+	// Due today is Today's business, and overdue is not upcoming.
+	fx.todo("due-today", "Due today", 5, anytime(), deadline(today))
+	fx.todo("overdue", "Overdue", 6, anytime(), deadline(yesterday))
+	// A plain Anytime to-do with no deadline stays out.
+	fx.todo("no-deadline", "No deadline", 7, anytime())
+
+	got, err := d.ListTasks("upcoming", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"due-tomorrow", "sched-tomorrow", "due-later", "sched-later"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("upcoming: got %v, want %v", got, want)
+	}
+
+	// --on picks a row by the day Upcoming files it under, which for a
+	// deadline-only row is the deadline.
+	on := model.ThingsDate(later)
+	got, err = d.ListTasks("upcoming", TaskFilter{On: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []string{"due-later", "sched-later"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("upcoming --on: got %v, want %v", got, want)
 	}
 }
 

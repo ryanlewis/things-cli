@@ -272,7 +272,7 @@ Filters:
 | `-p, --project NAME` | Filter by project name or UUID (not on `someday`, which lists only unparented items) |
 | `-a, --area NAME` | Filter by area name or UUID |
 | `-t, --tag NAME` | Filter by tag name |
-| `--on DATE` | Only tasks scheduled on `YYYY-MM-DD` (or RFC3339); on `deadlines`, filters by deadline |
+| `--on DATE` | Only tasks scheduled on `YYYY-MM-DD` (or RFC3339); on `deadlines`, filters by deadline, and on `upcoming` an undated task by its deadline |
 | `--from DATE` | Only tasks scheduled on or after the date |
 | `--to DATE` | Only tasks scheduled on or before the date |
 | `--include-completed` | On `today` and `anytime`: also show items closed today that Things hasn't logged out of the list yet |
