@@ -55,6 +55,7 @@ type CLI struct {
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
 	Conf     ConfigCmd   `cmd:"" name:"config" help:"Inspect and create the config file that supplies flag defaults."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
+	Update   UpdateCmd   `cmd:"" help:"Update things to the latest release, the same way it was installed."`
 
 	Completions CompletionsCmd `cmd:"" help:"Print a shell completion script (bash|zsh|fish)."`
 }

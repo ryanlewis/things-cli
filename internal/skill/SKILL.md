@@ -8,6 +8,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 - **Writes change the user's real data**: `add`, `project add`, `edit`, `project edit`, `complete`, `cancel`, `tag add`, `log`, `import`. Confirm before the destructive ones — `complete`, `cancel`, and any bulk `edit`.
 - `open` writes nothing; it reveals an item in the Things app and pulls focus. Use it when the user wants to *see* something rather than read data back.
 - `skill install` / `skill uninstall` write to the user's agent config directory. Do not run them unasked.
+- `update` replaces the `things` binary with the latest release. Do not run it unasked; `update --dry-run` only prints the command.
 - Things has no callback for writes, so success is never assumed — see [Writes](#writes-what-things-refuses-or-drops) for the four rules that decide whether a write is refused, dropped, or confirmed.
 
 ## Referring to an item
@@ -251,6 +252,7 @@ things config path | show | init [--force]
 things skill list | show [<agent>] | install <agent> [--path DIR] [-y] | uninstall <agent> [--path DIR] [-y]
 things completions <bash|zsh|fish>
 things version
+things update [--dry-run]           # update the CLI the way it was installed
 ```
 
 ## `--agent`: a brief written for you

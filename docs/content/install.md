@@ -83,6 +83,16 @@ mv things /usr/local/bin/
 things --version
 ```
 
+## Updating
+
+```sh
+things update
+```
+
+Updates the CLI the same way you installed it: Homebrew, the install
+script, or `go install`. Add `--dry-run` to see the command without
+running it. See [`things update`](/commands/#update).
+
 ## Verifying the install
 
 ```sh
