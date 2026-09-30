@@ -187,10 +187,13 @@ func TestUpdateCarriesOnWhenTheCheckFails(t *testing.T) {
 
 func TestUpdateUnwritableDirectory(t *testing.T) {
 	f := fakeUpdate{exe: "/usr/local/bin/things", version: "0.8.0", latest: "v0.9.0"}
-	_, _, err := f.run(t, false)
+	out, _, err := f.run(t, false)
 	if err == nil || !strings.Contains(err.Error(), "/usr/local/bin is not writable") ||
 		!strings.Contains(err.Error(), "| INSTALL_DIR=/usr/local/bin sh") {
 		t.Fatalf("err = %v, want the directory and the command to run", err)
+	}
+	if strings.Contains(out, "Updating") {
+		t.Errorf("stdout %q announces an update that is not going to happen", out)
 	}
 	if len(f.ran) != 0 {
 		t.Errorf("ran %v, want nothing", f.ran)

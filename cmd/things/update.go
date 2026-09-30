@@ -131,14 +131,10 @@ func (c *UpdateCmd) Run(d *Deps) error {
 	}
 
 	latest, err := latestReleaseTag()
-	switch {
-	case err != nil:
-		fmt.Fprintf(d.errOut(), "Could not check the latest release (%v); updating anyway.\n", err)
-	case strings.TrimPrefix(latest, "v") == plan.current:
+	latest = strings.TrimPrefix(latest, "v")
+	if err == nil && latest == plan.current {
 		fmt.Fprintf(d.Stdout, "things %s is the latest release.\n", plan.current)
 		return nil
-	default:
-		fmt.Fprintf(d.Stdout, "Updating things %s to %s.\n", plan.current, strings.TrimPrefix(latest, "v"))
 	}
 
 	// install.sh reaches for sudo when it cannot write the directory. Leave
@@ -147,6 +143,11 @@ func (c *UpdateCmd) Run(d *Deps) error {
 		return fmt.Errorf("%s is not writable, so things will not update itself. Run this yourself (install.sh asks for sudo when it needs it):\n  %s", plan.dir, plan.shown)
 	}
 
+	if err != nil {
+		fmt.Fprintf(d.errOut(), "Could not check the latest release (%v); updating anyway.\n", err)
+	} else {
+		fmt.Fprintf(d.Stdout, "Updating things %s to %s.\n", plan.current, latest)
+	}
 	fmt.Fprintf(d.Stdout, "Running: %s\n", plan.shown)
 	cmd := updateCommand(plan.args[0], plan.args[1:]...)
 	cmd.Stdin = os.Stdin
