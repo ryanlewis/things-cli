@@ -153,3 +153,14 @@ var termWidth = func() int {
 var stdoutIsTerminal = func() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
+
+// fitWidth is the width output has to fit: the terminal's on a terminal, and
+// 0 otherwise, which leaves text unwrapped and table columns whole. Piped
+// output would fall back to termWidth's 120 columns, and fitting that adds
+// line breaks and cuts the text does not have.
+func fitWidth() int {
+	if stdoutIsTerminal() {
+		return termWidth()
+	}
+	return 0
+}

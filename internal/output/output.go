@@ -198,13 +198,9 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 	label := func(s string) string {
 		return padCol(10, labelStyle.Render(s))
 	}
-	// Only a terminal has a width to fit. Piped output falls back to
-	// termWidth's 120 columns, and wrapping there would add line breaks the
-	// note does not have.
-	width := 0
-	if stdoutIsTerminal() {
-		width = termWidth()
-	}
+	// Only a terminal has a width to fit; piped output keeps every value on
+	// the lines it was written on.
+	width := fitWidth()
 	field := func(name, value string) {
 		fmt.Fprint(w, hang(label(name), value, width))
 	}
@@ -325,14 +321,14 @@ const (
 )
 
 func printProjects(w io.Writer, projects []model.Project) error {
-	tbl := &table{gap: columnGap}
-	if stdoutIsTerminal() {
-		// On a terminal a row that will not fit gives up its tags, then its
-		// area, and then has its title cut short. Piped output keeps every
-		// column whole.
-		tbl.maxWidth = termWidth()
-		tbl.dropOrder = []int{colProjectTags, colProjectArea}
-		tbl.shrink = []shrinkCol{{col: colProjectTitle, min: 10}}
+	// On a terminal, when the widest row will not fit, every row gives up its
+	// tags, then its area, and then titles are cut short. Piped output has no
+	// width to fit (fitWidth is 0), so every column stays whole.
+	tbl := &table{
+		gap:       columnGap,
+		maxWidth:  fitWidth(),
+		dropOrder: []int{colProjectTags, colProjectArea},
+		shrink:    []shrinkCol{{col: colProjectTitle, min: 10}},
 	}
 	for _, p := range projects {
 		tbl.row(

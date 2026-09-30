@@ -275,10 +275,6 @@ func singleLine(s string) string {
 // wraps at word boundaries to the width, under the start of the text, rather
 // than the terminal breaking it mid-word; piped output keeps it on one line.
 func PrintHint(w io.Writer, text string) error {
-	width := 0
-	if stdoutIsTerminal() {
-		width = termWidth()
-	}
-	_, err := fmt.Fprintf(newWriter(w), "\n%s", hang(dimStyle.Render("hint: "), dimStyle.Render(text), width))
+	_, err := fmt.Fprintf(newWriter(w), "\n%s", hang(dimStyle.Render("hint: "), dimStyle.Render(text), fitWidth()))
 	return err
 }
