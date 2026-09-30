@@ -270,11 +270,12 @@ func singleLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// PrintHint writes a dim one-line pointer below plain output. Callers decide
-// whether a hint is wanted at all; this only renders it. On a terminal it
-// wraps at word boundaries to the width, under the start of the text, rather
-// than the terminal breaking it mid-word; piped output keeps it on one line.
-func PrintHint(w io.Writer, text string) error {
-	_, err := fmt.Fprintf(newWriter(w), "\n%s", hang(dimStyle.Render("hint: "), dimStyle.Render(text), fitWidth()))
+// PrintHint writes a dim pointer below plain output. Callers decide whether a
+// hint is wanted at all, and so whether stdout is a terminal; this only
+// renders it. It wraps at word boundaries to width, under the start of the
+// text, rather than the terminal breaking it mid-word. A width of 0 keeps it
+// on one line.
+func PrintHint(w io.Writer, text string, width int) error {
+	_, err := fmt.Fprintf(newWriter(w), "\n%s", hang(dimStyle.Render("hint: "), dimStyle.Render(text), width))
 	return err
 }

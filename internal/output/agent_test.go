@@ -264,7 +264,7 @@ func TestPrintAgentBriefFoldsMultilineTitles(t *testing.T) {
 
 func TestPrintHint(t *testing.T) {
 	var buf bytes.Buffer
-	if err := PrintHint(&buf, "do the thing"); err != nil {
+	if err := PrintHint(&buf, "do the thing", 0); err != nil {
 		t.Fatalf("PrintHint: %v", err)
 	}
 	if got := buf.String(); got != "\nhint: do the thing\n" {
