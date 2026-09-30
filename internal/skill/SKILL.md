@@ -142,7 +142,7 @@ The rest of that import is already applied — re-run with only the failed items
 
 ## The config file changes the defaults
 
-The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CONFIG_HOME/things-cli/config.toml`; `--config PATH` or `$THINGS_CLI_CONFIG` overrides) that changes what the flags default to. Precedence is flag > config file > built-in default; `verify_timeout` alone also reads `$THINGS_CLI_VERIFY_TIMEOUT`, which beats the file. Keys: `json`, `color`, `hints`, `db`, `no_verify`, `verify_timeout`, `strict_tags`, `create_tags`, `assume_yes`.
+The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CONFIG_HOME/things-cli/config.toml`; `--config PATH` or `$THINGS_CLI_CONFIG` overrides) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `hints`, `db`, `no_verify`, `verify_timeout`, `strict_tags`, `create_tags`, `assume_yes`.
 
 **The defaults you would otherwise assume may not hold.** `json = true` makes every command emit JSON; `no_verify = true` turns off rule 3 and the tag read-back in rule 1; `assume_yes = true` removes the confirmation in rule 4 (on `complete` and `cancel` only — never on `skill install`/`uninstall`).
 

@@ -17,13 +17,10 @@ import (
 )
 
 // fastVerify shrinks the read-back poll so failure cases don't spend seconds
-// waiting for a status that will never change. The environment variable
-// carries the short budget through a parsed command line; the package var
-// covers a Deps built by hand.
+// waiting for a status that will never change. runStreams hands the shrunk
+// timeout to any run that leaves --verify-timeout at its built-in default.
 func fastVerify(t *testing.T) {
 	t.Helper()
-	isolateHome(t)
-	t.Setenv(verifyTimeoutEnv, "20ms")
 	timeout, interval, sleep := verifyTimeout, verifyInterval, verifySleep
 	verifyTimeout = 20 * time.Millisecond
 	verifyInterval = time.Millisecond

@@ -8,8 +8,8 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-// parseVerifyTimeout builds the parser the way main does — config file and
-// environment first — and returns the --verify-timeout value a run would use.
+// parseVerifyTimeout builds the parser the way main does — config file first
+// — and returns the --verify-timeout value a run would use.
 func parseVerifyTimeout(t *testing.T, args ...string) (time.Duration, error) {
 	t.Helper()
 	isolateHome(t)
@@ -32,22 +32,17 @@ func TestVerifyTimeoutPrecedence(t *testing.T) {
 	cases := []struct {
 		name string
 		file string // verify_timeout in the config file, "" for none
-		env  string // $THINGS_CLI_VERIFY_TIMEOUT, "" for unset
 		flag string // --verify-timeout, "" for none
 		want time.Duration
 	}{
 		{name: "built-in default", want: 5 * time.Second},
 		{name: "config beats default", file: "3s", want: 3 * time.Second},
-		{name: "env beats default", env: "2s", want: 2 * time.Second},
-		{name: "env beats config", file: "3s", env: "2s", want: 2 * time.Second},
+		{name: "flag beats default", flag: "1500ms", want: 1500 * time.Millisecond},
 		{name: "flag beats config", file: "3s", flag: "1500ms", want: 1500 * time.Millisecond},
-		{name: "flag beats env", env: "2s", flag: "1500ms", want: 1500 * time.Millisecond},
-		{name: "flag beats env and config", file: "3s", env: "2s", flag: "1500ms", want: 1500 * time.Millisecond},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateHome(t)
-			t.Setenv(verifyTimeoutEnv, tc.env)
 			var args []string
 			if tc.file != "" {
 				args = append(args, "--config", writeConfig(t, `verify_timeout = "`+tc.file+`"`+"\n"))
@@ -76,12 +71,6 @@ func TestVerifyTimeoutRejectsBadValues(t *testing.T) {
 			_, err := parseVerifyTimeout(t, "--verify-timeout="+bad, "today")
 			assertTimeoutError(t, err, "--verify-timeout", `got "`+bad+`"`, "--no-verify")
 		})
-		t.Run("env "+bad, func(t *testing.T) {
-			isolateHome(t)
-			t.Setenv(verifyTimeoutEnv, bad)
-			_, err := parseVerifyTimeout(t, "today")
-			assertTimeoutError(t, err, "$"+verifyTimeoutEnv, `got "`+bad+`"`, "--no-verify")
-		})
 		t.Run("config "+bad, func(t *testing.T) {
 			path := writeConfig(t, `verify_timeout = "`+bad+`"`+"\n")
 			_, err := parseVerifyTimeout(t, "--config", path, "today")
@@ -102,47 +91,28 @@ func assertTimeoutError(t *testing.T, err error, wants ...string) {
 	}
 }
 
-// A bad environment value stops ordinary commands, as a bad config file does,
-// but `config show` still runs and says what is wrong.
-func TestBadVerifyTimeoutEnvStopsCommandsButNotConfigShow(t *testing.T) {
+func TestConfigShowReportsVerifyTimeout(t *testing.T) {
 	isolateHome(t)
-	t.Setenv(verifyTimeoutEnv, "soon")
 
-	if err := runWith(t, seedFullDB(t), "today"); err == nil || !strings.Contains(err.Error(), "$"+verifyTimeoutEnv) {
-		t.Errorf("today: err = %v, want the environment variable named", err)
-	}
 	out, err := runOut(t, nil, "config", "show")
-	if err == nil || !strings.Contains(err.Error(), "$"+verifyTimeoutEnv) {
-		t.Errorf("config show: err = %v, want the environment variable named", err)
-	}
-	if !strings.Contains(out, "config: ") {
-		t.Errorf("config show did not name the file first; stdout = %q", out)
-	}
-}
-
-func TestConfigShowReportsVerifyTimeoutSource(t *testing.T) {
-	isolateHome(t)
-	path := writeConfig(t, `verify_timeout = "3s"`+"\n")
-
-	out, err := runOut(t, nil, "--config", path, "config", "show")
 	if err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	if !lineHas(out, "verify_timeout", "3s", "config") {
-		t.Errorf("config show without the env var:\n%s", out)
+	if !lineHas(out, "verify_timeout", "5s", "default") {
+		t.Errorf("config show without a file:\n%s", out)
 	}
 
-	t.Setenv(verifyTimeoutEnv, "750ms")
+	path := writeConfig(t, `verify_timeout = "3s"`+"\n")
 	out, err = runOut(t, nil, "--config", path, "config", "show")
 	if err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	if !lineHas(out, "verify_timeout", "750ms", "env") {
-		t.Errorf("config show with the env var:\n%s", out)
+	if !lineHas(out, "verify_timeout", "3s", "config") {
+		t.Errorf("config show with verify_timeout set:\n%s", out)
 	}
 }
 
-// lineHas reports whether one line of out has every field, in order.
+// lineHas reports whether one line of out has exactly these fields.
 func lineHas(out string, fields ...string) bool {
 	for line := range strings.SplitSeq(out, "\n") {
 		if strings.Join(strings.Fields(line), " ") == strings.Join(fields, " ") {
@@ -153,8 +123,8 @@ func lineHas(out string, fields ...string) bool {
 }
 
 // The configured value is the one every read-back waits for, and the one its
-// error reports. fastVerify's own 20ms comes through the environment, so a
-// flag beating it shows the flag reached the wait.
+// error reports. fastVerify's own 20ms stands in for the built-in default, so
+// a flag or a config value beating it shows that value reached the wait.
 func TestReadBackUsesConfiguredTimeout(t *testing.T) {
 	cases := []struct {
 		name string
@@ -206,15 +176,15 @@ func TestReadBackUsesConfiguredTimeout(t *testing.T) {
 		}
 	})
 
-	t.Run("from the environment", func(t *testing.T) {
+	t.Run("from the config file", func(t *testing.T) {
 		fastVerify(t)
-		t.Setenv(verifyTimeoutEnv, "45ms")
 		database, _ := seedWritable(t)
 		stubExecDropping(t)
 
-		err := runWith(t, database, "complete", "one-1")
+		path := writeConfig(t, `verify_timeout = "45ms"`+"\n")
+		err := runWith(t, database, "--config", path, "complete", "one-1")
 		if err == nil || !strings.Contains(err.Error(), "after 45ms") {
-			t.Fatalf("err = %v, want the 45ms from the environment reported", err)
+			t.Fatalf("err = %v, want the 45ms from the config file reported", err)
 		}
 	})
 }

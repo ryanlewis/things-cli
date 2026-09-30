@@ -36,17 +36,12 @@ built-in defaults. The same applies to a path you name yourself; run
 ## Precedence
 
 ```text
-flag on the command line  >  environment variable  >  config file  >  built-in default
+flag on the command line  >  config file  >  built-in default
 ```
 
-Only `verify_timeout` has an environment variable,
-`$THINGS_CLI_VERIFY_TIMEOUT`; for every other key the rule is flag > config
-file > default. An empty variable counts as unset.
-
-There is no second code path: the file and the environment variable are a
-resolver the CLI hands to its argument parser, which consults it only for
-flags you did not pass. That is what makes the rule hold everywhere
-without exception.
+There is no second code path: the file is a resolver the CLI hands to its
+argument parser, which consults it only for flags you did not pass. That
+is what makes the rule hold everywhere without exception.
 
 ```sh
 # config file says color = "always"
@@ -76,7 +71,7 @@ an error rather than a coin toss.
 | `hints` | — | boolean | `true` | every command | Print the hint line under a plain task listing |
 | `db` | — | path | auto-detected | every command | Where the Things3 SQLite database is; the file must exist |
 | `no_verify` | `no-verify` | boolean | `false` | `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a status change, an edit, or a tag creation landed |
-| `verify_timeout` | `verify-timeout` | duration string | `"5s"` | the same writes as `no_verify` | How long the read-back waits before reporting a write as not applied. `$THINGS_CLI_VERIFY_TIMEOUT` overrides it |
+| `verify_timeout` | `verify-timeout` | duration string | `"5s"` | the same writes as `no_verify` | How long the read-back waits before reporting a write as not applied |
 | `strict_tags` | `strict-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Fail instead of writing when a tag does not exist |
 | `create_tags` | `create-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Create missing tags before writing |
 | `assume_yes` | `yes` | boolean | `false` | `complete`, `cancel` | Answer the confirmation before a project-wide status change |
@@ -149,8 +144,7 @@ commented out. Uncomment a line to change that default.
 
 # How long to wait for that read-back before reporting the write as not
 # applied. A Go duration such as "5s" or "2500ms"; must be above zero.
-# Same as --verify-timeout. $THINGS_CLI_VERIFY_TIMEOUT overrides this
-# file, and the flag overrides both. To skip the wait, use no_verify.
+# Same as --verify-timeout. To skip the wait, use no_verify.
 # verify_timeout = "5s"
 
 # Fail instead of writing when a tag does not exist in Things.
@@ -200,9 +194,8 @@ $ things --json config path
 
 ### `things config show`
 
-Prints the default each key resolves to and whether that came from an
-environment variable (`env`), the file (`config`) or the CLI
-(`default`). These are the values that apply when you pass no flag —
+Prints the default each key resolves to and whether that came from the
+file or the CLI. These are the values that apply when you pass no flag —
 flags you pass to `config show` itself do not appear here.
 
 ```console
@@ -215,7 +208,7 @@ These apply when no flag overrides them.
   hints           true     default
   db              (unset)  default
   no_verify       false    default
-  verify_timeout  2s       env
+  verify_timeout  3s       config
   strict_tags     false    default
   create_tags     false    default
   assume_yes      true     config
@@ -289,14 +282,6 @@ Error: config file /Users/me/.config/things-cli/config.toml: key "color" must be
 ```console
 $ things config path
 Error: config file /Users/me/.config/things-cli/config.toml: key "verify_timeout" must be a positive duration such as "5s" or "2500ms", got "0s" — to skip the read-back entirely, set no_verify = true
-```
-
-A bad `$THINGS_CLI_VERIFY_TIMEOUT` is reported the same way, exits `2`
-too, and names the variable instead of the file:
-
-```console
-$ THINGS_CLI_VERIFY_TIMEOUT=soon things today
-Error: $THINGS_CLI_VERIFY_TIMEOUT must be a positive duration such as "5s" or "2500ms", got "soon" — to skip the read-back entirely, use --no-verify
 ```
 
 A `db` path that no longer exists is caught when a command opens the
