@@ -230,6 +230,10 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   completed or cancelled. Tasks under a project heading count towards
   both; the heading rows themselves never do, and neither do trashed
   tasks or checklist items.
+- **Tasks carry their checklist progress.** A task row with a checklist
+  reports `checklistProgress`: `total`, every item, and `open`, the ones
+  still open, so the difference is the ones completed or cancelled. A row
+  without a checklist leaves the field out. `things show` lists the items.
 
 ```console
 $ things show milk --json; echo "exit=$?"
