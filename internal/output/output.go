@@ -61,6 +61,10 @@ func PrintTaskWithChecklist(w io.Writer, t *model.Task, items []model.ChecklistI
 func printJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
+	// The default encoder rewrites &, < and > as \u0026, \u003c and \u003e for
+	// HTML embedding. This output is read as text, so a title like "R&D" must
+	// print as written.
+	enc.SetEscapeHTML(false)
 	return enc.Encode(v)
 }
 
