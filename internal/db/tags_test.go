@@ -110,3 +110,19 @@ func TestUnknownTagsEmptyDatabase(t *testing.T) {
 		t.Errorf("got %v, want [anything]", got)
 	}
 }
+
+func TestFindTagUUIDIgnoresCase(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('t1', 'Work', 0), ('t2', 'work', 1)`)
+
+	// An exact-case title wins over a case-folded one.
+	for ref, want := range map[string]string{"Work": "t1", "work": "t2", "WORK": "t1"} {
+		got, err := d.FindTagUUID(ref)
+		if err != nil {
+			t.Fatalf("FindTagUUID(%q): %v", ref, err)
+		}
+		if got != want {
+			t.Errorf("FindTagUUID(%q) = %q, want %q", ref, got, want)
+		}
+	}
+}

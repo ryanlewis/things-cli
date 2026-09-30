@@ -396,8 +396,8 @@ things open today              # built-in views
 things open inbox
 things open <uuid>             # specific task or project
 things open "Weekly Review"    # task or project by title
-things open --area "Side projects"   # an area (bare titles never resolve areas)
-things open --tag urgent             # a tag
+things open --area "Side projects"   # an area (bare titles never resolve areas; names match case-insensitively)
+things open --tag urgent             # a tag (names match case-insensitively)
 ```
 
 ## Agent skill
