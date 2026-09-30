@@ -25,6 +25,14 @@ var (
 	verifySleep    = time.Sleep
 )
 
+// verifyPause waits for the next read-back poll, but never past deadline, so
+// a read-back gives up at the budget it was given rather than up to one
+// interval later — and a budget shorter than the interval is not stretched
+// to it.
+func verifyPause(deadline time.Time) {
+	verifySleep(min(verifyInterval, max(time.Until(deadline), 0)))
+}
+
 // checkRepeating refuses a write that Things would silently drop. Things
 // rejects status, when, deadline and duplicate changes on repeating tasks and
 // projects without reporting an error, so an attempt would look like success.
@@ -188,7 +196,7 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 			break
 		}
 		if len(pending) > 0 {
-			verifySleep(verifyInterval)
+			verifyPause(deadline)
 		}
 	}
 	return results

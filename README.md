@@ -164,6 +164,7 @@ unchanged, and commands that fail on a single item carry no `items` at all.
 | `--db PATH` | Override the Things3 SQLite database path | auto-detected |
 | `--config PATH` | Read defaults from this config file instead of the default location | see [Configuration](#configuration) |
 | `--no-verify` | Skip the read-back that confirms a `complete`/`cancel` actually landed | `false` |
+| `--verify-timeout DURATION` | How long the read-back waits before reporting a write as not applied, e.g. `2500ms`; must be above zero | `5s` |
 | `--hints` / `--no-hints` | Print the hint line under a plain task listing | `true` |
 | `-v, --version` | Print version, commit, and build date and exit (same as `things version`) | — |
 
@@ -819,10 +820,11 @@ Things database, so project, area, and tag *names* are not (yet) completed.
   completing and cancelling them. This is the same interface Things exposes
   to Shortcuts and automation tools.
 - **Write confirmation**: `complete` and `cancel` poll the database after
-  writing until the status changes, up to 10 seconds, and fail if it never
-  does. Repeating items — which Things refuses to complete, cancel,
-  reschedule, or duplicate — are detected from the recurrence rule in the
-  database and rejected before any write is issued.
+  writing until the status changes, up to 5 seconds by default
+  (`--verify-timeout`), and fail if it never does. Repeating items —
+  which Things refuses to complete, cancel, reschedule, or duplicate — are
+  detected from the recurrence rule in the database and rejected before any
+  write is issued.
 - **Task resolution** accepts a UUID, a title (with interactive
   disambiguation when multiple tasks match) or a numeric index into the last
   listing.
