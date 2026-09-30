@@ -211,6 +211,15 @@ task, and a template never completes. `things list -p <project>` hides
 that template, so it can report no open tasks for a project whose
 `openCount` is 1.
 
+A task row with a checklist carries `checklistProgress`: `total` is every
+item on the checklist and `open` the ones still open, so the difference is
+the ones completed or cancelled. A row without a checklist leaves the field
+out. `things show` lists the items themselves.
+
+```sh
+things list today -j | jq '.[] | select(.checklistProgress.open > 0) | .title'
+```
+
 ## Inspecting a task
 
 ```sh
