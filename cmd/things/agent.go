@@ -2,10 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-
-	"github.com/mattn/go-isatty"
-	"golang.org/x/term"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -17,21 +13,11 @@ import (
 // they cannot discover from the listing itself.
 const agentHint = "things show <n> --agent hands a task to an agent (disable with hints = false in the config file)"
 
-// stdoutTerminal reports whether stdout is a terminal, using the same package
-// and the same Cygwin allowance as isInteractive does for stdin, and its width
-// (0 when it cannot be read). One answer decides both whether the hint prints
-// and how it wraps, so the two cannot disagree. It is a var so tests can stub
+// stdoutWidth is the width output on stdout has to fit, or 0 when stdout is
+// not a terminal. It is the output package's own check, so one answer decides
+// both whether the hint prints and how it wraps. It is a var so tests can stub
 // it — nothing in a test writes to a real terminal.
-var stdoutTerminal = func() (width int, ok bool) {
-	fd := os.Stdout.Fd()
-	if !isatty.IsTerminal(fd) && !isatty.IsCygwinTerminal(fd) {
-		return 0, false
-	}
-	if w, _, err := term.GetSize(int(fd)); err == nil && w > 0 {
-		width = w
-	}
-	return width, true
-}
+var stdoutWidth = output.FitWidth
 
 // printAgentHint writes the --agent pointer under a listing. It is suppressed
 // under --json and whenever stdout is not a terminal, because then a program
@@ -41,8 +27,8 @@ func printAgentHint(d *Deps, listed int) error {
 	if d.JSON || !d.Hints || listed == 0 {
 		return nil
 	}
-	width, ok := stdoutTerminal()
-	if !ok {
+	width := stdoutWidth()
+	if width == 0 {
 		return nil
 	}
 	return output.PrintHint(d.Stdout, agentHint, width)

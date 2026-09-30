@@ -164,3 +164,10 @@ func fitWidth() int {
 	}
 	return 0
 }
+
+// FitWidth is fitWidth for the command layer, so a hint printed under a
+// listing is decided on and fitted with the same answer the listing used: a
+// terminal's width, or 0 when stdout is not a terminal.
+func FitWidth() int {
+	return fitWidth()
+}

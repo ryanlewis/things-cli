@@ -12,16 +12,20 @@ import (
 // test writes to a real terminal, so the hint would never appear otherwise.
 func stubStdoutTTY(t *testing.T, tty bool) {
 	t.Helper()
-	stubStdoutTerminal(t, 120, tty)
+	width := 0
+	if tty {
+		width = 120
+	}
+	stubStdoutWidth(t, width)
 }
 
-// stubStdoutTerminal pins both halves of the terminal check: whether stdout is
-// a terminal, and how wide it is.
-func stubStdoutTerminal(t *testing.T, width int, tty bool) {
+// stubStdoutWidth pins the terminal check to a terminal width columns wide,
+// or to no terminal at all when width is 0.
+func stubStdoutWidth(t *testing.T, width int) {
 	t.Helper()
-	orig := stdoutTerminal
-	stdoutTerminal = func() (int, bool) { return width, tty }
-	t.Cleanup(func() { stdoutTerminal = orig })
+	orig := stdoutWidth
+	stdoutWidth = func() int { return width }
+	t.Cleanup(func() { stdoutWidth = orig })
 }
 
 func TestShowAgentBrief(t *testing.T) {
@@ -145,7 +149,7 @@ func TestSearchPrintsAgentHint(t *testing.T) {
 // stub that decides the hint prints also decides how it wraps.
 func TestAgentHintWrapsToStubbedTerminal(t *testing.T) {
 	database := seedFullDB(t)
-	stubStdoutTerminal(t, 40, true)
+	stubStdoutWidth(t, 40)
 	out, err := runOut(t, database, "list", "today")
 	if err != nil {
 		t.Fatalf("list today: %v", err)
