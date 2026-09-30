@@ -747,6 +747,26 @@ the status did not change, so a zero exit means it landed.|
 8.  [ ]  Renew passport                             due:25 Dec|
 |
 
+### case=print/tasks-compact-tags@100 color=never
+1.  [ ]  Renew the passport  [waiting-on-post-office, errands, needs-photo-booth]  due:2026-09-12|
+2.  [ ]  Buy stamps          [errands]                                             due:2026-10-20|
+|
+
+### case=print/tasks-compact-tags@70 color=never
+1.  [ ]  Renew the passport  [waiting-on-pos… +2]  due:2026-09-12|
+2.  [ ]  Buy stamps          [errands]             due:2026-10-20|
+|
+
+### case=print/tasks-compact-tags@64 color=never
+1.  [ ]  Renew the passport  [waiting-on-pos… +2]  due:Sat|
+2.  [ ]  Buy stamps          [errands]             due:20 Oct|
+|
+
+### case=print/tasks-compact-tags@50 color=never
+1.  [ ]  Renew the passport  due:Sat|
+2.  [ ]  Buy stamps          due:20 Oct|
+|
+
 ### case=print/tasks-long-checklist@85 color=never
 1.  [ ]  Get sign-off on the CAP-5 dependency PRs from platform folks  due:2026-09-12|
 2.  [ ]  Book a room                                                   due:2026-09-14|
@@ -1712,6 +1732,26 @@ the status did not change, so a zero exit means it landed.|
 6.  [ ]  No group at all                            \e[2mdue:25 Dec\e[m|
 7.  [ ]  Unrecognised status|
 8.  [ ]  Renew passport                             \e[2mdue:25 Dec\e[m|
+|
+
+### case=print/tasks-compact-tags@100 color=always
+1.  [ ]  Renew the passport  \e[33m[waiting-on-post-office, errands, needs-photo-booth]\e[m  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  Buy stamps          \e[33m[errands]\e[m                                             \e[2mdue:2026-10-20\e[m|
+|
+
+### case=print/tasks-compact-tags@70 color=always
+1.  [ ]  Renew the passport  \e[33m[waiting-on-pos… +2]\e[m  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  Buy stamps          \e[33m[errands]\e[m             \e[2mdue:2026-10-20\e[m|
+|
+
+### case=print/tasks-compact-tags@64 color=always
+1.  [ ]  Renew the passport  \e[33m[waiting-on-pos… +2]\e[m  \e[33mdue:Sat\e[m|
+2.  [ ]  Buy stamps          \e[33m[errands]\e[m             \e[2mdue:20 Oct\e[m|
+|
+
+### case=print/tasks-compact-tags@50 color=always
+1.  [ ]  Renew the passport  \e[33mdue:Sat\e[m|
+2.  [ ]  Buy stamps          \e[2mdue:20 Oct\e[m|
 |
 
 ### case=print/tasks-long-checklist@85 color=always

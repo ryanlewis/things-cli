@@ -35,9 +35,9 @@ type table struct {
 	dropFirst []int
 	// dropOrder names the columns that may be given up when a row does not
 	// fit once the shrink columns are at their soft minimum, in the order
-	// they go — the first named is the first to go. In either list, a column
-	// whose cells carry a compact form (see alt) switches to it before it is
-	// dropped.
+	// they go — the first named is the first to go. Every column here with a
+	// compact form (see alt) switches to it before any of them is dropped; a
+	// dropFirst column with one switches to it just before it goes.
 	dropOrder []int
 	// shrink names the columns that may be cut short, with an ellipsis, when
 	// a row does not fit. They give up width in the order named: first, once
@@ -227,10 +227,18 @@ func (t *table) widths() []int {
 
 // fit decides which columns survive the terminal width, which are cut short
 // and which switch to their compact form, narrowing widths in place. A column
-// no row puts anything in takes no space, gap included. Then dropFirst gives
-// up one column at a time, shrink columns give way to their soft minimum,
-// dropOrder gives up one column at a time, and the shrink columns give way to
-// their hard minimum, stopping as soon as the row fits — so a wide terminal
+// no row puts anything in takes no space, gap included. Then, stopping as
+// soon as the row fits:
+//
+//  1. dropFirst gives up one column at a time;
+//  2. shrink columns give way to their soft minimum;
+//  3. dropOrder columns switch to their compact forms, one at a time;
+//  4. dropOrder gives up one column at a time;
+//  5. any width a compact form or a drop freed beyond the overrun goes back
+//     to the columns the soft pass cut;
+//  6. shrink columns give way to their hard minimum.
+//
+// So a wide terminal
 // keeps everything and a narrow one loses as little as it can, the end of an
 // over-long cell before a column on every row, and a column worth less than
 // that before either.
@@ -247,7 +255,8 @@ func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 	full := slices.Clone(widths)
 	t.drop(widths, keep, compact, t.dropFirst)
 	t.shrinkTo(widths, keep, cut, true)
-	if t.drop(widths, keep, compact, t.dropOrder) {
+	compacted := t.compactTier(widths, keep, compact, t.dropOrder)
+	if t.drop(widths, keep, compact, t.dropOrder) || compacted {
 		// A compact form or a drop can free more than the row was over by:
 		// hand the rest back to the columns the soft pass cut, in the order
 		// they gave it up.
@@ -255,6 +264,27 @@ func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 	}
 	t.shrinkTo(widths, keep, cut, false)
 	return keep, cut, compact
+}
+
+// compactTier switches the columns in order to their compact form, where
+// they have a narrower one, until the kept columns fit, so that every column
+// in dropOrder gives up width before any of them is dropped. It reports
+// whether it freed any width.
+func (t *table) compactTier(widths []int, keep, compact []bool, order []int) bool {
+	freed := false
+	for _, c := range order {
+		if t.fits(widths, keep) {
+			break
+		}
+		if c < 0 || c >= len(keep) || !keep[c] || compact[c] {
+			continue
+		}
+		if w, ok := t.compactWidth(c); ok && w < widths[c] {
+			widths[c], compact[c] = w, true
+			freed = true
+		}
+	}
+	return freed
 }
 
 // drop goes through the columns in order until the kept columns fit,

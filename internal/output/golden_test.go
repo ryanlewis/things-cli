@@ -276,6 +276,28 @@ func goldenCases(t *testing.T) []goldenCase {
 			ChecklistProgress: &model.ChecklistProgress{Total: 12, Open: 0},
 		},
 	}
+	// Tags long enough that, on a narrow terminal, they switch to the first
+	// tag and a count of the rest, alongside compact dates, before either
+	// column is dropped. A single tag keeps its full form.
+	tagged := []model.Task{
+		{
+			UUID: "tg1", Title: "Renew the passport", Type: model.TypeTask, Status: model.StatusOpen,
+			Tags:     []string{"waiting-on-post-office", "errands", "needs-photo-booth"},
+			Deadline: thingsDate(t, "2026-09-12"),
+		},
+		{
+			UUID: "tg2", Title: "Buy stamps", Type: model.TypeTask, Status: model.StatusOpen,
+			Tags: []string{"errands"}, Deadline: thingsDate(t, "2026-10-20"),
+		},
+	}
+	for _, width := range []int{100, 70, 64, 50} {
+		cases = append(cases, goldenCase{
+			name:  fmt.Sprintf("print/tasks-compact-tags@%d", width),
+			width: width,
+			write: func(w io.Writer) error { return Print(w, tagged, false) },
+		})
+	}
+
 	// A title long enough to be cut beside its checklist progress, in a list
 	// with no tags: the progress goes before the title gives up anything, and
 	// the empty tags column leaves no gap before the date.

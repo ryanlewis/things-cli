@@ -170,14 +170,16 @@ counts. `things show` lists the items.
 Plain task lists fit the terminal width. When a row is too wide, the
 checklist progress goes first, then that extra start date. If the row is
 still too wide, a title longer than 40 columns is cut to 40 with `…`, so
-one long title does not cost every row its tags or date. Then the tags
-go. Next the dates switch to a short form relative to today (`today`,
-`tomorrow`, `due:Fri`, `3d ago`, `2 Oct`, with the year only when it is
-not this one), and only if that still does not fit does the date go.
-Then the title is cut further, down to 10. A project keeps its
-`(project)` marker; the cut comes out of the title before it. Group
-headers are cut to fit too. Titles and headers are cut only on a
-terminal: piped output and `--json` keep them whole.
+one long title does not cost every row its tags or date. Next the tags
+switch to a short form, the first tag and a count of the rest
+(`[waiting-on-pos… +2]`), and the dates to one relative to today
+(`today`, `tomorrow`, `due:Fri`, `3d ago`, `2 Oct`, with the year only
+when it is not this one). Only if that still does not fit do the tags go,
+and then the date. Then the title is cut further, down to 10. A project
+keeps its `(project)` marker; the cut comes out of the title before it.
+Group headers are cut to fit too. Titles and headers are cut, and tags
+and dates shortened, only on a terminal: piped output and `--json` keep
+them whole.
 
 `things projects`, `things areas`, and `things tags` list the
 collections themselves. `things projects` accepts `--area` and
