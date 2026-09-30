@@ -86,14 +86,21 @@ func planUpdate(exe, ver string, info *debug.BuildInfo, haveInfo bool) (updatePl
 	if releaseVersion.MatchString(ver) {
 		dir := filepath.Dir(exe)
 		script := "curl -fsSL " + updateScriptURL + " | INSTALL_DIR=" + shellQuote(dir) + " sh"
-		return updatePlan{method: methodScript, how: "from a release download", dir: dir, args: []string{"sh", "-c", script}, shown: script, current: ver}, nil
+		// Without pipefail a failed download feeds sh an empty script, which
+		// exits 0 and reports an update that never happened.
+		args := []string{"sh", "-c", "set -o pipefail; " + script}
+		return updatePlan{method: methodScript, how: "from a release download", dir: dir, args: args, shown: script, current: ver}, nil
 	}
 	// go install from the module proxy leaves main.version unset, stamps the
 	// module version, and records no VCS revision — a build from a checkout
 	// always records one.
 	if ver == "dev" && haveInfo && isModuleRelease(info) {
-		args := []string{"go", "install", updateModule + "@latest"}
-		return updatePlan{method: methodGo, how: "with go install", args: args, shown: strings.Join(args, " "), current: strings.TrimPrefix(info.Main.Version, "v")}, nil
+		// GOBIN puts the new binary where the running one is; left to go env
+		// it may land elsewhere and leave this one stale.
+		dir := filepath.Dir(exe)
+		args := []string{"env", "GOBIN=" + dir, "go", "install", updateModule + "@latest"}
+		shown := "GOBIN=" + shellQuote(dir) + " go install " + updateModule + "@latest"
+		return updatePlan{method: methodGo, how: "with go install", args: args, shown: shown, current: strings.TrimPrefix(info.Main.Version, "v")}, nil
 	}
 	return updatePlan{}, fmt.Errorf("%s is a local build (version %s), made with make install or go build, so there is nothing to update it from. Rebuild it from your checkout, or install a release: https://things.rlew.io/install/", exe, ver)
 }

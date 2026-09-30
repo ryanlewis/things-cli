@@ -81,7 +81,7 @@ func TestUpdateDryRunPerMethod(t *testing.T) {
 		{
 			name: "go install",
 			f:    fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0")},
-			want: "Would run: go install github.com/ryanlewis/things-cli/cmd/things@latest\n",
+			want: "Would run: GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@latest\n",
 		},
 	}
 	for _, tc := range cases {
@@ -142,7 +142,7 @@ func TestUpdateScriptTargetsTheBinarysDirectory(t *testing.T) {
 	if _, _, err := f.run(t, false); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := "sh -c curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR='/Users/me/my bin' sh"
+	want := "sh -c set -o pipefail; curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR='/Users/me/my bin' sh"
 	if len(f.ran) != 1 || strings.Join(f.ran[0], " ") != want {
 		t.Errorf("ran %v, want %q", f.ran, want)
 	}
@@ -180,8 +180,9 @@ func TestUpdateCarriesOnWhenTheCheckFails(t *testing.T) {
 	if !strings.Contains(stderr, "Could not check the latest release (offline)") {
 		t.Errorf("stderr = %q", stderr)
 	}
-	if len(f.ran) != 1 || f.ran[0][0] != "go" {
-		t.Errorf("ran %v, want go install", f.ran)
+	want := "env GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@latest"
+	if len(f.ran) != 1 || strings.Join(f.ran[0], " ") != want {
+		t.Errorf("ran %v, want %q", f.ran, want)
 	}
 }
 
