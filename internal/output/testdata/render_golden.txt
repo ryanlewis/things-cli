@@ -772,35 +772,35 @@ the status did not change, so a zero exit means it landed.|
 
 ### case=print/tasks@40 color=never
     Work|
-1.  [ ]  Runbook audit (project)                    |
-2.  [ ]  ★ Read logs                                |
-3.  [x]  Write the postmortem for last week's outage|
+1.  [ ]  Runbook audit (project)|
+2.  [ ]  ★ Read logs|
+3.  [x]  Write the postmortem for last …|
 |
     Q4 planning|
-4.  [~]  Draft memo                                 |
+4.  [~]  Draft memo|
 |
     Home|
-5.  [ ]  Buy milk                                   |
+5.  [ ]  Buy milk|
 |
-6.  [ ]  No group at all                            |
-7.  [ ]  Unrecognised status                        |
+6.  [ ]  No group at all|
+7.  [ ]  Unrecognised status|
 |
 
 ### case=task-list/labelled@40 color=never
     view: today|
     Work|
-1.  [ ]  Runbook audit (project)                    |
-2.  [ ]  ★ Read logs                                |
-3.  [x]  Write the postmortem for last week's outage|
+1.  [ ]  Runbook audit (project)|
+2.  [ ]  ★ Read logs|
+3.  [x]  Write the postmortem for last …|
 |
     Q4 planning|
-4.  [~]  Draft memo                                 |
+4.  [~]  Draft memo|
 |
     Home|
-5.  [ ]  Buy milk                                   |
+5.  [ ]  Buy milk|
 |
-6.  [ ]  No group at all                            |
-7.  [ ]  Unrecognised status                        |
+6.  [ ]  No group at all|
+7.  [ ]  Unrecognised status|
 |
 
 ### case=task-list/unlabelled@120 color=never
@@ -1593,35 +1593,35 @@ the status did not change, so a zero exit means it landed.|
 
 ### case=print/tasks@40 color=always
     \e[1;36mWork\e[m|
-1.  [ ]  Runbook audit \e[2m(project)\e[m                    |
-2.  [ ]  \e[1;33m★\e[m Read logs                                |
-3.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mw\e[m\e[2;9me\e[m\e[2;9me\e[m\e[2;9mk\e[m\e[2;9m'\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mo\e[m\e[2;9mu\e[m\e[2;9mt\e[m\e[2;9ma\e[m\e[2;9mg\e[m\e[2;9me\e[m|
+1.  [ ]  Runbook audit \e[2m(project)\e[m|
+2.  [ ]  \e[1;33m★\e[m Read logs|
+3.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9m…\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m|
 |
     \e[1;36mQ4 planning\e[m|
-4.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m                                 |
+4.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m|
 |
     \e[1;36mHome\e[m|
-5.  [ ]  Buy milk                                   |
+5.  [ ]  Buy milk|
 |
-6.  [ ]  No group at all                            |
-7.  [ ]  Unrecognised status                        |
+6.  [ ]  No group at all|
+7.  [ ]  Unrecognised status|
 |
 
 ### case=task-list/labelled@40 color=always
     \e[2mview: today\e[m|
     \e[1;36mWork\e[m|
-1.  [ ]  Runbook audit \e[2m(project)\e[m                    |
-2.  [ ]  \e[1;33m★\e[m Read logs                                |
-3.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mw\e[m\e[2;9me\e[m\e[2;9me\e[m\e[2;9mk\e[m\e[2;9m'\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mo\e[m\e[2;9mu\e[m\e[2;9mt\e[m\e[2;9ma\e[m\e[2;9mg\e[m\e[2;9me\e[m|
+1.  [ ]  Runbook audit \e[2m(project)\e[m|
+2.  [ ]  \e[1;33m★\e[m Read logs|
+3.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9m…\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m\e[2;9m\e[m|
 |
     \e[1;36mQ4 planning\e[m|
-4.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m                                 |
+4.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m|
 |
     \e[1;36mHome\e[m|
-5.  [ ]  Buy milk                                   |
+5.  [ ]  Buy milk|
 |
-6.  [ ]  No group at all                            |
-7.  [ ]  Unrecognised status                        |
+6.  [ ]  No group at all|
+7.  [ ]  Unrecognised status|
 |
 
 ### case=task-list/unlabelled@120 color=always

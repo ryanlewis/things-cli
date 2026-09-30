@@ -158,6 +158,10 @@ things --json list today | jq '.[] | .title'
 Tasks filed under a project heading belong to that project, so they appear
 under `-p` and under the project's area.
 
+Plain task lists fit the terminal width. When a row is too wide, the tags go first,
+then the date, and then the title is cut short with `…`. `--json` is never
+trimmed.
+
 `things projects`, `things areas`, and `things tags` list the
 collections themselves. `things projects` accepts `--area` and
 `--completed`.
