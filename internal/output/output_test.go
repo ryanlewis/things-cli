@@ -584,7 +584,7 @@ Status:   Open
 Notes:
   Call them before Friday and ask about
   the deposit.
-  
+
   See
   https://example.com/venue-offsite26
   for details.
@@ -627,6 +627,63 @@ func TestPrintTaskDetail_NoWrapWhenNotATerminal(t *testing.T) {
 func TestHang_HyphensComeBackAsWritten(t *testing.T) {
 	got := hang("  ", "Typed non\u2011break, see https://ex-ample.com/docs-page ok", 40)
 	want := "  Typed non\u2011break, see\n  https://ex-ample.com/docs-page ok\n"
+	if got != want {
+		t.Errorf("hang:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+// A note line that starts with an indent or a list marker wraps under the
+// text after it rather than back at the note's indent, and a tab counts as
+// the columns it moves to, so a tabbed line still fits the width. No wrapped
+// line ends in whitespace.
+func TestHang_ListLinesAndTabs(t *testing.T) {
+	note := "- Call the venue and ask about the deposit\n" +
+		"1. Book the coach for everyone going\n" +
+		"    nested line that is long enough to wrap\n" +
+		"\tTabbed\tline that is long enough to wrap\n" +
+		"• see https://ex-ample.com/a-b now\n" +
+		"-5 degrees is not a list item at all ok"
+	got := hang("  ", note, 30)
+	want := "" +
+		"  - Call the venue and ask\n" +
+		"    about the deposit\n" +
+		"  1. Book the coach for\n" +
+		"     everyone going\n" +
+		"      nested line that is long\n" +
+		"      enough to wrap\n" +
+		"      Tabbed  line that is\n" +
+		"      long enough to wrap\n" +
+		"  • see\n" +
+		"    https://ex-ample.com/a-b\n" +
+		"    now\n" +
+		"  -5 degrees is not a list\n" +
+		"  item at all ok\n"
+	if got != want {
+		t.Errorf("hang:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if strings.TrimRight(line, " \t") != line {
+			t.Errorf("line ends in whitespace: %q", line)
+		}
+	}
+}
+
+// A lead wider than half the space left would leave a sliver for the text,
+// so that line wraps back to the base indent instead.
+func TestHang_WideLeadFallsBack(t *testing.T) {
+	got := hang("", "            - one two three four five", 20)
+	want := "            - one\ntwo three four five\n"
+	if got != want {
+		t.Errorf("hang:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+// Unwrapped output (not a terminal) keeps a note's tabs and indents exactly
+// as written.
+func TestHang_UnwrappedKeepsTabs(t *testing.T) {
+	note := "\tTabbed\tline\n- item\n\n  indented  "
+	got := hang("  ", note, 0)
+	want := "  \tTabbed\tline\n  - item\n  \n    indented  \n"
 	if got != want {
 		t.Errorf("hang:\ngot  %q\nwant %q", got, want)
 	}

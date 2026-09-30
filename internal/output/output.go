@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -292,36 +293,117 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 // alone is wider than the space left. A width that leaves no room after the
 // prefix (0 for output that is not a terminal) leaves s unwrapped, though its
 // own line breaks are still indented.
+//
+// When wrapping, each of s's own lines wraps on its own: tabs are expanded
+// (see expandTabs), a line that starts with an indent or a list marker hangs
+// its wrapped lines under the text after it (see listLead), and no line ends
+// in whitespace. Unwrapped output keeps every byte of s, tabs included.
 func hang(prefix, s string, width int) string {
 	indent := lipgloss.Width(prefix)
-	if limit := width - indent; limit >= 1 {
-		// The wrap always breaks after a hyphen, which would split a URL or
-		// a hyphenated word that fits whole on the next line. A private-use
-		// rune the text does not already contain is the same width and never
-		// a breakpoint, so it stands in for each hyphen while wrapping and
-		// every other byte of the text comes back out as it went in.
-		stand, ok := unusedRune(s)
-		if ok {
-			s = strings.ReplaceAll(s, "-", stand)
-		}
-		s = lipgloss.Wrap(s, limit, "")
-		if ok {
-			s = strings.ReplaceAll(s, stand, "-")
-		}
-	}
-	lines := strings.Split(s, "\n")
 	pad := strings.Repeat(" ", indent)
-	var b strings.Builder
-	for i, line := range lines {
-		if i == 0 {
-			b.WriteString(prefix)
-		} else {
-			b.WriteString(pad)
+	limit := width - indent
+	if limit < 1 {
+		var b strings.Builder
+		for i, line := range strings.Split(s, "\n") {
+			if i == 0 {
+				b.WriteString(prefix)
+			} else {
+				b.WriteString(pad)
+			}
+			b.WriteString(line)
+			b.WriteString("\n")
 		}
-		b.WriteString(line)
-		b.WriteString("\n")
+		return b.String()
+	}
+	// The wrap always breaks after a hyphen, which would split a URL or a
+	// hyphenated word that fits whole on the next line. A private-use rune
+	// the text does not already contain is the same width and never a
+	// breakpoint, so it stands in for each hyphen while wrapping and every
+	// other byte of the text comes back out as it went in.
+	stand, ok := unusedRune(s)
+	var b strings.Builder
+	first := true
+	for _, line := range strings.Split(s, "\n") {
+		line = expandTabs(line)
+		lead := listLead(line)
+		// A lead that leaves under half the width would squeeze the text
+		// into a sliver, so such a line wraps back to the base indent.
+		if ansi.StringWidth(lead) > limit/2 {
+			lead = ""
+		}
+		body := line[len(lead):]
+		if ok {
+			body = strings.ReplaceAll(body, "-", stand)
+		}
+		body = lipgloss.Wrap(body, limit-ansi.StringWidth(lead), "")
+		if ok {
+			body = strings.ReplaceAll(body, stand, "-")
+		}
+		hangPad := strings.Repeat(" ", ansi.StringWidth(lead))
+		for i, part := range strings.Split(body, "\n") {
+			if i == 0 {
+				part = lead + part
+			} else {
+				part = hangPad + part
+			}
+			part = strings.TrimRight(part, " ")
+			start := pad
+			if first {
+				start = prefix
+				first = false
+			}
+			if part == "" {
+				start = strings.TrimRight(start, " ")
+			}
+			b.WriteString(start)
+			b.WriteString(part)
+			b.WriteString("\n")
+		}
 	}
 	return b.String()
+}
+
+// tabStop is the column interval expandTabs moves a tab to. A terminal's 8
+// would spend a quarter of a 32-column wrap on one level of nesting.
+const tabStop = 4
+
+// expandTabs replaces each tab in line with the spaces that reach the next
+// multiple of tabStop, counted from the start of line. The wrap measures a
+// tab as no columns wide, so a line with tabs would otherwise run past the
+// edge. Stops (rather than a fixed 4 spaces) keep text the user lined up in
+// columns with tabs lined up.
+func expandTabs(line string) string {
+	if !strings.Contains(line, "\t") {
+		return line
+	}
+	var b strings.Builder
+	col := 0
+	for i, seg := range strings.Split(line, "\t") {
+		if i > 0 {
+			n := tabStop - col%tabStop
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+		}
+		b.WriteString(seg)
+		col += ansi.StringWidth(seg)
+	}
+	return b.String()
+}
+
+// listItem matches the lead of a line that reads as a list item or an
+// indented line: leading spaces, then optionally a bullet ("- ", "* ", "• ")
+// or a number ("1. ", "1) ") and the spaces after it. Tabs are already
+// expanded by the time it runs.
+var listItem = regexp.MustCompile(`^ *(?:(?:[-*•]|[0-9]{1,3}[.)]) +)?`)
+
+// listLead returns the part of line that hang indents its wrapped lines past,
+// or "" when line is blank or starts with its text.
+func listLead(line string) string {
+	lead := listItem.FindString(line)
+	if lead == line {
+		return ""
+	}
+	return lead
 }
 
 // unusedRune returns a rune from Unicode's private use area that s does not

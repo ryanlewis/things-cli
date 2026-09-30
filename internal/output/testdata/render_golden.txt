@@ -903,7 +903,7 @@ Tags:     waiting-on-venue, errands,|
 Notes:|
   Call them before Friday and ask about|
   the deposit.|
-  |
+|
   See|
   https://example.com/venue-offsite26|
   for details.|
@@ -1848,7 +1848,7 @@ the status did not change, so a zero exit means it landed.|
 \e[1mNotes:\e[m|
   Call them before Friday and ask about|
   the deposit.|
-  |
+|
   See|
   https://example.com/venue-offsite26|
   for details.|

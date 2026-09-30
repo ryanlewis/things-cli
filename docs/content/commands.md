@@ -237,7 +237,10 @@ things show 3 --agent         # Markdown brief for handing to an agent
 On a terminal, long values, notes and checklist items wrap to its width,
 and each wrapped line keeps the indent its text started at. A note keeps
 its own line breaks, and a word or URL breaks only when it is wider than
-the space left. Piped output, `--json` and `--agent` are not wrapped.
+the space left. A note line that starts with an indent or a list marker
+(`- `, `* `, `• `, `1. ` or `1) `) wraps under the text after it, and tabs
+are expanded to every 4th column. Piped output, `--json` and `--agent` are
+not wrapped, and keep a note's tabs.
 
 A title reference is matched as a substring, literally and
 case-insensitively. There is no wildcard syntax: `%` and `_` are characters
