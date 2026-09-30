@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -116,7 +117,45 @@ func styledDate(d *model.ThingsDate, deadline bool) string {
 	if d == nil {
 		return ""
 	}
-	text := d.String()
+	return styleDate(d, deadline, d.String())
+}
+
+// styledCompactDate is styledDate's short form for a narrow terminal, relative
+// to today the way Things shows dates: "today", "tomorrow" and "yesterday",
+// a weekday for the rest of the coming week, "3d ago" for the past week, and
+// otherwise the day and month, with the year only when it is not this one.
+// A deadline keeps its "due:" prefix, so it still reads as one without
+// colour.
+func styledCompactDate(d *model.ThingsDate, deadline bool) string {
+	if d == nil {
+		return ""
+	}
+	today := startOfDay(nowFn())
+	target := startOfDay(d.ToTime())
+	days := int(math.Round(target.Sub(today).Hours() / 24))
+	var text string
+	switch {
+	case days == 0:
+		text = "today"
+	case days == 1:
+		text = "tomorrow"
+	case days == -1:
+		text = "yesterday"
+	case days > 1 && days < 7:
+		text = target.Format("Mon")
+	case days < -1 && days > -7:
+		text = fmt.Sprintf("%dd ago", -days)
+	case target.Year() == today.Year():
+		text = target.Format("2 Jan")
+	default:
+		text = target.Format("2 Jan 06")
+	}
+	return styleDate(d, deadline, text)
+}
+
+// styleDate prefixes a deadline's text and colours it by how far the date is
+// from today.
+func styleDate(d *model.ThingsDate, deadline bool, text string) string {
 	if deadline {
 		text = "due:" + text
 	}

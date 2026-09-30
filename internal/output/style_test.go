@@ -195,6 +195,55 @@ func TestStyledDate_Buckets(t *testing.T) {
 	}
 }
 
+// The compact form reads relative to today, keeps the deadline's "due:" and
+// takes the colour of the full form.
+func TestStyledCompactDate(t *testing.T) {
+	prevNow := nowFn
+	t.Cleanup(func() { nowFn = prevNow })
+
+	// Pin "now" to 2026-05-03 (Sunday).
+	nowFn = func() time.Time {
+		return time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local)
+	}
+
+	cases := []struct {
+		date *model.ThingsDate
+		want string
+	}{
+		{mustDate(2026, 5, 3), "today"},
+		{mustDate(2026, 5, 4), "tomorrow"},
+		{mustDate(2026, 5, 2), "yesterday"},
+		{mustDate(2026, 5, 5), "Tue"},
+		{mustDate(2026, 5, 9), "Sat"},
+		{mustDate(2026, 5, 10), "10 May"},
+		{mustDate(2026, 4, 30), "3d ago"},
+		{mustDate(2026, 4, 27), "6d ago"},
+		{mustDate(2026, 4, 26), "26 Apr"},
+		{mustDate(2027, 1, 2), "2 Jan 27"},
+		{mustDate(2025, 12, 31), "31 Dec 25"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.want, func(t *testing.T) {
+			full := styledDate(tc.date, false)
+			got := styledCompactDate(tc.date, false)
+			if !strings.Contains(got, tc.want) || lipgloss.Width(got) != len(tc.want) {
+				t.Errorf("styledCompactDate = %q, want %q", got, tc.want)
+			}
+			// Same style as the full form: the escapes around the text match.
+			if strings.Replace(full, tc.date.String(), tc.want, 1) != got {
+				t.Errorf("compact %q is not styled like full %q", got, full)
+			}
+		})
+	}
+
+	if got := styledCompactDate(nil, true); got != "" {
+		t.Errorf("styledCompactDate(nil) = %q, want empty", got)
+	}
+	if got := styledCompactDate(mustDate(2026, 5, 8), true); !strings.Contains(got, "due:Fri") {
+		t.Errorf("expected 'due:Fri' in %q", got)
+	}
+}
+
 func TestStyledTags(t *testing.T) {
 	if got := styledTags(nil); got != "" {
 		t.Errorf("empty tags should render empty, got %q", got)

@@ -730,6 +730,23 @@ things cancel fence-uuid              # mark it cancelled|
 the status did not change, so a zero exit means it landed.|
 |
 
+### case=print/tasks-compact-dates@62 color=never
+    Work|
+1.  [ ]  Runbook audit (project)|
+2.  [ ]  ★ Read logs                                today|
+3.  [x]  Write the postmortem for last week's out…  due:1 Sep|
+|
+    Q4 planning|
+4.  [~]  Draft memo|
+|
+    Home|
+5.  [ ]  Buy milk                                   Sun|
+|
+6.  [ ]  No group at all                            due:25 Dec|
+7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport                             due:25 Dec|
+|
+
 ### case=print/tasks-long-checklist@85 color=never
 1.  [ ]  Get sign-off on the CAP-5 dependency PRs from platform folks  due:2026-09-12|
 2.  [ ]  Book a room                                                   due:2026-09-14|
@@ -751,7 +768,7 @@ the status did not change, so a zero exit means it landed.|
 
 ### case=print/tasks-checklist@40 color=never
     Home|
-1.  [ ]  Pack for the trip|
+1.  [ ]  Pack for the trip   due:Sat|
 2.  [ ]  Water the plants|
 3.  [x]  Renew the passport|
 |
@@ -1680,6 +1697,23 @@ things cancel fence-uuid              # mark it cancelled|
 the status did not change, so a zero exit means it landed.|
 |
 
+### case=print/tasks-compact-dates@62 color=always
+    \e[1;36mWork\e[m|
+1.  [ ]  Runbook audit \e[2m(project)\e[m|
+2.  [ ]  \e[1;33m★\e[m Read logs                                \e[1;33mtoday\e[m|
+3.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mw\e[m\e[2;9me\e[m\e[2;9me\e[m\e[2;9mk\e[m\e[2;9m'\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mo\e[m\e[2;9mu\e[m\e[2;9mt\e[m\e[2;9m…\e[m  \e[1;31mdue:1 Sep\e[m|
+|
+    \e[1;36mQ4 planning\e[m|
+4.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m|
+|
+    \e[1;36mHome\e[m|
+5.  [ ]  Buy milk                                   \e[33mSun\e[m|
+|
+6.  [ ]  No group at all                            \e[2mdue:25 Dec\e[m|
+7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport                             \e[2mdue:25 Dec\e[m|
+|
+
 ### case=print/tasks-long-checklist@85 color=always
 1.  [ ]  Get sign-off on the CAP-5 dependency PRs from platform folks  \e[33mdue:2026-09-12\e[m|
 2.  [ ]  Book a room                                                   \e[2mdue:2026-09-14\e[m|
@@ -1701,7 +1735,7 @@ the status did not change, so a zero exit means it landed.|
 
 ### case=print/tasks-checklist@40 color=always
     \e[1;36mHome\e[m|
-1.  [ ]  Pack for the trip|
+1.  [ ]  Pack for the trip   \e[33mdue:Sat\e[m|
 2.  [ ]  Water the plants|
 3.  \e[2;32m[x]\e[m  \e[2;9mR\e[m\e[2;9me\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9mw\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m|
 |
