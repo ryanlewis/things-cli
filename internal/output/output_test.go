@@ -502,3 +502,31 @@ func TestPrintProjectsJSONScheduling(t *testing.T) {
 		}
 	}
 }
+
+// JSON output is read by people and agents as text, not embedded in HTML, so
+// `&`, `<` and `>` in a title must come out as written rather than as \u0026,
+// \u003c and \u003e.
+func TestPrintJSONDoesNotEscapeHTMLCharacters(t *testing.T) {
+	title := "R&D <review> & plan"
+	task := model.Task{UUID: "u1", Title: title, Notes: "a > b"}
+
+	cases := map[string]func(*bytes.Buffer) error{
+		"list":   func(b *bytes.Buffer) error { return PrintTaskList(b, []model.Task{task}, true, "") },
+		"print":  func(b *bytes.Buffer) error { return Print(b, []model.Task{task}, true) },
+		"detail": func(b *bytes.Buffer) error { return PrintTaskWithChecklist(b, &task, nil, true) },
+	}
+	for name, run := range cases {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := run(&buf); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(buf.String(), `\u00`) {
+				t.Errorf("output escapes HTML characters:\n%s", buf.String())
+			}
+			if !strings.Contains(buf.String(), title) {
+				t.Errorf("output missing literal title %q:\n%s", title, buf.String())
+			}
+		})
+	}
+}
