@@ -162,11 +162,16 @@ A task row's date is its deadline (`due:2026-10-02`) if it has one,
 otherwise its start date. A task with both also shows its start date,
 before the deadline, when the terminal is wide enough.
 
+A task with a checklist shows its progress after the title, as the items
+done out of all of them (`✓ 2/5`, where done means completed or
+cancelled). Things.app shows only a checklist icon on the row, not the
+counts. `things show` lists the items.
+
 Plain task lists fit the terminal width. When a row is too wide, a title
 longer than 40 columns is cut to 40 with `…` first, so one long title
-does not cost every row a column. If the row is still too wide, that
-extra start date goes, then the tags, then the date, and then the title
-is cut further, down to 10. A project keeps its `(project)` marker; the
+does not cost every row a column. If the row is still too wide, the
+checklist progress goes, then that extra start date, then the tags, then
+the date, and then the title is cut further, down to 10. A project keeps its `(project)` marker; the
 cut comes out of the title before it. Group headers are cut to fit too.
 Titles and headers are cut only on a terminal: piped output and `--json`
 keep them whole.

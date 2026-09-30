@@ -77,6 +77,7 @@ const (
 	colNum = iota
 	colStatus
 	colTitle
+	colChecklist
 	colTags
 	colStart
 	colDate
@@ -100,10 +101,13 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// still says what it is and when it is due for as long as it can.
 		// The start date beside a deadline is the first to go: the date
 		// column still carries the deadline, as it does on a narrow terminal.
-		dropOrder: []int{colStart, colTags, colDate},
+		// Checklist progress goes before any of them: `things show` has the
+		// checklist itself.
+		dropOrder: []int{colChecklist, colStart, colTags, colDate},
 		// A list with no task carrying both dates prints as if the start
-		// column were not there.
-		omitEmpty: []int{colStart},
+		// column were not there, and one with no checklist as if the
+		// checklist column were not.
+		omitEmpty: []int{colChecklist, colStart},
 	}
 	// A group header is cut to fit behind its four-space indent, and, as with
 	// titles, only on a terminal: piped output keeps every header whole.
@@ -154,6 +158,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			fmt.Sprintf("%d.", i+1),
 			styledStatus(t.Status),
 			title,
+			styledChecklist(t.ChecklistProgress),
 			styledTags(t.Tags),
 			start,
 			date,

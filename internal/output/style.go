@@ -89,6 +89,16 @@ func styledStatus(status model.Status) string {
 	}
 }
 
+// styledChecklist renders a task's checklist progress as done/total, marked
+// with a tick so it cannot be read as a date, or nothing when the task has no
+// checklist.
+func styledChecklist(c *model.ChecklistProgress) string {
+	if c == nil {
+		return ""
+	}
+	return dimStyle.Render(fmt.Sprintf("✓ %d/%d", c.Done(), c.Total))
+}
+
 func styledProjectIcon(p model.Project) string {
 	icon := projectIcon(p)
 	if p.Status == model.StatusCancelled {
