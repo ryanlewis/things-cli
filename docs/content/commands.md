@@ -465,7 +465,8 @@ running binary lives and how it was built:
   it stops and prints the command for you to run, since the script asks
   for `sudo`.
 - Built by `go install ...@latest`: runs
-  `go install github.com/ryanlewis/things-cli/cmd/things@latest`.
+  `go install github.com/ryanlewis/things-cli/cmd/things@latest` with
+  `GOBIN` set to the binary's own directory.
 - A local build (`make install`, `go build`): refuses, because there is
   no release to update it from.
 
