@@ -733,15 +733,15 @@ the status did not change, so a zero exit means it landed.|
 ### case=print/tasks-checklist@120 color=never
     Home|
 1.  [ ]  Pack for the trip   ✓ 2/5    [travel]  due:2026-09-12|
-2.  [ ]  Water the plants                       |
-3.  [x]  Renew the passport  ✓ 12/12  [admin]   |
+2.  [ ]  Water the plants|
+3.  [x]  Renew the passport  ✓ 12/12  [admin]|
 |
 
 ### case=print/tasks-checklist@55 color=never
     Home|
 1.  [ ]  Pack for the trip   [travel]  due:2026-09-12|
-2.  [ ]  Water the plants              |
-3.  [x]  Renew the passport  [admin]   |
+2.  [ ]  Water the plants|
+3.  [x]  Renew the passport  [admin]|
 |
 
 ### case=print/tasks-checklist@40 color=never
@@ -1678,15 +1678,15 @@ the status did not change, so a zero exit means it landed.|
 ### case=print/tasks-checklist@120 color=always
     \e[1;36mHome\e[m|
 1.  [ ]  Pack for the trip   \e[2m✓ 2/5\e[m    \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
-2.  [ ]  Water the plants                       |
-3.  \e[2;32m[x]\e[m  \e[2;9mR\e[m\e[2;9me\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9mw\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m  \e[2m✓ 12/12\e[m  \e[33m[admin]\e[m   |
+2.  [ ]  Water the plants|
+3.  \e[2;32m[x]\e[m  \e[2;9mR\e[m\e[2;9me\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9mw\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m  \e[2m✓ 12/12\e[m  \e[33m[admin]\e[m|
 |
 
 ### case=print/tasks-checklist@55 color=always
     \e[1;36mHome\e[m|
 1.  [ ]  Pack for the trip   \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
-2.  [ ]  Water the plants              |
-3.  \e[2;32m[x]\e[m  \e[2;9mR\e[m\e[2;9me\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9mw\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m  \e[33m[admin]\e[m   |
+2.  [ ]  Water the plants|
+3.  \e[2;32m[x]\e[m  \e[2;9mR\e[m\e[2;9me\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9mw\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m  \e[33m[admin]\e[m|
 |
 
 ### case=print/tasks-checklist@40 color=always
