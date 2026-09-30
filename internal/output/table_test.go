@@ -147,3 +147,32 @@ func TestTableTailMixedRows(t *testing.T) {
 		}
 	}
 }
+
+// A shrink column gives way to its soft minimum before a column is dropped,
+// takes back what a drop frees beyond the overrun, and goes on to its hard
+// minimum only once nothing is left to drop.
+func TestTableShrinkSoftFirst(t *testing.T) {
+	tests := []struct {
+		name     string
+		maxWidth int
+		want     string
+	}{
+		{"soft cut keeps every column", 20, "1.  abcdefg…  tag  d"},
+		{"drop then regrow", 16, "1.  abcdefgh…  d"},
+		{"drop all then hard cut", 10, "1.  abcde…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tbl := &table{
+				gap:       columnGap,
+				maxWidth:  tt.maxWidth,
+				dropOrder: []int{2, 3},
+				shrink:    []shrinkCol{{col: 1, min: 4, soft: 8}},
+			}
+			tbl.row("1.", "abcdefghijklmnop", "tag", "d")
+			if got := tbl.lines()[0]; got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

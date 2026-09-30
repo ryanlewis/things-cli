@@ -274,6 +274,18 @@ func goldenCases(t *testing.T) []goldenCase {
 			write: func(w io.Writer) error { return Print(w, projects, false) },
 		})
 	}
+	// A long title and a long area are cut to their soft minimums at 60
+	// columns, so the area column stays on every row.
+	longProjects := []model.Project{
+		{UUID: "lp1", Title: "Migrate the billing service to the new cluster", TaskCount: 4, OpenCount: 2,
+			AreaTitle: "Platform engineering, infrastructure and developer tooling team"},
+		{UUID: "lp2", Title: "Offsite", TaskCount: 1, OpenCount: 1, AreaTitle: "Home"},
+	}
+	cases = append(cases, goldenCase{
+		name:  "print/projects-long@60",
+		width: 60,
+		write: func(w io.Writer) error { return Print(w, longProjects, false) },
+	})
 	// A detail block long enough to wrap at 40 columns, and a hint at 30.
 	wrapped := &model.Task{
 		UUID: "wrap-uuid", Title: "Book the venue for the autumn team offsite", Type: model.TypeTask,

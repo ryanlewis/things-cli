@@ -110,10 +110,13 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 	headerWidth := 0
 	if tty {
 		headerWidth = max(width-4, 1)
-		// Then the title is cut short rather than wrapping under the row
-		// numbers, though never so far that it stops saying what the task is.
-		// Only on a terminal: piped output keeps every title whole.
-		tbl.shrink = []shrinkCol{{col: colTitle, min: 10}}
+		// An over-long title gives up its end, down to 40 columns, before a
+		// column is dropped from every row for it: 40 still reads as the task
+		// it names, and at 80 columns leaves room for the tags and the date.
+		// Once nothing is left to drop, it goes on down to 10 rather than
+		// wrapping under the row numbers. Only on a terminal: piped output
+		// keeps every title whole.
+		tbl.shrink = []shrinkCol{{col: colTitle, min: 10, soft: 40}}
 	}
 	groups := make([]group, len(tasks))
 
@@ -339,14 +342,20 @@ const (
 )
 
 func printProjects(w io.Writer, projects []model.Project) error {
-	// On a terminal, when the widest row will not fit, every row gives up its
-	// tags, then its area, and then titles are cut short. Piped output has no
-	// width to fit (fitWidth is 0), so every column stays whole.
+	// On a terminal, when the widest row will not fit, an over-long title is
+	// cut to 30 and an over-long area to 20 first; then every row gives up its
+	// tags, then its area, and then titles are cut down to 10. A project
+	// list has fewer columns than a task list, so its title needs less room
+	// kept for them, and 20 still names an area. Piped output has no width to
+	// fit (fitWidth is 0), so every column stays whole.
 	tbl := &table{
 		gap:       columnGap,
 		maxWidth:  fitWidth(),
 		dropOrder: []int{colProjectTags, colProjectArea},
-		shrink:    []shrinkCol{{col: colProjectTitle, min: 10}},
+		shrink: []shrinkCol{
+			{col: colProjectTitle, min: 10, soft: 30},
+			{col: colProjectArea, min: 20, soft: 20},
+		},
 	}
 	for _, p := range projects {
 		tbl.row(

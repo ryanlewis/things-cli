@@ -162,9 +162,11 @@ A task row's date is its deadline (`due:2026-10-02`) if it has one,
 otherwise its start date. A task with both also shows its start date,
 before the deadline, when the terminal is wide enough.
 
-Plain task lists fit the terminal width. When a row is too wide, that
-extra start date goes first, then the tags, then the date, and then the
-title is cut short with `…`. A project keeps its `(project)` marker; the
+Plain task lists fit the terminal width. When a row is too wide, a title
+longer than 40 columns is cut to 40 with `…` first, so one long title
+does not cost every row a column. If the row is still too wide, that
+extra start date goes, then the tags, then the date, and then the title
+is cut further, down to 10. A project keeps its `(project)` marker; the
 cut comes out of the title before it. Group headers are cut to fit too.
 Titles and headers are cut only on a terminal: piped output and `--json`
 keep them whole.
@@ -173,9 +175,10 @@ keep them whole.
 collections themselves. `things projects` accepts `--area` and
 `--completed`.
 
-On a terminal, `things projects` fits the width the same way: the tags go
-first, then the area, and then the title is cut short with `…`. Piped
-output keeps every column whole.
+On a terminal, `things projects` fits the width the same way: a title
+longer than 30 columns and an area longer than 20 are cut first, then the
+tags go, then the area, and then the title is cut down to 10. Piped output
+keeps every column whole.
 
 Projects are scheduled the same way tasks are, and `things projects -j`
 reports that with the same field names and encodings: `start`,
