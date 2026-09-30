@@ -228,8 +228,6 @@ func TestEditWithNothingToChangeDoesNotWait(t *testing.T) {
 func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 	now := time.Now()
 	today := int(model.ThingsDateFromTime(now))
-	todayISO := now.Format("2006-01-02")
-	future := now.AddDate(0, 0, 3).Format("2006-01-02")
 	deadline := int(model.ThingsDateFromTime(time.Date(2026, 10, 15, 0, 0, 0, 0, time.Local)))
 
 	cases := []struct {
@@ -251,15 +249,12 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"newDeadline", []string{"edit", "one-1", "--deadline", "2026-10-16"}, false},
 		{"clearDeadline", []string{"edit", "one-1", "--deadline", ""}, false},
 		{"clearAbsentDeadline", []string{"edit", "two-1", "--deadline", ""}, true},
-		{"whenToday", []string{"edit", "one-1", "--when", "today"}, true},
-		{"whenTodayLiteral", []string{"edit", "one-1", "--when", todayISO}, true},
-		{"whenTomorrow", []string{"edit", "one-1", "--when", "tomorrow"}, false},
-		{"whenEvening", []string{"edit", "one-1", "--when", "evening"}, false},
+		// --when always waits: even `today` on an item already in Today may
+		// touch its reminder, which the CLI does not read.
+		{"whenTodayOnToday", []string{"edit", "one-1", "--when", "today"}, false},
 		{"whenPhrase", []string{"edit", "one-1", "--when", "friday"}, false},
-		{"whenFutureLiteral", []string{"edit", "one-1", "--when", future}, false},
-		{"whenTodayFromEvening", []string{"edit", "eve-1", "--when", "today"}, false},
-		{"whenTodayUndated", []string{"edit", "two-1", "--when", "today"}, false},
-		{"allNoOp", []string{"edit", "one-1", "--title", "Post letter", "--add-tags", "errand", "--when", "today"}, true},
+		{"allNoOp", []string{"edit", "one-1", "--title", "Post letter", "--notes", "second class", "--add-tags", "errand", "--deadline", "2026-10-15"}, true},
+		{"noOpPlusWhen", []string{"edit", "one-1", "--title", "Post letter", "--when", "today"}, false},
 		{"mixed", []string{"edit", "one-1", "--title", "Post letter", "--notes", "first class"}, false},
 		{"mixedUncoveredFlag", []string{"edit", "one-1", "--title", "Post letter", "--append-notes", "x"}, false},
 		{"projectSameTitle", []string{"project", "edit", "repproj-1", "--title", "Weekly review"}, true},
@@ -275,8 +270,6 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 				`INSERT INTO TMTag (uuid, title) VALUES ('tag-1', 'Errand'), ('tag-2', 'Urgent')`,
 				`INSERT INTO TMTaskTag (tasks, tags) VALUES ('one-1', 'tag-1'), ('one-1', 'tag-2')`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('two-1', 'Undated', 0, 0, 0, 1)`,
-				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, startDate)
-				 VALUES ('eve-1', 'Tonight', 0, 0, 0, 1, 1, ` + strconv.Itoa(today) + `)`,
 			}
 			for _, s := range stmts {
 				if _, err := sqlDB.Exec(s); err != nil {

@@ -99,24 +99,30 @@ func (c *EditCmd) Run(d *Deps) error {
 			Reveal:           c.Reveal,
 		})
 	}
-	changed := c.changesFields() && !c.certainNoOp(task, time.Now())
+	changed := c.changesFields() && !c.certainNoOp(task)
 	return applyEdit(d, database, task, changed, c.Complete, c.Cancel, c.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
 // leaves the task as it is, so there is no modification to wait for.
-func (c *EditCmd) certainNoOp(task *model.Task, now time.Time) bool {
-	if anySet(c.PrependNotes, c.AppendNotes, c.Checklist, c.PrependChecklist, c.AppendChecklist,
-		c.List, c.ListID, c.Heading, c.HeadingID) {
-		return false
-	}
-	return coveredFields{c.Title, c.Notes, c.When, c.Deadline, c.Tags, c.AddTags}.unchanged(task, now)
+func (c *EditCmd) certainNoOp(task *model.Task) bool {
+	return !c.uncoveredSet() && c.covered().unchanged(task)
 }
 
 // changesFields reports whether the edit sets any attribute besides the status.
 func (c *EditCmd) changesFields() bool {
-	return anySet(c.Title, c.Notes, c.PrependNotes, c.AppendNotes, c.When, c.Deadline,
-		c.Tags, c.AddTags, c.Checklist, c.PrependChecklist, c.AppendChecklist,
+	return c.covered().set() || c.uncoveredSet()
+}
+
+func (c *EditCmd) covered() coveredFields {
+	return coveredFields{c.Title, c.Notes, c.Deadline, c.Tags, c.AddTags}
+}
+
+// uncoveredSet reports whether any field flag outside coveredFields is set.
+// Every field flag belongs either here or in covered, so a new one cannot be
+// missed by changesFields and still pass certainNoOp.
+func (c *EditCmd) uncoveredSet() bool {
+	return anySet(c.PrependNotes, c.AppendNotes, c.When, c.Checklist, c.PrependChecklist, c.AppendChecklist,
 		c.List, c.ListID, c.Heading, c.HeadingID)
 }
 
@@ -125,14 +131,20 @@ func (c *EditCmd) changesFields() bool {
 // before the read-back. Things records no change for such an edit, and
 // waiting for one would end in a false "did not apply" after the full budget.
 type coveredFields struct {
-	title, notes, when, deadline, tags, addTags *string
+	title, notes, deadline, tags, addTags *string
+}
+
+// set reports whether any covered flag was given.
+func (f coveredFields) set() bool {
+	return anySet(f.title, f.notes, f.deadline, f.tags, f.addTags)
 }
 
 // unchanged reports whether each flag that is set already matches task. It is
 // deliberately narrow: a value whose outcome depends on how Things reads it
-// (an English phrase, a future date, --when evening) counts as a change, and
-// the edit waits for its read-back as before.
-func (f coveredFields) unchanged(task *model.Task, now time.Time) bool {
+// counts as a change, and the edit waits for its read-back as before. --when
+// is left out for that reason — even `today` on an item already in Today may
+// touch its reminder, which the CLI does not read.
+func (f coveredFields) unchanged(task *model.Task) bool {
 	if f.title != nil && *f.title != task.Title {
 		return false
 	}
@@ -164,9 +176,6 @@ func (f coveredFields) unchanged(task *model.Task, now time.Time) bool {
 	if f.deadline != nil && !deadlineUnchanged(*f.deadline, task.Deadline) {
 		return false
 	}
-	if f.when != nil && !whenUnchanged(*f.when, task, now) {
-		return false
-	}
 	return true
 }
 
@@ -182,25 +191,6 @@ func deadlineUnchanged(value string, current *model.ThingsDate) bool {
 	}
 	date, err := time.ParseInLocation("2006-01-02", v, time.Local)
 	return err == nil && current != nil && *current == model.ThingsDateFromTime(date)
-}
-
-// whenUnchanged covers `today`, or today's date written out, on an item
-// already scheduled for today outside This Evening — the one schedule whose
-// stored form is certain: start anytime, bucket 0, startDate today.
-func whenUnchanged(value string, task *model.Task, now time.Time) bool {
-	v, err := things.NormalizeWhen(value)
-	if err != nil {
-		return false
-	}
-	today := model.ThingsDateFromTime(now)
-	if v != "today" {
-		date, err := time.ParseInLocation("2006-01-02", v, time.Local)
-		if err != nil || model.ThingsDateFromTime(date) != today {
-			return false
-		}
-	}
-	return task.Start == model.StartAnytime && task.StartBucket == 0 &&
-		task.StartDate != nil && *task.StartDate == today
 }
 
 // anySet reports whether any of the optional flags was given.

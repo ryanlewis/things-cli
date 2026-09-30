@@ -1,8 +1,6 @@
 package main
 
 import (
-	"time"
-
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -118,21 +116,26 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 			Reveal:       c.Reveal,
 		})
 	}
-	changed := c.changesFields() && !c.certainNoOp(project, time.Now())
+	changed := c.changesFields() && !c.certainNoOp(project)
 	return applyEdit(d, database, project, changed, c.Complete, c.Cancel, c.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
 // leaves the project as it is, so there is no modification to wait for.
-func (c *ProjectEditCmd) certainNoOp(project *model.Task, now time.Time) bool {
-	if anySet(c.PrependNotes, c.AppendNotes, c.Area, c.AreaID) {
-		return false
-	}
-	return coveredFields{c.Title, c.Notes, c.When, c.Deadline, c.Tags, c.AddTags}.unchanged(project, now)
+func (c *ProjectEditCmd) certainNoOp(project *model.Task) bool {
+	return !c.uncoveredSet() && c.covered().unchanged(project)
 }
 
 // changesFields reports whether the edit sets any attribute besides the status.
 func (c *ProjectEditCmd) changesFields() bool {
-	return anySet(c.Title, c.Notes, c.PrependNotes, c.AppendNotes, c.When, c.Deadline,
-		c.Tags, c.AddTags, c.Area, c.AreaID)
+	return c.covered().set() || c.uncoveredSet()
+}
+
+func (c *ProjectEditCmd) covered() coveredFields {
+	return coveredFields{c.Title, c.Notes, c.Deadline, c.Tags, c.AddTags}
+}
+
+// uncoveredSet reports whether any field flag outside coveredFields is set.
+func (c *ProjectEditCmd) uncoveredSet() bool {
+	return anySet(c.PrependNotes, c.AppendNotes, c.When, c.Area, c.AreaID)
 }
