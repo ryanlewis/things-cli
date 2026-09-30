@@ -454,7 +454,7 @@ Prints the version, commit, and build date.
 
 ```sh
 things update            # update to the latest release
-things update --dry-run  # print the command it would run, and stop
+things update --dry-run  # check for a release, print the command, and stop
 ```
 
 Updates `things` the same way it was installed. It looks at where the
@@ -473,12 +473,13 @@ running binary lives and how it was built:
 - A local build (`make install`, `go build`): refuses, because there is
   no release to update it from.
 
-Before updating, it asks GitHub for the latest release. It stops if you
-already have it, or if yours is newer (only `MAJOR.MINOR.PATCH` is
-compared, so `1.0.0-rc1` counts as `1.0.0`). The install script is then
-fetched from that release's tag and told to install that version. If
-GitHub can't be reached, it says so and updates anyway, using the script
-on `main`. It prints the command before running it.
+Before updating, it asks GitHub for the latest release, with or without
+`--dry-run`. It stops if you already have it, or if yours is newer. Only
+`MAJOR.MINOR.PATCH` is compared for "newer", so `1.0.0-rc1` is not newer
+than `1.0.0` and updates to it. The install script is then fetched from
+that release's tag and told to install that version. If GitHub can't be
+reached, it says so and updates anyway, using the script on `main`. It
+prints the command before running it.
 
 ## Configuration
 

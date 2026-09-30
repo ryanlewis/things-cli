@@ -178,23 +178,28 @@ func (c *UpdateCmd) Run(d *Deps) error {
 	}
 	fmt.Fprintf(d.Stdout, "%s was installed %s.\n", exe, plan.how)
 
-	tag, err := latestReleaseTag()
+	tag, checkErr := latestReleaseTag()
 	latest := strings.TrimPrefix(tag, "v")
-	if err == nil {
+	if checkErr == nil {
 		if latest == plan.current {
 			fmt.Fprintf(d.Stdout, "things %s is the latest release.\n", plan.current)
 			return nil
 		}
-		if newer, ok := newerThan(plan.current, latest); ok && newer {
+		if newer, _ := newerThan(plan.current, latest); newer {
 			fmt.Fprintf(d.Stdout, "things %s is newer than the latest release %s; nothing to do.\n", plan.current, latest)
 			return nil
 		}
-		if plan.method == methodScript {
+		// The tag goes into a URL and a shell command, so only a well-formed
+		// release tag is pinned; anything else keeps the script on main.
+		if plan.method == methodScript && tag == "v"+latest && releaseVersion.MatchString(latest) {
 			plan.pinScript(tag)
 		}
 	}
 
 	if c.DryRun {
+		if checkErr != nil {
+			fmt.Fprintf(d.errOut(), "Could not check the latest release (%v).\n", checkErr)
+		}
 		fmt.Fprintf(d.Stdout, "Would run: %s\n", plan.shown)
 		if plan.method == methodScript && !dirWritable(plan.dir) {
 			fmt.Fprintf(d.errOut(), "%s is not writable, so `things update` would stop here; run the command above yourself.\n", plan.dir)
@@ -208,8 +213,8 @@ func (c *UpdateCmd) Run(d *Deps) error {
 		return fmt.Errorf("%s is not writable, so things will not update itself. Run this yourself (install.sh asks for sudo when it needs it):\n  %s", plan.dir, plan.shown)
 	}
 
-	if err != nil {
-		fmt.Fprintf(d.errOut(), "Could not check the latest release (%v); updating anyway.\n", err)
+	if checkErr != nil {
+		fmt.Fprintf(d.errOut(), "Could not check the latest release (%v); updating anyway.\n", checkErr)
 	} else {
 		fmt.Fprintf(d.Stdout, "Updating things %s to %s.\n", plan.current, latest)
 	}
