@@ -289,11 +289,10 @@ If the item never changes within ten seconds, `edit` exits non-zero with
 `edit did not apply: …` — Things accepted the command and dropped it, so
 check that Things3 is running. An edit that sets every field to the value
 it already has is detected before the wait when every flag is `--title`,
-`--notes`, `--tags`, `--add-tags` (tags compared case-insensitively), a
-`--deadline` date, or `--when today` (or today's date) on an item already
-in Today outside This Evening. It then prints the item straight away. Any
-other re-set value still waits and reports the same error, so on that
-error check the item with `things show` before retrying.
+`--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a
+`--deadline` date. It then prints the item straight away. Any other
+re-set value, `--when` included, still waits and reports the same error,
+so on that error check the item with `things show` before retrying.
 An edit with nothing to change (no field flags, or `--complete` on a task
 that is already complete) prints the item without waiting.
 
