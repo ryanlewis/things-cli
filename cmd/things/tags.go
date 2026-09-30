@@ -331,5 +331,5 @@ func dedupeTagNames(names []string) []string {
 }
 
 func foldTagName(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
+	return db.FoldCase(strings.TrimSpace(s))
 }

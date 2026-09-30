@@ -821,10 +821,12 @@ var likeEscaper = strings.NewReplacer(
 )
 
 // literalLike turns a filter value into a LIKE pattern matching it and nothing
-// else. LIKE stays case-insensitive for ASCII, which is what it was before and
-// what a name filter wants; only the wildcards lose their meaning.
+// else. The value is case-folded first, and every LIKE it feeds folds its
+// column with fold(), so matching ignores case beyond ASCII — LIKE's own case
+// rule covers ASCII only, and missed "ärger" against "Ärger". Only the
+// wildcards lose their meaning.
 func literalLike(value string) string {
-	return likeEscaper.Replace(value)
+	return likeEscaper.Replace(FoldCase(value))
 }
 
 // containsLike is literalLike for the lookups that match a substring: the
@@ -893,15 +895,15 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 
 	var args []any
 	if opts.Project != "" {
-		where += " AND (p.uuid = ? OR p.title LIKE ?" + escapeClause + ")"
+		where += " AND (p.uuid = ? OR fold(p.title) LIKE ?" + escapeClause + ")"
 		args = append(args, opts.Project, literalLike(opts.Project))
 	}
 	if opts.Area != "" {
-		where += " AND (COALESCE(a.uuid, pa.uuid) = ? OR COALESCE(a.title, pa.title) LIKE ?" + escapeClause + ")"
+		where += " AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ?" + escapeClause + ")"
 		args = append(args, opts.Area, literalLike(opts.Area))
 	}
 	if opts.Tag != "" {
-		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE tg2.title LIKE ?" + escapeClause + ")"
+		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ?" + escapeClause + ")"
 		args = append(args, literalLike(opts.Tag))
 	}
 
@@ -1105,10 +1107,10 @@ func preferInstances(matches []model.Task) []model.Task {
 // (issue #267). Without that, `_` stood for any character and `%` for any run
 // of them, so a lookup could resolve to a task the user did not name — and
 // GetTask acts on a lookup that matches exactly one row, which put a status
-// write on the wrong task. Matching stays case-insensitive for ASCII, as it
-// has always been; nothing documented offered wildcards.
+// write on the wrong task. Matching ignores case, beyond ASCII too (see
+// literalLike); nothing documented offered wildcards.
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE t.title LIKE ?" + escapeClause + " AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+	query := d.taskQuery() + " WHERE fold(t.title) LIKE ?" + escapeClause + " AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, containsLike(substr))
 }
@@ -1159,7 +1161,7 @@ func (e *AmbiguousTaskError) Error() string {
 // went in as a pattern (issue #267).
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 	pattern := containsLike(query)
-	q := d.taskQuery() + " WHERE (t.title LIKE ?" + escapeClause + " OR t.notes LIKE ?" + escapeClause + ") AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid " + indexOrderBy
+	q := d.taskQuery() + " WHERE (fold(t.title) LIKE ?" + escapeClause + " OR fold(t.notes) LIKE ?" + escapeClause + ") AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid " + indexOrderBy
 	return d.collectTasks(q, pattern, pattern)
 }
 
