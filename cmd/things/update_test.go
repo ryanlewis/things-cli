@@ -85,6 +85,12 @@ func TestUpdateDryRunPerMethod(t *testing.T) {
 			want: "Would run: curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR=/usr/local/bin sh\n",
 		},
 		{
+			name: "install.sh, latest tag is not a release",
+			// The tag lands in a shell command, so an odd one is not pinned.
+			f:    fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.0", writable: true, latest: "nightly;touch /tmp/x"},
+			want: "Would run: curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR=/usr/local/bin sh\n",
+		},
+		{
 			name: "go install",
 			f:    fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), latest: "v0.9.1"},
 			want: "Would run: GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@latest\n",
@@ -255,6 +261,17 @@ func TestUpdateCarriesOnWhenTheCheckFails(t *testing.T) {
 	want := "env GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@latest"
 	if len(f.ran) != 1 || strings.Join(f.ran[0], " ") != want {
 		t.Errorf("ran %v, want %q", f.ran, want)
+	}
+}
+
+func TestUpdateDryRunSaysWhenTheCheckFails(t *testing.T) {
+	f := fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.0", writable: true, fetchErr: errors.New("offline")}
+	_, stderr, err := f.run(t, true)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(stderr, "Could not check the latest release (offline).") {
+		t.Errorf("stderr = %q", stderr)
 	}
 }
 
