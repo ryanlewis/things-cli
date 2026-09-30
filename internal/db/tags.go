@@ -1,7 +1,6 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
@@ -9,21 +8,18 @@ import (
 )
 
 // FindTagUUID resolves a tag reference (UUID or title) to its UUID,
-// matching a title case-insensitively (an exact-case title wins), returning "" when no row matches.
+// returning "" when no row matches. Titles match ignoring case, as Things
+// matches them; matchRef says which row wins.
 func (d *DB) FindTagUUID(ref string) (string, error) {
-	var uuid string
-	err := d.db.QueryRow(
-		`SELECT uuid FROM TMTag WHERE uuid = ? OR title = ? COLLATE NOCASE
-		 ORDER BY uuid = ? DESC, title = ? DESC, "index", uuid LIMIT 1`,
-		ref, ref, ref, ref,
-	).Scan(&uuid)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
+	tags, err := d.ListTags()
 	if err != nil {
 		return "", fmt.Errorf("finding tag: %w", err)
 	}
-	return uuid, nil
+	rows := make([]uuidTitle, len(tags))
+	for i, t := range tags {
+		rows[i] = uuidTitle{t.UUID, t.Title}
+	}
+	return matchRef(rows, ref), nil
 }
 
 func (d *DB) ListTags() ([]model.Tag, error) {
@@ -68,7 +64,7 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 	}
 	existing := make(map[string]struct{}, len(tags))
 	for _, t := range tags {
-		existing[foldTag(t.Title)] = struct{}{}
+		existing[foldTitle(t.Title)] = struct{}{}
 	}
 
 	var unknown []string
@@ -78,7 +74,7 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 		if n == "" {
 			continue
 		}
-		key := foldTag(n)
+		key := foldTitle(n)
 		if _, dup := seen[key]; dup {
 			continue
 		}
@@ -90,6 +86,32 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 	return unknown, nil
 }
 
-func foldTag(s string) string {
+func foldTitle(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
+}
+
+type uuidTitle struct{ uuid, title string }
+
+// matchRef returns the UUID of the row that ref names, or "" when none does.
+// A UUID match wins, then an exact title, then the first title equal to ref
+// under foldTitle, in the order given (callers pass Things' list order). The
+// fold happens here rather than in SQL because SQLite's NOCASE folds ASCII
+// only: Things matches "ärger" to a tag named "Ärger", and NOCASE would not.
+func matchRef(rows []uuidTitle, ref string) string {
+	key := foldTitle(ref)
+	var exact, folded string
+	for _, r := range rows {
+		switch {
+		case r.uuid == ref:
+			return r.uuid
+		case exact == "" && r.title == ref:
+			exact = r.uuid
+		case folded == "" && foldTitle(r.title) == key:
+			folded = r.uuid
+		}
+	}
+	if exact != "" {
+		return exact
+	}
+	return folded
 }

@@ -237,6 +237,7 @@ things log                          # move Today → Logbook
 things open [<ref>] [-p P | -a A | -t T | -q Q] [--filter T1,T2] [--background]
     # ref: task/project UUID, numeric index, title, or a built-in list name
     # exactly one of <ref> / -p / -a / -t / -q is required
+    # -a/-t take a name or UUID; names match case-insensitively
     # --filter narrows the opened list by tags; --background keeps focus elsewhere
 
 things import [--file F] [--reveal] [--strict-tags | --create-tags] < payload.json
