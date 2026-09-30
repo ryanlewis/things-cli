@@ -171,10 +171,10 @@ Plain task lists fit the terminal width. When a row is too wide, a title
 longer than 40 columns is cut to 40 with `…` first, so one long title
 does not cost every row a column. If the row is still too wide, the
 checklist progress goes, then that extra start date, then the tags, then
-the date, and then the title is cut further, down to 10. A project keeps its `(project)` marker; the
-cut comes out of the title before it. Group headers are cut to fit too.
-Titles and headers are cut only on a terminal: piped output and `--json`
-keep them whole.
+the date, and then the title is cut further, down to 10. A project keeps
+its `(project)` marker; the cut comes out of the title before it. Group
+headers are cut to fit too. Titles and headers are cut only on a
+terminal: piped output and `--json` keep them whole.
 
 `things projects`, `things areas`, and `things tags` list the
 collections themselves. `things projects` accepts `--area` and

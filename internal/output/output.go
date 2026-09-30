@@ -97,12 +97,11 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 	tbl := &table{
 		gap:      columnGap,
 		maxWidth: width,
-		// The tags go first when a row will not fit, then the date: a row
-		// still says what it is and when it is due for as long as it can.
-		// The start date beside a deadline is the first to go: the date
-		// column still carries the deadline, as it does on a narrow terminal.
-		// Checklist progress goes before any of them: `things show` has the
-		// checklist itself.
+		// When a row will not fit, checklist progress goes first, since
+		// `things show` has the checklist itself. The start date beside a
+		// deadline is next: the date column still carries the deadline, as it
+		// does on a narrow terminal. Then the tags, then the date: a row still
+		// says what it is and when it is due for as long as it can.
 		dropOrder: []int{colChecklist, colStart, colTags, colDate},
 		// A list with no task carrying both dates prints as if the start
 		// column were not there, and one with no checklist as if the
