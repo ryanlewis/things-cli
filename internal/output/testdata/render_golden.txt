@@ -730,6 +730,11 @@ things cancel fence-uuid              # mark it cancelled|
 the status did not change, so a zero exit means it landed.|
 |
 
+### case=print/tasks-long-checklist@85 color=never
+1.  [ ]  Get sign-off on the CAP-5 dependency PRs from platform folks  due:2026-09-12|
+2.  [ ]  Book a room                                                   due:2026-09-14|
+|
+
 ### case=print/tasks-checklist@120 color=never
     Home|
 1.  [ ]  Pack for the trip   ✓ 2/5    [travel]  due:2026-09-12|
@@ -1673,6 +1678,11 @@ things cancel fence-uuid              # mark it cancelled|
 |
 `complete` and `cancel` read the item back afterwards and exit non-zero if|
 the status did not change, so a zero exit means it landed.|
+|
+
+### case=print/tasks-long-checklist@85 color=always
+1.  [ ]  Get sign-off on the CAP-5 dependency PRs from platform folks  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  Book a room                                                   \e[2mdue:2026-09-14\e[m|
 |
 
 ### case=print/tasks-checklist@120 color=always

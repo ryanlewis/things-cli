@@ -57,10 +57,10 @@ func TestTableLastKeptColumnUnpadded(t *testing.T) {
 	}
 }
 
-// An omitEmpty column that no row fills takes no space, not even its gap.
-func TestTableOmitEmpty(t *testing.T) {
+// A column that no row fills takes no space, not even its gap.
+func TestTableEmptyColumnTakesNoSpace(t *testing.T) {
 	for _, fill := range []string{"", "s"} {
-		tbl := &table{gap: columnGap, omitEmpty: []int{1}}
+		tbl := &table{gap: columnGap}
 		tbl.row("a", fill, "b")
 		want := "a  b"
 		if fill != "" {
@@ -72,10 +72,10 @@ func TestTableOmitEmpty(t *testing.T) {
 	}
 }
 
-// An omitted empty column adds neither width nor gap to the fit, so it never
-// costs another column its place. It is left out of dropOrder here so that
-// nothing but omitEmpty can explain the tags surviving at the boundary.
-func TestTableOmitEmptyFits(t *testing.T) {
+// An empty column adds neither width nor gap to the fit, so it never costs
+// another column its place. It is left out of dropOrder here so that nothing
+// but its being empty can explain the tags surviving at the boundary.
+func TestTableEmptyColumnFits(t *testing.T) {
 	tests := []struct {
 		maxWidth int
 		want     string
@@ -88,7 +88,6 @@ func TestTableOmitEmptyFits(t *testing.T) {
 			gap:       columnGap,
 			maxWidth:  tt.maxWidth,
 			dropOrder: []int{2, 4},
-			omitEmpty: []int{3},
 		}
 		tbl.row("1.", "title", "[tag]", "", "due:x")
 		if got := tbl.lines()[0]; got != tt.want {
@@ -282,5 +281,35 @@ func TestDropEmptySpans(t *testing.T) {
 		if got := dropEmptySpans(tt.in); got != tt.want {
 			t.Errorf("dropEmptySpans(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+// A dropFirst column goes before a shrink column gives up anything, even its
+// soft minimum's worth; dropOrder still waits until the soft cut is done.
+func TestTableDropFirst(t *testing.T) {
+	tests := []struct {
+		name     string
+		maxWidth int
+		want     string
+	}{
+		{"all fit", 38, "1.  a title of twenty ch  ✓ 1/2  due:x"},
+		{"drop first, title whole", 31, "1.  a title of twenty ch  due:x"},
+		{"then soft cut", 27, "1.  a title of twen…  due:x"},
+		{"then dropOrder", 16, "1.  a title of …"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tbl := &table{
+				gap:       columnGap,
+				maxWidth:  tt.maxWidth,
+				dropFirst: []int{2},
+				dropOrder: []int{3},
+				shrink:    []shrinkCol{{col: 1, min: 4, soft: 12}},
+			}
+			tbl.row("1.", "a title of twenty ch", "✓ 1/2", "due:x")
+			if got := tbl.lines()[0]; got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

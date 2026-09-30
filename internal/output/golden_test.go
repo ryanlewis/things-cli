@@ -267,6 +267,25 @@ func goldenCases(t *testing.T) []goldenCase {
 			ChecklistProgress: &model.ChecklistProgress{Total: 12, Open: 0},
 		},
 	}
+	// A title long enough to be cut beside its checklist progress, in a list
+	// with no tags: the progress goes before the title gives up anything, and
+	// the empty tags column leaves no gap before the date.
+	longChecklisted := []model.Task{
+		{
+			UUID: "lk1", Title: "Get sign-off on the CAP-5 dependency PRs from platform folks", Type: model.TypeTask,
+			Status: model.StatusOpen, Deadline: thingsDate(t, "2026-09-12"),
+			ChecklistProgress: &model.ChecklistProgress{Total: 5, Open: 3},
+		},
+		{
+			UUID: "lk2", Title: "Book a room", Type: model.TypeTask, Status: model.StatusOpen,
+			Deadline: thingsDate(t, "2026-09-14"),
+		},
+	}
+	cases = append(cases, goldenCase{
+		name:  "print/tasks-long-checklist@85",
+		width: 85,
+		write: func(w io.Writer) error { return Print(w, longChecklisted, false) },
+	})
 	for _, width := range []int{120, 55, 40} {
 		cases = append(cases, goldenCase{
 			name:  fmt.Sprintf("print/tasks-checklist@%d", width),
