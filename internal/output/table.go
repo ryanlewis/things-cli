@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"slices"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -32,9 +33,10 @@ type table struct {
 	// row puts anything in them.
 	omitEmpty []int
 	// shrink names the columns that may be cut short, with an ellipsis, when
-	// a row still does not fit once every column in dropOrder has gone. They
-	// give up width in the order named, none below its own minimum, so a row
-	// whose other columns alone overrun maxWidth still prints, only wider.
+	// a row does not fit. They give up width in the order named: first down
+	// to their soft minimum, before any column in dropOrder goes, and then,
+	// once every column in dropOrder has gone, down to their hard minimum. A
+	// row whose other columns alone overrun maxWidth still prints, only wider.
 	shrink []shrinkCol
 
 	rows [][]string
@@ -42,9 +44,12 @@ type table struct {
 	tails map[[2]int]string
 }
 
-// shrinkCol is a column a table may cut short, and the narrowest it may go.
+// shrinkCol is a column a table may cut short. soft is how far it gives way
+// before another column is dropped for it, and min the narrowest it may go
+// once nothing is left to drop. A soft of zero, or one below min, gives no
+// width up before the drops.
 type shrinkCol struct {
-	col, min int
+	col, min, soft int
 }
 
 // row appends one row. Rows are expected to carry the same number of cells;
@@ -91,8 +96,7 @@ func (t *table) cut(i, c int, cell string, width int) string {
 // that has to write something between two rows — a group header — still can.
 func (t *table) lines() []string {
 	widths := t.widths()
-	keep := t.keep(widths)
-	cut := t.shrinkTo(widths, keep)
+	keep, cut := t.fit(widths)
 	last := -1
 	for c := range widths {
 		if keep[c] {
@@ -151,11 +155,15 @@ func (t *table) widths() []int {
 	return widths
 }
 
-// keep decides which columns survive the terminal width. It gives up one
-// column at a time, in dropOrder, and stops as soon as the row fits — so a
-// wide terminal keeps everything and a narrow one loses as little as it can.
-func (t *table) keep(widths []int) []bool {
-	keep := make([]bool, len(widths))
+// fit decides which columns survive the terminal width and which are cut
+// short, narrowing widths in place. Shrink columns give way to their soft
+// minimum first, then dropOrder gives up one column at a time, and then the
+// shrink columns give way to their hard minimum, stopping as soon as the row
+// fits — so a wide terminal keeps everything and a narrow one loses as little
+// as it can, the end of an over-long cell before a column on every row.
+func (t *table) fit(widths []int) (keep, cut []bool) {
+	keep = make([]bool, len(widths))
+	cut = make([]bool, len(widths))
 	for i := range keep {
 		keep[i] = true
 	}
@@ -165,29 +173,35 @@ func (t *table) keep(widths []int) []bool {
 		}
 	}
 	if t.maxWidth <= 0 {
-		return keep
+		return keep, cut
 	}
+	full := slices.Clone(widths)
+	t.shrinkTo(widths, keep, cut, true)
+	dropped := false
 	for _, c := range t.dropOrder {
 		if t.fits(widths, keep) {
 			break
 		}
 		if c >= 0 && c < len(keep) {
 			keep[c] = false
+			dropped = true
 		}
 	}
-	return keep
+	if dropped {
+		// A drop can free more than the row was over by: hand the rest back
+		// to the columns the soft pass cut, in the order they gave it up.
+		t.regrow(widths, full, keep, cut)
+	}
+	t.shrinkTo(widths, keep, cut, false)
+	return keep, cut
 }
 
 // shrinkTo narrows the shrink columns, in place in widths, until the kept
-// columns fit or every one of them is at its minimum. It reports which
-// columns it narrowed, so their cells can be cut to the new width. A column
-// with tails goes no narrower than its widest tail plus one character and the
-// ellipsis, whatever its own minimum.
-func (t *table) shrinkTo(widths []int, keep []bool) []bool {
-	cut := make([]bool, len(widths))
-	if t.maxWidth <= 0 {
-		return cut
-	}
+// columns fit or every one of them is at its soft minimum (soft) or its hard
+// one. It marks in cut the columns it narrowed, so their cells can be cut to
+// the new width. A column with tails goes no narrower than its widest tail
+// plus one character and the ellipsis, whatever its own minimum.
+func (t *table) shrinkTo(widths []int, keep, cut []bool, soft bool) {
 	for _, s := range t.shrink {
 		over := t.width(widths, keep) - t.maxWidth
 		if over <= 0 {
@@ -197,13 +211,34 @@ func (t *table) shrinkTo(widths []int, keep []bool) []bool {
 			continue
 		}
 		floor := max(s.min, t.widestTail(s.col)+2)
+		if soft {
+			if s.soft <= 0 {
+				continue
+			}
+			floor = max(floor, s.soft)
+		}
 		if widths[s.col] <= floor {
 			continue
 		}
 		widths[s.col] = max(widths[s.col]-over, floor)
 		cut[s.col] = true
 	}
-	return cut
+}
+
+// regrow gives the room a row has left under maxWidth back to the shrink
+// columns that were cut, each up to its full width, in shrink order.
+func (t *table) regrow(widths, full []int, keep, cut []bool) {
+	for _, s := range t.shrink {
+		slack := t.maxWidth - t.width(widths, keep)
+		if slack <= 0 {
+			return
+		}
+		if s.col < 0 || s.col >= len(widths) || !keep[s.col] || !cut[s.col] {
+			continue
+		}
+		widths[s.col] = min(widths[s.col]+slack, full[s.col])
+		cut[s.col] = widths[s.col] < full[s.col]
+	}
 }
 
 // widestTail is the widest tail set in column c, or zero.
