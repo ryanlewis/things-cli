@@ -264,17 +264,17 @@ func hang(prefix, s string, width int) string {
 	indent := lipgloss.Width(prefix)
 	if limit := width - indent; limit >= 1 {
 		// The wrap always breaks after a hyphen, which would split a URL or
-		// a hyphenated word that fits whole on the next line. A non-breaking
-		// hyphen is the same width, so it stands in while wrapping, unless
-		// the text already has one that has to come back out as itself.
-		const nbHyphen = "‑"
-		protect := !strings.Contains(s, nbHyphen)
-		if protect {
-			s = strings.ReplaceAll(s, "-", nbHyphen)
+		// a hyphenated word that fits whole on the next line. A private-use
+		// rune the text does not already contain is the same width and never
+		// a breakpoint, so it stands in for each hyphen while wrapping and
+		// every other byte of the text comes back out as it went in.
+		stand, ok := unusedRune(s)
+		if ok {
+			s = strings.ReplaceAll(s, "-", stand)
 		}
 		s = lipgloss.Wrap(s, limit, "")
-		if protect {
-			s = strings.ReplaceAll(s, nbHyphen, "-")
+		if ok {
+			s = strings.ReplaceAll(s, stand, "-")
 		}
 	}
 	lines := strings.Split(s, "\n")
@@ -290,6 +290,18 @@ func hang(prefix, s string, width int) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// unusedRune returns a rune from Unicode's private use area that s does not
+// contain, for hang to stand in for a hyphen. ok is false only if s holds
+// every one of them.
+func unusedRune(s string) (string, bool) {
+	for r := rune(0xE000); r <= 0xF8FF; r++ {
+		if !strings.ContainsRune(s, r) {
+			return string(r), true
+		}
+	}
+	return "", false
 }
 
 func printProjects(w io.Writer, projects []model.Project) error {

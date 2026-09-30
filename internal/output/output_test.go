@@ -598,3 +598,15 @@ func TestPrintTaskDetail_NoWrapWhenNotATerminal(t *testing.T) {
 		t.Errorf("unwrapped detail:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+// The hyphen stand-in used while wrapping never reaches the output: every '-'
+// prints as '-', and a U+2011 the user typed prints as itself. A hyphenated
+// URL in the same text still moves whole to the next line, so copying it out
+// of `things show` gives back its original bytes.
+func TestHang_HyphensComeBackAsWritten(t *testing.T) {
+	got := hang("  ", "Typed non\u2011break, see https://ex-ample.com/docs-page ok", 40)
+	want := "  Typed non\u2011break, see\n  https://ex-ample.com/docs-page ok\n"
+	if got != want {
+		t.Errorf("hang:\ngot  %q\nwant %q", got, want)
+	}
+}
