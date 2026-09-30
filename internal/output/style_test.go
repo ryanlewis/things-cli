@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -340,6 +342,42 @@ func TestStyledCompactTags(t *testing.T) {
 		}
 		if tagStyle.Render(tc.want) != got {
 			t.Errorf("styledCompactTags(%q) = %q, not styled like styledTags", tc.tags, got)
+		}
+	}
+}
+
+// The first tag is cut by display width, never mid-character: a tag of wide
+// runes or emoji stops at a whole character within 15 columns, and the style
+// wraps the cut text whole, so none is left open.
+func TestStyledCompactTags_WideRunes(t *testing.T) {
+	if err := SetColorMode("always"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = SetColorMode("never") })
+
+	for _, first := range []string{
+		"東京出張の準備と予約確認",                // 2 columns each: 7 fit beside the ellipsis
+		"🏷️🏷️🏷️🏷️🏷️🏷️🏷️🏷️🏷️🏷️",        // emoji with a variation selector
+		"👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻", // ZWJ sequences, one grapheme each
+		"abc東京出張の準備と予約",               // an odd column left over before a wide rune
+	} {
+		got := styledCompactTags([]string{first, "b"})
+		plain := ansi.Strip(got)
+		if !utf8.ValidString(got) {
+			t.Errorf("%q: invalid UTF-8 in %q", first, got)
+		}
+		cut := strings.TrimSuffix(strings.TrimPrefix(plain, "["), " +1]")
+		if w := lipgloss.Width(cut); w > compactTagWidth {
+			t.Errorf("%q: first tag %q is %d wide, over %d", first, cut, w, compactTagWidth)
+		}
+		if !strings.HasPrefix(first, strings.TrimSuffix(cut, "…")) {
+			t.Errorf("%q: cut %q is not a whole-character prefix", first, cut)
+		}
+		if got != tagStyle.Render(plain) {
+			t.Errorf("%q: %q is not the plain text styled whole", first, got)
+		}
+		if !strings.HasSuffix(got, "\x1b[m") {
+			t.Errorf("%q: %q does not end with a reset", first, got)
 		}
 	}
 }

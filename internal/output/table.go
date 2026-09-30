@@ -233,7 +233,8 @@ func (t *table) widths() []int {
 //  1. dropFirst gives up one column at a time;
 //  2. shrink columns give way to their soft minimum;
 //  3. dropOrder columns switch to their compact forms, one at a time;
-//  4. dropOrder gives up one column at a time;
+//  4. dropOrder gives up one column at a time, and a column step 3 shortened
+//     goes back to its full form if a drop made room for it;
 //  5. any width a compact form or a drop freed beyond the overrun goes back
 //     to the columns the soft pass cut;
 //  6. shrink columns give way to their hard minimum.
@@ -256,7 +257,13 @@ func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 	t.drop(widths, keep, compact, t.dropFirst)
 	t.shrinkTo(widths, keep, cut, true)
 	compacted := t.compactTier(widths, keep, compact, t.dropOrder)
-	if t.drop(widths, keep, compact, t.dropOrder) || compacted {
+	dropped := t.drop(widths, keep, compact, t.dropOrder)
+	if dropped {
+		// A drop can free enough for a column the compact tier shortened to
+		// go back to its full form.
+		t.expand(widths, full, keep, compact, t.dropOrder)
+	}
+	if compacted || dropped {
 		// A compact form or a drop can free more than the row was over by:
 		// hand the rest back to the columns the soft pass cut, in the order
 		// they gave it up.
@@ -285,6 +292,26 @@ func (t *table) compactTier(widths []int, keep, compact []bool, order []int) boo
 		}
 	}
 	return freed
+}
+
+// expand gives the kept columns the compact tier shortened their full form
+// back, where the row still fits with it, going through order from its end:
+// the column that would have been dropped last is the one most worth having
+// whole.
+func (t *table) expand(widths, full []int, keep, compact []bool, order []int) {
+	for i := len(order) - 1; i >= 0; i-- {
+		c := order[i]
+		if c < 0 || c >= len(keep) || !keep[c] || !compact[c] {
+			continue
+		}
+		short := widths[c]
+		widths[c] = full[c]
+		if t.fits(widths, keep) {
+			compact[c] = false
+			continue
+		}
+		widths[c] = short
+	}
 }
 
 // drop goes through the columns in order until the kept columns fit,

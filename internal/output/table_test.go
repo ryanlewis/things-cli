@@ -351,7 +351,8 @@ func TestTableCompactBeforeDrop(t *testing.T) {
 // Every dropOrder column with a compact form switches to it before any
 // dropOrder column is dropped: at 26 the tags survive in their short form
 // beside a short date, where dropping as each column's turn came would have
-// given up the tags to keep the full date.
+// given up the tags to keep the full date. When the tags go anyway, the date
+// takes its full form back if that fits.
 func TestTableCompactTierBeforeDrops(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -361,7 +362,8 @@ func TestTableCompactTierBeforeDrops(t *testing.T) {
 		{"all full", 36, "1.  title  [alpha, beta]  2026-10-02"},
 		{"tags compact", 33, "1.  title  [alpha +1]  2026-10-02"},
 		{"both compact", 26, "1.  title  [alpha +1]  Fri"},
-		{"tags dropped", 25, "1.  title  Fri"},
+		{"tags dropped, date whole again", 25, "1.  title  2026-10-02"},
+		{"tags dropped, date still short", 20, "1.  title  Fri"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
