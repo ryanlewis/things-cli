@@ -10,15 +10,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
 const (
-	updateCask      = "ryanlewis/tap/things"
-	updateModule    = "github.com/ryanlewis/things-cli/cmd/things"
-	updateScriptURL = "https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh"
+	updateCask   = "ryanlewis/tap/things"
+	updateModule = "github.com/ryanlewis/things-cli/cmd/things"
+	// updateScriptURL takes a git ref: a release tag, or main when there is
+	// no tag to pin to.
+	updateScriptURL = "https://raw.githubusercontent.com/ryanlewis/things-cli/%s/install.sh"
 )
 
 // The seams `things update` reaches the outside world through. Tests swap them
@@ -84,12 +87,9 @@ func planUpdate(exe, ver string, info *debug.BuildInfo, haveInfo bool) (updatePl
 		return updatePlan{method: methodBrew, how: "with Homebrew", args: args, shown: strings.Join(args, " "), current: ver}, nil
 	}
 	if releaseVersion.MatchString(ver) {
-		dir := filepath.Dir(exe)
-		script := "curl -fsSL " + updateScriptURL + " | INSTALL_DIR=" + shellQuote(dir) + " sh"
-		// Without pipefail a failed download feeds sh an empty script, which
-		// exits 0 and reports an update that never happened.
-		args := []string{"sh", "-c", "set -o pipefail; " + script}
-		return updatePlan{method: methodScript, how: "from a release download", dir: dir, args: args, shown: script, current: ver}, nil
+		plan := updatePlan{method: methodScript, how: "from a release download", dir: filepath.Dir(exe), current: ver}
+		plan.pinScript("")
+		return plan, nil
 	}
 	// go install from the module proxy leaves main.version unset, stamps the
 	// module version, and records no VCS revision — a build from a checkout
@@ -103,6 +103,55 @@ func planUpdate(exe, ver string, info *debug.BuildInfo, haveInfo bool) (updatePl
 		return updatePlan{method: methodGo, how: "with go install", args: args, shown: shown, current: strings.TrimPrefix(info.Main.Version, "v")}, nil
 	}
 	return updatePlan{}, fmt.Errorf("%s is a local build (version %s), made with make install or go build, so there is nothing to update it from. Rebuild it from your checkout, or install a release: https://things.rlew.io/install/", exe, ver)
+}
+
+// pinScript points the install.sh command at a release tag: the script comes
+// from that tag and installs that version, so what runs is what the release
+// check found. With no tag it falls back to the script on main, which finds
+// the latest release itself.
+func (p *updatePlan) pinScript(tag string) {
+	ref, version := "main", ""
+	if tag != "" {
+		ref, version = tag, " VERSION="+shellQuote(tag)
+	}
+	p.shown = "curl -fsSL " + fmt.Sprintf(updateScriptURL, ref) + " | INSTALL_DIR=" + shellQuote(p.dir) + version + " sh"
+	// Without pipefail a failed download feeds sh an empty script, which
+	// exits 0 and reports an update that never happened.
+	p.args = []string{"sh", "-c", "set -o pipefail; " + p.shown}
+}
+
+// newerThan reports whether version a is ahead of b. Only MAJOR.MINOR.PATCH
+// is compared, so a prerelease suffix is ignored: 1.0.0-rc1 orders as 1.0.0.
+// ok is false when either side does not start with three numbers.
+func newerThan(a, b string) (newer, ok bool) {
+	ca, oka := versionCore(a)
+	cb, okb := versionCore(b)
+	if !oka || !okb {
+		return false, false
+	}
+	for i := range ca {
+		if ca[i] != cb[i] {
+			return ca[i] > cb[i], true
+		}
+	}
+	return false, true
+}
+
+func versionCore(v string) (core [3]int, ok bool) {
+	v, _, _ = strings.Cut(strings.TrimPrefix(v, "v"), "-")
+	v, _, _ = strings.Cut(v, "+")
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return core, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return core, false
+		}
+		core[i] = n
+	}
+	return core, true
 }
 
 func isModuleRelease(info *debug.BuildInfo) bool {
@@ -129,18 +178,27 @@ func (c *UpdateCmd) Run(d *Deps) error {
 	}
 	fmt.Fprintf(d.Stdout, "%s was installed %s.\n", exe, plan.how)
 
+	tag, err := latestReleaseTag()
+	latest := strings.TrimPrefix(tag, "v")
+	if err == nil {
+		if latest == plan.current {
+			fmt.Fprintf(d.Stdout, "things %s is the latest release.\n", plan.current)
+			return nil
+		}
+		if newer, ok := newerThan(plan.current, latest); ok && newer {
+			fmt.Fprintf(d.Stdout, "things %s is newer than the latest release %s; nothing to do.\n", plan.current, latest)
+			return nil
+		}
+		if plan.method == methodScript {
+			plan.pinScript(tag)
+		}
+	}
+
 	if c.DryRun {
 		fmt.Fprintf(d.Stdout, "Would run: %s\n", plan.shown)
 		if plan.method == methodScript && !dirWritable(plan.dir) {
 			fmt.Fprintf(d.errOut(), "%s is not writable, so `things update` would stop here; run the command above yourself.\n", plan.dir)
 		}
-		return nil
-	}
-
-	latest, err := latestReleaseTag()
-	latest = strings.TrimPrefix(latest, "v")
-	if err == nil && latest == plan.current {
-		fmt.Fprintf(d.Stdout, "things %s is the latest release.\n", plan.current)
 		return nil
 	}
 

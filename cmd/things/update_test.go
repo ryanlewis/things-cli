@@ -70,17 +70,23 @@ func TestUpdateDryRunPerMethod(t *testing.T) {
 			name: "homebrew cask",
 			// A goreleaser build carries its module version too; the Caskroom
 			// path has to win.
-			f:    fakeUpdate{exe: "/opt/homebrew/Caskroom/things/0.9.0/things", version: "0.9.0", info: moduleInfo("v0.9.0", vcsRevision)},
+			f:    fakeUpdate{exe: "/opt/homebrew/Caskroom/things/0.9.0/things", version: "0.9.0", info: moduleInfo("v0.9.0", vcsRevision), latest: "v0.9.1"},
 			want: "Would run: brew upgrade --cask ryanlewis/tap/things\n",
 		},
 		{
 			name: "install.sh or prebuilt",
-			f:    fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.0", info: moduleInfo("v0.9.0", vcsRevision), writable: true},
+			f:    fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.0", info: moduleInfo("v0.9.0", vcsRevision), writable: true, latest: "v0.9.1"},
+			want: "Would run: curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/v0.9.1/install.sh | INSTALL_DIR=/usr/local/bin VERSION=v0.9.1 sh\n",
+		},
+		{
+			name: "install.sh, release check failed",
+			// No tag to pin to: the script on main finds the latest itself.
+			f:    fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.0", writable: true, fetchErr: errors.New("offline")},
 			want: "Would run: curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR=/usr/local/bin sh\n",
 		},
 		{
 			name: "go install",
-			f:    fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0")},
+			f:    fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), latest: "v0.9.1"},
 			want: "Would run: GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@latest\n",
 		},
 	}
@@ -142,7 +148,7 @@ func TestUpdateScriptTargetsTheBinarysDirectory(t *testing.T) {
 	if _, _, err := f.run(t, false); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := "sh -c set -o pipefail; curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR='/Users/me/my bin' sh"
+	want := "sh -c set -o pipefail; curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/v0.9.0/install.sh | INSTALL_DIR='/Users/me/my bin' VERSION=v0.9.0 sh"
 	if len(f.ran) != 1 || strings.Join(f.ran[0], " ") != want {
 		t.Errorf("ran %v, want %q", f.ran, want)
 	}
@@ -171,6 +177,72 @@ func TestUpdateAlreadyLatest(t *testing.T) {
 	}
 }
 
+func TestUpdateNeverDowngrades(t *testing.T) {
+	cases := map[string]fakeUpdate{
+		"release binary":  {exe: "/usr/local/bin/things", version: "0.9.98", latest: "v0.9.0", writable: true},
+		"go install":      {exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.10.0"), latest: "v0.9.0"},
+		"prerelease core": {exe: "/opt/homebrew/Caskroom/things/1.0.0-rc1/things", version: "1.0.0-rc1", latest: "v0.9.0"},
+	}
+	for name, f := range cases {
+		t.Run(name, func(t *testing.T) {
+			for _, dryRun := range []bool{false, true} {
+				f.ran = nil
+				out, _, err := f.run(t, dryRun)
+				if err != nil {
+					t.Fatalf("Run(dryRun=%v): %v", dryRun, err)
+				}
+				if !strings.Contains(out, "is newer than the latest release 0.9.0; nothing to do.") || len(f.ran) != 0 || strings.Contains(out, "Would run") {
+					t.Errorf("dryRun=%v: stdout %q, ran %v; want newer and nothing run", dryRun, out, f.ran)
+				}
+			}
+		})
+	}
+}
+
+func TestUpdateProceedsWhenNotNewer(t *testing.T) {
+	// A prerelease orders as its core, so 1.0.0-rc1 moves on to 1.0.0. A
+	// version that does not parse keeps the old behaviour and updates.
+	cases := map[string]fakeUpdate{
+		"prerelease to its release": {exe: "/opt/homebrew/Caskroom/things/1.0.0-rc1/things", version: "1.0.0-rc1", latest: "v1.0.0"},
+		"latest does not parse":     {exe: "/opt/homebrew/Caskroom/things/0.9.0/things", version: "0.9.0", latest: "nightly"},
+	}
+	for name, f := range cases {
+		t.Run(name, func(t *testing.T) {
+			out, _, err := f.run(t, false)
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if !strings.Contains(out, "Updating things") || len(f.ran) != 1 {
+				t.Errorf("stdout %q, ran %v; want an update", out, f.ran)
+			}
+		})
+	}
+}
+
+func TestNewerThan(t *testing.T) {
+	cases := []struct {
+		a, b      string
+		newer, ok bool
+	}{
+		{"0.9.98", "0.9.0", true, true},
+		{"0.10.0", "v0.9.9", true, true},
+		{"1.0.0", "0.99.99", true, true},
+		{"0.9.0", "0.9.0", false, true},
+		{"0.8.9", "0.9.0", false, true},
+		{"1.0.0-rc1", "1.0.0", false, true},
+		{"1.0.0", "1.0.0-rc1", false, true},
+		{"0.9.1-0.20260930000000-abcdef", "0.9.0", true, true},
+		{"0.9", "0.9.0", false, false},
+		{"0.9.0", "nightly", false, false},
+	}
+	for _, c := range cases {
+		newer, ok := newerThan(c.a, c.b)
+		if newer != c.newer || ok != c.ok {
+			t.Errorf("newerThan(%q, %q) = %v, %v; want %v, %v", c.a, c.b, newer, ok, c.newer, c.ok)
+		}
+	}
+}
+
 func TestUpdateCarriesOnWhenTheCheckFails(t *testing.T) {
 	f := fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), fetchErr: errors.New("offline")}
 	_, stderr, err := f.run(t, false)
@@ -190,7 +262,7 @@ func TestUpdateUnwritableDirectory(t *testing.T) {
 	f := fakeUpdate{exe: "/usr/local/bin/things", version: "0.8.0", latest: "v0.9.0"}
 	out, _, err := f.run(t, false)
 	if err == nil || !strings.Contains(err.Error(), "/usr/local/bin is not writable") ||
-		!strings.Contains(err.Error(), "| INSTALL_DIR=/usr/local/bin sh") {
+		!strings.Contains(err.Error(), "| INSTALL_DIR=/usr/local/bin VERSION=v0.9.0 sh") {
 		t.Fatalf("err = %v, want the directory and the command to run", err)
 	}
 	if strings.Contains(out, "Updating") {

@@ -473,9 +473,12 @@ running binary lives and how it was built:
 - A local build (`make install`, `go build`): refuses, because there is
   no release to update it from.
 
-Before updating, it asks GitHub for the latest release and stops if you
-already have it. If GitHub can't be reached, it says so and updates
-anyway. It prints the command before running it.
+Before updating, it asks GitHub for the latest release. It stops if you
+already have it, or if yours is newer (only `MAJOR.MINOR.PATCH` is
+compared, so `1.0.0-rc1` counts as `1.0.0`). The install script is then
+fetched from that release's tag and told to install that version. If
+GitHub can't be reached, it says so and updates anyway, using the script
+on `main`. It prints the command before running it.
 
 ## Configuration
 
