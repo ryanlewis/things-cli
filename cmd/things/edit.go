@@ -96,7 +96,24 @@ func (c *EditCmd) Run(d *Deps) error {
 			Reveal:           c.Reveal,
 		})
 	}
-	return applyEditStatusWrite(d, database, task, c.Complete, c.Cancel, c.Duplicate, update)
+	return applyEdit(d, database, task, c.changesFields(), c.Complete, c.Cancel, c.Duplicate, update)
+}
+
+// changesFields reports whether the edit sets any attribute besides the status.
+func (c *EditCmd) changesFields() bool {
+	return anySet(c.Title, c.Notes, c.PrependNotes, c.AppendNotes, c.When, c.Deadline,
+		c.Tags, c.AddTags, c.Checklist, c.PrependChecklist, c.AppendChecklist,
+		c.List, c.ListID, c.Heading, c.HeadingID)
+}
+
+// anySet reports whether any of the optional flags was given.
+func anySet(flags ...*string) bool {
+	for _, f := range flags {
+		if f != nil {
+			return true
+		}
+	}
+	return false
 }
 
 type CompleteCmd struct {

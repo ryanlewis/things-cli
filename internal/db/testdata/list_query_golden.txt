@@ -23,7 +23,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -58,7 +59,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -93,7 +95,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -128,7 +131,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -163,7 +167,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -198,7 +203,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -233,7 +239,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -268,7 +275,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -303,7 +311,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -338,7 +347,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -373,7 +383,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -408,7 +419,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -443,7 +455,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -478,7 +491,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -513,7 +527,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -548,7 +563,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -583,7 +599,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -618,7 +635,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -653,7 +671,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -688,7 +707,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -723,7 +743,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -758,7 +779,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -793,7 +815,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -828,7 +851,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -863,7 +887,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -898,7 +923,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -933,7 +959,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -968,7 +995,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1003,7 +1031,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1038,7 +1067,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1073,7 +1103,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1108,7 +1139,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1143,7 +1175,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1178,7 +1211,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1213,7 +1247,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1248,7 +1283,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1283,7 +1319,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1318,7 +1355,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1353,7 +1391,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1388,7 +1427,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1423,7 +1463,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1458,7 +1499,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1493,7 +1535,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1528,7 +1571,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1563,7 +1607,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1598,7 +1643,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1633,7 +1679,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1668,7 +1715,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1703,7 +1751,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1738,7 +1787,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1773,7 +1823,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1808,7 +1859,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1843,7 +1895,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1878,7 +1931,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1913,7 +1967,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1948,7 +2003,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -1983,7 +2039,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2018,7 +2075,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2053,7 +2111,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2088,7 +2147,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2123,7 +2183,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2158,7 +2219,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2193,7 +2255,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2228,7 +2291,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2263,7 +2327,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2298,7 +2363,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2333,7 +2399,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2368,7 +2435,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2403,7 +2471,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2438,7 +2507,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2473,7 +2543,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2508,7 +2579,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2543,7 +2615,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2578,7 +2651,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2613,7 +2687,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2648,7 +2723,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2683,7 +2759,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2718,7 +2795,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2753,7 +2831,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2788,7 +2867,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2823,7 +2903,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2858,7 +2939,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2893,7 +2975,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2928,7 +3011,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2963,7 +3047,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -2998,7 +3083,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3033,7 +3119,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3068,7 +3155,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3103,7 +3191,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3138,7 +3227,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3173,7 +3263,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3208,7 +3299,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3243,7 +3335,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3278,7 +3371,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3313,7 +3407,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3348,7 +3443,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3383,7 +3479,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3418,7 +3515,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3453,7 +3551,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3488,7 +3587,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3523,7 +3623,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3558,7 +3659,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3593,7 +3695,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3628,7 +3731,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3663,7 +3767,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3698,7 +3803,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3733,7 +3839,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3768,7 +3875,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3803,7 +3911,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3838,7 +3947,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3873,7 +3983,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3908,7 +4019,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3943,7 +4055,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -3978,7 +4091,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4013,7 +4127,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4048,7 +4163,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4083,7 +4199,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4118,7 +4235,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4153,7 +4271,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4188,7 +4307,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4223,7 +4343,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4258,7 +4379,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4293,7 +4415,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4328,7 +4451,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4363,7 +4487,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4398,7 +4523,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4433,7 +4559,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4468,7 +4595,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4503,7 +4631,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4538,7 +4667,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4573,7 +4703,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4608,7 +4739,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4643,7 +4775,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4678,7 +4811,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4713,7 +4847,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4748,7 +4883,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4783,7 +4919,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4818,7 +4955,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4853,7 +4991,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4888,7 +5027,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4923,7 +5063,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4958,7 +5099,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -4993,7 +5135,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5028,7 +5171,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5063,7 +5207,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5098,7 +5243,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5133,7 +5279,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5168,7 +5315,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5203,7 +5351,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5238,7 +5387,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5273,7 +5423,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5308,7 +5459,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5343,7 +5495,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5378,7 +5531,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5413,7 +5567,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5448,7 +5603,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5483,7 +5639,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5518,7 +5675,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5553,7 +5711,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5588,7 +5747,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5623,7 +5783,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5658,7 +5819,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5693,7 +5855,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5728,7 +5891,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5763,7 +5927,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5798,7 +5963,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5833,7 +5999,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5868,7 +6035,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5903,7 +6071,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5938,7 +6107,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -5973,7 +6143,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6008,7 +6179,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6043,7 +6215,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6078,7 +6251,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6113,7 +6287,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6148,7 +6323,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6183,7 +6359,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6218,7 +6395,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6253,7 +6431,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6288,7 +6467,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6323,7 +6503,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6358,7 +6539,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6393,7 +6575,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6428,7 +6611,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6463,7 +6647,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6498,7 +6683,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6533,7 +6719,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6568,7 +6755,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6603,7 +6791,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6638,7 +6827,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6673,7 +6863,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6708,7 +6899,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6743,7 +6935,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6778,7 +6971,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6813,7 +7007,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6848,7 +7043,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6883,7 +7079,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6918,7 +7115,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6953,7 +7151,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)
@@ -6988,7 +7187,8 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END
+	CASE WHEN t."rt1_recurrenceRule" IS NOT NULL THEN 1 ELSE 0 END,
+	t.userModificationDate
 FROM TMTask t
 LEFT JOIN TMTask h ON t.heading = h.uuid
 LEFT JOIN TMTask p ON p.uuid = COALESCE(t.project, h.project)

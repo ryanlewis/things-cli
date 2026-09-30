@@ -271,6 +271,37 @@ things edit 3 --append-checklist "Almond too"
 things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
 ```
 
+Things reports nothing back from an edit, so the CLI waits for the item's
+modification date to move (and, with `--complete` or `--cancel`, for the
+status to change), then prints the item the way `things show` does — the
+same object under `--json`:
+
+```sh
+things edit 3 --title "Buy oat milk"
+# Title:    Buy oat milk
+# UUID:     8QK2xgV1m3C9p7RfT4hLwe
+# Status:   Open
+# …
+```
+
+If the item never changes within ten seconds, `edit` exits non-zero with
+`edit did not apply: …` — Things accepted the command and dropped it, so
+check that Things3 is running. An edit that sets every field to the value
+it already has may not register as a change and reports the same error.
+An edit with nothing to change (no field flags, or `--complete` on a task
+that is already complete) prints the item without waiting.
+
+Two cases are not read back, and say so instead of printing the item:
+
+- `--no-verify` (or `no_verify = true`): `Sent to Things, not confirmed
+  (--no-verify): "Buy oat milk" (…)`.
+- `--duplicate`: Things applies the edit to a new copy whose UUID the CLI
+  cannot learn, and leaves the original as it was.
+
+Under `--json` both print `{"uuid": …, "title": …, "confirmed": false,
+"reason": "no-verify"}` (or `"duplicate"`), so a script can tell an
+unconfirmed edit from a confirmed one.
+
 `edit` is for tasks only. A reference that resolves to a project is refused
 before anything is written, because `things:///update` cannot address one —
 use `things project edit` instead. `project edit` refuses a task the same

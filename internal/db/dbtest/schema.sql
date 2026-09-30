@@ -6,6 +6,7 @@ CREATE TABLE TMTask (
     status                          INTEGER,
     stopDate                        REAL,
     creationDate                    REAL,
+    userModificationDate            REAL,
     trashed                         INTEGER,
     start                           INTEGER,
     startDate                       INTEGER,

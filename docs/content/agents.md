@@ -365,6 +365,11 @@ instead of assuming:
   `import` that sets a status, the CLI re-reads the item and exits non-zero
   if the status never changed. A non-zero exit means "still open", not
   "done".
+- **Edits are read back.** `edit` and `project edit` wait for Things to
+  record the change, then print the item as `things show` would. Exit 0
+  with the item printed is the confirmation, so the agent does not need a
+  second `things show`. With `--no-verify` or `--duplicate` nothing is
+  read back and the output says the edit is unconfirmed.
 - **Tags must already exist.** Things silently drops tags it does not know.
   The CLI warns before writing; `--create-tags` creates the missing ones
   first and `--strict-tags` refuses to write instead.

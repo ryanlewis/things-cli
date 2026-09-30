@@ -7,6 +7,7 @@ import (
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/output"
 )
 
 // repeatingDocsURL documents which attributes Things refuses to update on
@@ -64,21 +65,43 @@ func restrictedEdits(when, deadline *string, complete, cancel, duplicate bool) [
 }
 
 // statusWant pairs an item with the status a write asked Things to move it to.
+//
+// edit marks the read-back for an `edit` / `project edit` write, which also
+// waits for the item's modification date to move past since. Things bumps it
+// on every write it applies, so it covers every field an edit can change —
+// comparing fields one by one could not, since `--when "next friday"` or
+// `--append-notes` give nothing exact to compare against. since is nil when
+// the item had no modification date before the write; any date then counts.
 type statusWant struct {
 	uuid  string
 	title string
 	want  model.Status
+	edit  bool
+	since *time.Time
+}
+
+// landed reports whether current shows the change w asked for.
+func (w statusWant) landed(current *model.Task) bool {
+	if current.Status != w.want {
+		return false
+	}
+	if !w.edit {
+		return true
+	}
+	return current.ModificationDate != nil && (w.since == nil || current.ModificationDate.After(*w.since))
 }
 
 // statusResult is the outcome for one item of a batch read-back. err is nil
 // when the change landed. got is the status actually seen on the final read,
 // which exists only when the item was read successfully and simply never
 // changed — observed says whether it does, since a read error or a deleted row
-// leaves nothing to report.
+// leaves nothing to report. task is the item as last read once the change
+// landed, so a caller can print it without a second query.
 type statusResult struct {
 	err      error
 	got      model.Status
 	observed bool
+	task     *model.Task
 }
 
 // verifyStatuses re-reads each item until its status matches the one requested,
@@ -129,7 +152,18 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 			case current == nil:
 				results[i].err = fmt.Errorf("verifying status change: %s no longer exists in the Things database", w.uuid)
 				continue
-			case current.Status == w.want:
+			case w.landed(current):
+				results[i].task = current
+				continue
+			case expired && current.Status == w.want:
+				// Only an edit can get here: the status is right but the
+				// modification date never moved.
+				results[i] = statusResult{
+					err: fmt.Errorf("edit did not apply: %q (%s) was not modified within %s. Things accepted the command and then dropped it silently — check that Things3 is running, or make the change in the app. An edit that sets every field to the value it already has may not register as a change",
+						w.title, w.uuid, budget),
+					got:      current.Status,
+					observed: true,
+				}
 				continue
 			case expired:
 				results[i] = statusResult{
@@ -173,20 +207,69 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 	return verifyStatus(database, task, want)
 }
 
-// applyEditStatusWrite runs an `edit` / `project edit` update and, when it
-// asked for a status transition, confirms the transition landed. A --duplicate
-// edit is exempt: Things applies the attributes to the copy, so the original's
-// status is expected to stay put.
-func applyEditStatusWrite(d *Deps, database *db.DB, task *model.Task, complete, cancel, duplicate bool, update func() error) error {
-	want := model.StatusOpen
+// applyEdit runs an `edit` / `project edit` update, waits for it to land, and
+// prints the item as Things now holds it — the same output `things show`
+// gives, so a caller has its confirmation without a second command. changed
+// says whether the edit asked for anything beyond the status; complete and
+// cancel ask for a status transition.
+//
+// The read-back is skipped, and the output says the edit is unconfirmed, in
+// two cases: --no-verify, and --duplicate, where Things applies the edit to a
+// new copy whose uuid the CLI never learns while the original is expected to
+// stay as it was. An edit that asks for nothing new (no field flags, and any
+// status it names is already the item's) has nothing to wait for; the item
+// is printed as it stands.
+func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, cancel, duplicate bool, update func() error) error {
+	if err := update(); err != nil {
+		return err
+	}
+	switch {
+	case duplicate:
+		return printUnconfirmedEdit(d, task, "duplicate", "Sent to Things as a duplicate; the copy is not read back")
+	case d.NoVerify:
+		return printUnconfirmedEdit(d, task, "no-verify", "Sent to Things, not confirmed (--no-verify)")
+	}
+
+	want := task.Status
 	switch {
 	case complete:
 		want = model.StatusCompleted
 	case cancel:
 		want = model.StatusCancelled
 	}
-	if want == model.StatusOpen || duplicate {
-		return update()
+	current := task
+	if changed || want != task.Status {
+		res := verifyStatuses(database, []statusWant{{
+			uuid: task.UUID, title: task.Title, want: want, edit: true, since: task.ModificationDate,
+		}}, verifyTimeout)[0]
+		if res.err != nil {
+			return res.err
+		}
+		current = res.task
 	}
-	return applyStatusWrite(d, database, task, want, update)
+	items, err := database.GetChecklistItems(current.UUID)
+	if err != nil {
+		return err
+	}
+	return output.PrintTaskWithChecklist(d.Stdout, current, items, d.JSON)
+}
+
+// unconfirmedEdit is the --json output for an edit that was sent but not read
+// back. confirmed is always false, so a caller testing it cannot mistake this
+// for the item object a confirmed edit prints.
+type unconfirmedEdit struct {
+	UUID      string `json:"uuid"`
+	Title     string `json:"title"`
+	Confirmed bool   `json:"confirmed"`
+	Reason    string `json:"reason"`
+}
+
+// printUnconfirmedEdit says an edit went out without being read back, so exit
+// 0 with nothing printed is never the answer for a write nobody checked.
+func printUnconfirmedEdit(d *Deps, task *model.Task, reason, msg string) error {
+	if d.JSON {
+		return output.Print(d.Stdout, unconfirmedEdit{UUID: task.UUID, Title: task.Title, Reason: reason}, true)
+	}
+	_, err := fmt.Fprintf(d.Stdout, "%s: %q (%s)\n", msg, task.Title, task.UUID)
+	return err
 }

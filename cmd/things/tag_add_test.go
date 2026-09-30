@@ -40,17 +40,22 @@ func seedTagDB(t *testing.T) (*db.DB, *sql.DB) {
 
 // stubExecCreatingTags records every exec call. When sqlDB is non-nil it also
 // inserts the tag named by a tag-creating AppleScript, as Things would, so the
-// read-back finds it.
+// read-back finds it, and treats any other call as an applied write by
+// bumping every item's modification date, so an edit's read-back passes.
 func stubExecCreatingTags(t *testing.T, sqlDB *sql.DB) *[][]string {
 	t.Helper()
 	var calls [][]string
 	prev := things.SetExecCommandForTest(func(name string, args ...string) *exec.Cmd {
 		calls = append(calls, append([]string{name}, args...))
-		if sqlDB == nil || len(args) != 2 || args[0] != "-e" {
+		if sqlDB == nil {
 			return exec.Command("true")
 		}
-		title := tagNameFromScript(args[1])
+		title := ""
+		if len(args) == 2 && args[0] == "-e" {
+			title = tagNameFromScript(args[1])
+		}
 		if title == "" {
+			bumpModificationDates(t, sqlDB)
 			return exec.Command("true")
 		}
 		if _, err := sqlDB.Exec(
