@@ -76,9 +76,9 @@ func (t *table) cell(i, c int) string {
 	return cell + t.tails[[2]int{i, c}]
 }
 
-// cut shortens row i's cell in column c to width, keeping its tail whole.
-func (t *table) cut(i, c, width int) string {
-	cell := t.cell(i, c)
+// cut shortens cell, row i's in column c as cell returns it, to width,
+// keeping its tail whole.
+func (t *table) cut(i, c int, cell string, width int) string {
 	if lipgloss.Width(cell) <= width {
 		return cell
 	}
@@ -109,7 +109,7 @@ func (t *table) lines() []string {
 			}
 			cell := t.cell(i, c)
 			if cut[c] {
-				cell = t.cut(i, c, width)
+				cell = t.cut(i, c, cell, width)
 			}
 			if c == last {
 				cols = append(cols, cell)
