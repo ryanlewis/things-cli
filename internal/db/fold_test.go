@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
@@ -99,6 +100,22 @@ func TestNamesRepeatingProjectIgnoresNonASCIICase(t *testing.T) {
 	}
 	if !got {
 		t.Error("NamesRepeatingProject(ärger REVIEW) = false, want true")
+	}
+}
+
+// FoldCase equates exactly what strings.EqualFold does. ToLower(ToUpper(s))
+// also sent the Turkish "ı" and "İ" to "i", so a title lookup for "kirmizi"
+// could resolve to a task titled "kırmızı".
+func TestFoldCaseAgreesWithEqualFold(t *testing.T) {
+	for _, p := range [][2]string{
+		{"Work", "wORK"}, {"Ärger", "äRGER"}, {"ΚΟΣ", "κος"}, {"σ", "ς"},
+		{"ß", "ẞ"}, {"K", "K"}, {"s", "ſ"}, {"µ", "μ"},
+		{"ı", "i"}, {"ı", "I"}, {"İ", "i"}, {"İ", "I"}, {"ß", "ss"}, {"a", "b"},
+	} {
+		want := strings.EqualFold(p[0], p[1])
+		if got := FoldCase(p[0]) == FoldCase(p[1]); got != want {
+			t.Errorf("FoldCase(%q) == FoldCase(%q) is %v, EqualFold says %v", p[0], p[1], got, want)
+		}
 	}
 }
 

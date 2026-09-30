@@ -4,6 +4,7 @@ import (
 	"maps"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -152,15 +153,15 @@ func (f coveredFields) unchanged(task *model.Task) bool {
 		return false
 	}
 	// Tags compare the way Things matches them: case-insensitively, after
-	// trimming (foldTagName).
+	// trimming (db.FoldTag).
 	have := make(map[string]struct{}, len(task.Tags))
 	for _, t := range task.Tags {
-		have[foldTagName(t)] = struct{}{}
+		have[db.FoldTag(t)] = struct{}{}
 	}
 	if f.tags != nil {
 		want := make(map[string]struct{})
 		for _, t := range things.SplitTags(*f.tags) {
-			want[foldTagName(t)] = struct{}{}
+			want[db.FoldTag(t)] = struct{}{}
 		}
 		if !maps.Equal(want, have) {
 			return false
@@ -168,7 +169,7 @@ func (f coveredFields) unchanged(task *model.Task) bool {
 	}
 	if f.addTags != nil {
 		for _, t := range things.SplitTags(*f.addTags) {
-			if _, ok := have[foldTagName(t)]; !ok {
+			if _, ok := have[db.FoldTag(t)]; !ok {
 				return false
 			}
 		}

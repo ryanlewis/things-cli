@@ -246,11 +246,11 @@ func (c *TagAddCmd) Run(d *Deps) error {
 	}
 	toCreate := make(map[string]struct{}, len(missing))
 	for _, n := range missing {
-		toCreate[foldTagName(n)] = struct{}{}
+		toCreate[db.FoldTag(n)] = struct{}{}
 	}
 	skipped := []string{}
 	for _, n := range names {
-		if _, ok := toCreate[foldTagName(n)]; !ok {
+		if _, ok := toCreate[db.FoldTag(n)]; !ok {
 			skipped = append(skipped, n)
 		}
 	}
@@ -320,7 +320,7 @@ func dedupeTagNames(names []string) []string {
 		if n == "" {
 			continue
 		}
-		key := foldTagName(n)
+		key := db.FoldTag(n)
 		if _, dup := seen[key]; dup {
 			continue
 		}
@@ -328,8 +328,4 @@ func dedupeTagNames(names []string) []string {
 		out = append(out, n)
 	}
 	return out
-}
-
-func foldTagName(s string) string {
-	return db.FoldCase(strings.TrimSpace(s))
 }
