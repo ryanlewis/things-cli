@@ -306,7 +306,7 @@ func verifyTagsCreated(database *db.DB, names []string, budget time.Duration) er
 			return fmt.Errorf("tag creation did not apply: %s still missing from the Things database after %s. Things accepted the command and then dropped it silently — check that Things3 is running",
 				strings.Join(missing, ", "), budget)
 		}
-		verifySleep(verifyInterval)
+		verifyPause(deadline)
 	}
 }
 
