@@ -100,13 +100,12 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// When a row will not fit, checklist progress goes first, since
 		// `things show` has the checklist itself. The start date beside a
 		// deadline is next: the date column still carries the deadline, as it
-		// does on a narrow terminal. Then the tags, then the date: a row still
-		// says what it is and when it is due for as long as it can.
-		dropOrder: []int{colChecklist, colStart, colTags, colDate},
-		// A list with no task carrying both dates prints as if the start
-		// column were not there, and one with no checklist as if the
-		// checklist column were not.
-		omitEmpty: []int{colChecklist, colStart},
+		// does on a narrow terminal. Both go before any title is cut.
+		dropFirst: []int{colChecklist, colStart},
+		// Then, once titles are at their soft minimum, the tags, then the
+		// date: a row still says what it is and when it is due for as long as
+		// it can.
+		dropOrder: []int{colTags, colDate},
 	}
 	// A group header is cut to fit behind its four-space indent, and, as with
 	// titles, only on a terminal: piped output keeps every header whole.
@@ -356,8 +355,6 @@ func printProjects(w io.Writer, projects []model.Project) error {
 		gap:       columnGap,
 		maxWidth:  fitWidth(),
 		dropOrder: []int{colProjectTags, colProjectArea},
-		// A list with no tagged project gives the tags column no gap.
-		omitEmpty: []int{colProjectTags},
 		shrink: []shrinkCol{
 			{col: colProjectTitle, min: 10, soft: 30},
 			{col: colProjectArea, min: 20, soft: 20},

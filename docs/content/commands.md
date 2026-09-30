@@ -167,11 +167,11 @@ done out of all of them (`✓ 2/5`, where done means completed or
 cancelled). Things.app shows only a checklist icon on the row, not the
 counts. `things show` lists the items.
 
-Plain task lists fit the terminal width. When a row is too wide, a title
-longer than 40 columns is cut to 40 with `…` first, so one long title
-does not cost every row a column. If the row is still too wide, the
-checklist progress goes, then that extra start date, then the tags, then
-the date, and then the title is cut further, down to 10. A project keeps
+Plain task lists fit the terminal width. When a row is too wide, the
+checklist progress goes first, then that extra start date. If the row is
+still too wide, a title longer than 40 columns is cut to 40 with `…`, so
+one long title does not cost every row its tags or date. Then the tags
+go, then the date, and then the title is cut further, down to 10. A project keeps
 its `(project)` marker; the cut comes out of the title before it. Group
 headers are cut to fit too. Titles and headers are cut only on a
 terminal: piped output and `--json` keep them whole.
