@@ -249,6 +249,15 @@ func goldenCases(t *testing.T) []goldenCase {
 		}},
 	}
 
+	// Narrow enough that the date column switches to its compact form
+	// rather than being dropped: today, a weekday, a past date and one later
+	// this year.
+	cases = append(cases, goldenCase{
+		name:  "print/tasks-compact-dates@62",
+		width: 62,
+		write: func(w io.Writer) error { return Print(w, tasks, false) },
+	})
+
 	// A list where some tasks carry a checklist, wide enough for its progress
 	// column, narrow enough that the column is the first to go, and narrower.
 	checklisted := []model.Task{
@@ -267,14 +276,6 @@ func goldenCases(t *testing.T) []goldenCase {
 			ChecklistProgress: &model.ChecklistProgress{Total: 12, Open: 0},
 		},
 	}
-	// Narrow enough that the date column switches to its compact form
-	// rather than being dropped, across every date bucket.
-	cases = append(cases, goldenCase{
-		name:  "print/tasks-compact-dates@62",
-		width: 62,
-		write: func(w io.Writer) error { return Print(w, tasks, false) },
-	})
-
 	// A title long enough to be cut beside its checklist progress, in a list
 	// with no tags: the progress goes before the title gives up anything, and
 	// the empty tags column leaves no gap before the date.

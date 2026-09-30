@@ -195,6 +195,24 @@ func TestStyledDate_Buckets(t *testing.T) {
 	}
 }
 
+// A date three calendar days out is "soon" even when the clocks go back in
+// between, which puts its midnight 73 hours away.
+func TestStyledDate_SoonAcrossClocksBack(t *testing.T) {
+	london, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		t.Skipf("no tz data: %v", err)
+	}
+	prevNow, prevLocal := nowFn, time.Local
+	t.Cleanup(func() { nowFn, time.Local = prevNow, prevLocal })
+	time.Local = london
+	nowFn = func() time.Time { return time.Date(2026, 10, 23, 12, 0, 0, 0, london) }
+
+	d := mustDate(2026, 10, 26)
+	if got, want := styledDate(d, false), dateSoonStyle.Render(d.String()); got != want {
+		t.Errorf("styledDate = %q, want %q", got, want)
+	}
+}
+
 // The compact form reads relative to today, keeps the deadline's "due:" and
 // takes the colour of the full form.
 func TestStyledCompactDate(t *testing.T) {

@@ -35,8 +35,9 @@ type table struct {
 	dropFirst []int
 	// dropOrder names the columns that may be given up when a row does not
 	// fit once the shrink columns are at their soft minimum, in the order
-	// they go — the first named is the first to go. A column whose cells
-	// carry a compact form (see alt) switches to it before it is dropped.
+	// they go — the first named is the first to go. In either list, a column
+	// whose cells carry a compact form (see alt) switches to it before it is
+	// dropped.
 	dropOrder []int
 	// shrink names the columns that may be cut short, with an ellipsis, when
 	// a row does not fit. They give up width in the order named: first, once
@@ -114,22 +115,13 @@ func (t *table) cellAs(i, c int, compact bool) string {
 
 // compactWidth is how wide column c measures in its compact form, and
 // whether any of its cells has one.
-func (t *table) compactWidth(c int) (int, bool) {
-	has := false
-	for k := range t.alts {
-		if k[1] == c {
-			has = true
-			break
-		}
-	}
-	if !has {
-		return 0, false
-	}
-	width := 0
+func (t *table) compactWidth(c int) (width int, has bool) {
 	for i := range t.rows {
+		_, ok := t.alts[[2]int{i, c}]
+		has = has || ok
 		width = max(width, lipgloss.Width(t.cellAs(i, c, true)))
 	}
-	return width, true
+	return width, has
 }
 
 // cut shortens cell, row i's in column c as cell returns it, to width,
@@ -233,14 +225,15 @@ func (t *table) widths() []int {
 	return widths
 }
 
-// fit decides which columns survive the terminal width and which are cut
-// short, narrowing widths in place. A column no row puts anything in takes no
-// space, gap included. Then dropFirst gives up one column at a time, shrink
-// columns give way to their soft minimum, dropOrder gives up one column at a
-// time, and the shrink columns give way to their hard minimum, stopping as
-// soon as the row fits — so a wide terminal keeps everything and a narrow one
-// loses as little as it can, the end of an over-long cell before a column on
-// every row, and a column worth less than that before either.
+// fit decides which columns survive the terminal width, which are cut short
+// and which switch to their compact form, narrowing widths in place. A column
+// no row puts anything in takes no space, gap included. Then dropFirst gives
+// up one column at a time, shrink columns give way to their soft minimum,
+// dropOrder gives up one column at a time, and the shrink columns give way to
+// their hard minimum, stopping as soon as the row fits — so a wide terminal
+// keeps everything and a narrow one loses as little as it can, the end of an
+// over-long cell before a column on every row, and a column worth less than
+// that before either.
 func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 	keep = make([]bool, len(widths))
 	cut = make([]bool, len(widths))
@@ -252,9 +245,9 @@ func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 		return keep, cut, compact
 	}
 	full := slices.Clone(widths)
-	t.drop(widths, keep, t.dropFirst)
+	t.drop(widths, keep, compact, t.dropFirst)
 	t.shrinkTo(widths, keep, cut, true)
-	if t.compactOrDrop(widths, keep, compact) {
+	if t.drop(widths, keep, compact, t.dropOrder) {
 		// A compact form or a drop can free more than the row was over by:
 		// hand the rest back to the columns the soft pass cut, in the order
 		// they gave it up.
@@ -264,45 +257,28 @@ func (t *table) fit(widths []int) (keep, cut, compact []bool) {
 	return keep, cut, compact
 }
 
-// compactOrDrop goes through dropOrder until the kept columns fit, switching
-// each column to its compact form if it has a narrower one and dropping it
+// drop goes through the columns in order until the kept columns fit,
+// switching each to its compact form if it has a narrower one and dropping it
 // only if the row still does not fit. It reports whether it freed any width.
-func (t *table) compactOrDrop(widths []int, keep, compact []bool) bool {
+func (t *table) drop(widths []int, keep, compact []bool, order []int) bool {
 	freed := false
-	for _, c := range t.dropOrder {
+	for _, c := range order {
 		if t.fits(widths, keep) {
 			break
 		}
 		if c < 0 || c >= len(keep) || !keep[c] {
 			continue
 		}
+		freed = true
 		if w, ok := t.compactWidth(c); ok && w < widths[c] {
 			widths[c], compact[c] = w, true
-			freed = true
 			if t.fits(widths, keep) {
 				break
 			}
 		}
 		keep[c] = false
-		freed = true
 	}
 	return freed
-}
-
-// drop gives up the columns in order, one at a time, until the kept columns
-// fit, and reports whether it gave any up.
-func (t *table) drop(widths []int, keep []bool, order []int) bool {
-	dropped := false
-	for _, c := range order {
-		if t.fits(widths, keep) {
-			break
-		}
-		if c >= 0 && c < len(keep) && keep[c] {
-			keep[c] = false
-			dropped = true
-		}
-	}
-	return dropped
 }
 
 // shrinkTo narrows the shrink columns, in place in widths, until the kept
