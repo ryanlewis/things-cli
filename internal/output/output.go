@@ -187,48 +187,57 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 	label := func(s string) string {
 		return padCol(10, labelStyle.Render(s))
 	}
-	width := termWidth()
+	// Only a terminal has a width to fit. Piped output falls back to
+	// termWidth's 120 columns, and wrapping there would add line breaks the
+	// note does not have.
+	width := 0
+	if stdoutIsTerminal() {
+		width = termWidth()
+	}
+	field := func(name, value string) {
+		fmt.Fprint(w, hang(label(name), value, width))
+	}
 
-	fmt.Fprint(w, hang(label("Title:"), t.Title, width))
-	fmt.Fprint(w, hang(label("UUID:"), t.UUID, width))
-	fmt.Fprint(w, hang(label("Status:"), statusText(t.Status), width))
+	field("Title:", t.Title)
+	field("UUID:", t.UUID)
+	field("Status:", statusText(t.Status))
 	// A lookup resolves projects as well as to-dos, and `things repeating`
 	// hands out indexes for project templates, so say when the thing being
 	// shown is a project rather than leaving its detail block reading as a
 	// to-do's. To-do output is unchanged.
 	if isProject(t) {
-		fmt.Fprint(w, hang(label("Type:"), kindWord(t), width))
+		field("Type:", kindWord(t))
 	}
 	if t.ProjectTitle != "" {
-		fmt.Fprint(w, hang(label("Project:"), projectStyle.Render(t.ProjectTitle), width))
+		field("Project:", projectStyle.Render(t.ProjectTitle))
 	}
 	if t.AreaTitle != "" {
-		fmt.Fprint(w, hang(label("Area:"), areaStyle.Render(t.AreaTitle), width))
+		field("Area:", areaStyle.Render(t.AreaTitle))
 	}
 	if t.HeadingTitle != "" {
-		fmt.Fprint(w, hang(label("Heading:"), t.HeadingTitle, width))
+		field("Heading:", t.HeadingTitle)
 	}
 	if len(t.Tags) > 0 {
-		fmt.Fprint(w, hang(label("Tags:"), tagStyle.Render(strings.Join(t.Tags, ", ")), width))
+		field("Tags:", tagStyle.Render(strings.Join(t.Tags, ", ")))
 	}
 	if t.StartDate != nil {
-		fmt.Fprint(w, hang(label("Start:"), styledDate(t.StartDate, false), width))
+		field("Start:", styledDate(t.StartDate, false))
 	}
 	if t.Deadline != nil {
-		fmt.Fprint(w, hang(label("Deadline:"), styledDate(t.Deadline, false), width))
+		field("Deadline:", styledDate(t.Deadline, false))
 	}
 	if t.Repeating {
-		fmt.Fprint(w, hang(label("Repeats:"), "yes (Things blocks status, when and deadline edits)", width))
+		field("Repeats:", "yes (Things blocks status, when and deadline edits)")
 	}
 	// The timestamps arrive in UTC (model.UnixToTime), and the line carries no
 	// zone, so render them in local time like every other date the reader sees.
 	// Printed as UTC, an item closed after midnight in a zone ahead of UTC
 	// reads as stopped the day before.
 	if t.CreationDate != nil {
-		fmt.Fprint(w, hang(label("Created:"), t.CreationDate.Local().Format("2006-01-02 15:04"), width))
+		field("Created:", t.CreationDate.Local().Format("2006-01-02 15:04"))
 	}
 	if t.StopDate != nil {
-		fmt.Fprint(w, hang(label("Stopped:"), t.StopDate.Local().Format("2006-01-02 15:04"), width))
+		field("Stopped:", t.StopDate.Local().Format("2006-01-02 15:04"))
 	}
 	if t.Notes != "" {
 		// The wrap keeps the user's own line breaks and blank lines, so a
@@ -248,23 +257,27 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 // hang renders prefix then s wrapped to fit width, indenting each wrapped
 // line to where s began, so a long value keeps to its column on a narrow
 // terminal instead of running back to column 0. Words break only when one
-// alone is wider than the space left.
+// alone is wider than the space left. A width that leaves no room after the
+// prefix (0 for output that is not a terminal) leaves s unwrapped, though its
+// own line breaks are still indented.
 func hang(prefix, s string, width int) string {
 	indent := lipgloss.Width(prefix)
-	// The wrap always breaks after a hyphen, which would split a URL or a
-	// hyphenated word that fits whole on the next line. A non-breaking hyphen
-	// is the same width, so it stands in while wrapping, unless the text
-	// already has one that has to come back out as itself.
-	const nbHyphen = "‑"
-	protect := !strings.Contains(s, nbHyphen)
-	if protect {
-		s = strings.ReplaceAll(s, "-", nbHyphen)
+	if limit := width - indent; limit >= 1 {
+		// The wrap always breaks after a hyphen, which would split a URL or
+		// a hyphenated word that fits whole on the next line. A non-breaking
+		// hyphen is the same width, so it stands in while wrapping, unless
+		// the text already has one that has to come back out as itself.
+		const nbHyphen = "‑"
+		protect := !strings.Contains(s, nbHyphen)
+		if protect {
+			s = strings.ReplaceAll(s, "-", nbHyphen)
+		}
+		s = lipgloss.Wrap(s, limit, "")
+		if protect {
+			s = strings.ReplaceAll(s, nbHyphen, "-")
+		}
 	}
-	wrapped := lipgloss.Wrap(s, width-indent, "")
-	if protect {
-		wrapped = strings.ReplaceAll(wrapped, nbHyphen, "-")
-	}
-	lines := strings.Split(wrapped, "\n")
+	lines := strings.Split(s, "\n")
 	pad := strings.Repeat(" ", indent)
 	var b strings.Builder
 	for i, line := range lines {
