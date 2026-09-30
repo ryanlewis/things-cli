@@ -10,6 +10,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -189,6 +190,21 @@ func styledTags(tags []string) string {
 		return ""
 	}
 	return tagStyle.Render("[" + strings.Join(tags, ", ") + "]")
+}
+
+// compactTagWidth caps the first tag in styledCompactTags: most tags are a
+// word or two, and a longer one still reads by its start.
+const compactTagWidth = 15
+
+// styledCompactTags is styledTags' short form for a narrow terminal: the first
+// tag, cut to compactTagWidth, and a count of the rest, "[waiting-on-pos… +2]".
+// A single tag has no short form and gets "".
+func styledCompactTags(tags []string) string {
+	if len(tags) < 2 {
+		return ""
+	}
+	first := ansi.Truncate(tags[0], compactTagWidth, "…")
+	return tagStyle.Render(fmt.Sprintf("[%s +%d]", first, len(tags)-1))
 }
 
 // termWidth returns the terminal width, falling back to 120 for non-TTY

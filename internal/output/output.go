@@ -103,9 +103,10 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// deadline is next: the date column still carries the deadline, as it
 		// does on a narrow terminal. Both go before any title is cut.
 		dropFirst: []int{colChecklist, colStart},
-		// Then, once titles are at their soft minimum, the tags, then the
-		// date: a row still says what it is and when it is due for as long as
-		// it can.
+		// Then, once titles are at their soft minimum, the tags and the date
+		// switch to their short forms on a terminal, and only then does the
+		// tags column go, then the date: a row still says what it is and when
+		// it is due for as long as it can.
 		dropOrder: []int{colTags, colDate},
 	}
 	// A group header is cut to fit behind its four-space indent, and, as with
@@ -171,6 +172,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// Only on a terminal: a relative date goes stale in a saved file and
 		// defeats grep, so piped output keeps the full date or none.
 		if tty {
+			tbl.alt(colTags, styledCompactTags(t.Tags))
 			tbl.alt(colDate, compactDate)
 		}
 

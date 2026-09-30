@@ -313,3 +313,33 @@ func TestStyledCompactDate_Boundaries(t *testing.T) {
 		})
 	}
 }
+
+// The short form of a tag list keeps the first tag, cut to a fixed width, and
+// counts the rest. One tag, or none, has no short form.
+func TestStyledCompactTags(t *testing.T) {
+	cases := []struct {
+		tags []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"errands"}, ""},
+		{[]string{"write", "ops"}, "[write +1]"},
+		{[]string{"waiting-on-post-office", "errands", "needs-photo-booth"}, "[waiting-on-pos… +2]"},
+		{[]string{"exactly-fifteen", "x"}, "[exactly-fifteen +1]"},
+	}
+	for _, tc := range cases {
+		got := styledCompactTags(tc.tags)
+		if tc.want == "" {
+			if got != "" {
+				t.Errorf("styledCompactTags(%q) = %q, want empty", tc.tags, got)
+			}
+			continue
+		}
+		if !strings.Contains(got, tc.want) || lipgloss.Width(got) != lipgloss.Width(tc.want) {
+			t.Errorf("styledCompactTags(%q) = %q, want %q", tc.tags, got, tc.want)
+		}
+		if tagStyle.Render(tc.want) != got {
+			t.Errorf("styledCompactTags(%q) = %q, not styled like styledTags", tc.tags, got)
+		}
+	}
+}

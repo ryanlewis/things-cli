@@ -347,3 +347,31 @@ func TestTableCompactBeforeDrop(t *testing.T) {
 		})
 	}
 }
+
+// Every dropOrder column with a compact form switches to it before any
+// dropOrder column is dropped: at 26 the tags survive in their short form
+// beside a short date, where dropping as each column's turn came would have
+// given up the tags to keep the full date.
+func TestTableCompactTierBeforeDrops(t *testing.T) {
+	tests := []struct {
+		name     string
+		maxWidth int
+		want     string
+	}{
+		{"all full", 36, "1.  title  [alpha, beta]  2026-10-02"},
+		{"tags compact", 33, "1.  title  [alpha +1]  2026-10-02"},
+		{"both compact", 26, "1.  title  [alpha +1]  Fri"},
+		{"tags dropped", 25, "1.  title  Fri"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tbl := &table{gap: columnGap, maxWidth: tt.maxWidth, dropOrder: []int{2, 3}}
+			tbl.row("1.", "title", "[alpha, beta]", "2026-10-02")
+			tbl.alt(2, "[alpha +1]")
+			tbl.alt(3, "Fri")
+			if got := tbl.lines()[0]; got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
