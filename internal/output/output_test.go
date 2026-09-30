@@ -678,6 +678,16 @@ func TestHang_WideLeadFallsBack(t *testing.T) {
 	}
 }
 
+// An indent wider than the space left does not open up a blank line: the
+// text starts on the next line at the base indent.
+func TestHang_IndentWiderThanWidth(t *testing.T) {
+	got := hang("  ", "\t\t\t\t\t\t\t\tfoo bar\nnext", 32)
+	want := "  foo bar\n  next\n"
+	if got != want {
+		t.Errorf("hang:\ngot  %q\nwant %q", got, want)
+	}
+}
+
 // Unwrapped output (not a terminal) keeps a note's tabs and indents exactly
 // as written.
 func TestHang_UnwrappedKeepsTabs(t *testing.T) {

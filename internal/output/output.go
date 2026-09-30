@@ -325,21 +325,23 @@ func hang(prefix, s string, width int) string {
 	first := true
 	for _, line := range strings.Split(s, "\n") {
 		line = expandTabs(line)
+		blank := strings.TrimSpace(line) == ""
 		lead := listLead(line)
+		leadWidth := ansi.StringWidth(lead)
 		// A lead that leaves under half the width would squeeze the text
 		// into a sliver, so such a line wraps back to the base indent.
-		if ansi.StringWidth(lead) > limit/2 {
-			lead = ""
+		if leadWidth > limit/2 {
+			lead, leadWidth = "", 0
 		}
 		body := line[len(lead):]
 		if ok {
 			body = strings.ReplaceAll(body, "-", stand)
 		}
-		body = lipgloss.Wrap(body, limit-ansi.StringWidth(lead), "")
+		body = lipgloss.Wrap(body, limit-leadWidth, "")
 		if ok {
 			body = strings.ReplaceAll(body, stand, "-")
 		}
-		hangPad := strings.Repeat(" ", ansi.StringWidth(lead))
+		hangPad := strings.Repeat(" ", leadWidth)
 		for i, part := range strings.Split(body, "\n") {
 			if i == 0 {
 				part = lead + part
@@ -347,6 +349,12 @@ func hang(prefix, s string, width int) string {
 				part = hangPad + part
 			}
 			part = strings.TrimRight(part, " ")
+			// An indent wider than the space left wraps onto a line of its
+			// own; dropping that keeps a blank line from opening up in the
+			// middle of the text, which then starts at the base indent.
+			if part == "" && !blank {
+				continue
+			}
 			start := pad
 			if first {
 				start = prefix
