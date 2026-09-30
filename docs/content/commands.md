@@ -176,9 +176,9 @@ collections themselves. `things projects` accepts `--area` and
 `--completed`.
 
 On a terminal, `things projects` fits the width the same way: a title
-longer than 30 columns and an area longer than 20 are cut first, then the
-tags go, then the area, and then the title is cut down to 10. Piped output
-keeps every column whole.
+longer than 30 columns is cut first, then, if that is not enough, an area
+longer than 20. Then the tags go, then the area, and then the title is
+cut down to 10. Piped output keeps every column whole.
 
 Projects are scheduled the same way tasks are, and `things projects -j`
 reports that with the same field names and encodings: `start`,
