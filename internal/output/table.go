@@ -182,7 +182,7 @@ func (t *table) fit(widths []int) (keep, cut []bool) {
 		if t.fits(widths, keep) {
 			break
 		}
-		if c >= 0 && c < len(keep) {
+		if c >= 0 && c < len(keep) && keep[c] {
 			keep[c] = false
 			dropped = true
 		}
@@ -212,7 +212,7 @@ func (t *table) shrinkTo(widths []int, keep, cut []bool, soft bool) {
 		}
 		floor := max(s.min, t.widestTail(s.col)+2)
 		if soft {
-			if s.soft <= 0 {
+			if s.soft <= 0 || s.soft < s.min {
 				continue
 			}
 			floor = max(floor, s.soft)

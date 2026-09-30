@@ -237,3 +237,18 @@ func TestTableFitNeverOverruns(t *testing.T) {
 		}
 	}
 }
+
+// A soft minimum below the hard one gives no width up before the drops, as
+// shrinkCol says: the tags go first, and the title is cut only once they have.
+func TestTableSoftBelowMinDropsFirst(t *testing.T) {
+	tbl := &table{
+		gap:       columnGap,
+		maxWidth:  20,
+		dropOrder: []int{2},
+		shrink:    []shrinkCol{{col: 1, min: 8, soft: 4}},
+	}
+	tbl.row("1.", "abcdefghijklmnop", "tag")
+	if got, want := tbl.lines()[0], "1.  abcdefghijklmnop"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
