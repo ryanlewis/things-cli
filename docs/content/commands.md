@@ -207,6 +207,11 @@ things show "Buy milk"        # by title (interactive disambiguation)
 things show 3 --agent         # Markdown brief for handing to an agent
 ```
 
+On a terminal, long values, notes and checklist items wrap to its width,
+and each wrapped line keeps the indent its text started at. A note keeps
+its own line breaks, and a word or URL breaks only when it is wider than
+the space left. Piped output, `--json` and `--agent` are not wrapped.
+
 A title reference is matched as a substring, literally and
 case-insensitively. There is no wildcard syntax: `%` and `_` are characters
 to find, so `things show "20_30 review"` finds the task spelled with an
