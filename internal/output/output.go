@@ -127,19 +127,16 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			title += " " + dimStyle.Render("("+kindWord(&t)+")")
 		}
 
-		var date string
+		// The date column shows the deadline over the start date, so a task
+		// with both carries its start date in a column of its own, before the
+		// deadline.
+		var start, date string
 		switch {
 		case t.Deadline != nil:
 			date = styledDate(t.Deadline, true)
+			start = styledDate(t.StartDate, false)
 		case t.StartDate != nil:
 			date = styledDate(t.StartDate, false)
-		}
-		// The date column shows the deadline over the start date, so a task
-		// with both carries its start date in a column of its own, before the
-		// deadline as the two fall in time.
-		var start string
-		if t.Deadline != nil && t.StartDate != nil {
-			start = styledDate(t.StartDate, false)
 		}
 
 		tbl.row(
