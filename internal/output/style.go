@@ -198,10 +198,17 @@ const compactTagWidth = 15
 
 // styledCompactTags is styledTags' short form for a narrow terminal: the first
 // tag, cut to compactTagWidth, and a count of the rest, "[waiting-on-pos… +2]".
-// A single tag has no short form and gets "".
+// A single tag is only cut, "[waiting-on-pos…]", and one that already fits
+// compactTagWidth has no short form and gets "", as does no tag.
 func styledCompactTags(tags []string) string {
-	if len(tags) < 2 {
+	switch {
+	case len(tags) == 0:
 		return ""
+	case len(tags) == 1:
+		if lipgloss.Width(tags[0]) <= compactTagWidth {
+			return ""
+		}
+		return tagStyle.Render("[" + ansi.Truncate(tags[0], compactTagWidth, "…") + "]")
 	}
 	first := ansi.Truncate(tags[0], compactTagWidth, "…")
 	return tagStyle.Render(fmt.Sprintf("[%s +%d]", first, len(tags)-1))

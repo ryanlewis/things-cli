@@ -365,6 +365,17 @@ func TestTableCompactTierBeforeDrops(t *testing.T) {
 		{"tags dropped, date whole again", 25, "1.  title  2026-10-02"},
 		{"tags dropped, date still short", 20, "1.  title  Fri"},
 	}
+	// Tags whose short form frees little beside a date whose short form frees
+	// a lot: once the date is short, the tags fit whole again.
+	t.Run("tags whole again beside a short date", func(t *testing.T) {
+		tbl := &table{gap: columnGap, maxWidth: 34, dropOrder: []int{2, 3}}
+		tbl.row("1.", "title", "[aaaa, bbbbb]", "2026-10-02 abc")
+		tbl.alt(2, "[aaaa +1xx]")
+		tbl.alt(3, "Fri")
+		if got, want := tbl.lines()[0], "1.  title  [aaaa, bbbbb]  Fri"; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tbl := &table{gap: columnGap, maxWidth: tt.maxWidth, dropOrder: []int{2, 3}}

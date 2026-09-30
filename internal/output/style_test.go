@@ -317,7 +317,8 @@ func TestStyledCompactDate_Boundaries(t *testing.T) {
 }
 
 // The short form of a tag list keeps the first tag, cut to a fixed width, and
-// counts the rest. One tag, or none, has no short form.
+// counts the rest. A lone tag is only cut, and one short enough already, or
+// none, has no short form.
 func TestStyledCompactTags(t *testing.T) {
 	cases := []struct {
 		tags []string
@@ -325,6 +326,8 @@ func TestStyledCompactTags(t *testing.T) {
 	}{
 		{nil, ""},
 		{[]string{"errands"}, ""},
+		{[]string{"exactly-fifteen"}, ""},
+		{[]string{"waiting-on-post-office"}, "[waiting-on-pos…]"},
 		{[]string{"write", "ops"}, "[write +1]"},
 		{[]string{"waiting-on-post-office", "errands", "needs-photo-booth"}, "[waiting-on-pos… +2]"},
 		{[]string{"exactly-fifteen", "x"}, "[exactly-fifteen +1]"},
