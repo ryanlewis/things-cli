@@ -257,3 +257,41 @@ func TestStyledTags(t *testing.T) {
 		t.Errorf("styledTags = %q, want %q", got, want)
 	}
 }
+
+// The compact form counts calendar days in local time, the same way
+// styledDate buckets them: a minute before midnight tomorrow is still
+// "tomorrow", and a daylight-saving change, which makes two midnights 47 or
+// 49 hours apart, does not shift a day.
+func TestStyledCompactDate_Boundaries(t *testing.T) {
+	london, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		t.Skipf("no tz data: %v", err)
+	}
+	prevNow, prevLocal := nowFn, time.Local
+	t.Cleanup(func() { nowFn, time.Local = prevNow, prevLocal })
+	time.Local = london
+
+	cases := []struct {
+		name string
+		now  time.Time
+		date *model.ThingsDate
+		want string
+	}{
+		{"just before midnight, today", time.Date(2026, 5, 3, 23, 59, 0, 0, london), mustDate(2026, 5, 3), "today"},
+		{"just before midnight, tomorrow", time.Date(2026, 5, 3, 23, 59, 0, 0, london), mustDate(2026, 5, 4), "tomorrow"},
+		{"just after midnight, yesterday", time.Date(2026, 5, 4, 0, 1, 0, 0, london), mustDate(2026, 5, 3), "yesterday"},
+		{"clocks forward", time.Date(2026, 3, 28, 12, 0, 0, 0, london), mustDate(2026, 3, 30), "Mon"},
+		{"clocks back", time.Date(2026, 10, 24, 12, 0, 0, 0, london), mustDate(2026, 10, 26), "Mon"},
+		{"clocks back, past", time.Date(2026, 10, 27, 12, 0, 0, 0, london), mustDate(2026, 10, 24), "3d ago"},
+		{"new year", time.Date(2026, 12, 31, 23, 0, 0, 0, london), mustDate(2027, 1, 1), "tomorrow"},
+		{"new year, a week out", time.Date(2026, 12, 31, 12, 0, 0, 0, london), mustDate(2027, 1, 8), "8 Jan 27"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			nowFn = func() time.Time { return tc.now }
+			if got := styledCompactDate(tc.date, false); !strings.Contains(got, tc.want) {
+				t.Errorf("styledCompactDate = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
