@@ -1,6 +1,9 @@
 package db
 
 import (
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -54,6 +57,63 @@ func TestFindDBPathMultipleMatches(t *testing.T) {
 	}
 }
 
+func TestFindDBPathReportsContainerPermissionDenied(t *testing.T) {
+	home := t.TempDir()
+	container := filepath.Join(home, "Library", "Group Containers", thingsGroupContainer)
+	want := &os.PathError{Op: "readdir", Path: container, Err: fs.ErrPermission}
+
+	diagnosis, err := findDBPath(home, func(path string) ([]os.DirEntry, error) {
+		if path != container {
+			t.Fatalf("ReadDir(%q), want %q", path, container)
+		}
+		return nil, want
+	}, os.Stat)
+	if err == nil {
+		t.Fatal("expected permission error")
+	}
+	if diagnosis.Status != "permission_denied" {
+		t.Errorf("status = %q, want permission_denied", diagnosis.Status)
+	}
+	var accessErr *PathAccessError
+	if !errors.As(err, &accessErr) {
+		t.Fatalf("error type = %T, want *PathAccessError", err)
+	}
+	if accessErr.Path != container {
+		t.Errorf("error path = %q, want %q", accessErr.Path, container)
+	}
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("error does not wrap fs.ErrPermission: %v", err)
+	}
+}
+
+func TestFindDBPathReportsDatabasePermissionDenied(t *testing.T) {
+	home := t.TempDir()
+	container := filepath.Join(home, "Library", "Group Containers", thingsGroupContainer)
+	dataDir := filepath.Join(container, "ThingsData-ABC")
+	mustMkdirAll(t, dataDir)
+	wantPath := filepath.Join(dataDir, "Things Database.thingsdatabase", "main.sqlite")
+
+	diagnosis, err := findDBPath(home, os.ReadDir, func(path string) (os.FileInfo, error) {
+		if path != wantPath {
+			t.Fatalf("Stat(%q), want %q", path, wantPath)
+		}
+		return nil, &os.PathError{Op: "stat", Path: path, Err: fs.ErrPermission}
+	})
+	if err == nil {
+		t.Fatal("expected permission error")
+	}
+	if diagnosis.Status != "permission_denied" {
+		t.Errorf("status = %q, want permission_denied", diagnosis.Status)
+	}
+	var accessErr *PathAccessError
+	if !errors.As(err, &accessErr) {
+		t.Fatalf("error type = %T, want *PathAccessError", err)
+	}
+	if accessErr.Path != wantPath {
+		t.Errorf("error path = %q, want %q", accessErr.Path, wantPath)
+	}
+}
+
 func TestOpenReadOnly(t *testing.T) {
 	// Create an empty DB file, open it, confirm close works.
 	path := filepath.Join(t.TempDir(), "t.sqlite")
@@ -79,12 +139,33 @@ func TestNewFromSQL(t *testing.T) {
 }
 
 func TestOpenBadPath(t *testing.T) {
-	// modernc.org/sqlite only errors at Exec time for bad paths on some
-	// platforms — but the PRAGMA query_only pragma will execute, so a
-	// non-existent path through a non-existent directory should fail.
 	_, err := Open("/nonexistent/dir/does/not/exist.sqlite")
 	if err == nil {
 		t.Fatal("expected error for bad path")
+	}
+}
+
+func TestProbeDatabaseReadablePreservesPermissionError(t *testing.T) {
+	path := "/protected/main.sqlite"
+	err := probeDatabaseReadable(path, func(got string) (*os.File, error) {
+		if got != path {
+			t.Fatalf("open(%q), want %q", got, path)
+		}
+		return nil, &os.PathError{Op: "open", Path: got, Err: fs.ErrPermission}
+	})
+	if err == nil {
+		t.Fatal("expected permission error")
+	}
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("error does not wrap fs.ErrPermission: %v", err)
+	}
+}
+
+func TestProbeDatabaseReadableAllowsEmptyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty.sqlite")
+	mustCreate(t, path)
+	if err := probeDatabaseReadable(path, os.Open); err != nil {
+		t.Fatalf("probeDatabaseReadable: %v", err)
 	}
 }
 

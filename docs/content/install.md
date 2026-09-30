@@ -95,6 +95,10 @@ The first invocation reads the Things3 database from
 in read-only mode. Things3 must be installed and have been launched at
 least once for the database to exist.
 
+If discovery fails, run `things doctor` (or `things --json doctor`) to tell a
+missing database from a macOS permission denial. The diagnostic opens the
+database read-only but does not query task data.
+
 ## Quickstart
 
 ```sh
