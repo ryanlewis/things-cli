@@ -64,7 +64,7 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 	}
 	existing := make(map[string]struct{}, len(tags))
 	for _, t := range tags {
-		existing[foldTitle(t.Title)] = struct{}{}
+		existing[foldTag(t.Title)] = struct{}{}
 	}
 
 	var unknown []string
@@ -74,7 +74,7 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 		if n == "" {
 			continue
 		}
-		key := foldTitle(n)
+		key := foldTag(n)
 		if _, dup := seen[key]; dup {
 			continue
 		}
@@ -86,7 +86,7 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 	return unknown, nil
 }
 
-func foldTitle(s string) string {
+func foldTag(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
@@ -94,11 +94,14 @@ type uuidTitle struct{ uuid, title string }
 
 // matchRef returns the UUID of the row that ref names, or "" when none does.
 // A UUID match wins, then an exact title, then the first title equal to ref
-// under foldTitle, in the order given (callers pass Things' list order). The
-// fold happens here rather than in SQL because SQLite's NOCASE folds ASCII
-// only: Things matches "ärger" to a tag named "Ärger", and NOCASE would not.
+// ignoring case and surrounding space, in the order given (callers pass
+// Things' list order). The fold happens here rather than in SQL because
+// SQLite's NOCASE folds ASCII only: Things matches "ärger" to a tag named
+// "Ärger", and NOCASE would not. strings.EqualFold rather than ToLower so
+// case variants such as "Σ", "σ" and "ς" also match. A blank ref never folds
+// onto an untitled row.
 func matchRef(rows []uuidTitle, ref string) string {
-	key := foldTitle(ref)
+	key := strings.TrimSpace(ref)
 	var exact, folded string
 	for _, r := range rows {
 		switch {
@@ -106,7 +109,7 @@ func matchRef(rows []uuidTitle, ref string) string {
 			return r.uuid
 		case exact == "" && r.title == ref:
 			exact = r.uuid
-		case folded == "" && foldTitle(r.title) == key:
+		case folded == "" && key != "" && strings.EqualFold(strings.TrimSpace(r.title), key):
 			folded = r.uuid
 		}
 	}

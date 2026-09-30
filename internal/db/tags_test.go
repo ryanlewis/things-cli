@@ -114,11 +114,12 @@ func TestUnknownTagsEmptyDatabase(t *testing.T) {
 func TestFindTagUUIDIgnoresCase(t *testing.T) {
 	d := newTestDB(t)
 	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
-		('t1', 'Work', 0), ('t2', 'work', 1), ('t3', 'Ärger', 2)`)
+		('t1', 'Work', 0), ('t2', 'work', 1), ('t3', 'Ärger', 2), ('t4', 'κος', 3),
+		('t5', NULL, 4)`)
 
 	// An exact-case title wins over a case-folded one, and folding is not
 	// limited to ASCII (SQLite's NOCASE is).
-	for ref, want := range map[string]string{"Work": "t1", "work": "t2", "WORK": "t1", "ärger": "t3", "ÄRGER": "t3"} {
+	for ref, want := range map[string]string{"Work": "t1", "work": "t2", "WORK": "t1", "ärger": "t3", "ÄRGER": "t3", "ΚΟΣ": "t4", "  ": ""} {
 		got, err := d.FindTagUUID(ref)
 		if err != nil {
 			t.Fatalf("FindTagUUID(%q): %v", ref, err)
