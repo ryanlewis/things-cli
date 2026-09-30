@@ -352,6 +352,8 @@ func printProjects(w io.Writer, projects []model.Project) error {
 		gap:       columnGap,
 		maxWidth:  fitWidth(),
 		dropOrder: []int{colProjectTags, colProjectArea},
+		// A list with no tagged project gives the tags column no gap.
+		omitEmpty: []int{colProjectTags},
 		shrink: []shrinkCol{
 			{col: colProjectTitle, min: 10, soft: 30},
 			{col: colProjectArea, min: 20, soft: 20},
