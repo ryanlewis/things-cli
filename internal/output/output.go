@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -185,58 +187,83 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 	label := func(s string) string {
 		return padCol(10, labelStyle.Render(s))
 	}
+	width := termWidth()
 
-	fmt.Fprintf(w, "%s%s\n", label("Title:"), t.Title)
-	fmt.Fprintf(w, "%s%s\n", label("UUID:"), t.UUID)
-	fmt.Fprintf(w, "%s%s\n", label("Status:"), statusText(t.Status))
+	fmt.Fprint(w, hang(label("Title:"), t.Title, width))
+	fmt.Fprint(w, hang(label("UUID:"), t.UUID, width))
+	fmt.Fprint(w, hang(label("Status:"), statusText(t.Status), width))
 	// A lookup resolves projects as well as to-dos, and `things repeating`
 	// hands out indexes for project templates, so say when the thing being
 	// shown is a project rather than leaving its detail block reading as a
 	// to-do's. To-do output is unchanged.
 	if isProject(t) {
-		fmt.Fprintf(w, "%s%s\n", label("Type:"), kindWord(t))
+		fmt.Fprint(w, hang(label("Type:"), kindWord(t), width))
 	}
 	if t.ProjectTitle != "" {
-		fmt.Fprintf(w, "%s%s\n", label("Project:"), projectStyle.Render(t.ProjectTitle))
+		fmt.Fprint(w, hang(label("Project:"), projectStyle.Render(t.ProjectTitle), width))
 	}
 	if t.AreaTitle != "" {
-		fmt.Fprintf(w, "%s%s\n", label("Area:"), areaStyle.Render(t.AreaTitle))
+		fmt.Fprint(w, hang(label("Area:"), areaStyle.Render(t.AreaTitle), width))
 	}
 	if t.HeadingTitle != "" {
-		fmt.Fprintf(w, "%s%s\n", label("Heading:"), t.HeadingTitle)
+		fmt.Fprint(w, hang(label("Heading:"), t.HeadingTitle, width))
 	}
 	if len(t.Tags) > 0 {
-		fmt.Fprintf(w, "%s%s\n", label("Tags:"), tagStyle.Render(strings.Join(t.Tags, ", ")))
+		fmt.Fprint(w, hang(label("Tags:"), tagStyle.Render(strings.Join(t.Tags, ", ")), width))
 	}
 	if t.StartDate != nil {
-		fmt.Fprintf(w, "%s%s\n", label("Start:"), styledDate(t.StartDate, false))
+		fmt.Fprint(w, hang(label("Start:"), styledDate(t.StartDate, false), width))
 	}
 	if t.Deadline != nil {
-		fmt.Fprintf(w, "%s%s\n", label("Deadline:"), styledDate(t.Deadline, false))
+		fmt.Fprint(w, hang(label("Deadline:"), styledDate(t.Deadline, false), width))
 	}
 	if t.Repeating {
-		fmt.Fprintf(w, "%s%s\n", label("Repeats:"), "yes (Things blocks status, when and deadline edits)")
+		fmt.Fprint(w, hang(label("Repeats:"), "yes (Things blocks status, when and deadline edits)", width))
 	}
 	// The timestamps arrive in UTC (model.UnixToTime), and the line carries no
 	// zone, so render them in local time like every other date the reader sees.
 	// Printed as UTC, an item closed after midnight in a zone ahead of UTC
 	// reads as stopped the day before.
 	if t.CreationDate != nil {
-		fmt.Fprintf(w, "%s%s\n", label("Created:"), t.CreationDate.Local().Format("2006-01-02 15:04"))
+		fmt.Fprint(w, hang(label("Created:"), t.CreationDate.Local().Format("2006-01-02 15:04"), width))
 	}
 	if t.StopDate != nil {
-		fmt.Fprintf(w, "%s%s\n", label("Stopped:"), t.StopDate.Local().Format("2006-01-02 15:04"))
+		fmt.Fprint(w, hang(label("Stopped:"), t.StopDate.Local().Format("2006-01-02 15:04"), width))
 	}
 	if t.Notes != "" {
-		fmt.Fprintf(w, "%s\n  %s\n", labelStyle.Render("Notes:"), strings.ReplaceAll(t.Notes, "\n", "\n  "))
+		// The wrap keeps the user's own line breaks and blank lines, so a
+		// paragraph never runs into the next.
+		fmt.Fprintln(w, labelStyle.Render("Notes:"))
+		fmt.Fprint(w, hang("  ", t.Notes, width))
 	}
 	if len(items) > 0 {
 		fmt.Fprintln(w, labelStyle.Render("Checklist:"))
 		for _, item := range items {
-			fmt.Fprintf(w, "  %s %s\n", styledStatus(item.Status), item.Title)
+			fmt.Fprint(w, hang("  "+styledStatus(item.Status)+" ", item.Title, width))
 		}
 	}
 	return nil
+}
+
+// hang renders prefix then s wrapped to fit width, indenting each wrapped
+// line to where s began, so a long value keeps to its column on a narrow
+// terminal instead of running back to column 0. Words break only when one
+// alone is wider than the space left.
+func hang(prefix, s string, width int) string {
+	indent := lipgloss.Width(prefix)
+	lines := strings.Split(lipgloss.Wrap(s, width-indent, ""), "\n")
+	pad := strings.Repeat(" ", indent)
+	var b strings.Builder
+	for i, line := range lines {
+		if i == 0 {
+			b.WriteString(prefix)
+		} else {
+			b.WriteString(pad)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 func printProjects(w io.Writer, projects []model.Project) error {
