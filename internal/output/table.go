@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // columnGap separates two columns of a rendered listing.
@@ -15,9 +16,9 @@ const columnGap = "  "
 // padded and joined — the work each list printer in this package used to do
 // for itself, with its own row struct and its own width loop.
 //
-// Every column is padded to its widest cell except the last one declared,
-// which goes out as it is. Dropping a column does not move that rule: the
-// column left unpadded is the last one declared, whether or not it survived.
+// Every column is padded to its widest cell except the last one kept, which
+// goes out as it is: padding at the end of a row buys nothing, and on a narrow
+// terminal it can carry the row past the edge and wrap it onto a blank line.
 type table struct {
 	// gap separates two columns.
 	gap string
@@ -27,8 +28,18 @@ type table struct {
 	// dropOrder names the columns that may be given up when a row does not
 	// fit, in the order they go — the first named is the first to go.
 	dropOrder []int
+	// shrink names the columns that may be cut short, with an ellipsis, when
+	// a row still does not fit once every column in dropOrder has gone. They
+	// give up width in the order named, none below its own minimum, so a row
+	// whose other columns alone overrun maxWidth still prints, only wider.
+	shrink []shrinkCol
 
 	rows [][]string
+}
+
+// shrinkCol is a column a table may cut short, and the narrowest it may go.
+type shrinkCol struct {
+	col, min int
 }
 
 // row appends one row. Rows are expected to carry the same number of cells;
@@ -42,7 +53,13 @@ func (t *table) row(cells ...string) {
 func (t *table) lines() []string {
 	widths := t.widths()
 	keep := t.keep(widths)
-	last := len(widths) - 1
+	cut := t.shrinkTo(widths, keep)
+	last := -1
+	for c := range widths {
+		if keep[c] {
+			last = c
+		}
+	}
 
 	lines := make([]string, len(t.rows))
 	for i, cells := range t.rows {
@@ -54,6 +71,9 @@ func (t *table) lines() []string {
 			cell := ""
 			if c < len(cells) {
 				cell = cells[c]
+			}
+			if cut[c] {
+				cell = ansi.Truncate(cell, width, "…")
 			}
 			if c == last {
 				cols = append(cols, cell)
@@ -117,9 +137,36 @@ func (t *table) keep(widths []int) []bool {
 	return keep
 }
 
+// shrinkTo narrows the shrink columns, in place in widths, until the kept
+// columns fit or every one of them is at its minimum. It reports which
+// columns it narrowed, so their cells can be cut to the new width.
+func (t *table) shrinkTo(widths []int, keep []bool) []bool {
+	cut := make([]bool, len(widths))
+	if t.maxWidth <= 0 {
+		return cut
+	}
+	for _, s := range t.shrink {
+		over := t.width(widths, keep) - t.maxWidth
+		if over <= 0 {
+			break
+		}
+		if s.col < 0 || s.col >= len(widths) || !keep[s.col] || widths[s.col] <= s.min {
+			continue
+		}
+		widths[s.col] = max(widths[s.col]-over, s.min)
+		cut[s.col] = true
+	}
+	return cut
+}
+
 // fits reports whether the kept columns, plus the gaps between them, are
 // within maxWidth.
 func (t *table) fits(widths []int, keep []bool) bool {
+	return t.width(widths, keep) <= t.maxWidth
+}
+
+// width is how wide a row of the kept columns measures, gaps included.
+func (t *table) width(widths []int, keep []bool) int {
 	total, n := 0, 0
 	for c, w := range widths {
 		if !keep[c] {
@@ -131,7 +178,7 @@ func (t *table) fits(widths []int, keep []bool) bool {
 	if n > 1 {
 		total += (n - 1) * len(t.gap)
 	}
-	return total <= t.maxWidth
+	return total
 }
 
 func padCol(width int, s string) string {
