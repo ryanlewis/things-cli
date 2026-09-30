@@ -28,6 +28,9 @@ type table struct {
 	// dropOrder names the columns that may be given up when a row does not
 	// fit, in the order they go — the first named is the first to go.
 	dropOrder []int
+	// omitEmpty names the columns that take no space, gap included, when no
+	// row puts anything in them.
+	omitEmpty []int
 	// shrink names the columns that may be cut short, with an ellipsis, when
 	// a row still does not fit once every column in dropOrder has gone. They
 	// give up width in the order named, none below its own minimum, so a row
@@ -122,6 +125,11 @@ func (t *table) keep(widths []int) []bool {
 	keep := make([]bool, len(widths))
 	for i := range keep {
 		keep[i] = true
+	}
+	for _, c := range t.omitEmpty {
+		if c >= 0 && c < len(keep) && widths[c] == 0 {
+			keep[c] = false
+		}
 	}
 	if t.maxWidth <= 0 {
 		return keep

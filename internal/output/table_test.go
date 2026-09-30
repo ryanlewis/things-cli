@@ -55,3 +55,18 @@ func TestTableLastKeptColumnUnpadded(t *testing.T) {
 		}
 	}
 }
+
+// An omitEmpty column that no row fills takes no space, not even its gap.
+func TestTableOmitEmpty(t *testing.T) {
+	for _, fill := range []string{"", "s"} {
+		tbl := &table{gap: columnGap, omitEmpty: []int{1}}
+		tbl.row("a", fill, "b")
+		want := "a  b"
+		if fill != "" {
+			want = "a  s  b"
+		}
+		if got := tbl.lines()[0]; got != want {
+			t.Errorf("fill %q: got %q, want %q", fill, got, want)
+		}
+	}
+}
