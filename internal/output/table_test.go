@@ -70,3 +70,28 @@ func TestTableOmitEmpty(t *testing.T) {
 		}
 	}
 }
+
+// An omitted empty column adds neither width nor gap to the fit, so it never
+// costs another column its place. It is left out of dropOrder here so that
+// nothing but omitEmpty can explain the tags surviving at the boundary.
+func TestTableOmitEmptyFits(t *testing.T) {
+	tests := []struct {
+		maxWidth int
+		want     string
+	}{
+		{23, "1.  title  [tag]  due:x"},
+		{22, "1.  title  due:x"},
+	}
+	for _, tt := range tests {
+		tbl := &table{
+			gap:       columnGap,
+			maxWidth:  tt.maxWidth,
+			dropOrder: []int{2, 4},
+			omitEmpty: []int{3},
+		}
+		tbl.row("1.", "title", "[tag]", "", "due:x")
+		if got := tbl.lines()[0]; got != tt.want {
+			t.Errorf("maxWidth %d: got %q, want %q", tt.maxWidth, got, tt.want)
+		}
+	}
+}

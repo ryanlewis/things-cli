@@ -348,9 +348,8 @@ waiting-on-someone  (w)|
     "title": "No group at all",|
     "type": "task",|
     "status": "open",|
-    "start": "someday",|
+    "start": "inbox",|
     "startBucket": 0,|
-    "startDate": "2026-12-01",|
     "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
@@ -363,6 +362,19 @@ waiting-on-someone  (w)|
     "status": 99,|
     "start": "inbox",|
     "startBucket": 0,|
+    "trashed": false,|
+    "index": 0,|
+    "todayIndex": 0|
+  },|
+  {|
+    "uuid": "t7",|
+    "title": "Renew passport",|
+    "type": "task",|
+    "status": "open",|
+    "start": "someday",|
+    "startBucket": 0,|
+    "startDate": "2026-12-01",|
+    "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
     "todayIndex": 0|
@@ -455,9 +467,8 @@ waiting-on-someone  (w)|
     "title": "No group at all",|
     "type": "task",|
     "status": "open",|
-    "start": "someday",|
+    "start": "inbox",|
     "startBucket": 0,|
-    "startDate": "2026-12-01",|
     "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
@@ -470,6 +481,19 @@ waiting-on-someone  (w)|
     "status": 99,|
     "start": "inbox",|
     "startBucket": 0,|
+    "trashed": false,|
+    "index": 0,|
+    "todayIndex": 0|
+  },|
+  {|
+    "uuid": "t7",|
+    "title": "Renew passport",|
+    "type": "task",|
+    "status": "open",|
+    "start": "someday",|
+    "startBucket": 0,|
+    "startDate": "2026-12-01",|
+    "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
     "todayIndex": 0|
@@ -718,8 +742,9 @@ the status did not change, so a zero exit means it landed.|
     Home|
 5.  [ ]  Buy milk                                     [shop]                    2026-09-13|
 |
-6.  [ ]  No group at all                                            2026-12-01  due:2026-12-25|
+6.  [ ]  No group at all                                                        due:2026-12-25|
 7.  [ ]  Unrecognised status                                                    |
+8.  [ ]  Renew passport                                             2026-12-01  due:2026-12-25|
 |
 
 ### case=task-list/labelled@120 color=never
@@ -735,8 +760,9 @@ the status did not change, so a zero exit means it landed.|
     Home|
 5.  [ ]  Buy milk                                     [shop]                    2026-09-13|
 |
-6.  [ ]  No group at all                                            2026-12-01  due:2026-12-25|
+6.  [ ]  No group at all                                                        due:2026-12-25|
 7.  [ ]  Unrecognised status                                                    |
+8.  [ ]  Renew passport                                             2026-12-01  due:2026-12-25|
 |
 
 ### case=print/tasks@80 color=never
@@ -753,6 +779,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all                              due:2026-12-25|
 7.  [ ]  Unrecognised status                          |
+8.  [ ]  Renew passport                               due:2026-12-25|
 |
 
 ### case=task-list/labelled@80 color=never
@@ -770,6 +797,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all                              due:2026-12-25|
 7.  [ ]  Unrecognised status                          |
+8.  [ ]  Renew passport                               due:2026-12-25|
 |
 
 ### case=print/tasks@40 color=never
@@ -786,6 +814,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all|
 7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport|
 |
 
 ### case=task-list/labelled@40 color=never
@@ -803,6 +832,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all|
 7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport|
 |
 
 ### case=task-list/unlabelled@120 color=never
@@ -817,8 +847,9 @@ the status did not change, so a zero exit means it landed.|
     Home|
 5.  [ ]  Buy milk                                     [shop]                    2026-09-13|
 |
-6.  [ ]  No group at all                                            2026-12-01  due:2026-12-25|
+6.  [ ]  No group at all                                                        due:2026-12-25|
 7.  [ ]  Unrecognised status                                                    |
+8.  [ ]  Renew passport                                             2026-12-01  due:2026-12-25|
 |
 
 ### case=task-detail/plain color=always
@@ -1171,9 +1202,8 @@ waiting-on-someone  \e[2m(w)\e[m|
     "title": "No group at all",|
     "type": "task",|
     "status": "open",|
-    "start": "someday",|
+    "start": "inbox",|
     "startBucket": 0,|
-    "startDate": "2026-12-01",|
     "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
@@ -1186,6 +1216,19 @@ waiting-on-someone  \e[2m(w)\e[m|
     "status": 99,|
     "start": "inbox",|
     "startBucket": 0,|
+    "trashed": false,|
+    "index": 0,|
+    "todayIndex": 0|
+  },|
+  {|
+    "uuid": "t7",|
+    "title": "Renew passport",|
+    "type": "task",|
+    "status": "open",|
+    "start": "someday",|
+    "startBucket": 0,|
+    "startDate": "2026-12-01",|
+    "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
     "todayIndex": 0|
@@ -1278,9 +1321,8 @@ waiting-on-someone  \e[2m(w)\e[m|
     "title": "No group at all",|
     "type": "task",|
     "status": "open",|
-    "start": "someday",|
+    "start": "inbox",|
     "startBucket": 0,|
-    "startDate": "2026-12-01",|
     "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
@@ -1293,6 +1335,19 @@ waiting-on-someone  \e[2m(w)\e[m|
     "status": 99,|
     "start": "inbox",|
     "startBucket": 0,|
+    "trashed": false,|
+    "index": 0,|
+    "todayIndex": 0|
+  },|
+  {|
+    "uuid": "t7",|
+    "title": "Renew passport",|
+    "type": "task",|
+    "status": "open",|
+    "start": "someday",|
+    "startBucket": 0,|
+    "startDate": "2026-12-01",|
+    "deadline": "2026-12-25",|
     "trashed": false,|
     "index": 0,|
     "todayIndex": 0|
@@ -1541,8 +1596,9 @@ the status did not change, so a zero exit means it landed.|
     \e[1;36mHome\e[m|
 5.  [ ]  Buy milk                                     \e[33m[shop]\e[m                    \e[33m2026-09-13\e[m|
 |
-6.  [ ]  No group at all                                            \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
+6.  [ ]  No group at all                                                        \e[2mdue:2026-12-25\e[m|
 7.  [ ]  Unrecognised status                                                    |
+8.  [ ]  Renew passport                                             \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
 |
 
 ### case=task-list/labelled@120 color=always
@@ -1558,8 +1614,9 @@ the status did not change, so a zero exit means it landed.|
     \e[1;36mHome\e[m|
 5.  [ ]  Buy milk                                     \e[33m[shop]\e[m                    \e[33m2026-09-13\e[m|
 |
-6.  [ ]  No group at all                                            \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
+6.  [ ]  No group at all                                                        \e[2mdue:2026-12-25\e[m|
 7.  [ ]  Unrecognised status                                                    |
+8.  [ ]  Renew passport                                             \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
 |
 
 ### case=print/tasks@80 color=always
@@ -1576,6 +1633,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all                              \e[2mdue:2026-12-25\e[m|
 7.  [ ]  Unrecognised status                          |
+8.  [ ]  Renew passport                               \e[2mdue:2026-12-25\e[m|
 |
 
 ### case=task-list/labelled@80 color=always
@@ -1593,6 +1651,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all                              \e[2mdue:2026-12-25\e[m|
 7.  [ ]  Unrecognised status                          |
+8.  [ ]  Renew passport                               \e[2mdue:2026-12-25\e[m|
 |
 
 ### case=print/tasks@40 color=always
@@ -1609,6 +1668,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all|
 7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport|
 |
 
 ### case=task-list/labelled@40 color=always
@@ -1626,6 +1686,7 @@ the status did not change, so a zero exit means it landed.|
 |
 6.  [ ]  No group at all|
 7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport|
 |
 
 ### case=task-list/unlabelled@120 color=always
@@ -1640,7 +1701,8 @@ the status did not change, so a zero exit means it landed.|
     \e[1;36mHome\e[m|
 5.  [ ]  Buy milk                                     \e[33m[shop]\e[m                    \e[33m2026-09-13\e[m|
 |
-6.  [ ]  No group at all                                            \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
+6.  [ ]  No group at all                                                        \e[2mdue:2026-12-25\e[m|
 7.  [ ]  Unrecognised status                                                    |
+8.  [ ]  Renew passport                                             \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
 |
 

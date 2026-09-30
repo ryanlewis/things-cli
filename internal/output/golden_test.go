@@ -70,15 +70,20 @@ func goldenTasks(t *testing.T) []model.Task {
 			AreaUUID: "a2", AreaTitle: "Home", Tags: []string{"shop"},
 			Start: model.StartSomeday, StartDate: thingsDate(t, "2026-09-13"),
 		},
-		// No project and no area: a group break with nothing to head it. Both
-		// dates, so the start date gets a column of its own beside the deadline.
+		// No project and no area: a group break with nothing to head it.
 		{
 			UUID: "t5", Title: "No group at all", Type: model.TypeTask, Status: model.StatusOpen,
-			Start: model.StartSomeday, StartDate: thingsDate(t, "2026-12-01"),
 			Deadline: thingsDate(t, "2026-12-25"),
 		},
 		{
 			UUID: "t6", Title: "Unrecognised status", Type: model.TypeTask, Status: model.Status(99),
+		},
+		// Both dates: the start date gets a column of its own, beside the
+		// deadline, while the terminal is wide enough for it.
+		{
+			UUID: "t7", Title: "Renew passport", Type: model.TypeTask, Status: model.StatusOpen,
+			Start: model.StartSomeday, StartDate: thingsDate(t, "2026-12-01"),
+			Deadline: thingsDate(t, "2026-12-25"),
 		},
 	}
 }
