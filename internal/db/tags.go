@@ -64,7 +64,7 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 	}
 	existing := make(map[string]struct{}, len(tags))
 	for _, t := range tags {
-		existing[foldTag(t.Title)] = struct{}{}
+		existing[FoldTag(t.Title)] = struct{}{}
 	}
 
 	var unknown []string
@@ -74,7 +74,7 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 		if n == "" {
 			continue
 		}
-		key := foldTag(n)
+		key := FoldTag(n)
 		if _, dup := seen[key]; dup {
 			continue
 		}
@@ -86,18 +86,14 @@ func (d *DB) UnknownTags(names []string) ([]string, error) {
 	return unknown, nil
 }
 
-func foldTag(s string) string {
-	return FoldCase(strings.TrimSpace(s))
-}
-
 type uuidTitle struct{ uuid, title string }
 
 // matchRef returns the UUID of the row that ref names, or "" when none does.
 // A UUID match wins, then an exact title, then the first title equal to ref
-// under foldTag, in the order given (callers pass Things' list order). A blank
+// under FoldTag, in the order given (callers pass Things' list order). A blank
 // ref never folds onto an untitled row.
 func matchRef(rows []uuidTitle, ref string) string {
-	key := foldTag(ref)
+	key := FoldTag(ref)
 	var exact, folded string
 	for _, r := range rows {
 		switch {
@@ -105,7 +101,7 @@ func matchRef(rows []uuidTitle, ref string) string {
 			return r.uuid
 		case exact == "" && r.title == ref:
 			exact = r.uuid
-		case folded == "" && key != "" && foldTag(r.title) == key:
+		case folded == "" && key != "" && FoldTag(r.title) == key:
 			folded = r.uuid
 		}
 	}

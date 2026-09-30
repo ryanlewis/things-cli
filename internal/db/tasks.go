@@ -1110,7 +1110,7 @@ func preferInstances(matches []model.Task) []model.Task {
 // write on the wrong task. Matching ignores case, beyond ASCII too (see
 // literalLike); nothing documented offered wildcards.
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE fold(t.title) LIKE ?" + escapeClause + " AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+	query := d.taskQuery() + " WHERE t.trashed = 0 AND t.status = 0 AND " + notHeading + " AND fold(t.title) LIKE ?" + escapeClause +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, containsLike(substr))
 }
@@ -1161,7 +1161,7 @@ func (e *AmbiguousTaskError) Error() string {
 // went in as a pattern (issue #267).
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 	pattern := containsLike(query)
-	q := d.taskQuery() + " WHERE (fold(t.title) LIKE ?" + escapeClause + " OR fold(t.notes) LIKE ?" + escapeClause + ") AND t.trashed = 0 AND " + notHeading + " GROUP BY t.uuid " + indexOrderBy
+	q := d.taskQuery() + " WHERE t.trashed = 0 AND " + notHeading + " AND (fold(t.title) LIKE ?" + escapeClause + " OR fold(t.notes) LIKE ?" + escapeClause + ") GROUP BY t.uuid " + indexOrderBy
 	return d.collectTasks(q, pattern, pattern)
 }
 
