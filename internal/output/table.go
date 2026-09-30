@@ -38,10 +38,11 @@ type table struct {
 	// they go — the first named is the first to go.
 	dropOrder []int
 	// shrink names the columns that may be cut short, with an ellipsis, when
-	// a row does not fit. They give up width in the order named: first down
-	// to their soft minimum, before any column in dropOrder goes, and then,
-	// once every column in dropOrder has gone, down to their hard minimum. A
-	// row whose other columns alone overrun maxWidth still prints, only wider.
+	// a row does not fit. They give up width in the order named: first, once
+	// every column in dropFirst has gone, down to their soft minimum, before
+	// any column in dropOrder goes, and then, once every column in dropOrder
+	// has gone, down to their hard minimum. A row whose other columns alone
+	// overrun maxWidth still prints, only wider.
 	shrink []shrinkCol
 
 	rows [][]string
@@ -50,7 +51,7 @@ type table struct {
 }
 
 // shrinkCol is a column a table may cut short. soft is how far it gives way
-// before another column is dropped for it, and min the narrowest it may go
+// before a dropOrder column is dropped for it, and min the narrowest it may go
 // once nothing is left to drop. A soft of zero, or one below min, gives no
 // width up before the drops.
 type shrinkCol struct {
@@ -198,13 +199,8 @@ func (t *table) widths() []int {
 func (t *table) fit(widths []int) (keep, cut []bool) {
 	keep = make([]bool, len(widths))
 	cut = make([]bool, len(widths))
-	for i := range keep {
-		keep[i] = true
-	}
 	for c, w := range widths {
-		if w == 0 {
-			keep[c] = false
-		}
+		keep[c] = w > 0
 	}
 	if t.maxWidth <= 0 {
 		return keep, cut
