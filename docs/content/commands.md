@@ -447,6 +447,32 @@ things version       # or: things --version / things -v
 
 Prints the version, commit, and build date.
 
+## Update
+
+```sh
+things update            # update to the latest release
+things update --dry-run  # print the command it would run, and stop
+```
+
+Updates `things` the same way it was installed. It looks at where the
+running binary lives and how it was built:
+
+- In the Homebrew Caskroom: runs
+  `brew upgrade --cask ryanlewis/tap/things`.
+- A release binary from the install script or a tarball: re-runs the
+  [install script](/install/#one-line-install-script) with `INSTALL_DIR`
+  set to the binary's own directory. If that directory isn't writable,
+  it stops and prints the command for you to run, since the script asks
+  for `sudo`.
+- Built by `go install ...@latest`: runs
+  `go install github.com/ryanlewis/things-cli/cmd/things@latest`.
+- A local build (`make install`, `go build`): refuses, because there is
+  no release to update it from.
+
+Before updating, it asks GitHub for the latest release and stops if you
+already have it. If GitHub can't be reached, it says so and updates
+anyway. It prints the command before running it.
+
 ## Configuration
 
 A TOML file at `~/.config/things-cli/config.toml` supplies defaults for
