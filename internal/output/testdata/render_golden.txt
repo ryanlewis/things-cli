@@ -835,6 +835,63 @@ the status did not change, so a zero exit means it landed.|
 8.  [ ]  Renew passport|
 |
 
+### case=print/projects@30 color=never
+○  Empty project  |
+◔  Just started   Work|
+◑  Half done      Work|
+◕  Nearly there   |
+●  All done       Home|
+●  Completed      |
+◌  Cancelled      |
+|
+
+### case=print/projects@20 color=never
+○  Empty project|
+◔  Just started|
+◑  Half done|
+◕  Nearly there|
+●  All done|
+●  Completed|
+◌  Cancelled|
+|
+
+### case=print/projects@14 color=never
+○  Empty proj…|
+◔  Just start…|
+◑  Half done|
+◕  Nearly the…|
+●  All done|
+●  Completed|
+◌  Cancelled|
+|
+
+### case=task-detail/wrapped@40 color=never
+Title:    Book the venue for the autumn|
+          team offsite|
+UUID:     wrap-uuid|
+Status:   Open|
+Project:  Team offsite planning and|
+          logistics|
+Tags:     waiting-on-venue, errands,|
+          budget|
+Notes:|
+  Call them before Friday and ask about|
+  the deposit.|
+  |
+  See|
+  https://example.com/venue-offsite26|
+  for details.|
+Checklist:|
+  [x] Confirm the headcount with every|
+      team lead|
+|
+
+### case=hint@30 color=never
+|
+hint: run `things show 1` for|
+      the detail|
+|
+
 ### case=task-list/unlabelled@120 color=never
     Work|
 1.  [ ]  Runbook audit (project)                      [ops]                     |
@@ -1357,7 +1414,7 @@ waiting-on-someone  \e[2m(w)\e[m|
 
 ### case=hint color=always
 |
-\e[2mhint: run `things show 1` for the detail\e[m|
+\e[2mhint: \e[m\e[2mrun `things show 1` for the detail\e[m|
 |
 
 ### case=brief/task color=always
@@ -1687,6 +1744,63 @@ the status did not change, so a zero exit means it landed.|
 6.  [ ]  No group at all|
 7.  [ ]  Unrecognised status|
 8.  [ ]  Renew passport|
+|
+
+### case=print/projects@30 color=always
+\e[36m○\e[m  Empty project  \e[2;36m\e[m|
+\e[36m◔\e[m  Just started   \e[2;36mWork\e[m|
+\e[36m◑\e[m  Half done      \e[2;36mWork\e[m|
+\e[36m◕\e[m  Nearly there   \e[2;36m\e[m|
+\e[36m●\e[m  All done       \e[2;36mHome\e[m|
+\e[2;32m●\e[m  Completed      \e[2;36m\e[m|
+\e[2;31m◌\e[m  Cancelled      \e[2;36m\e[m|
+|
+
+### case=print/projects@20 color=always
+\e[36m○\e[m  Empty project|
+\e[36m◔\e[m  Just started|
+\e[36m◑\e[m  Half done|
+\e[36m◕\e[m  Nearly there|
+\e[36m●\e[m  All done|
+\e[2;32m●\e[m  Completed|
+\e[2;31m◌\e[m  Cancelled|
+|
+
+### case=print/projects@14 color=always
+\e[36m○\e[m  Empty proj…|
+\e[36m◔\e[m  Just start…|
+\e[36m◑\e[m  Half done|
+\e[36m◕\e[m  Nearly the…|
+\e[36m●\e[m  All done|
+\e[2;32m●\e[m  Completed|
+\e[2;31m◌\e[m  Cancelled|
+|
+
+### case=task-detail/wrapped@40 color=always
+\e[1mTitle:\e[m    Book the venue for the autumn|
+          team offsite|
+\e[1mUUID:\e[m     wrap-uuid|
+\e[1mStatus:\e[m   Open|
+\e[1mProject:\e[m  \e[36mTeam offsite planning and\e[m|
+          \e[36mlogistics\e[m|
+\e[1mTags:\e[m     \e[33mwaiting-on-venue, errands,\e[m|
+          \e[33mbudget\e[m|
+\e[1mNotes:\e[m|
+  Call them before Friday and ask about|
+  the deposit.|
+  |
+  See|
+  https://example.com/venue-offsite26|
+  for details.|
+\e[1mChecklist:\e[m|
+  \e[2;32m[x]\e[m Confirm the headcount with every|
+      team lead|
+|
+
+### case=hint@30 color=always
+|
+\e[2mhint: \e[m\e[2mrun `things show 1` for\e[m|
+      \e[2mthe detail\e[m|
 |
 
 ### case=task-list/unlabelled@120 color=always

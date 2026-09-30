@@ -171,6 +171,10 @@ output and `--json` keep every title whole.
 collections themselves. `things projects` accepts `--area` and
 `--completed`.
 
+On a terminal, `things projects` fits the width the same way: the tags go
+first, then the area, and then the title is cut short with `…`. Piped
+output keeps every column whole.
+
 Projects are scheduled the same way tasks are, and `things projects -j`
 reports that with the same field names and encodings: `start`,
 `startBucket`, `startDate` and `deadline`. A caller can tell a scheduled

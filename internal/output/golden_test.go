@@ -265,6 +265,37 @@ func goldenCases(t *testing.T) []goldenCase {
 			},
 		)
 	}
+	// The project list at widths that give up its tags, then its area, and
+	// then cut its titles short.
+	for _, width := range []int{30, 20, 14} {
+		cases = append(cases, goldenCase{
+			name:  fmt.Sprintf("print/projects@%d", width),
+			width: width,
+			write: func(w io.Writer) error { return Print(w, projects, false) },
+		})
+	}
+	// A detail block long enough to wrap at 40 columns, and a hint at 30.
+	wrapped := &model.Task{
+		UUID: "wrap-uuid", Title: "Book the venue for the autumn team offsite", Type: model.TypeTask,
+		Status: model.StatusOpen, ProjectTitle: "Team offsite planning and logistics",
+		Tags:  []string{"waiting-on-venue", "errands", "budget"},
+		Notes: "Call them before Friday and ask about the deposit.\n\nSee https://example.com/venue-offsite26 for details.",
+	}
+	wrappedItems := []model.ChecklistItem{
+		{UUID: "w1", Title: "Confirm the headcount with every team lead", Status: model.StatusCompleted},
+	}
+	cases = append(cases,
+		goldenCase{
+			name:  "task-detail/wrapped@40",
+			width: 40,
+			write: func(w io.Writer) error { return PrintTaskWithChecklist(w, wrapped, wrappedItems, false) },
+		},
+		goldenCase{
+			name:  "hint@30",
+			width: 30,
+			write: func(w io.Writer) error { return PrintHint(w, "run `things show 1` for the detail") },
+		},
+	)
 	cases = append(cases, goldenCase{
 		name:  "task-list/unlabelled@120",
 		width: 120,
