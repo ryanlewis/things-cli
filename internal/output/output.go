@@ -251,7 +251,20 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 // alone is wider than the space left.
 func hang(prefix, s string, width int) string {
 	indent := lipgloss.Width(prefix)
-	lines := strings.Split(lipgloss.Wrap(s, width-indent, ""), "\n")
+	// The wrap always breaks after a hyphen, which would split a URL or a
+	// hyphenated word that fits whole on the next line. A non-breaking hyphen
+	// is the same width, so it stands in while wrapping, unless the text
+	// already has one that has to come back out as itself.
+	const nbHyphen = "‑"
+	protect := !strings.Contains(s, nbHyphen)
+	if protect {
+		s = strings.ReplaceAll(s, "-", nbHyphen)
+	}
+	wrapped := lipgloss.Wrap(s, width-indent, "")
+	if protect {
+		wrapped = strings.ReplaceAll(wrapped, nbHyphen, "-")
+	}
+	lines := strings.Split(wrapped, "\n")
 	pad := strings.Repeat(" ", indent)
 	var b strings.Builder
 	for i, line := range lines {
