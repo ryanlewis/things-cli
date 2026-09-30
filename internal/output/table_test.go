@@ -95,3 +95,31 @@ func TestTableOmitEmptyFits(t *testing.T) {
 		}
 	}
 }
+
+// A tail survives a cut: the ellipsis goes into the text before it, and the
+// column goes no narrower than the tail plus one character and the ellipsis.
+func TestTableTail(t *testing.T) {
+	tests := []struct {
+		name     string
+		maxWidth int
+		want     string
+	}{
+		{"fits", 0, "1.  a long title (p)"},
+		{"cut", 14, "1.  a lon… (p)"},
+		{"floor", 4, "1.  a… (p)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tbl := &table{
+				gap:      columnGap,
+				maxWidth: tt.maxWidth,
+				shrink:   []shrinkCol{{col: 1, min: 2}},
+			}
+			tbl.row("1.", "a long title")
+			tbl.tail(1, " (p)")
+			if got := tbl.lines()[0]; got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

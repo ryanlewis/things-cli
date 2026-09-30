@@ -164,8 +164,10 @@ before the deadline, when the terminal is wide enough.
 
 Plain task lists fit the terminal width. When a row is too wide, that
 extra start date goes first, then the tags, then the date, and then the
-title is cut short with `…`. Titles are cut only on a terminal: piped
-output and `--json` keep every title whole.
+title is cut short with `…`. A project keeps its `(project)` marker; the
+cut comes out of the title before it. Group headers are cut to fit too.
+Titles and headers are cut only on a terminal: piped output and `--json`
+keep them whole.
 
 `things projects`, `things areas`, and `things tags` list the
 collections themselves. `things projects` accepts `--area` and
