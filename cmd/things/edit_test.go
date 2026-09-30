@@ -2,8 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ryanlewis/things-cli/internal/model"
 )
 
 // A field edit that lands prints the item as `things show` would, in both
@@ -211,6 +215,88 @@ func TestEditWithNothingToChangeDoesNotWait(t *testing.T) {
 			}
 			if !strings.Contains(out, args[1]) {
 				t.Errorf("output = %q, want the item printed", out)
+			}
+		})
+	}
+}
+
+// An edit made only of values the item already has is recognised before the
+// write: Things records no change for it, so waiting would end in a false
+// "did not apply". The URL still goes out, and the item is printed at once.
+// Anything that is a real change, or whose outcome depends on how Things reads
+// it, still waits — a dropping stub turns those into a failure.
+func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
+	now := time.Now()
+	today := int(model.ThingsDateFromTime(now))
+	todayISO := now.Format("2006-01-02")
+	future := now.AddDate(0, 0, 3).Format("2006-01-02")
+	deadline := int(model.ThingsDateFromTime(time.Date(2026, 10, 15, 0, 0, 0, 0, time.Local)))
+
+	cases := []struct {
+		name string
+		args []string
+		noOp bool
+	}{
+		{"sameTitle", []string{"edit", "one-1", "--title", "Post letter"}, true},
+		{"newTitle", []string{"edit", "one-1", "--title", "Post the letter"}, false},
+		{"titleCaseOnly", []string{"edit", "one-1", "--title", "post letter"}, false},
+		{"sameNotes", []string{"edit", "one-1", "--notes", "second class"}, true},
+		{"newNotes", []string{"edit", "one-1", "--notes", "first class"}, false},
+		{"sameTagsOtherCase", []string{"edit", "one-1", "--tags", " errand ,URGENT"}, true},
+		{"moreTags", []string{"edit", "one-1", "--tags", "Errand,Urgent,Home"}, false},
+		{"clearTags", []string{"edit", "one-1", "--tags", ""}, false},
+		{"addTagsPresent", []string{"edit", "one-1", "--add-tags", "ERRAND"}, true},
+		{"addTagsNew", []string{"edit", "one-1", "--add-tags", "Errand,Home"}, false},
+		{"sameDeadline", []string{"edit", "one-1", "--deadline", "2026-10-15"}, true},
+		{"newDeadline", []string{"edit", "one-1", "--deadline", "2026-10-16"}, false},
+		{"clearDeadline", []string{"edit", "one-1", "--deadline", ""}, false},
+		{"clearAbsentDeadline", []string{"edit", "two-1", "--deadline", ""}, true},
+		{"whenToday", []string{"edit", "one-1", "--when", "today"}, true},
+		{"whenTodayLiteral", []string{"edit", "one-1", "--when", todayISO}, true},
+		{"whenTomorrow", []string{"edit", "one-1", "--when", "tomorrow"}, false},
+		{"whenEvening", []string{"edit", "one-1", "--when", "evening"}, false},
+		{"whenPhrase", []string{"edit", "one-1", "--when", "friday"}, false},
+		{"whenFutureLiteral", []string{"edit", "one-1", "--when", future}, false},
+		{"whenTodayFromEvening", []string{"edit", "eve-1", "--when", "today"}, false},
+		{"whenTodayUndated", []string{"edit", "two-1", "--when", "today"}, false},
+		{"allNoOp", []string{"edit", "one-1", "--title", "Post letter", "--add-tags", "errand", "--when", "today"}, true},
+		{"mixed", []string{"edit", "one-1", "--title", "Post letter", "--notes", "first class"}, false},
+		{"mixedUncoveredFlag", []string{"edit", "one-1", "--title", "Post letter", "--append-notes", "x"}, false},
+		{"projectSameTitle", []string{"project", "edit", "repproj-1", "--title", "Weekly review"}, true},
+		{"projectMoveArea", []string{"project", "edit", "repproj-1", "--title", "Weekly review", "--area", "Home"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			stmts := []string{
+				`UPDATE TMTask SET notes = 'second class', start = 1, startBucket = 0, startDate = ` + strconv.Itoa(today) +
+					`, deadline = ` + strconv.Itoa(deadline) + ` WHERE uuid = 'one-1'`,
+				`INSERT INTO TMTag (uuid, title) VALUES ('tag-1', 'Errand'), ('tag-2', 'Urgent')`,
+				`INSERT INTO TMTaskTag (tasks, tags) VALUES ('one-1', 'tag-1'), ('one-1', 'tag-2')`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('two-1', 'Undated', 0, 0, 0, 1)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, startDate)
+				 VALUES ('eve-1', 'Tonight', 0, 0, 0, 1, 1, ` + strconv.Itoa(today) + `)`,
+			}
+			for _, s := range stmts {
+				if _, err := sqlDB.Exec(s); err != nil {
+					t.Fatalf("seed %q: %v", s, err)
+				}
+			}
+			calls := stubExecDropping(t)
+
+			_, err := runOut(t, database, tc.args...)
+			if *calls != 1 {
+				t.Errorf("issued %d writes, want the URL sent once either way", *calls)
+			}
+			if tc.noOp {
+				if err != nil {
+					t.Fatalf("%v: %v — a certain no-op must not wait for a change", tc.args, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "did not apply") {
+				t.Fatalf("%v = %v, want the read-back to wait and fail", tc.args, err)
 			}
 		})
 	}

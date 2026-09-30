@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -116,7 +118,17 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 			Reveal:       c.Reveal,
 		})
 	}
-	return applyEdit(d, database, project, c.changesFields(), c.Complete, c.Cancel, c.Duplicate, update)
+	changed := c.changesFields() && !c.certainNoOp(project, time.Now())
+	return applyEdit(d, database, project, changed, c.Complete, c.Cancel, c.Duplicate, update)
+}
+
+// certainNoOp reports whether every field flag set on the edit provably
+// leaves the project as it is, so there is no modification to wait for.
+func (c *ProjectEditCmd) certainNoOp(project *model.Task, now time.Time) bool {
+	if anySet(c.PrependNotes, c.AppendNotes, c.Area, c.AreaID) {
+		return false
+	}
+	return coveredFields{c.Title, c.Notes, c.When, c.Deadline, c.Tags, c.AddTags}.unchanged(project, now)
 }
 
 // changesFields reports whether the edit sets any attribute besides the status.

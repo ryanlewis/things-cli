@@ -219,9 +219,10 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 // The read-back is skipped, and the output says the edit is unconfirmed, in
 // two cases: --no-verify, and --duplicate, where Things applies the edit to a
 // new copy whose uuid the CLI never learns while the original is expected to
-// stay as it was. An edit that asks for nothing new (no field flags, and any
-// status it names is already the item's) has nothing to wait for; the item
-// is printed as it stands. A status-only edit waits for the status alone, the
+// stay as it was. An edit that asks for nothing new (no field flags, or only
+// values the item certainly has already — see coveredFields — and any status
+// it names is already the item's) has nothing to wait for; the item is
+// printed as it stands. A status-only edit waits for the status alone, the
 // same check `complete` and `cancel` make.
 func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, cancel, duplicate bool, update func() error) error {
 	if err := update(); err != nil {
