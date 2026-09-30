@@ -218,7 +218,7 @@ func TestTableFitNeverOverruns(t *testing.T) {
 	prevKept := -1
 	for w := 100; w >= 1; w-- {
 		tbl := build(w)
-		keep, _ := tbl.fit(tbl.widths())
+		keep, _, _ := tbl.fit(tbl.widths())
 		kept := 0
 		for _, k := range keep {
 			if k {
@@ -309,6 +309,40 @@ func TestTableDropFirst(t *testing.T) {
 			tbl.row("1.", "a title of twenty ch", "✓ 1/2", "due:x")
 			if got := tbl.lines()[0]; got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A dropOrder column with compact forms switches the whole column to them
+// before it is dropped, and is dropped only if the row still does not fit. A
+// row without a compact form keeps its full text.
+func TestTableCompactBeforeDrop(t *testing.T) {
+	tests := []struct {
+		name     string
+		maxWidth int
+		want     []string
+	}{
+		{"full fits", 21, []string{"1.  title  2026-10-02", "2.  other  2026-10-09", "3.  third  soon"}},
+		{"compact", 16, []string{"1.  title  Fri", "2.  other  9 Oct", "3.  third  soon"}},
+		{"still too wide", 15, []string{"1.  title", "2.  other", "3.  third"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tbl := &table{gap: columnGap, maxWidth: tt.maxWidth, dropOrder: []int{2}}
+			tbl.row("1.", "title", "2026-10-02")
+			tbl.alt(2, "Fri")
+			tbl.row("2.", "other", "2026-10-09")
+			tbl.alt(2, "9 Oct")
+			tbl.row("3.", "third", "soon")
+			got := tbl.lines()
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d lines, want %d", len(got), len(tt.want))
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Errorf("line %d = %q, want %q", i, got[i], tt.want[i])
+				}
 			}
 		})
 	}

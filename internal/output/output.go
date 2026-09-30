@@ -145,13 +145,17 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// The date column shows the deadline over the start date, so a task
 		// with both carries its start date in a column of its own, before the
 		// deadline.
-		var start, date string
+		// The date's compact form ("due:Fri") stands in for it on a terminal
+		// too narrow for the full one, before the column is dropped.
+		var start, date, compactDate string
 		switch {
 		case t.Deadline != nil:
 			date = styledDate(t.Deadline, true)
+			compactDate = styledCompactDate(t.Deadline, true)
 			start = styledDate(t.StartDate, false)
 		case t.StartDate != nil:
 			date = styledDate(t.StartDate, false)
+			compactDate = styledCompactDate(t.StartDate, false)
 		}
 
 		tbl.row(
@@ -164,6 +168,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			date,
 		)
 		tbl.tail(colTitle, marker)
+		tbl.alt(colDate, compactDate)
 
 		g := group{uuid: t.UUID}
 		if t.ProjectUUID != "" {

@@ -171,8 +171,11 @@ Plain task lists fit the terminal width. When a row is too wide, the
 checklist progress goes first, then that extra start date. If the row is
 still too wide, a title longer than 40 columns is cut to 40 with `…`, so
 one long title does not cost every row its tags or date. Then the tags
-go, then the date, and then the title is cut further, down to 10. A project keeps
-its `(project)` marker; the cut comes out of the title before it. Group
+go. Next the dates switch to a short form relative to today (`today`,
+`tomorrow`, `due:Fri`, `3d ago`, `2 Oct`, with the year only when it is
+not this one), and only if that still does not fit does the date go.
+Then the title is cut further, down to 10. A project keeps its
+`(project)` marker; the cut comes out of the title before it. Group
 headers are cut to fit too. Titles and headers are cut only on a
 terminal: piped output and `--json` keep them whole.
 
