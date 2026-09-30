@@ -102,13 +102,20 @@ var emptySpans = regexp.MustCompile(`(?:\x1b\[[0-9;]+m\x1b\[m)+$`)
 
 // dropEmptySpans removes the empty styled spans ansi.Truncate leaves behind
 // for the characters it cut from text styled one character at a time. It only
-// does so after a reset, so what it removes can never leave a style open.
+// does so after a reset, so what it removes can never leave a style open: when
+// the run follows text still styled, its first span keeps the reset that
+// closes that style and only the spans after it go.
 func dropEmptySpans(s string) string {
 	loc := emptySpans.FindStringIndex(s)
-	if loc == nil || !strings.HasSuffix(s[:loc[0]], "\x1b[m") {
+	if loc == nil {
 		return s
 	}
-	return s[:loc[0]]
+	const reset = "\x1b[m"
+	start := loc[0]
+	if !strings.HasSuffix(s[:start], reset) {
+		start += strings.Index(s[start:], reset) + len(reset)
+	}
+	return s[:start]
 }
 
 // lines renders one line per row, in the order the rows went in, so a caller
