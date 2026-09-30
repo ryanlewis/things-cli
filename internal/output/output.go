@@ -168,7 +168,11 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			date,
 		)
 		tbl.tail(colTitle, marker)
-		tbl.alt(colDate, compactDate)
+		// Only on a terminal: a relative date goes stale in a saved file and
+		// defeats grep, so piped output keeps the full date or none.
+		if tty {
+			tbl.alt(colDate, compactDate)
+		}
 
 		g := group{uuid: t.UUID}
 		if t.ProjectUUID != "" {
