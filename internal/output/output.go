@@ -77,6 +77,7 @@ const (
 	colStatus
 	colTitle
 	colTags
+	colStart
 	colDate
 )
 
@@ -95,7 +96,12 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		maxWidth: termWidth(),
 		// The tags go first when a row will not fit, then the date: a row
 		// still says what it is and when it is due for as long as it can.
-		dropOrder: []int{colTags, colDate},
+		// The start date beside a deadline is the first to go: the date
+		// column still carries the deadline, as it does on a narrow terminal.
+		dropOrder: []int{colStart, colTags, colDate},
+		// A list with no task carrying both dates prints as if the start
+		// column were not there.
+		omitEmpty: []int{colStart},
 	}
 	if stdoutIsTerminal() {
 		// Then the title is cut short rather than wrapping under the row
@@ -128,12 +134,20 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		case t.StartDate != nil:
 			date = styledDate(t.StartDate, false)
 		}
+		// The date column shows the deadline over the start date, so a task
+		// with both carries its start date in a column of its own, before the
+		// deadline as the two fall in time.
+		var start string
+		if t.Deadline != nil && t.StartDate != nil {
+			start = styledDate(t.StartDate, false)
+		}
 
 		tbl.row(
 			fmt.Sprintf("%d.", i+1),
 			styledStatus(t.Status),
 			title,
 			styledTags(t.Tags),
+			start,
 			date,
 		)
 
