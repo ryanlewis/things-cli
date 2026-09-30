@@ -9,12 +9,15 @@ import (
 )
 
 // FindTagUUID resolves a tag reference (UUID or title) to its UUID,
-// returning "" when no row matches.
+// returning "" when no row matches. Titles match case-insensitively, as Things
+// treats tag names that differ only in case as the same tag (see UnknownTags);
+// an exact match wins over a case-folded one.
 func (d *DB) FindTagUUID(ref string) (string, error) {
 	var uuid string
 	err := d.db.QueryRow(
-		`SELECT uuid FROM TMTag WHERE uuid = ? OR title = ? LIMIT 1`,
-		ref, ref,
+		`SELECT uuid FROM TMTag WHERE uuid = ? OR title = ? COLLATE NOCASE
+		 ORDER BY (uuid = ?) DESC, (title = ?) DESC, "index" ASC, uuid ASC LIMIT 1`,
+		ref, ref, ref, ref,
 	).Scan(&uuid)
 	if err == sql.ErrNoRows {
 		return "", nil

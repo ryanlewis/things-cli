@@ -32,7 +32,7 @@ func TestFindTagUUID(t *testing.T) {
 	d := newTestDB(t)
 	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('t1', 'urgent', 0)`)
 
-	for _, ref := range []string{"urgent", "t1"} {
+	for _, ref := range []string{"urgent", "URGENT", "t1"} {
 		got, err := d.FindTagUUID(ref)
 		if err != nil {
 			t.Fatalf("FindTagUUID(%q): %v", ref, err)
