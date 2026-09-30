@@ -274,13 +274,14 @@ func renderGolden(t *testing.T) string {
 	// The detail block prints its UTC timestamps in local time, so the document
 	// is rendered for a reader in UTC — otherwise it would change with the zone
 	// of the machine running the test.
-	prevNow, prevWidth, prevLocal := nowFn, termWidth, time.Local
+	prevNow, prevWidth, prevTerm, prevLocal := nowFn, termWidth, stdoutIsTerminal, time.Local
 	t.Cleanup(func() {
-		nowFn, termWidth, time.Local = prevNow, prevWidth, prevLocal
+		nowFn, termWidth, stdoutIsTerminal, time.Local = prevNow, prevWidth, prevTerm, prevLocal
 		_ = SetColorMode("never")
 	})
 	time.Local = time.UTC
 	nowFn = func() time.Time { return goldenNow }
+	stdoutIsTerminal = func() bool { return true }
 
 	var b strings.Builder
 	for _, mode := range []string{"never", "always"} {

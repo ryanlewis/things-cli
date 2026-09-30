@@ -145,3 +145,11 @@ var termWidth = func() int {
 	}
 	return 120
 }
+
+// stdoutIsTerminal reports whether stdout is a terminal. Titles are cut short
+// only there: piped output falls back to termWidth's 120 columns, and cutting
+// a title there would hide text from grep and from agents reading the rows.
+// A var, like termWidth, so a test can pin it.
+var stdoutIsTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}

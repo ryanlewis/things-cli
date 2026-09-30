@@ -28,6 +28,9 @@ func TestTableShrink(t *testing.T) {
 			tbl.row("1.", "a long title here", "x")
 			tbl.row("2.", "short")
 			got := tbl.lines()
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d lines, want %d: %q", len(got), len(tt.want), got)
+			}
 			for i, line := range got {
 				if line != tt.want[i] {
 					t.Errorf("line %d = %q, want %q", i, line, tt.want[i])

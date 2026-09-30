@@ -94,9 +94,12 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// The tags go first when a row will not fit, then the date: a row
 		// still says what it is and when it is due for as long as it can.
 		dropOrder: []int{colTags, colDate},
+	}
+	if stdoutIsTerminal() {
 		// Then the title is cut short rather than wrapping under the row
 		// numbers, though never so far that it stops saying what the task is.
-		shrink: []shrinkCol{{col: colTitle, min: 10}},
+		// Only on a terminal: piped output keeps every title whole.
+		tbl.shrink = []shrinkCol{{col: colTitle, min: 10}}
 	}
 	groups := make([]group, len(tasks))
 
