@@ -207,11 +207,15 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) er
 	if t.Repeating {
 		fmt.Fprintf(w, "%s%s\n", label("Repeats:"), "yes (Things blocks status, when and deadline edits)")
 	}
+	// The timestamps arrive in UTC (model.UnixToTime), and the line carries no
+	// zone, so render them in local time like every other date the reader sees.
+	// Printed as UTC, an item closed after midnight in a zone ahead of UTC
+	// reads as stopped the day before.
 	if t.CreationDate != nil {
-		fmt.Fprintf(w, "%s%s\n", label("Created:"), t.CreationDate.Format("2006-01-02 15:04"))
+		fmt.Fprintf(w, "%s%s\n", label("Created:"), t.CreationDate.Local().Format("2006-01-02 15:04"))
 	}
 	if t.StopDate != nil {
-		fmt.Fprintf(w, "%s%s\n", label("Stopped:"), t.StopDate.Format("2006-01-02 15:04"))
+		fmt.Fprintf(w, "%s%s\n", label("Stopped:"), t.StopDate.Local().Format("2006-01-02 15:04"))
 	}
 	if t.Notes != "" {
 		fmt.Fprintf(w, "%s\n  %s\n", labelStyle.Render("Notes:"), strings.ReplaceAll(t.Notes, "\n", "\n  "))

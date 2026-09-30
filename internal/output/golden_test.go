@@ -25,7 +25,8 @@ const goldenRenderPath = "testdata/render_golden.txt"
 // goldenNow is the clock the golden document is rendered against. styledDate
 // buckets a date by its distance from today, so the fixtures below carry dates
 // either side of this one and the file would otherwise change every day.
-var goldenNow = time.Date(2026, 9, 10, 11, 30, 0, 0, time.Local)
+// renderGolden pins time.Local to UTC, so this is the reader's wall clock too.
+var goldenNow = time.Date(2026, 9, 10, 11, 30, 0, 0, time.UTC)
 
 // goldenCase is one rendered surface: a name, the width to render it at, and
 // the call that writes it.
@@ -270,11 +271,15 @@ func goldenCases(t *testing.T) []goldenCase {
 func renderGolden(t *testing.T) string {
 	t.Helper()
 
-	prevNow, prevWidth := nowFn, termWidth
+	// The detail block prints its UTC timestamps in local time, so the document
+	// is rendered for a reader in UTC — otherwise it would change with the zone
+	// of the machine running the test.
+	prevNow, prevWidth, prevLocal := nowFn, termWidth, time.Local
 	t.Cleanup(func() {
-		nowFn, termWidth = prevNow, prevWidth
+		nowFn, termWidth, time.Local = prevNow, prevWidth, prevLocal
 		_ = SetColorMode("never")
 	})
+	time.Local = time.UTC
 	nowFn = func() time.Time { return goldenNow }
 
 	var b strings.Builder
