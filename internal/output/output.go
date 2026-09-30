@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -122,9 +123,11 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// A task list is normally to-dos only, but `things repeating` carries
 		// project templates too and `things search` can turn up a project, so
 		// say which rows are projects rather than letting them read as
-		// to-dos. Text, not just colour, so it survives --color never.
+		// to-dos. Text, not just colour, so it survives --color never. It
+		// goes in as the title's tail, so cutting a long title keeps it.
+		var marker string
 		if isProject(&t) {
-			title += " " + dimStyle.Render("("+kindWord(&t)+")")
+			marker = " " + dimStyle.Render("("+kindWord(&t)+")")
 		}
 
 		// The date column shows the deadline over the start date, so a task
@@ -147,6 +150,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			start,
 			date,
 		)
+		tbl.tail(colTitle, marker)
 
 		g := group{uuid: t.UUID}
 		if t.ProjectUUID != "" {
@@ -181,7 +185,7 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 					fmt.Fprintln(w)
 				}
 				if g.title != "" {
-					fmt.Fprintf(w, "    %s\n", headerStyle.Render(g.title))
+					fmt.Fprintf(w, "    %s\n", headerStyle.Render(fitHeader(g.title)))
 				}
 			}
 			*current = g.key
@@ -192,6 +196,16 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		fmt.Fprintln(w, lines[i])
 	}
 	return nil
+}
+
+// fitHeader cuts a group header short with an ellipsis so that, behind its
+// four-space indent, it fits the terminal rather than wrapping. Only on a
+// terminal, as with titles: piped output keeps every header whole.
+func fitHeader(title string) string {
+	if !stdoutIsTerminal() {
+		return title
+	}
+	return ansi.Truncate(title, max(termWidth()-4, 1), "…")
 }
 
 func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) error {

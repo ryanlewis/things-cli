@@ -909,6 +909,14 @@ hint: run `things show 1` for|
 8.  [ ]  Renew passport                                             2026-12-01  due:2026-12-25|
 |
 
+### case=task-list/long@50 color=never
+    Platform engineering and infrastructure work|
+1.  [ ]  Migrate the billing service to… (project)|
+|
+    Quarterly offsite planning for the whole depa…|
+2.  [ ]  Book a room|
+|
+
 ### case=task-detail/plain color=always
 \e[1mTitle:\e[m    Cut RC build|
 \e[1mUUID:\e[m     detail-uuid|
@@ -1818,5 +1826,13 @@ the status did not change, so a zero exit means it landed.|
 6.  [ ]  No group at all                                                        \e[2mdue:2026-12-25\e[m|
 7.  [ ]  Unrecognised status                                                    |
 8.  [ ]  Renew passport                                             \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
+|
+
+### case=task-list/long@50 color=always
+    \e[1;36mPlatform engineering and infrastructure work\e[m|
+1.  [ ]  Migrate the billing service to… \e[2m(project)\e[m|
+|
+    \e[1;36mQuarterly offsite planning for the whole depa…\e[m|
+2.  [ ]  Book a room|
 |
 

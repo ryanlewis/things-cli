@@ -301,6 +301,24 @@ func goldenCases(t *testing.T) []goldenCase {
 		width: 120,
 		write: func(w io.Writer) error { return PrintTaskList(w, tasks, false, "") },
 	})
+
+	// Long enough to be cut at 50 columns: a project row keeps its marker
+	// behind the cut, and the group headers are cut to fit their indent.
+	long := []model.Task{
+		{
+			UUID: "lp1", Title: "Migrate the billing service to the new cluster", Type: model.TypeProject,
+			Status: model.StatusOpen, AreaUUID: "la1", AreaTitle: "Platform engineering and infrastructure work",
+		},
+		{
+			UUID: "lt1", Title: "Book a room", Type: model.TypeTask, Status: model.StatusOpen,
+			ProjectUUID: "lp2", ProjectTitle: "Quarterly offsite planning for the whole department",
+		},
+	}
+	cases = append(cases, goldenCase{
+		name:  "task-list/long@50",
+		width: 50,
+		write: func(w io.Writer) error { return PrintTaskList(w, long, false, "") },
+	})
 	return cases
 }
 

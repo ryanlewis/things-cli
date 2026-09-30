@@ -38,6 +38,8 @@ type table struct {
 	shrink []shrinkCol
 
 	rows [][]string
+	// tails holds the endings set with tail, by row and column.
+	tails map[[2]int]string
 }
 
 // shrinkCol is a column a table may cut short, and the narrowest it may go.
@@ -49,6 +51,39 @@ type shrinkCol struct {
 // a short row leaves the columns past its end empty.
 func (t *table) row(cells ...string) {
 	t.rows = append(t.rows, cells)
+}
+
+// tail gives the last row's cell in column c an ending that a cut leaves
+// whole: the cell measures and prints as its text followed by s, and when the
+// column is cut short the ellipsis goes into the text before s.
+func (t *table) tail(c int, s string) {
+	if len(t.rows) == 0 || s == "" {
+		return
+	}
+	if t.tails == nil {
+		t.tails = make(map[[2]int]string)
+	}
+	t.tails[[2]int{len(t.rows) - 1, c}] = s
+}
+
+// cell is the full text of row i's cell in column c, tail included.
+func (t *table) cell(i, c int) string {
+	cell := ""
+	if c < len(t.rows[i]) {
+		cell = t.rows[i][c]
+	}
+	return cell + t.tails[[2]int{i, c}]
+}
+
+// cut shortens row i's cell in column c to width, keeping its tail whole.
+func (t *table) cut(i, c, width int) string {
+	cell := t.cell(i, c)
+	if lipgloss.Width(cell) <= width {
+		return cell
+	}
+	tail := t.tails[[2]int{i, c}]
+	head := cell[:len(cell)-len(tail)]
+	return ansi.Truncate(head, width-lipgloss.Width(tail), "…") + tail
 }
 
 // lines renders one line per row, in the order the rows went in, so a caller
@@ -65,18 +100,15 @@ func (t *table) lines() []string {
 	}
 
 	lines := make([]string, len(t.rows))
-	for i, cells := range t.rows {
+	for i := range t.rows {
 		cols := make([]string, 0, len(widths))
 		for c, width := range widths {
 			if !keep[c] {
 				continue
 			}
-			cell := ""
-			if c < len(cells) {
-				cell = cells[c]
-			}
+			cell := t.cell(i, c)
 			if cut[c] {
-				cell = ansi.Truncate(cell, width, "…")
+				cell = t.cut(i, c, width)
 			}
 			if c == last {
 				cols = append(cols, cell)
@@ -108,9 +140,9 @@ func (t *table) widths() []int {
 		}
 	}
 	widths := make([]int, n)
-	for _, cells := range t.rows {
-		for c, cell := range cells {
-			if w := lipgloss.Width(cell); w > widths[c] {
+	for i, cells := range t.rows {
+		for c := range cells {
+			if w := lipgloss.Width(t.cell(i, c)); w > widths[c] {
 				widths[c] = w
 			}
 		}
@@ -147,7 +179,9 @@ func (t *table) keep(widths []int) []bool {
 
 // shrinkTo narrows the shrink columns, in place in widths, until the kept
 // columns fit or every one of them is at its minimum. It reports which
-// columns it narrowed, so their cells can be cut to the new width.
+// columns it narrowed, so their cells can be cut to the new width. A column
+// with tails goes no narrower than its widest tail plus one character and the
+// ellipsis, whatever its own minimum.
 func (t *table) shrinkTo(widths []int, keep []bool) []bool {
 	cut := make([]bool, len(widths))
 	if t.maxWidth <= 0 {
@@ -158,13 +192,28 @@ func (t *table) shrinkTo(widths []int, keep []bool) []bool {
 		if over <= 0 {
 			break
 		}
-		if s.col < 0 || s.col >= len(widths) || !keep[s.col] || widths[s.col] <= s.min {
+		if s.col < 0 || s.col >= len(widths) || !keep[s.col] {
 			continue
 		}
-		widths[s.col] = max(widths[s.col]-over, s.min)
+		floor := max(s.min, t.widestTail(s.col)+2)
+		if widths[s.col] <= floor {
+			continue
+		}
+		widths[s.col] = max(widths[s.col]-over, floor)
 		cut[s.col] = true
 	}
 	return cut
+}
+
+// widestTail is the widest tail set in column c, or zero.
+func (t *table) widestTail(c int) int {
+	widest := 0
+	for k, tail := range t.tails {
+		if k[1] == c {
+			widest = max(widest, lipgloss.Width(tail))
+		}
+	}
+	return widest
 }
 
 // fits reports whether the kept columns, plus the gaps between them, are

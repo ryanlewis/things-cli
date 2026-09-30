@@ -412,6 +412,27 @@ func TestPrintTasksMarksProjects(t *testing.T) {
 	}
 }
 
+// Titles are cut to the width only on a terminal: piped output falls back to
+// 120 columns, and cutting there would hide text from grep and from agents.
+func TestPrintTasksPipedKeepsTitlesWhole(t *testing.T) {
+	prevWidth, prevTerm := termWidth, stdoutIsTerminal
+	t.Cleanup(func() { termWidth, stdoutIsTerminal = prevWidth, prevTerm })
+	termWidth = func() int { return 30 }
+
+	title := "Write the postmortem for last week's outage"
+	tasks := []model.Task{{UUID: "t1", Title: title, Type: model.TypeTask, Status: model.StatusOpen}}
+	for _, tty := range []bool{false, true} {
+		stdoutIsTerminal = func() bool { return tty }
+		var buf bytes.Buffer
+		if err := Print(&buf, tasks, false); err != nil {
+			t.Fatalf("Print: %v", err)
+		}
+		if whole := strings.Contains(buf.String(), title); whole == tty {
+			t.Errorf("tty=%v: title whole=%v:\n%s", tty, whole, buf.String())
+		}
+	}
+}
+
 // today and upcoming list a scheduled project as a row, and its own to-dos
 // sort straight after it (issue #201) — anytime carries no project rows at all
 // since issue #217. The to-dos' project group header would
