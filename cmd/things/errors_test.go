@@ -146,6 +146,31 @@ func TestResolveTaskAmbiguousPlainTextUnchanged(t *testing.T) {
 	}
 }
 
+// A candidate whose title holds a line break is listed on one line, so it
+// cannot read as two candidates.
+func TestResolveTaskAmbiguousTitleOnOneLine(t *testing.T) {
+	stubTTY(t, false)
+	sqlDB := dbtest.NewSQL(t)
+	if _, err := sqlDB.Exec(
+		`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
+			('nl-1', 'Pack' || char(10) || 'bags', 0, 0, 0),
+			('nl-2', 'Pack' || char(9) || 'boxes', 0, 0, 0)`,
+	); err != nil {
+		t.Fatalf("seed tasks: %v", err)
+	}
+
+	_, err := resolveTask(&Deps{}, "Pack", db.NewFromSQL(sqlDB))
+	if err == nil {
+		t.Fatal("expected an ambiguity error")
+	}
+	msg := err.Error()
+	for _, want := range []string{"  1. Pack bags  [task]  (nl-1)\n", "  2. Pack boxes  [task]  (nl-2)\n"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message missing %q:\n%s", want, msg)
+		}
+	}
+}
+
 func decodePayload(t *testing.T, err error) (jsonErrorPayload, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer

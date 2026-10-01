@@ -12,6 +12,7 @@ import (
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/output"
 )
 
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
@@ -54,7 +55,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		var b strings.Builder
 		fmt.Fprintf(&b, "ambiguous task %q — matches %d tasks:\n", ambig.Query, len(ambig.Matches))
 		for i, m := range ambig.Matches {
-			fmt.Fprintf(&b, "  %d. %s  [%s]  (%s)\n", i+1, m.Title, m.Type, m.UUID)
+			fmt.Fprintf(&b, "  %d. %s  [%s]  (%s)\n", i+1, output.OneLine(m.Title), m.Type, m.UUID)
 		}
 		fmt.Fprint(&b, "Re-run with a UUID or more specific string.")
 		// Wrap rather than replace: the plain-text reader gets the rendered
@@ -68,9 +69,9 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	for i, m := range ambig.Matches {
 		project := ""
 		if m.ProjectTitle != "" {
-			project = "  (" + m.ProjectTitle + ")"
+			project = "  (" + output.OneLine(m.ProjectTitle) + ")"
 		}
-		fmt.Fprintf(os.Stderr, "  %d. %s  [%s]%s\n", i+1, m.Title, m.Type, project)
+		fmt.Fprintf(os.Stderr, "  %d. %s  [%s]%s\n", i+1, output.OneLine(m.Title), m.Type, project)
 	}
 	fmt.Fprintf(os.Stderr, "Pick [1-%d]: ", len(ambig.Matches))
 

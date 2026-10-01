@@ -180,13 +180,14 @@ and then the date. Then the title is cut further, down to 10. A project
 keeps its `(project)` marker; the cut comes out of the title before it.
 Group headers are cut to fit too. Titles and headers are cut, and tags
 and dates shortened, only on a terminal. Piped output never cuts or
-shortens anything, but a row wider than 120 columns still loses whole
-columns, in the same order: the checklist progress, the extra start
-date, the tags, then the date. `--json` carries every field in full.
+shortens anything, but when any row is wider than 120 columns, whole
+columns still go from every row, in the same order: the checklist
+progress, the extra start date, the tags, then the date. `--json`
+carries every field in full.
 
 A list prints each task on one line: a line break or a tab in a title,
-tag, project, area or group header shows as a space. `things show` and
-`--json` keep the title as it was written.
+tag, project, area or group header shows as a space. `things show` keeps
+a title's own line breaks, and `--json` carries it exactly as written.
 
 `things projects`, `things areas`, and `things tags` list the
 collections themselves. `things projects` accepts `--area` and

@@ -201,17 +201,17 @@ const compactTagWidth = 15
 // A single tag is only cut, "[waiting-on-pos…]", and one that already fits
 // compactTagWidth has no short form and gets "", as does no tag.
 func styledCompactTags(tags []string) string {
-	switch {
-	case len(tags) == 0:
+	if len(tags) == 0 {
 		return ""
-	case len(tags) == 1:
-		first := oneLine(tags[0])
+	}
+	first := oneLine(tags[0])
+	if len(tags) == 1 {
 		if lipgloss.Width(first) <= compactTagWidth {
 			return ""
 		}
 		return tagStyle.Render("[" + ansi.Truncate(first, compactTagWidth, "…") + "]")
 	}
-	first := ansi.Truncate(oneLine(tags[0]), compactTagWidth, "…")
+	first = ansi.Truncate(first, compactTagWidth, "…")
 	return tagStyle.Render(fmt.Sprintf("[%s +%d]", first, len(tags)-1))
 }
 
