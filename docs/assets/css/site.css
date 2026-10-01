@@ -790,7 +790,8 @@ svg {
 }
 
 .prose h2 code,
-.prose h3 code {
+.prose h3 code,
+.prose h4 code {
   font-size: 0.9em;
   background: none;
   border: none;
