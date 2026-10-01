@@ -22,11 +22,11 @@ func Print(w io.Writer, v any, asJSON bool) error {
 	// written to the raw writer.
 	switch val := v.(type) {
 	case []model.Task:
-		return printTasks(newWriter(w), val)
+		return printTasks(newWriter(w), val, currentLayout())
 	case *model.Task:
-		return printTaskDetail(newWriter(w), val, nil)
+		return printTaskDetail(newWriter(w), val, nil, currentLayout())
 	case []model.Project:
-		return printProjects(newWriter(w), val)
+		return printProjects(newWriter(w), val, currentLayout())
 	case []model.Area:
 		return printAreas(newWriter(w), val)
 	case []model.Tag:
@@ -46,9 +46,9 @@ func PrintTaskList(w io.Writer, tasks []model.Task, asJSON bool, view string) er
 	}
 	tw := newWriter(w)
 	if view != "" {
-		fmt.Fprintf(tw, "    %s\n", dimStyle.Render("view: "+view))
+		fmt.Fprintf(tw, "%s%s\n", headerIndent, dimStyle.Render("view: "+view))
 	}
-	return printTasks(tw, tasks)
+	return printTasks(tw, tasks, currentLayout())
 }
 
 func PrintTaskWithChecklist(w io.Writer, t *model.Task, items []model.ChecklistItem, asJSON bool) error {
@@ -59,7 +59,7 @@ func PrintTaskWithChecklist(w io.Writer, t *model.Task, items []model.ChecklistI
 		}
 		return printJSON(w, taskWithChecklist{Task: t, Checklist: items})
 	}
-	return printTaskDetail(newWriter(w), t, items)
+	return printTaskDetail(newWriter(w), t, items, currentLayout())
 }
 
 func printJSON(w io.Writer, v any) error {
@@ -84,20 +84,17 @@ const (
 	colDate
 )
 
-func printTasks(w io.Writer, tasks []model.Task) error {
-	// group is what a row needs beyond its cells: which project or area it
-	// belongs under, and its own UUID, so the header logic below can see
-	// whether a group's rows follow the row that names the group.
-	type group struct {
-		uuid       string
-		key, title string
-		isProject  bool
-	}
+// headerIndent sets a task listing's group headers, and its view line, in
+// from the rows.
+const headerIndent = "    "
 
-	width, tty := termWidth(), stdoutIsTerminal()
+func printTasks(w io.Writer, tasks []model.Task, lay layout) error {
 	tbl := &table{
-		gap:      columnGap,
-		maxWidth: width,
+		gap: columnGap,
+		// Unlike every other surface, a task listing fits lay.width even when
+		// piped, where it is termWidth's 120-column fallback: an over-long row
+		// gives up whole columns there, though no cell is cut or shortened.
+		maxWidth: lay.width,
 		// When a row will not fit, checklist progress goes first, since
 		// `things show` has the checklist itself. The start date beside a
 		// deadline is next: the date column still carries the deadline, as it
@@ -109,11 +106,11 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// it is due for as long as it can.
 		dropOrder: []int{colTags, colDate},
 	}
-	// A group header is cut to fit behind its four-space indent, and, as with
-	// titles, only on a terminal: piped output keeps every header whole.
+	// A group header is cut to fit behind its indent, and, as with titles,
+	// only on a terminal: piped output keeps every header whole.
 	headerWidth := 0
-	if tty {
-		headerWidth = max(width-4, 1)
+	if lay.tty {
+		headerWidth = max(lay.width-len(headerIndent), 1)
 		// Once the checklist progress and the extra start date have gone, an
 		// over-long title gives up its end, down to 40 columns, before the tags
 		// or the date are dropped from every row for it: 40 still reads as the
@@ -123,104 +120,121 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 		// keeps every title whole.
 		tbl.shrink = []shrinkCol{{col: colTitle, min: 10, soft: 40}}
 	}
-	groups := make([]group, len(tasks))
-
-	for i, t := range tasks {
-		title := t.Title
-		if t.Status == model.StatusCompleted || t.Status == model.StatusCancelled {
-			title = titleDimStyle.Render(title)
-		}
-		if t.Start == model.StartAnytime && t.StartBucket == 0 && t.StartDate != nil {
-			title = starStyle.Render("★") + " " + title
-		}
-		// A task list is normally to-dos only, but `things repeating` carries
-		// project templates too and `things search` can turn up a project, so
-		// say which rows are projects rather than letting them read as
-		// to-dos. Text, not just colour, so it survives --color never. It
-		// goes in as the title's tail, so cutting a long title keeps it.
-		var marker string
-		if isProject(&t) {
-			marker = " " + dimStyle.Render("("+kindWord(&t)+")")
-		}
-
-		// The date column shows the deadline over the start date, so a task
-		// with both carries its start date in a column of its own, before the
-		// deadline.
-		// The date's compact form ("due:Fri") stands in for it on a terminal
-		// too narrow for the full one, before the column is dropped.
-		var start, date, compactDate string
-		switch {
-		case t.Deadline != nil:
-			date = styledDate(t.Deadline, true)
-			compactDate = styledCompactDate(t.Deadline, true)
-			start = styledDate(t.StartDate, false)
-		case t.StartDate != nil:
-			date = styledDate(t.StartDate, false)
-			compactDate = styledCompactDate(t.StartDate, false)
-		}
-
-		tags := cell{text: styledTags(t.Tags)}
-		dateCell := cell{text: date}
-		// Only on a terminal: a relative date goes stale in a saved file and
-		// defeats grep, so piped output keeps the full date or none.
-		if tty {
-			tags.alt = styledCompactTags(t.Tags)
-			dateCell.alt = compactDate
-		}
-		tbl.add(
-			cell{text: fmt.Sprintf("%d.", i+1)},
-			cell{text: styledStatus(t.Status)},
-			cell{text: title, tail: marker},
-			cell{text: styledChecklist(t.ChecklistProgress)},
-			tags,
-			cell{text: start},
-			dateCell,
-		)
-
-		g := group{uuid: t.UUID}
-		if t.ProjectUUID != "" {
-			g.key, g.title, g.isProject = t.ProjectUUID, t.ProjectTitle, true
-		} else {
-			g.key, g.title = t.AreaUUID, t.AreaTitle
-		}
-		groups[i] = g
+	for i := range tasks {
+		tbl.add(taskCells(i+1, &tasks[i], lay.tty)...)
 	}
 
-	lines := tbl.lines()
+	headers := groupHeaders(tasks)
+	for i, line := range tbl.lines() {
+		h := headers[i]
+		if h.gap {
+			fmt.Fprintln(w)
+		}
+		if h.title != "" {
+			fmt.Fprintf(w, "%s%s\n", headerIndent, headerStyle.Render(fitHeader(h.title, headerWidth)))
+		}
+		fmt.Fprintln(w, line)
+	}
+	return nil
+}
+
+// taskCells is the row a task listing prints for t, numbered n. The compact
+// forms of its tags and date go in only on a terminal: a relative date goes
+// stale in a saved file and defeats grep, so piped output keeps the full date
+// or none.
+func taskCells(n int, t *model.Task, tty bool) []cell {
+	title := t.Title
+	if t.Status == model.StatusCompleted || t.Status == model.StatusCancelled {
+		title = titleDimStyle.Render(title)
+	}
+	if t.Start == model.StartAnytime && t.StartBucket == 0 && t.StartDate != nil {
+		title = starStyle.Render("★") + " " + title
+	}
+	// A task list is normally to-dos only, but `things repeating` carries
+	// project templates too and `things search` can turn up a project, so
+	// say which rows are projects rather than letting them read as to-dos.
+	// Text, not just colour, so it survives --color never. It goes in as the
+	// title's tail, so cutting a long title keeps it.
+	var marker string
+	if isProject(t) {
+		marker = " " + dimStyle.Render("("+kindWord(t)+")")
+	}
+
+	// The date column shows the deadline over the start date, so a task with
+	// both carries its start date in a column of its own, before the
+	// deadline. The date's compact form ("due:Fri") stands in for it on a
+	// terminal too narrow for the full one, before the column is dropped.
+	var start string
+	var date cell
+	switch {
+	case t.Deadline != nil:
+		date = cell{text: styledDate(t.Deadline, true), alt: styledCompactDate(t.Deadline, true)}
+		start = styledDate(t.StartDate, false)
+	case t.StartDate != nil:
+		date = cell{text: styledDate(t.StartDate, false), alt: styledCompactDate(t.StartDate, false)}
+	}
+	tags := cell{text: styledTags(t.Tags), alt: styledCompactTags(t.Tags)}
+	if !tty {
+		date.alt, tags.alt = "", ""
+	}
+
+	return []cell{
+		colNum:       {text: fmt.Sprintf("%d.", n)},
+		colStatus:    {text: styledStatus(t.Status)},
+		colTitle:     {text: title, tail: marker},
+		colChecklist: {text: styledChecklist(t.ChecklistProgress)},
+		colTags:      tags,
+		colStart:     {text: start},
+		colDate:      date,
+	}
+}
+
+// header is what a task listing prints above a row: a blank line, closing the
+// group before, and the title of the group the row opens. A group with no
+// title, or one folded under the row above, prints none.
+type header struct {
+	gap   bool
+	title string
+}
+
+// groupHeaders works out the header above each task's row. Rows group under
+// their project, or else their area; a change of group, or a move between a
+// project and an area, opens a new one.
+func groupHeaders(tasks []model.Task) []header {
+	headers := make([]header, len(tasks))
 	const sentinel = "\x00"
 	currentProject, currentArea := sentinel, sentinel
 	prevUUID := ""
-	for i, g := range groups {
-		current := &currentArea
-		other := &currentProject
-		if g.isProject {
+	for i := range tasks {
+		t := &tasks[i]
+		key, title, isProject := t.AreaUUID, t.AreaTitle, false
+		if t.ProjectUUID != "" {
+			key, title, isProject = t.ProjectUUID, t.ProjectTitle, true
+		}
+		current, other := &currentArea, &currentProject
+		if isProject {
 			current, other = &currentProject, &currentArea
 		}
-		if g.key != *current || *other != sentinel {
+		if key != *current || *other != sentinel {
 			// Every view but inbox lists a project as a row of its own
-			// (issues #201, #206, #212, #213). Where the view's order
-			// puts its to-dos straight after that row, their project group
-			// header would restate the title on the line above, so fold them
-			// under the row instead of repeating it. Where the order separates
-			// them the header still prints, which is what it is for. The group
+			// (issues #201, #206, #212, #213). Where the view's order puts its
+			// to-dos straight after that row, their project group header
+			// would restate the title on the line above, so fold them under
+			// the row instead of repeating it. Where the order separates them
+			// the header still prints, which is what it is for. The group
 			// state advances either way, so a later group breaks as usual.
-			foldsIntoRowAbove := g.isProject && g.key == prevUUID
-			if !foldsIntoRowAbove {
-				if currentProject != sentinel || currentArea != sentinel {
-					fmt.Fprintln(w)
-				}
-				if g.title != "" {
-					fmt.Fprintf(w, "    %s\n", headerStyle.Render(fitHeader(g.title, headerWidth)))
+			if foldsIntoRowAbove := isProject && key == prevUUID; !foldsIntoRowAbove {
+				headers[i] = header{
+					gap:   currentProject != sentinel || currentArea != sentinel,
+					title: title,
 				}
 			}
-			*current = g.key
+			*current = key
 			*other = sentinel
 		}
-		prevUUID = g.uuid
-
-		fmt.Fprintln(w, lines[i])
+		prevUUID = t.UUID
 	}
-	return nil
+	return headers
 }
 
 // fitHeader cuts a group header short with an ellipsis so that it fits width
@@ -232,13 +246,13 @@ func fitHeader(title string, width int) string {
 	return ansi.Truncate(title, width, "…")
 }
 
-func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem) error {
+func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem, lay layout) error {
 	label := func(s string) string {
 		return padCol(10, labelStyle.Render(s))
 	}
 	// Only a terminal has a width to fit; piped output keeps every value on
 	// the lines it was written on.
-	width := fitWidth()
+	width := lay.fitWidth()
 	field := func(name, value string) {
 		fmt.Fprint(w, hang(label(name), value, width))
 	}
@@ -447,7 +461,7 @@ const (
 	colProjectTags
 )
 
-func printProjects(w io.Writer, projects []model.Project) error {
+func printProjects(w io.Writer, projects []model.Project, lay layout) error {
 	// On a terminal, when the widest row will not fit, an over-long title is
 	// cut to 30 and an over-long area to 20 first; then every row gives up its
 	// tags, then its area, and then titles are cut down to 10. A project
@@ -456,7 +470,7 @@ func printProjects(w io.Writer, projects []model.Project) error {
 	// fit (fitWidth is 0), so every column stays whole.
 	tbl := &table{
 		gap:       columnGap,
-		maxWidth:  fitWidth(),
+		maxWidth:  lay.fitWidth(),
 		dropOrder: []int{colProjectTags, colProjectArea},
 		shrink: []shrinkCol{
 			{col: colProjectTitle, min: 10, soft: 30},
