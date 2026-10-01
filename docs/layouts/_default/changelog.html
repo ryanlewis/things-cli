@@ -25,10 +25,14 @@
              notes, are removed first so they do not warn on every build. The
              body's own headings move down a level to sit under the version
              heading, and lose their ids: every release has a "What's
-             Changed", and repeated ids would clash. */ -}}
+             Changed", and repeated ids would clash. Issue and PR numbers
+             such as "(#280)" become links, as GitHub shows them; a number
+             right after a tag, as in a code span or an existing link, is
+             left alone. */ -}}
       {{- $md := replaceRE `(?s)<!--.*?-->` "" . -}}
       {{- $html := $.RenderString (dict "display" "block") $md -}}
       {{- $html = $html | replaceRE `<(/?)h[3-4]([ >])` "<${1}h4$2" | replaceRE `<(/?)h[1-2]([ >])` "<${1}h3$2" | replaceRE `<(h[34]) id="[^"]*"` "<$1" -}}
+      {{- $html = $html | replaceRE `(^|[\s(])#(\d+)\b` (printf `${1}<a href="%s/issues/${2}">#${2}</a>` $repo) -}}
       {{ $html | safeHTML }}
     {{- end }}
     {{- end }}
