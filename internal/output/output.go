@@ -242,16 +242,28 @@ func groupHeaders(tasks []model.Task) []header {
 }
 
 // oneLine puts text from the database on one line, for a listing row or a
-// group header: each line break (\r\n, \r or \n) and each tab becomes a
-// space. Left in, a line break splits the row, and a tab, which measures as
-// no columns but prints as several, throws the padding out and wraps it. A
-// space keeps the words apart and the text greppable as one line per row;
-// the detail block and --json still carry the text as written.
+// group header: each line break (\r\n, \r, \n, a vertical tab, a form feed,
+// or Unicode's NEL, line and paragraph separators) and each tab becomes a
+// space. Left in, a line break splits the row (lipgloss splits on NEL as it
+// does on \n, and a terminal moves down a line on a vertical tab or form
+// feed), and a tab, which measures as no columns but prints as several,
+// throws the padding out and wraps it. A space keeps the words apart and the
+// text greppable as one line per row; the detail block and --json still carry
+// the text as written.
 func oneLine(s string) string {
 	return oneLineReplacer.Replace(s)
 }
 
-var oneLineReplacer = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ")
+// OneLine is oneLine for the command layer, for a list it prints itself:
+// the candidates of an ambiguous task reference.
+func OneLine(s string) string {
+	return oneLine(s)
+}
+
+var oneLineReplacer = strings.NewReplacer(
+	"\r\n", " ", "\r", " ", "\n", " ", "\t", " ", "\v", " ", "\f", " ",
+	"\u0085", " ", "\u2028", " ", "\u2029", " ",
+)
 
 // fitHeader cuts a group header short with an ellipsis so that it fits width
 // rather than wrapping. A width of zero keeps the header whole.

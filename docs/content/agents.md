@@ -356,9 +356,12 @@ hides that template, so it can report no open tasks for a project whose
 
 Colour is for terminals; it switches off when the output is piped or
 under `NO_COLOR`, and `--json` is never styled. Piped output keeps its
-columns aligned but never cuts or shortens a title, tag or date, and a
-plain listing prints each task on one line, with a line break or tab in
-a title shown as a space. Use `--json` for a title exactly as written.
+columns aligned but never cuts or shortens a title, tag or date. When any
+task row is wider than 120 columns, though, every row loses its
+checklist progress, then its extra start date, then its tags, then its
+date, until the rows fit. A plain listing prints each task on one line,
+with a line break or tab in a title, tag, project or area shown as a
+space. Use `--json` for every field, exactly as written.
 
 ## What can and cannot go wrong
 

@@ -710,3 +710,25 @@ func TestHang_UnwrappedKeepsTabs(t *testing.T) {
 		t.Errorf("hang:\ngot  %q\nwant %q", got, want)
 	}
 }
+
+func TestOneLine(t *testing.T) {
+	cases := map[string]string{
+		"Plain title":               "Plain title",
+		"Pack\tthe bags":            "Pack the bags",
+		"Windows\r\nend":            "Windows end",
+		"lone\rreturn":              "lone return",
+		"two\nlines":                "two lines",
+		"vertical\vtab":             "vertical tab",
+		"form\ffeed":                "form feed",
+		"next\u0085line":            "next line",
+		"line separator":            "line separator",
+		"paragraph separator":       "paragraph separator",
+		"日本語\nのタイトル":                "日本語 のタイトル",
+		"  keeps  its own  spaces ": "  keeps  its own  spaces ",
+	}
+	for in, want := range cases {
+		if got := oneLine(in); got != want {
+			t.Errorf("oneLine(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
