@@ -36,8 +36,8 @@ type table struct {
 	// dropOrder names the columns that may be given up when a row does not
 	// fit once the shrink columns are at their soft minimum, in the order
 	// they go — the first named is the first to go. Every column here with a
-	// compact form (see alt) switches to it before any of them is dropped; a
-	// dropFirst column with one switches to it just before it goes.
+	// compact form (a cell's alt) switches to it before any of them is
+	// dropped; a dropFirst column with one switches to it just before it goes.
 	dropOrder []int
 	// shrink names the columns that may be cut short, with an ellipsis, when
 	// a row does not fit. They give up width in the order named: first, once
@@ -69,22 +69,18 @@ type cell struct {
 	width, altWidth, tailWidth int
 }
 
-// form is the cell as it prints, tail included — its compact form when
-// compact is set and it has one — and how wide that measures.
-func (c cell) form(compact bool) (string, int) {
-	if compact && c.alt != "" {
+// form is the cell as it prints, tail included — its compact form when short
+// is set and it has one — and how wide that measures.
+func (c cell) form(short bool) (string, int) {
+	if short && c.alt != "" {
 		return c.alt + c.tail, c.altWidth
 	}
 	return c.text + c.tail, c.width
 }
 
-// cut shortens the cell's form to width with an ellipsis, keeping its tail
-// whole. A form that already fits comes back as it is.
-func (c cell) cut(compact bool, width int) string {
-	s, w := c.form(compact)
-	if w <= width {
-		return s
-	}
+// cut shortens s, one of the cell's forms, to width with an ellipsis,
+// keeping its tail whole.
+func (c cell) cut(s string, width int) string {
 	head := s[:len(s)-len(c.tail)]
 	return dropEmptySpans(ansi.Truncate(head, width-c.tailWidth, "…")) + c.tail
 }
@@ -108,14 +104,6 @@ func (t *table) row(texts ...string) {
 		cells[i].text = s
 	}
 	t.add(cells...)
-}
-
-// cell is row i's cell in column c, or an empty one past the row's end.
-func (t *table) cell(i, c int) cell {
-	if c < len(t.rows[i]) {
-		return t.rows[i][c]
-	}
-	return cell{}
 }
 
 // emptySpans matches a run of styles each opened and reset with nothing
@@ -146,26 +134,25 @@ func (t *table) lines() []string {
 	cols := t.fit()
 
 	lines := make([]string, len(t.rows))
-	for i := range t.rows {
+	for i, row := range t.rows {
 		cells := make([]string, len(cols))
 		end := -1
 		for c, k := range cols {
-			if !k.keep {
+			if !k.keep || c >= len(row) {
 				continue
 			}
-			cl := t.cell(i, c)
-			s, w := cl.form(k.compact)
-			if k.cut {
-				s = cl.cut(k.compact, k.width)
+			s, w := row[c].form(k.compact)
+			if k.cut && w > k.width {
+				s = row[c].cut(s, k.width)
 			}
 			cells[c] = s
 			if w > 0 {
 				end = c
 			}
 		}
-		parts := make([]string, 0, len(cols))
-		for c, k := range cols {
-			if !k.keep || c > end {
+		parts := make([]string, 0, end+1)
+		for c, k := range cols[:end+1] {
+			if !k.keep {
 				continue
 			}
 			if c == end {
@@ -202,7 +189,8 @@ type col struct {
 // measure sizes every column across the whole table. A column no row puts
 // anything in is not kept: it takes no space, gap included. That covers a
 // column the drop and shrink lists name but no row reaches, which is
-// measured, empty, so that fit can look any of them up.
+// measured, empty, so that fit can look any of them up. The lists hold a
+// printer's column constants; a negative index is a bug, and panics.
 func (t *table) measure() []col {
 	n := 0
 	for _, row := range t.rows {
@@ -292,7 +280,7 @@ func softFloor(s shrinkCol, tail int) (int, bool) {
 	if s.soft <= 0 || s.soft < s.min {
 		return 0, false
 	}
-	return max(s.soft, s.min, tail+2), true
+	return max(s.soft, tail+2), true
 }
 
 // hardFloor is the narrowest s may go once nothing is left to drop. A column
