@@ -22,6 +22,7 @@
 {{- $groups = $groups | append (dict "name" "Reference" "items" (slice
     (dict "title" "Configuration" "url" "/configuration/")
     (dict "title" "Shell completions" "url" "/commands/#shell-completions")
-    (dict "title" "About" "url" "/about/"))) -}}
+    (dict "title" "About" "url" "/about/")
+    (dict "title" "Changelog" "url" "/changelog/"))) -}}
 
 {{- return $groups -}}

@@ -77,9 +77,13 @@ jobs:
         id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
+      # The changelog page fetches the release notes from the GitHub API. The
+      # job's token is read-only (contents: read) and only lifts the rate
+      # limit; without it the build still works, at 60 requests an hour.
       - name: Build site
         run: hugo --minify --gc --baseURL "${PAGES_ORIGIN}${BASE_PATH}/"
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           PAGES_ORIGIN: ${{ steps.pages.outputs.origin }}
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
 

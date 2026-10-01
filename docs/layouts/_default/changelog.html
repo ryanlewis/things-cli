@@ -1,0 +1,64 @@
+{{ define "main" }}
+{{- $repo := printf "https://github.com/%s" site.Params.repo -}}
+{{- $fetched := partial "releases.html" . -}}
+{{- $releases := $fetched.releases -}}
+<div class="docs">
+
+  {{ partial "sidebar.html" . }}
+
+  <main id="content" class="prose">
+    <div class="doc-head">
+      {{- with .Params.eyebrow }}<span class="eyebrow">{{ . }}</span>{{ end }}
+      <h1 class="display">{{ .Title }}</h1>
+    </div>
+
+    {{ .Content }}
+
+    {{- range $releases }}
+    <h2 id="{{ .tag_name }}">{{ .name | default .tag_name }}</h2>
+    {{- $date := time.AsTime .published_at }}
+    <p class="release__meta"><time datetime="{{ $date.Format "2006-01-02" }}">{{ $date.Format "2 January 2006" }}</time> · <a href="{{ .html_url }}">Downloads on GitHub</a></p>
+    {{- with .body }}
+      {{- /* Release bodies are markdown. Goldmark runs with unsafe = false,
+             so raw HTML in a body is dropped, not passed through. HTML
+             comments, such as the one GitHub adds above its generated
+             notes, are removed first so they do not warn on every build. The
+             body's own headings move down a level to sit under the version
+             heading, and lose their ids: every release has a "What's
+             Changed", and repeated ids would clash. */ -}}
+      {{- $md := replaceRE `(?s)<!--.*?-->` "" . -}}
+      {{- $html := $.RenderString (dict "display" "block") $md -}}
+      {{- $html = $html | replaceRE `<(/?)h[3-4]([ >])` "<${1}h4$2" | replaceRE `<(/?)h[1-2]([ >])` "<${1}h3$2" | replaceRE `<(h[34]) id="[^"]*"` "<$1" -}}
+      {{ $html | safeHTML }}
+    {{- end }}
+    {{- end }}
+
+    {{- if not $releases }}
+    <p>The release notes could not be loaded for this build. Read them on <a href="{{ $repo }}/releases">GitHub</a>.</p>
+    {{- else if $fetched.truncated }}
+    <p>Only the latest releases are listed here. Older ones are on <a href="{{ $repo }}/releases">GitHub</a>.</p>
+    {{- end }}
+
+    {{ partial "pager.html" . }}
+  </main>
+
+  {{- with $releases }}
+  <aside class="onpage" aria-label="On this page">
+    <span class="onpage__label">On this page</span>
+    <a href="#content" class="on">{{ $.Title }}</a>
+    <nav id="TableOfContents">
+      <ul>
+        {{- range . }}
+        <li><a href="#{{ .tag_name }}">{{ .tag_name }}</a></li>
+        {{- end }}
+      </ul>
+    </nav>
+  </aside>
+  {{- end }}
+
+</div>
+{{ end }}
+
+{{ define "scripts" }}
+{{ partial "docs-scripts.html" . }}
+{{ end }}
