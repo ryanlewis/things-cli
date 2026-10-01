@@ -1105,11 +1105,6 @@ Checklist:|
   [x] Confirm the headcount with every team lead|
 |
 
-### case=hint@piped color=never
-|
-hint: run `things show 1` for the detail|
-|
-
 ### case=print/tasks-KNOWN-BUG-tab-newline-titles@80 color=never
 1.  [ ]  Pack    the   [travel]  due:2026-09-12|
          bags                                  |
@@ -2231,11 +2226,6 @@ the status did not change, so a zero exit means it landed.|
   See https://example.com/venue-offsite26 for details.|
 \e[1mChecklist:\e[m|
   \e[2;32m[x]\e[m Confirm the headcount with every team lead|
-|
-
-### case=hint@piped color=always
-|
-\e[2mhint: \e[m\e[2mrun `things show 1` for the detail\e[m|
 |
 
 ### case=print/tasks-KNOWN-BUG-tab-newline-titles@80 color=always

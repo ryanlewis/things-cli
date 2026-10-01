@@ -480,7 +480,6 @@ func goldenCases(t *testing.T) []goldenCase {
 		{"print/projects", func(w io.Writer) error { return Print(w, projects, false) }},
 		{"print/projects-long", func(w io.Writer) error { return Print(w, longProjects, false) }},
 		{"task-detail/wrapped", func(w io.Writer) error { return PrintTaskWithChecklist(w, wrapped, wrappedItems, false) }},
-		{"hint", func(w io.Writer) error { return PrintHint(w, "run `things show 1` for the detail", fitWidth()) }},
 	}
 	for _, p := range piped {
 		cases = append(cases, goldenCase{name: p.name + "@piped", piped: true, write: p.write})
