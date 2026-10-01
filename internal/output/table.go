@@ -47,11 +47,7 @@ type table struct {
 	// overrun maxWidth still prints, only wider.
 	shrink []shrinkCol
 
-	rows [][]string
-	// tails holds the endings set with tail, by row and column.
-	tails map[[2]int]string
-	// alts holds the compact forms set with alt, by row and column.
-	alts map[[2]int]string
+	rows [][]cell
 }
 
 // shrinkCol is a column a table may cut short. soft is how far it gives way
@@ -62,77 +58,64 @@ type shrinkCol struct {
 	col, min, soft int
 }
 
-// row appends one row. Rows are expected to carry the same number of cells;
-// a short row leaves the columns past its end empty.
-func (t *table) row(cells ...string) {
+// cell is one cell of a row: its text, an ending a cut leaves whole (tail),
+// and a compact form (alt) its column may switch to, keeping the rows
+// aligned. Its widths are measured once, as the row goes in — lipgloss.Width,
+// not len: a cell carries ANSI and may carry a wide rune.
+type cell struct {
+	text, tail, alt string
+	// width is text and tail measured together, so a cell measures what it
+	// prints; altWidth is alt and tail, and tailWidth the tail alone.
+	width, altWidth, tailWidth int
+}
+
+// form is the cell as it prints, tail included — its compact form when
+// compact is set and it has one — and how wide that measures.
+func (c cell) form(compact bool) (string, int) {
+	if compact && c.alt != "" {
+		return c.alt + c.tail, c.altWidth
+	}
+	return c.text + c.tail, c.width
+}
+
+// cut shortens the cell's form to width with an ellipsis, keeping its tail
+// whole. A form that already fits comes back as it is.
+func (c cell) cut(compact bool, width int) string {
+	s, w := c.form(compact)
+	if w <= width {
+		return s
+	}
+	head := s[:len(s)-len(c.tail)]
+	return dropEmptySpans(ansi.Truncate(head, width-c.tailWidth, "…")) + c.tail
+}
+
+// add appends one row of cells. Rows are expected to carry the same number
+// of cells; a short row leaves the columns past its end empty.
+func (t *table) add(cells ...cell) {
+	for i := range cells {
+		c := &cells[i]
+		c.width = lipgloss.Width(c.text + c.tail)
+		c.altWidth = lipgloss.Width(c.alt + c.tail)
+		c.tailWidth = lipgloss.Width(c.tail)
+	}
 	t.rows = append(t.rows, cells)
 }
 
-// tail gives one cell, column c of the row just added, an ending that a cut
-// leaves whole; other rows are untouched. The cell measures and prints as its
-// text followed by s, and when the column is cut short the ellipsis goes into
-// the text before s.
-func (t *table) tail(c int, s string) {
-	if len(t.rows) == 0 || s == "" {
-		return
+// row appends one row of plain text cells.
+func (t *table) row(texts ...string) {
+	cells := make([]cell, len(texts))
+	for i, s := range texts {
+		cells[i].text = s
 	}
-	if t.tails == nil {
-		t.tails = make(map[[2]int]string)
-	}
-	t.tails[[2]int{len(t.rows) - 1, c}] = s
+	t.add(cells...)
 }
 
-// alt gives one cell, column c of the row just added, a compact form. When
-// its column is too wide to keep whole, the whole column switches to its
-// compact forms, so the rows stay aligned; a row without one keeps its text.
-func (t *table) alt(c int, s string) {
-	if len(t.rows) == 0 || s == "" {
-		return
-	}
-	if t.alts == nil {
-		t.alts = make(map[[2]int]string)
-	}
-	t.alts[[2]int{len(t.rows) - 1, c}] = s
-}
-
-// cell is the full text of row i's cell in column c, tail included.
-func (t *table) cell(i, c int) string {
-	return t.cellAs(i, c, false)
-}
-
-// cellAs is row i's cell in column c, in its compact form when compact is set
-// and it has one, tail included.
-func (t *table) cellAs(i, c int, compact bool) string {
-	cell := ""
+// cell is row i's cell in column c, or an empty one past the row's end.
+func (t *table) cell(i, c int) cell {
 	if c < len(t.rows[i]) {
-		cell = t.rows[i][c]
+		return t.rows[i][c]
 	}
-	if alt, ok := t.alts[[2]int{i, c}]; compact && ok {
-		cell = alt
-	}
-	return cell + t.tails[[2]int{i, c}]
-}
-
-// compactWidth is how wide column c measures in its compact form, and
-// whether any of its cells has one.
-func (t *table) compactWidth(c int) (width int, has bool) {
-	for i := range t.rows {
-		_, ok := t.alts[[2]int{i, c}]
-		has = has || ok
-		width = max(width, lipgloss.Width(t.cellAs(i, c, true)))
-	}
-	return width, has
-}
-
-// cut shortens cell, row i's in column c as cell returns it, to width,
-// keeping its tail whole.
-func (t *table) cut(i, c int, cell string, width int) string {
-	if lipgloss.Width(cell) <= width {
-		return cell
-	}
-	tail := t.tails[[2]int{i, c}]
-	head := cell[:len(cell)-len(tail)]
-	return dropEmptySpans(ansi.Truncate(head, width-lipgloss.Width(tail), "…")) + tail
+	return cell{}
 }
 
 // emptySpans matches a run of styles each opened and reset with nothing
@@ -160,38 +143,38 @@ func dropEmptySpans(s string) string {
 // lines renders one line per row, in the order the rows went in, so a caller
 // that has to write something between two rows — a group header — still can.
 func (t *table) lines() []string {
-	widths := t.widths()
-	keep, cut, compact := t.fit(widths)
+	cols := t.fit()
 
 	lines := make([]string, len(t.rows))
 	for i := range t.rows {
-		cells := make([]string, len(widths))
+		cells := make([]string, len(cols))
 		end := -1
-		for c, width := range widths {
-			if !keep[c] {
+		for c, k := range cols {
+			if !k.keep {
 				continue
 			}
-			cell := t.cellAs(i, c, compact[c])
-			if cut[c] {
-				cell = t.cut(i, c, cell, width)
+			cl := t.cell(i, c)
+			s, w := cl.form(k.compact)
+			if k.cut {
+				s = cl.cut(k.compact, k.width)
 			}
-			cells[c] = cell
-			if lipgloss.Width(cell) > 0 {
+			cells[c] = s
+			if w > 0 {
 				end = c
 			}
 		}
-		cols := make([]string, 0, len(widths))
-		for c, width := range widths {
-			if !keep[c] || c > end {
+		parts := make([]string, 0, len(cols))
+		for c, k := range cols {
+			if !k.keep || c > end {
 				continue
 			}
 			if c == end {
-				cols = append(cols, cells[c])
+				parts = append(parts, cells[c])
 				continue
 			}
-			cols = append(cols, padCol(width, cells[c]))
+			parts = append(parts, padCol(k.width, cells[c]))
 		}
-		lines[i] = joinWithGap(cols, t.gap)
+		lines[i] = joinWithGap(parts, t.gap)
 	}
 	return lines
 }
@@ -204,204 +187,192 @@ func (t *table) render(w io.Writer) error {
 	return nil
 }
 
-// widths measures each column across every row. lipgloss.Width, not len: a
-// cell carries ANSI and may carry a wide rune, and neither is a column of
-// terminal.
-func (t *table) widths() []int {
-	n := 0
-	for _, cells := range t.rows {
-		if len(cells) > n {
-			n = len(cells)
-		}
-	}
-	widths := make([]int, n)
-	for i, cells := range t.rows {
-		for c := range cells {
-			if w := lipgloss.Width(t.cell(i, c)); w > widths[c] {
-				widths[c] = w
-			}
-		}
-	}
-	return widths
+// col is what fit knows and decides about one column.
+type col struct {
+	// width is what the column takes now: full to begin with, then less as
+	// fit compacts or cuts it. short is its width with every cell in its
+	// compact form, or in full where it has none, so a column with no compact
+	// forms measures no narrower in them. tail is its widest tail.
+	width, full, short, tail int
+	// keep is whether the column prints, cut whether its cells are cut to
+	// width, and compact whether they print in their compact forms.
+	keep, cut, compact bool
 }
 
-// fit decides which columns survive the terminal width, which are cut short
-// and which switch to their compact form, narrowing widths in place. A column
-// no row puts anything in takes no space, gap included. Then, stopping as
-// soon as the row fits:
+// measure sizes every column across the whole table. A column no row puts
+// anything in is not kept: it takes no space, gap included. That covers a
+// column the drop and shrink lists name but no row reaches, which is
+// measured, empty, so that fit can look any of them up.
+func (t *table) measure() []col {
+	n := 0
+	for _, row := range t.rows {
+		n = max(n, len(row))
+	}
+	for _, c := range slices.Concat(t.dropFirst, t.dropOrder) {
+		n = max(n, c+1)
+	}
+	for _, s := range t.shrink {
+		n = max(n, s.col+1)
+	}
+	cols := make([]col, n)
+	for _, row := range t.rows {
+		for c, cl := range row {
+			k := &cols[c]
+			k.full = max(k.full, cl.width)
+			_, short := cl.form(true)
+			k.short = max(k.short, short)
+			k.tail = max(k.tail, cl.tailWidth)
+		}
+	}
+	for c := range cols {
+		cols[c].width = cols[c].full
+		cols[c].keep = cols[c].full > 0
+	}
+	return cols
+}
+
+// fit decides which columns survive maxWidth, which are cut short and which
+// switch to their compact form. Each step stops as soon as the row fits:
 //
 //  1. dropFirst gives up one column at a time;
 //  2. shrink columns give way to their soft minimum;
 //  3. dropOrder columns switch to their compact forms, one at a time;
 //  4. dropOrder gives up one column at a time;
-//  5. a column step 3 shortened goes back to its full form if a later
-//     compact form or a drop made room for it;
-//  6. any width left beyond the overrun goes back to the columns the soft
-//     pass cut;
-//  7. shrink columns give way to their hard minimum.
+//  5. room steps 3 and 4 freed beyond the overrun goes back (see restore);
+//  6. shrink columns give way to their hard minimum.
 //
 // So a wide terminal keeps everything and a narrow one loses as little as it
 // can, the end of an over-long cell before a column on every row, and a
 // column worth less than that before either.
-func (t *table) fit(widths []int) (keep, cut, compact []bool) {
-	keep = make([]bool, len(widths))
-	cut = make([]bool, len(widths))
-	compact = make([]bool, len(widths))
-	for c, w := range widths {
-		keep[c] = w > 0
-	}
+func (t *table) fit() []col {
+	cols := t.measure()
 	if t.maxWidth <= 0 {
-		return keep, cut, compact
+		return cols
 	}
-	full := slices.Clone(widths)
-	t.drop(widths, keep, compact, t.dropFirst)
-	t.shrinkTo(widths, keep, cut, true)
-	compacted := t.compactTier(widths, keep, compact, t.dropOrder)
-	dropped := t.drop(widths, keep, compact, t.dropOrder)
-	if compacted || dropped {
-		// A later compact form or a drop can free enough for a column the
-		// compact tier shortened to go back to its full form, and more than
-		// the row was over by: hand the rest back to the columns the soft
-		// pass cut, in the order they gave it up.
-		t.expand(widths, full, keep, compact, t.dropOrder)
-		t.regrow(widths, full, keep, cut)
-	}
-	t.shrinkTo(widths, keep, cut, false)
-	return keep, cut, compact
+	t.untilFits(cols, t.dropFirst, t.drop)
+	t.shrinkTo(cols, softFloor)
+	t.untilFits(cols, t.dropOrder, compact)
+	t.untilFits(cols, t.dropOrder, t.drop)
+	t.restore(cols)
+	t.shrinkTo(cols, hardFloor)
+	return cols
 }
 
-// compactTier switches the columns in order to their compact form, where
-// they have a narrower one, until the kept columns fit, so that every column
-// in dropOrder gives up width before any of them is dropped. It reports
-// whether it freed any width.
-func (t *table) compactTier(widths []int, keep, compact []bool, order []int) bool {
-	freed := false
+// untilFits applies step to each of the columns in order, until the row fits.
+func (t *table) untilFits(cols []col, order []int, step func([]col, int)) {
 	for _, c := range order {
-		if t.fits(widths, keep) {
-			break
+		if t.fits(cols) {
+			return
 		}
-		if c < 0 || c >= len(keep) || !keep[c] || compact[c] {
-			continue
-		}
-		if w, ok := t.compactWidth(c); ok && w < widths[c] {
-			widths[c], compact[c] = w, true
-			freed = true
-		}
-	}
-	return freed
-}
-
-// expand gives the kept columns the compact tier shortened their full form
-// back, where the row still fits with it, going through order from its end:
-// the column that would have been dropped last is the one most worth having
-// whole.
-func (t *table) expand(widths, full []int, keep, compact []bool, order []int) {
-	for i := len(order) - 1; i >= 0; i-- {
-		c := order[i]
-		if c < 0 || c >= len(keep) || !keep[c] || !compact[c] {
-			continue
-		}
-		short := widths[c]
-		widths[c] = full[c]
-		if t.fits(widths, keep) {
-			compact[c] = false
-			continue
-		}
-		widths[c] = short
+		step(cols, c)
 	}
 }
 
-// drop goes through the columns in order until the kept columns fit,
-// switching each to its compact form if it has a narrower one and dropping it
-// only if the row still does not fit. It reports whether it freed any width.
-func (t *table) drop(widths []int, keep, compact []bool, order []int) bool {
-	freed := false
-	for _, c := range order {
-		if t.fits(widths, keep) {
-			break
-		}
-		if c < 0 || c >= len(keep) || !keep[c] {
-			continue
-		}
-		freed = true
-		if t.compactTier(widths, keep, compact, []int{c}) && t.fits(widths, keep) {
-			break
-		}
-		keep[c] = false
+// compact switches column c to its compact forms, where it is kept, not yet
+// compact, and narrower in them.
+func compact(cols []col, c int) {
+	k := &cols[c]
+	if k.keep && !k.compact && k.short < k.width {
+		k.width, k.compact = k.short, true
 	}
-	return freed
 }
 
-// shrinkTo narrows the shrink columns, in place in widths, until the kept
-// columns fit or every one of them is at its soft minimum (soft) or its hard
-// one. It marks in cut the columns it narrowed, so their cells can be cut to
-// the new width. A column with tails goes no narrower than its widest tail
-// plus one character and the ellipsis, whatever its own minimum.
-func (t *table) shrinkTo(widths []int, keep, cut []bool, soft bool) {
+// drop gives up column c, unless switching it to its compact form is enough
+// for the row to fit.
+func (t *table) drop(cols []col, c int) {
+	compact(cols, c)
+	if !t.fits(cols) {
+		cols[c].keep = false
+	}
+}
+
+// softFloor is how far s gives way before any dropOrder column is dropped
+// for it, or false when it gives none up then.
+func softFloor(s shrinkCol, tail int) (int, bool) {
+	if s.soft <= 0 || s.soft < s.min {
+		return 0, false
+	}
+	return max(s.soft, s.min, tail+2), true
+}
+
+// hardFloor is the narrowest s may go once nothing is left to drop. A column
+// with tails goes no narrower than its widest tail plus one character and the
+// ellipsis, whatever its own minimum.
+func hardFloor(s shrinkCol, tail int) (int, bool) {
+	return max(s.min, tail+2), true
+}
+
+// shrinkTo narrows the shrink columns, in order, until the kept columns fit
+// or every one of them is down to its floor, and marks the ones it narrowed
+// as cut.
+func (t *table) shrinkTo(cols []col, floorOf func(shrinkCol, int) (int, bool)) {
 	for _, s := range t.shrink {
-		over := t.width(widths, keep) - t.maxWidth
+		over := t.width(cols) - t.maxWidth
 		if over <= 0 {
-			break
+			return
 		}
-		if s.col < 0 || s.col >= len(widths) || !keep[s.col] {
+		k := &cols[s.col]
+		if !k.keep {
 			continue
 		}
-		floor := max(s.min, t.widestTail(s.col)+2)
-		if soft {
-			if s.soft <= 0 || s.soft < s.min {
-				continue
-			}
-			floor = max(floor, s.soft)
-		}
-		if widths[s.col] <= floor {
+		floor, ok := floorOf(s, k.tail)
+		if !ok || k.width <= floor {
 			continue
 		}
-		widths[s.col] = max(widths[s.col]-over, floor)
-		cut[s.col] = true
+		k.width = max(k.width-over, floor)
+		k.cut = true
 	}
 }
 
-// regrow gives the room a row has left under maxWidth back to the shrink
-// columns that were cut, each up to its full width, in shrink order.
-func (t *table) regrow(widths, full []int, keep, cut []bool) {
+// restore hands back the room a row has left under maxWidth once a compact
+// form or a drop freed more than it was over by. First the columns step 3 of
+// fit shortened get their full forms back, where the row still fits with
+// them, from the end of dropOrder: the column that would have been dropped
+// last is the one most worth having whole. Then what is left goes to the
+// columns the soft pass cut, each up to its full width, in shrink order — the
+// order they gave it up.
+func (t *table) restore(cols []col) {
+	for _, c := range slices.Backward(t.dropOrder) {
+		k := &cols[c]
+		if !k.keep || !k.compact {
+			continue
+		}
+		short := k.width
+		k.width = k.full
+		if t.fits(cols) {
+			k.compact = false
+			continue
+		}
+		k.width = short
+	}
 	for _, s := range t.shrink {
-		slack := t.maxWidth - t.width(widths, keep)
+		slack := t.maxWidth - t.width(cols)
 		if slack <= 0 {
 			return
 		}
-		if s.col < 0 || s.col >= len(widths) || !keep[s.col] || !cut[s.col] {
+		k := &cols[s.col]
+		if !k.keep || !k.cut {
 			continue
 		}
-		widths[s.col] = min(widths[s.col]+slack, full[s.col])
-		cut[s.col] = widths[s.col] < full[s.col]
+		k.width = min(k.width+slack, k.full)
+		k.cut = k.width < k.full
 	}
-}
-
-// widestTail is the widest tail set in column c, or zero.
-func (t *table) widestTail(c int) int {
-	widest := 0
-	for k, tail := range t.tails {
-		if k[1] == c {
-			widest = max(widest, lipgloss.Width(tail))
-		}
-	}
-	return widest
 }
 
 // fits reports whether the kept columns, plus the gaps between them, are
 // within maxWidth.
-func (t *table) fits(widths []int, keep []bool) bool {
-	return t.width(widths, keep) <= t.maxWidth
+func (t *table) fits(cols []col) bool {
+	return t.width(cols) <= t.maxWidth
 }
 
 // width is how wide a row of the kept columns measures, gaps included.
-func (t *table) width(widths []int, keep []bool) int {
+func (t *table) width(cols []col) int {
 	total, n := 0, 0
-	for c, w := range widths {
-		if !keep[c] {
+	for _, k := range cols {
+		if !k.keep {
 			continue
 		}
-		total += w
+		total += k.width
 		n++
 	}
 	if n > 1 {
