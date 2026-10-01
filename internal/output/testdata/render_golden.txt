@@ -1105,20 +1105,45 @@ Checklist:|
   [x] Confirm the headcount with every team lead|
 |
 
-### case=print/tasks-KNOWN-BUG-tab-newline-titles@80 color=never
-1.  [ ]  Pack    the   [travel]  due:2026-09-12|
-         bags                                  |
-2.  [ ]  First line    [home]|
-         second line         |
+### case=print/tasks-tab-newline-titles@80 color=never
+1.  [ ]  Pack the bags           [travel]  due:2026-09-12|
+2.  [ ]  First line second line  [home]|
 3.  [ ]  Plain title|
 |
 
-### case=print/tasks-KNOWN-BUG-tab-newline-titles@piped color=never
-1.  [ ]  Pack    the   [travel]  due:2026-09-12|
-         bags                                  |
-2.  [ ]  First line    [home]|
-         second line         |
+### case=print/tasks-tab-newline-titles@piped color=never
+1.  [ ]  Pack the bags           [travel]  due:2026-09-12|
+2.  [ ]  First line second line  [home]|
 3.  [ ]  Plain title|
+|
+
+### case=print/tasks-more-control-chars@40 color=never
+    Home and garden|
+1.  [ ]  Windows line end and a lone re…|
+2.  [x]  Done across two lines|
+|
+
+### case=print/tasks-more-control-chars@piped color=never
+    Home and garden|
+1.  [ ]  Windows line end and a lone return  [tab tag]|
+2.  [x]  Done across two lines                          due:2026-09-12|
+|
+
+### case=print/collections-control-chars@piped color=never
+◑  Two lines  Area with tab  [a b]|
+○  Plain|
+Home and garden|
+tab tag  (t)|
+|
+
+### case=print/tasks-wide-runes-dated@60 color=never
+1.  [ ]  日本語のタイトルはとても長いので切り詰め…   due:Sat|
+2.  [ ]  Aこちらも長い日本語のタイトルで切り詰めら…  due:Mon|
+|
+
+### case=print/tasks-wide-runes-dated@40 color=never
+1.  [ ]  日本語のタイトルはとても長いの…|
+2.  [ ]  Aこちらも長い日本語のタイトル…|
 |
 
 ### case=task-detail/plain color=always
@@ -2228,19 +2253,44 @@ the status did not change, so a zero exit means it landed.|
   \e[2;32m[x]\e[m Confirm the headcount with every team lead|
 |
 
-### case=print/tasks-KNOWN-BUG-tab-newline-titles@80 color=always
-1.  [ ]  Pack    the   \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
-         bags                                  |
-2.  [ ]  First line    \e[33m[home]\e[m|
-         second line         |
+### case=print/tasks-tab-newline-titles@80 color=always
+1.  [ ]  Pack the bags           \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  First line second line  \e[33m[home]\e[m|
 3.  [ ]  Plain title|
 |
 
-### case=print/tasks-KNOWN-BUG-tab-newline-titles@piped color=always
-1.  [ ]  Pack    the   \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
-         bags                                  |
-2.  [ ]  First line    \e[33m[home]\e[m|
-         second line         |
+### case=print/tasks-tab-newline-titles@piped color=always
+1.  [ ]  Pack the bags           \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  First line second line  \e[33m[home]\e[m|
 3.  [ ]  Plain title|
+|
+
+### case=print/tasks-more-control-chars@40 color=always
+    \e[1;36mHome and garden\e[m|
+1.  [ ]  Windows line end and a lone re…|
+2.  \e[2;32m[x]\e[m  \e[2;9mD\e[m\e[2;9mo\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9ma\e[m\e[2;9mc\e[m\e[2;9mr\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mw\e[m\e[2;9mo\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9mi\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9ms\e[m|
+|
+
+### case=print/tasks-more-control-chars@piped color=always
+    \e[1;36mHome and garden\e[m|
+1.  [ ]  Windows line end and a lone return  \e[33m[tab tag]\e[m|
+2.  \e[2;32m[x]\e[m  \e[2;9mD\e[m\e[2;9mo\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9ma\e[m\e[2;9mc\e[m\e[2;9mr\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mw\e[m\e[2;9mo\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9mi\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9ms\e[m                          \e[33mdue:2026-09-12\e[m|
+|
+
+### case=print/collections-control-chars@piped color=always
+\e[36m◑\e[m  Two lines  \e[2;36mArea with tab\e[m  \e[33m[a b]\e[m|
+\e[36m○\e[m  Plain|
+Home and garden|
+tab tag  \e[2m(t)\e[m|
+|
+
+### case=print/tasks-wide-runes-dated@60 color=always
+1.  [ ]  日本語のタイトルはとても長いので切り詰め…   \e[33mdue:Sat\e[m|
+2.  [ ]  Aこちらも長い日本語のタイトルで切り詰めら…  \e[2mdue:Mon\e[m|
+|
+
+### case=print/tasks-wide-runes-dated@40 color=always
+1.  [ ]  日本語のタイトルはとても長いの…|
+2.  [ ]  Aこちらも長い日本語のタイトル…|
 |
 
