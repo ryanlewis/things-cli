@@ -208,9 +208,7 @@ func TestPrintTaskDetail(t *testing.T) {
 // prints them without a zone, so they have to be local: printed as UTC, a to-do
 // closed at 00:30 BST reads as stopped the day before.
 func TestPrintTaskDetail_TimestampsInLocalTime(t *testing.T) {
-	orig := time.Local
-	time.Local = time.FixedZone("BST", 60*60)
-	t.Cleanup(func() { time.Local = orig })
+	pinClock(t, time.Time{}, time.FixedZone("BST", 60*60))
 
 	created := model.UnixToTime(model.TimeToUnix(time.Date(2026, 9, 29, 8, 15, 0, 0, time.UTC)))
 	stopped := model.UnixToTime(model.TimeToUnix(time.Date(2026, 9, 29, 23, 30, 0, 0, time.UTC)))
@@ -415,19 +413,16 @@ func TestPrintTasksMarksProjects(t *testing.T) {
 // Dates switch to their compact form only on a terminal: piped output keeps
 // the full date or drops it, since "3d ago" goes stale in a saved file.
 func TestPrintTasksPipedKeepsFullDates(t *testing.T) {
-	prevWidth, prevTerm, prevNow := termWidth, stdoutIsTerminal, nowFn
-	t.Cleanup(func() { termWidth, stdoutIsTerminal, nowFn = prevWidth, prevTerm, prevNow })
-	nowFn = func() time.Time { return time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local) }
-	// "1.  [ ]  " and a 20-column title leave 10 for the date: too few for
-	// "due:2026-05-08", enough for "due:Fri".
-	termWidth = func() int { return 41 }
+	pinClock(t, time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local), nil)
 
 	tasks := []model.Task{{
 		UUID: "t1", Title: "Twenty column title.", Type: model.TypeTask, Status: model.StatusOpen,
 		Deadline: mustDate(2026, 5, 8),
 	}}
 	for _, tty := range []bool{false, true} {
-		stdoutIsTerminal = func() bool { return tty }
+		// "1.  [ ]  " and a 20-column title leave 10 for the date: too few
+		// for "due:2026-05-08", enough for "due:Fri".
+		pinLayout(t, 41, tty)
 		var buf bytes.Buffer
 		if err := Print(&buf, tasks, false); err != nil {
 			t.Fatalf("Print: %v", err)
@@ -441,14 +436,10 @@ func TestPrintTasksPipedKeepsFullDates(t *testing.T) {
 // Titles are cut to the width only on a terminal: piped output falls back to
 // 120 columns, and cutting there would hide text from grep and from agents.
 func TestPrintTasksPipedKeepsTitlesWhole(t *testing.T) {
-	prevWidth, prevTerm := termWidth, stdoutIsTerminal
-	t.Cleanup(func() { termWidth, stdoutIsTerminal = prevWidth, prevTerm })
-	termWidth = func() int { return 30 }
-
 	title := "Write the postmortem for last week's outage"
 	tasks := []model.Task{{UUID: "t1", Title: title, Type: model.TypeTask, Status: model.StatusOpen}}
 	for _, tty := range []bool{false, true} {
-		stdoutIsTerminal = func() bool { return tty }
+		pinLayout(t, 30, tty)
 		var buf bytes.Buffer
 		if err := Print(&buf, tasks, false); err != nil {
 			t.Fatalf("Print: %v", err)
@@ -584,10 +575,7 @@ func TestPrintJSONDoesNotEscapeHTMLCharacters(t *testing.T) {
 // a line of its own rather than splitting at a hyphen, and only a token wider
 // than the space left is broken.
 func TestPrintTaskDetail_WrapsToTerminalWidth(t *testing.T) {
-	prevWidth, prevTerm := termWidth, stdoutIsTerminal
-	termWidth = func() int { return 40 }
-	stdoutIsTerminal = func() bool { return true }
-	t.Cleanup(func() { termWidth, stdoutIsTerminal = prevWidth, prevTerm })
+	pinLayout(t, 40, true)
 
 	task := &model.Task{
 		UUID: "u1", Title: "Book the venue for the autumn team offsite", Status: model.StatusOpen,
@@ -629,9 +617,7 @@ Checklist:
 // reading a piped detail block gets each line of a note whole, with only the
 // note's own line breaks, rather than breaks at an assumed width.
 func TestPrintTaskDetail_NoWrapWhenNotATerminal(t *testing.T) {
-	prev := stdoutIsTerminal
-	stdoutIsTerminal = func() bool { return false }
-	t.Cleanup(func() { stdoutIsTerminal = prev })
+	pinLayout(t, 120, false)
 
 	long := strings.Repeat("word ", 40) + "end"
 	task := &model.Task{UUID: "u1", Title: long, Status: model.StatusOpen, Notes: long + "\nsecond"}

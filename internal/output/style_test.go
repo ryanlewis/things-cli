@@ -157,13 +157,8 @@ func TestColorMode_Auto_StripsWhenNonTTY(t *testing.T) {
 }
 
 func TestStyledDate_Buckets(t *testing.T) {
-	prevNow := nowFn
-	t.Cleanup(func() { nowFn = prevNow })
-
 	// Pin "now" to 2026-05-03 (Sunday).
-	nowFn = func() time.Time {
-		return time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local)
-	}
+	pinClock(t, time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local), nil)
 
 	cases := []struct {
 		name string
@@ -204,10 +199,7 @@ func TestStyledDate_SoonAcrossClocksBack(t *testing.T) {
 	if err != nil {
 		t.Skipf("no tz data: %v", err)
 	}
-	prevNow, prevLocal := nowFn, time.Local
-	t.Cleanup(func() { nowFn, time.Local = prevNow, prevLocal })
-	time.Local = london
-	nowFn = func() time.Time { return time.Date(2026, 10, 23, 12, 0, 0, 0, london) }
+	pinClock(t, time.Date(2026, 10, 23, 12, 0, 0, 0, london), london)
 
 	d := mustDate(2026, 10, 26)
 	if got, want := styledDate(d, false), dateSoonStyle.Render(d.String()); got != want {
@@ -218,13 +210,8 @@ func TestStyledDate_SoonAcrossClocksBack(t *testing.T) {
 // The compact form reads relative to today, keeps the deadline's "due:" and
 // takes the colour of the full form.
 func TestStyledCompactDate(t *testing.T) {
-	prevNow := nowFn
-	t.Cleanup(func() { nowFn = prevNow })
-
 	// Pin "now" to 2026-05-03 (Sunday).
-	nowFn = func() time.Time {
-		return time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local)
-	}
+	pinClock(t, time.Date(2026, 5, 3, 12, 0, 0, 0, time.Local), nil)
 
 	cases := []struct {
 		date *model.ThingsDate
@@ -287,9 +274,7 @@ func TestStyledCompactDate_Boundaries(t *testing.T) {
 	if err != nil {
 		t.Skipf("no tz data: %v", err)
 	}
-	prevNow, prevLocal := nowFn, time.Local
-	t.Cleanup(func() { nowFn, time.Local = prevNow, prevLocal })
-	time.Local = london
+	pinClock(t, time.Time{}, london)
 
 	cases := []struct {
 		name string
@@ -308,7 +293,7 @@ func TestStyledCompactDate_Boundaries(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			nowFn = func() time.Time { return tc.now }
+			pinClock(t, tc.now, nil)
 			if got := styledCompactDate(tc.date, false); !strings.Contains(got, tc.want) {
 				t.Errorf("styledCompactDate = %q, want %q", got, tc.want)
 			}

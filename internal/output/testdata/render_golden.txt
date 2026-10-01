@@ -985,6 +985,147 @@ hint: run `things show 1` for|
 2.  [ ]  Book a room|
 |
 
+### case=print/tasks-wide-runes@60 color=never
+1.  [ ]  日本語のタイトルはとても長いので切り詰め…   due:Sat|
+2.  [ ]  Short title|
+|
+
+### case=print/tasks-dim-cut@60 color=never
+1.  [x]  Write the postmortem for last week's outage…  [ops]|
+2.  [~]  Draft the memo nobody asked for i… (project)|
+|
+
+### case=print/tasks-wide-runes@30 color=never
+1.  [ ]  日本語のタイトルはと…|
+2.  [ ]  Short title|
+|
+
+### case=print/tasks-dim-cut@30 color=never
+1.  [x]  Write the postmortem…|
+2.  [~]  Draft the … (project)|
+|
+
+### case=print/tasks@piped color=never
+    Work|
+1.  [ ]  Runbook audit (project)                      [ops]|
+2.  [ ]  ★ Read logs                                                            2026-09-10|
+3.  [x]  Write the postmortem for last week's outage  [write, ops]              due:2026-09-01|
+|
+    Q4 planning|
+4.  [~]  Draft memo|
+|
+    Home|
+5.  [ ]  Buy milk                                     [shop]                    2026-09-13|
+|
+6.  [ ]  No group at all                                                        due:2026-12-25|
+7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport                                             2026-12-01  due:2026-12-25|
+|
+
+### case=task-list/labelled@piped color=never
+    view: today|
+    Work|
+1.  [ ]  Runbook audit (project)                      [ops]|
+2.  [ ]  ★ Read logs                                                            2026-09-10|
+3.  [x]  Write the postmortem for last week's outage  [write, ops]              due:2026-09-01|
+|
+    Q4 planning|
+4.  [~]  Draft memo|
+|
+    Home|
+5.  [ ]  Buy milk                                     [shop]                    2026-09-13|
+|
+6.  [ ]  No group at all                                                        due:2026-12-25|
+7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport                                             2026-12-01  due:2026-12-25|
+|
+
+### case=task-list/long@piped color=never
+    Platform engineering and infrastructure work|
+1.  [ ]  Migrate the billing service to the new cluster (project)|
+|
+    Quarterly offsite planning for the whole department|
+2.  [ ]  Book a room|
+|
+
+### case=print/tasks-checklist@piped color=never
+    Home|
+1.  [ ]  Pack for the trip   ✓ 2/5    [travel]  due:2026-09-12|
+2.  [ ]  Water the plants|
+3.  [x]  Renew the passport  ✓ 12/12  [admin]|
+|
+
+### case=print/tasks-compact-tags@piped color=never
+1.  [ ]  Renew the passport  [waiting-on-post-office, errands, needs-photo-booth]  due:2026-09-12|
+2.  [ ]  Buy stamps          [errands]                                             due:2026-10-20|
+|
+
+### case=print/tasks-overlong@piped color=never
+    Work|
+1.  [ ]  Collect every receipt from the last three trips, scan them, and file the expense claim before the deadline|
+2.  [ ]  Book a room|
+|
+
+### case=print/tasks-wide-runes@piped color=never
+1.  [ ]  日本語のタイトルはとても長いので切り詰められます  [東京]  due:2026-09-12|
+2.  [ ]  Short title|
+|
+
+### case=print/tasks-dim-cut@piped color=never
+1.  [x]  Write the postmortem for last week's outage and circulate it          [ops]|
+2.  [~]  Draft the memo nobody asked for in the end, then shelve it (project)|
+|
+
+### case=print/projects@piped color=never
+○  Empty project|
+◔  Just started   Work  [urgent]|
+◑  Half done      Work|
+◕  Nearly there|
+●  All done       Home|
+●  Completed|
+◌  Cancelled|
+|
+
+### case=print/projects-long@piped color=never
+◑  Migrate the billing service to the new cluster  Platform engineering, infrastructure and developer tooling team|
+○  Offsite                                         Home|
+|
+
+### case=task-detail/wrapped@piped color=never
+Title:    Book the venue for the autumn team offsite|
+UUID:     wrap-uuid|
+Status:   Open|
+Project:  Team offsite planning and logistics|
+Tags:     waiting-on-venue, errands, budget|
+Notes:|
+  Call them before Friday and ask about the deposit.|
+  |
+  See https://example.com/venue-offsite26 for details.|
+Checklist:|
+  [x] Confirm the headcount with every team lead|
+|
+
+### case=hint@piped color=never
+|
+hint: run `things show 1` for the detail|
+|
+
+### case=print/tasks-KNOWN-BUG-tab-newline-titles@80 color=never
+1.  [ ]  Pack    the   [travel]  due:2026-09-12|
+         bags                                  |
+2.  [ ]  First line    [home]|
+         second line         |
+3.  [ ]  Plain title|
+|
+
+### case=print/tasks-KNOWN-BUG-tab-newline-titles@piped color=never
+1.  [ ]  Pack    the   [travel]  due:2026-09-12|
+         bags                                  |
+2.  [ ]  First line    [home]|
+         second line         |
+3.  [ ]  Plain title|
+|
+
 ### case=task-detail/plain color=always
 \e[1mTitle:\e[m    Cut RC build|
 \e[1mUUID:\e[m     detail-uuid|
@@ -1970,5 +2111,146 @@ the status did not change, so a zero exit means it landed.|
 |
     \e[1;36mQuarterly offsite planning for the whole depa…\e[m|
 2.  [ ]  Book a room|
+|
+
+### case=print/tasks-wide-runes@60 color=always
+1.  [ ]  日本語のタイトルはとても長いので切り詰め…   \e[33mdue:Sat\e[m|
+2.  [ ]  Short title|
+|
+
+### case=print/tasks-dim-cut@60 color=always
+1.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mw\e[m\e[2;9me\e[m\e[2;9me\e[m\e[2;9mk\e[m\e[2;9m'\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mo\e[m\e[2;9mu\e[m\e[2;9mt\e[m\e[2;9ma\e[m\e[2;9mg\e[m\e[2;9me\e[m\e[9m…\e[m  \e[33m[ops]\e[m|
+2.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[9m \e[m\e[2;9mn\e[m\e[2;9mo\e[m\e[2;9mb\e[m\e[2;9mo\e[m\e[2;9md\e[m\e[2;9my\e[m\e[9m \e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mk\e[m\e[2;9me\e[m\e[2;9md\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9mi\e[m\e[2;9m…\e[m \e[2m(project)\e[m|
+|
+
+### case=print/tasks-wide-runes@30 color=always
+1.  [ ]  日本語のタイトルはと…|
+2.  [ ]  Short title|
+|
+
+### case=print/tasks-dim-cut@30 color=always
+1.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m…\e[m|
+2.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9m…\e[m \e[2m(project)\e[m|
+|
+
+### case=print/tasks@piped color=always
+    \e[1;36mWork\e[m|
+1.  [ ]  Runbook audit \e[2m(project)\e[m                      \e[33m[ops]\e[m|
+2.  [ ]  \e[1;33m★\e[m Read logs                                                            \e[1;33m2026-09-10\e[m|
+3.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mw\e[m\e[2;9me\e[m\e[2;9me\e[m\e[2;9mk\e[m\e[2;9m'\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mo\e[m\e[2;9mu\e[m\e[2;9mt\e[m\e[2;9ma\e[m\e[2;9mg\e[m\e[2;9me\e[m  \e[33m[write, ops]\e[m              \e[1;31mdue:2026-09-01\e[m|
+|
+    \e[1;36mQ4 planning\e[m|
+4.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m|
+|
+    \e[1;36mHome\e[m|
+5.  [ ]  Buy milk                                     \e[33m[shop]\e[m                    \e[33m2026-09-13\e[m|
+|
+6.  [ ]  No group at all                                                        \e[2mdue:2026-12-25\e[m|
+7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport                                             \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
+|
+
+### case=task-list/labelled@piped color=always
+    \e[2mview: today\e[m|
+    \e[1;36mWork\e[m|
+1.  [ ]  Runbook audit \e[2m(project)\e[m                      \e[33m[ops]\e[m|
+2.  [ ]  \e[1;33m★\e[m Read logs                                                            \e[1;33m2026-09-10\e[m|
+3.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mw\e[m\e[2;9me\e[m\e[2;9me\e[m\e[2;9mk\e[m\e[2;9m'\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mo\e[m\e[2;9mu\e[m\e[2;9mt\e[m\e[2;9ma\e[m\e[2;9mg\e[m\e[2;9me\e[m  \e[33m[write, ops]\e[m              \e[1;31mdue:2026-09-01\e[m|
+|
+    \e[1;36mQ4 planning\e[m|
+4.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m|
+|
+    \e[1;36mHome\e[m|
+5.  [ ]  Buy milk                                     \e[33m[shop]\e[m                    \e[33m2026-09-13\e[m|
+|
+6.  [ ]  No group at all                                                        \e[2mdue:2026-12-25\e[m|
+7.  [ ]  Unrecognised status|
+8.  [ ]  Renew passport                                             \e[2m2026-12-01\e[m  \e[2mdue:2026-12-25\e[m|
+|
+
+### case=task-list/long@piped color=always
+    \e[1;36mPlatform engineering and infrastructure work\e[m|
+1.  [ ]  Migrate the billing service to the new cluster \e[2m(project)\e[m|
+|
+    \e[1;36mQuarterly offsite planning for the whole department\e[m|
+2.  [ ]  Book a room|
+|
+
+### case=print/tasks-checklist@piped color=always
+    \e[1;36mHome\e[m|
+1.  [ ]  Pack for the trip   \e[2m✓ 2/5\e[m    \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  Water the plants|
+3.  \e[2;32m[x]\e[m  \e[2;9mR\e[m\e[2;9me\e[m\e[2;9mn\e[m\e[2;9me\e[m\e[2;9mw\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9ms\e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m  \e[2m✓ 12/12\e[m  \e[33m[admin]\e[m|
+|
+
+### case=print/tasks-compact-tags@piped color=always
+1.  [ ]  Renew the passport  \e[33m[waiting-on-post-office, errands, needs-photo-booth]\e[m  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  Buy stamps          \e[33m[errands]\e[m                                             \e[2mdue:2026-10-20\e[m|
+|
+
+### case=print/tasks-overlong@piped color=always
+    \e[1;36mWork\e[m|
+1.  [ ]  Collect every receipt from the last three trips, scan them, and file the expense claim before the deadline|
+2.  [ ]  Book a room|
+|
+
+### case=print/tasks-wide-runes@piped color=always
+1.  [ ]  日本語のタイトルはとても長いので切り詰められます  \e[33m[東京]\e[m  \e[33mdue:2026-09-12\e[m|
+2.  [ ]  Short title|
+|
+
+### case=print/tasks-dim-cut@piped color=always
+1.  \e[2;32m[x]\e[m  \e[2;9mW\e[m\e[2;9mr\e[m\e[2;9mi\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mp\e[m\e[2;9mo\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mw\e[m\e[2;9me\e[m\e[2;9me\e[m\e[2;9mk\e[m\e[2;9m'\e[m\e[2;9ms\e[m\e[9m \e[m\e[2;9mo\e[m\e[2;9mu\e[m\e[2;9mt\e[m\e[2;9ma\e[m\e[2;9mg\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9ma\e[m\e[2;9mn\e[m\e[2;9md\e[m\e[9m \e[m\e[2;9mc\e[m\e[2;9mi\e[m\e[2;9mr\e[m\e[2;9mc\e[m\e[2;9mu\e[m\e[2;9ml\e[m\e[2;9ma\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mi\e[m\e[2;9mt\e[m          \e[33m[ops]\e[m|
+2.  \e[2;31m[~]\e[m  \e[2;9mD\e[m\e[2;9mr\e[m\e[2;9ma\e[m\e[2;9mf\e[m\e[2;9mt\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mm\e[m\e[2;9me\e[m\e[2;9mm\e[m\e[2;9mo\e[m\e[9m \e[m\e[2;9mn\e[m\e[2;9mo\e[m\e[2;9mb\e[m\e[2;9mo\e[m\e[2;9md\e[m\e[2;9my\e[m\e[9m \e[m\e[2;9ma\e[m\e[2;9ms\e[m\e[2;9mk\e[m\e[2;9me\e[m\e[2;9md\e[m\e[9m \e[m\e[2;9mf\e[m\e[2;9mo\e[m\e[2;9mr\e[m\e[9m \e[m\e[2;9mi\e[m\e[2;9mn\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9me\e[m\e[2;9mn\e[m\e[2;9md\e[m\e[2;9m,\e[m\e[9m \e[m\e[2;9mt\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[2;9mn\e[m\e[9m \e[m\e[2;9ms\e[m\e[2;9mh\e[m\e[2;9me\e[m\e[2;9ml\e[m\e[2;9mv\e[m\e[2;9me\e[m\e[9m \e[m\e[2;9mi\e[m\e[2;9mt\e[m \e[2m(project)\e[m|
+|
+
+### case=print/projects@piped color=always
+\e[36m○\e[m  Empty project|
+\e[36m◔\e[m  Just started   \e[2;36mWork\e[m  \e[33m[urgent]\e[m|
+\e[36m◑\e[m  Half done      \e[2;36mWork\e[m|
+\e[36m◕\e[m  Nearly there|
+\e[36m●\e[m  All done       \e[2;36mHome\e[m|
+\e[2;32m●\e[m  Completed|
+\e[2;31m◌\e[m  Cancelled|
+|
+
+### case=print/projects-long@piped color=always
+\e[36m◑\e[m  Migrate the billing service to the new cluster  \e[2;36mPlatform engineering, infrastructure and developer tooling team\e[m|
+\e[36m○\e[m  Offsite                                         \e[2;36mHome\e[m|
+|
+
+### case=task-detail/wrapped@piped color=always
+\e[1mTitle:\e[m    Book the venue for the autumn team offsite|
+\e[1mUUID:\e[m     wrap-uuid|
+\e[1mStatus:\e[m   Open|
+\e[1mProject:\e[m  \e[36mTeam offsite planning and logistics\e[m|
+\e[1mTags:\e[m     \e[33mwaiting-on-venue, errands, budget\e[m|
+\e[1mNotes:\e[m|
+  Call them before Friday and ask about the deposit.|
+  |
+  See https://example.com/venue-offsite26 for details.|
+\e[1mChecklist:\e[m|
+  \e[2;32m[x]\e[m Confirm the headcount with every team lead|
+|
+
+### case=hint@piped color=always
+|
+\e[2mhint: \e[m\e[2mrun `things show 1` for the detail\e[m|
+|
+
+### case=print/tasks-KNOWN-BUG-tab-newline-titles@80 color=always
+1.  [ ]  Pack    the   \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
+         bags                                  |
+2.  [ ]  First line    \e[33m[home]\e[m|
+         second line         |
+3.  [ ]  Plain title|
+|
+
+### case=print/tasks-KNOWN-BUG-tab-newline-titles@piped color=always
+1.  [ ]  Pack    the   \e[33m[travel]\e[m  \e[33mdue:2026-09-12\e[m|
+         bags                                  |
+2.  [ ]  First line    \e[33m[home]\e[m|
+         second line         |
+3.  [ ]  Plain title|
 |
 
