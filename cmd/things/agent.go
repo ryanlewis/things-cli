@@ -8,10 +8,18 @@ import (
 	"github.com/ryanlewis/things-cli/internal/output"
 )
 
-// agentHint is the pointer printed under a plain task listing. The numeric
-// index is the handle the reader already has in front of them; --agent is what
-// they cannot discover from the listing itself.
-const agentHint = "things show <n> --agent hands a task to an agent (disable with hints = false in the config file)"
+// agentHintActions are the next actions offered under a listing, most common
+// first. <n> is the numeric index the reader already has in front of them;
+// --agent is what they cannot discover from the listing itself. They are
+// dropped from the end when the terminal is narrow.
+var agentHintActions = []string{
+	"complete <n>",
+	"show <n>",
+	"edit <n> --when tomorrow",
+	"show <n> --agent",
+}
+
+const agentHintNote = "(disable with hints = false in the config file)"
 
 // stdoutWidth is the width output on stdout has to fit, or 0 when stdout is
 // not a terminal. It is the output package's own check, so one answer decides
@@ -19,7 +27,7 @@ const agentHint = "things show <n> --agent hands a task to an agent (disable wit
 // it — nothing in a test writes to a real terminal.
 var stdoutWidth = output.FitWidth
 
-// printAgentHint writes the --agent pointer under a listing. It is suppressed
+// printAgentHint writes the next-actions hint under a listing. It is suppressed
 // under --json and whenever stdout is not a terminal, because then a program
 // is reading the output and a hint is noise in its input; for an empty listing,
 // because there is no <n> to show; and when hints are turned off.
@@ -31,7 +39,7 @@ func printAgentHint(d *Deps, listed int) error {
 	if width == 0 {
 		return nil
 	}
-	return output.PrintHint(d.Stdout, agentHint, width)
+	return output.PrintHint(d.Stdout, agentHintActions, agentHintNote, width)
 }
 
 // showAgentBrief renders the Markdown brief `things show --agent` prints. A

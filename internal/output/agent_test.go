@@ -264,11 +264,35 @@ func TestPrintAgentBriefFoldsMultilineTitles(t *testing.T) {
 
 func TestPrintHint(t *testing.T) {
 	var buf bytes.Buffer
-	if err := PrintHint(&buf, "do the thing", 0); err != nil {
+	if err := PrintHint(&buf, []string{"one", "two"}, "a note", 0); err != nil {
 		t.Fatalf("PrintHint: %v", err)
 	}
-	if got := buf.String(); got != "\nhint: do the thing\n" {
+	if got := buf.String(); got != "\nthings one · two\na note\n" {
 		t.Errorf("PrintHint wrote %q", got)
+	}
+}
+
+func TestPrintHintDropsWholeActionsFromTheEnd(t *testing.T) {
+	actions := []string{"complete <n>", "show <n>", "edit <n> --when tomorrow", "show <n> --agent"}
+	cases := []struct {
+		width int
+		want  string
+	}{
+		{120, "things complete <n> · show <n> · edit <n> --when tomorrow · show <n> --agent"},
+		{70, "things complete <n> · show <n> · edit <n> --when tomorrow"},
+		{45, "things complete <n> · show <n>"},
+		{30, "things complete <n> · show <n>"},
+		{29, "things complete <n>"},
+		{5, "things complete <n>"},
+	}
+	for _, tc := range cases {
+		var buf bytes.Buffer
+		if err := PrintHint(&buf, actions, "note", tc.width); err != nil {
+			t.Fatalf("PrintHint: %v", err)
+		}
+		if got := strings.Split(buf.String(), "\n")[1]; got != tc.want {
+			t.Errorf("width %d: line 1 = %q, want %q", tc.width, got, tc.want)
+		}
 	}
 }
 

@@ -125,7 +125,7 @@ func TestListPrintsAgentHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list today: %v", err)
 	}
-	if !strings.Contains(out, "hint: things show <n> --agent") {
+	if !strings.Contains(out, "things complete <n> · show <n> · edit <n> --when tomorrow · show <n> --agent") {
 		t.Errorf("listing carries no hint\n%s", out)
 	}
 }
@@ -139,7 +139,7 @@ func TestSearchPrintsAgentHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search milk: %v", err)
 	}
-	if !strings.Contains(out, "hint: things show <n> --agent") {
+	if !strings.Contains(out, "things complete <n> · show <n> · edit <n> --when tomorrow · show <n> --agent") {
 		t.Errorf("search results carry no hint\n%s", out)
 	}
 }
@@ -149,12 +149,12 @@ func TestSearchPrintsAgentHint(t *testing.T) {
 // stub that decides the hint prints also decides how it wraps.
 func TestAgentHintWrapsToStubbedTerminal(t *testing.T) {
 	database := seedFullDB(t)
-	stubStdoutWidth(t, 40)
+	stubStdoutWidth(t, 50)
 	out, err := runOut(t, database, "list", "today")
 	if err != nil {
 		t.Fatalf("list today: %v", err)
 	}
-	want := "\nhint: things show <n> --agent hands a\n      task to an agent (disable with\n      hints = false in the config file)\n"
+	want := "\nthings complete <n> · show <n>\n(disable with hints = false in the config file)\n"
 	if !strings.HasSuffix(out, want) {
 		t.Errorf("hint not wrapped to the 40-column stub\ngot:\n%s\nwant suffix:\n%s", out, want)
 	}
@@ -179,7 +179,7 @@ func TestListSuppressesAgentHint(t *testing.T) {
 			if err != nil {
 				t.Fatalf("run %v: %v", tc.args, err)
 			}
-			if strings.Contains(out, "hint:") {
+			if strings.Contains(out, "(disable with hints") {
 				t.Errorf("hint printed anyway\n%s", out)
 			}
 		})
@@ -195,7 +195,7 @@ func TestListHintOffViaConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list today with hints = false: %v", err)
 	}
-	if strings.Contains(out, "hint:") {
+	if strings.Contains(out, "(disable with hints") {
 		t.Errorf("hints = false did not turn the hint off\n%s", out)
 	}
 }

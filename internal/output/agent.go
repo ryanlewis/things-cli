@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -270,12 +271,24 @@ func singleLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// PrintHint writes a dim pointer below plain output. Callers decide whether a
-// hint is wanted at all, and so whether stdout is a terminal; this only
-// renders it. It wraps at word boundaries to width, under the start of the
-// text, rather than the terminal breaking it mid-word. A width of 0 keeps it
-// on one line.
-func PrintHint(w io.Writer, text string, width int) error {
-	_, err := fmt.Fprintf(newWriter(w), "\n%s", hang(dimStyle.Render("hint: "), dimStyle.Render(text), width))
+// PrintHint writes a dim line of next actions below plain output, then a note
+// on its own line. Callers decide whether a hint is wanted at all, and so
+// whether stdout is a terminal; this only renders it.
+//
+// The actions are joined with " · " after a leading "things ". They are fitted
+// to width by dropping whole actions from the end, never wrapping or cutting
+// one; the first is kept even when it does not fit. The note wraps at word
+// boundaries. A width of 0 keeps everything on one line each.
+func PrintHint(w io.Writer, actions []string, note string, width int) error {
+	if len(actions) == 0 {
+		return nil
+	}
+	const head, sep = "things ", " · "
+	line := head + strings.Join(actions, sep)
+	for n := len(actions); width > 0 && n > 1 && ansi.StringWidth(line) > width; {
+		n--
+		line = head + strings.Join(actions[:n], sep)
+	}
+	_, err := fmt.Fprintf(newWriter(w), "\n%s\n%s", dimStyle.Render(line), hang("", dimStyle.Render(note), width))
 	return err
 }

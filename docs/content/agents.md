@@ -159,11 +159,16 @@ config file with `json = true` is only a default; the explicit `--agent`
 wins, as any flag does.
 
 Plain listings from `things list` and `things search`, printed to a
-terminal, end with a one-line pointer to the flag:
+terminal, end with a line of common next actions, then a note on how to turn it off:
 
 ```text
-hint: things show <n> --agent hands a task to an agent (disable with hints = false in the config file)
+things complete <n> · show <n> · edit <n> --when tomorrow · show <n> --agent
+(disable with hints = false in the config file)
 ```
+
+On a narrow terminal the actions are dropped from the end, a whole action at
+a time, so a line never wraps. `show <n> --agent` is the one that hands a
+task to an agent.
 
 It never appears under `--json`, when stdout is not a terminal, or for an
 empty listing, so nothing that parses output will meet it. `--no-hints` or
