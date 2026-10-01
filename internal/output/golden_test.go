@@ -231,7 +231,7 @@ func goldenCases(t *testing.T) []goldenCase {
 			return PrintTaskList(w, tasks, true, "today")
 		}},
 		{name: "hint", write: func(w io.Writer) error {
-			return PrintHint(w, "run `things show 1` for the detail", FitWidth())
+			return PrintHint(w, hintActions, hintNote, FitWidth())
 		}},
 		{name: "brief/task", write: func(w io.Writer) error {
 			return PrintAgentBrief(w, AgentBrief{Task: detail, Checklist: items})
@@ -384,7 +384,17 @@ func goldenCases(t *testing.T) []goldenCase {
 		goldenCase{
 			name:  "hint@30",
 			width: 30,
-			write: func(w io.Writer) error { return PrintHint(w, "run `things show 1` for the detail", FitWidth()) },
+			write: func(w io.Writer) error { return PrintHint(w, hintActions, hintNote, FitWidth()) },
+		},
+		goldenCase{
+			name:  "hint@10",
+			width: 10,
+			write: func(w io.Writer) error { return PrintHint(w, hintActions, hintNote, FitWidth()) },
+		},
+		goldenCase{
+			name:  "hint@45",
+			width: 45,
+			write: func(w io.Writer) error { return PrintHint(w, hintActions, hintNote, FitWidth()) },
 		},
 	)
 	cases = append(cases, goldenCase{
@@ -728,3 +738,7 @@ func goldenCaseOrder(want, got string) []string {
 	}
 	return order
 }
+
+var hintActions = []string{"complete <n>", "show <n>", "edit <n> --when tomorrow", "show <n> --agent"}
+
+const hintNote = "(disable with hints = false in the config file)"

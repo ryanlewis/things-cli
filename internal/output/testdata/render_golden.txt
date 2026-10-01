@@ -503,7 +503,8 @@ waiting-on-someone  (w)|
 
 ### case=hint color=never
 |
-hint: run `things show 1` for the detail|
+things complete <n> · show <n> · edit <n> --when tomorrow · show <n> --agent|
+(disable with hints = false in the config file)|
 |
 
 ### case=brief/task color=never
@@ -956,8 +957,26 @@ Checklist:|
 
 ### case=hint@30 color=never
 |
-hint: run `things show 1` for|
-      the detail|
+things complete <n> · show <n>|
+(disable with hints = false in|
+the config file)|
+|
+
+### case=hint@10 color=never
+|
+things complete <n>|
+(disable|
+with hints|
+= false in|
+the config|
+file)|
+|
+
+### case=hint@45 color=never
+|
+things complete <n> · show <n>|
+(disable with hints = false in the config|
+file)|
 |
 
 ### case=task-list/unlabelled@120 color=never
@@ -1651,7 +1670,8 @@ waiting-on-someone  \e[2m(w)\e[m|
 
 ### case=hint color=always
 |
-\e[2mhint: \e[m\e[2mrun `things show 1` for the detail\e[m|
+\e[2mthings complete <n> · show <n> · edit <n> --when tomorrow · show <n> --agent\e[m|
+\e[2m(disable with hints = false in the config file)\e[m|
 |
 
 ### case=brief/task color=always
@@ -2104,8 +2124,26 @@ the status did not change, so a zero exit means it landed.|
 
 ### case=hint@30 color=always
 |
-\e[2mhint: \e[m\e[2mrun `things show 1` for\e[m|
-      \e[2mthe detail\e[m|
+\e[2mthings complete <n> · show <n>\e[m|
+\e[2m(disable with hints = false in\e[m|
+\e[2mthe config file)\e[m|
+|
+
+### case=hint@10 color=always
+|
+\e[2mthings complete <n>\e[m|
+\e[2m(disable\e[m|
+\e[2mwith hints\e[m|
+\e[2m= false in\e[m|
+\e[2mthe config\e[m|
+\e[2mfile)\e[m|
+|
+
+### case=hint@45 color=always
+|
+\e[2mthings complete <n> · show <n>\e[m|
+\e[2m(disable with hints = false in the config\e[m|
+\e[2mfile)\e[m|
 |
 
 ### case=task-list/unlabelled@120 color=always

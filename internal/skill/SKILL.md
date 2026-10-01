@@ -268,7 +268,7 @@ The brief carries the title as a heading, then UUID, status, project/area/headin
 - A repeating task's or project's brief omits `complete`/`cancel` (rule 2).
 - `--agent` and `--json` are mutually exclusive: the brief is for reading, `--json` for parsing. Prefer `--json` when extracting fields.
 
-A plain listing from `list` or `search`, printed to a terminal, ends with a `hint:` line pointing at `--agent`. It never appears under `--json` or when the output is piped, so it will not turn up in anything you parse.
+A plain listing from `list` or `search`, printed to a terminal, ends with a dim line of next actions (`things complete <n> · show <n> · …`) and a note on turning it off. It never appears under `--json` or when the output is piped, so it will not turn up in anything you parse.
 
 A plain listing prints each task on one line: a line break or tab in a title, tag, project or area shows as a space. Use `--json` when you need a title exactly as written.
 
