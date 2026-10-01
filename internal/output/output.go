@@ -164,18 +164,21 @@ func taskCells(n int, t *model.Task, tty bool) []cell {
 	// both carries its start date in a column of its own, before the
 	// deadline. The date's compact form ("due:Fri") stands in for it on a
 	// terminal too narrow for the full one, before the column is dropped.
-	var start string
-	var date cell
+	var start, date, compactDate string
 	switch {
 	case t.Deadline != nil:
-		date = cell{text: styledDate(t.Deadline, true), alt: styledCompactDate(t.Deadline, true)}
+		date = styledDate(t.Deadline, true)
+		compactDate = styledCompactDate(t.Deadline, true)
 		start = styledDate(t.StartDate, false)
 	case t.StartDate != nil:
-		date = cell{text: styledDate(t.StartDate, false), alt: styledCompactDate(t.StartDate, false)}
+		date = styledDate(t.StartDate, false)
+		compactDate = styledCompactDate(t.StartDate, false)
 	}
-	tags := cell{text: styledTags(t.Tags), alt: styledCompactTags(t.Tags)}
-	if !tty {
-		date.alt, tags.alt = "", ""
+	tags := cell{text: styledTags(t.Tags)}
+	dateCell := cell{text: date}
+	if tty {
+		tags.alt = styledCompactTags(t.Tags)
+		dateCell.alt = compactDate
 	}
 
 	return []cell{
@@ -185,7 +188,7 @@ func taskCells(n int, t *model.Task, tty bool) []cell {
 		colChecklist: {text: styledChecklist(t.ChecklistProgress)},
 		colTags:      tags,
 		colStart:     {text: start},
-		colDate:      date,
+		colDate:      dateCell,
 	}
 }
 
