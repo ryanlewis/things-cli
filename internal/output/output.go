@@ -194,7 +194,8 @@ func taskCells(n int, t *model.Task, tty bool) []cell {
 
 // header is what a task listing prints above a row: a blank line, closing the
 // group before, and the title of the group the row opens. A group with no
-// title, or one folded under the row above, prints none.
+// title still gets its blank line; one folded under the row above gets
+// neither.
 type header struct {
 	gap   bool
 	title string
