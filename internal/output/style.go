@@ -232,13 +232,27 @@ var stdoutIsTerminal = func() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
+// layout is what a printer fits its output to: the width termWidth reports
+// and whether stdout is a terminal at all. Piped, width is termWidth's
+// 120-column fallback, which only a task listing uses (see printTasks); every
+// other surface fits fitWidth, which is 0 there.
+type layout struct {
+	width int
+	tty   bool
+}
+
+// currentLayout reads the layout from stdout.
+func currentLayout() layout {
+	return layout{width: termWidth(), tty: stdoutIsTerminal()}
+}
+
 // fitWidth is the width output has to fit: the terminal's on a terminal, and
 // 0 otherwise, which leaves text unwrapped and table columns whole. Piped
 // output would fall back to termWidth's 120 columns, and fitting that adds
 // line breaks and cuts the text does not have.
-func fitWidth() int {
-	if stdoutIsTerminal() {
-		return termWidth()
+func (l layout) fitWidth() int {
+	if l.tty {
+		return l.width
 	}
 	return 0
 }
@@ -247,5 +261,5 @@ func fitWidth() int {
 // listing is decided on and fitted with the same answer the listing used: a
 // terminal's width, or 0 when stdout is not a terminal.
 func FitWidth() int {
-	return fitWidth()
+	return currentLayout().fitWidth()
 }
