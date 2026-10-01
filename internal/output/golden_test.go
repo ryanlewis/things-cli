@@ -33,6 +33,10 @@ var goldenNow = time.Date(2026, 9, 10, 11, 30, 0, 0, time.UTC)
 type goldenCase struct {
 	name  string
 	width int // terminal width; 0 renders at the 120-column default
+	// piped renders as if stdout were a pipe rather than a terminal, which is
+	// what a script or an agent reading the output sees. termWidth then gives
+	// its 120-column fallback, so a piped case leaves width at 0.
+	piped bool
 	write func(w io.Writer) error
 }
 
@@ -406,6 +410,110 @@ func goldenCases(t *testing.T) []goldenCase {
 		width: 50,
 		write: func(w io.Writer) error { return PrintTaskList(w, long, false, "") },
 	})
+
+	// Titles in wide runes, cut on a terminal: the cut counts terminal
+	// columns, not bytes or runes.
+	wide := []model.Task{
+		{
+			UUID: "wr1", Title: "日本語のタイトルはとても長いので切り詰められます", Type: model.TypeTask,
+			Status: model.StatusOpen, Tags: []string{"東京"}, Deadline: thingsDate(t, "2026-09-12"),
+		},
+		{UUID: "wr2", Title: "Short title", Type: model.TypeTask, Status: model.StatusOpen},
+	}
+	// Completed and cancelled titles are dim and struck through, styled a
+	// character at a time, and cut on a terminal: the cut must leave no empty
+	// styled spans behind.
+	dimCut := []model.Task{
+		{
+			UUID: "dc1", Title: "Write the postmortem for last week's outage and circulate it",
+			Type: model.TypeTask, Status: model.StatusCompleted, Tags: []string{"ops"},
+		},
+		{
+			UUID: "dc2", Title: "Draft the memo nobody asked for in the end, then shelve it",
+			Type: model.TypeProject, Status: model.StatusCancelled,
+		},
+	}
+	for _, width := range []int{60, 30} {
+		cases = append(cases,
+			goldenCase{
+				name:  fmt.Sprintf("print/tasks-wide-runes@%d", width),
+				width: width,
+				write: func(w io.Writer) error { return Print(w, wide, false) },
+			},
+			goldenCase{
+				name:  fmt.Sprintf("print/tasks-dim-cut@%d", width),
+				width: width,
+				write: func(w io.Writer) error { return Print(w, dimCut, false) },
+			},
+		)
+	}
+
+	// Piped output: what a script or an agent reads. A task listing still
+	// fits termWidth's 120-column fallback, but only by dropping columns: no
+	// title, header, tag or date is cut or shortened. The other surfaces are
+	// not fitted at all. The first task here is wider than 120 columns whole.
+	overlong := []model.Task{
+		{
+			UUID: "ol1", Title: "Collect every receipt from the last three trips, scan them, and file the expense claim before the deadline",
+			Type: model.TypeTask, Status: model.StatusOpen, AreaUUID: "a1", AreaTitle: "Work",
+			Tags: []string{"waiting-on-post-office", "errands"}, StartDate: thingsDate(t, "2026-09-11"),
+			Deadline:          thingsDate(t, "2026-09-30"),
+			ChecklistProgress: &model.ChecklistProgress{Total: 4, Open: 1},
+		},
+		{
+			UUID: "ol2", Title: "Book a room", Type: model.TypeTask, Status: model.StatusOpen,
+			AreaUUID: "a1", AreaTitle: "Work", Tags: []string{"errands"}, Deadline: thingsDate(t, "2026-09-14"),
+		},
+	}
+	piped := []struct {
+		name  string
+		write func(w io.Writer) error
+	}{
+		{"print/tasks", func(w io.Writer) error { return Print(w, tasks, false) }},
+		{"task-list/labelled", func(w io.Writer) error { return PrintTaskList(w, tasks, false, "today") }},
+		{"task-list/long", func(w io.Writer) error { return PrintTaskList(w, long, false, "") }},
+		{"print/tasks-checklist", func(w io.Writer) error { return Print(w, checklisted, false) }},
+		{"print/tasks-compact-tags", func(w io.Writer) error { return Print(w, tagged, false) }},
+		{"print/tasks-overlong", func(w io.Writer) error { return Print(w, overlong, false) }},
+		{"print/tasks-wide-runes", func(w io.Writer) error { return Print(w, wide, false) }},
+		{"print/tasks-dim-cut", func(w io.Writer) error { return Print(w, dimCut, false) }},
+		{"print/projects", func(w io.Writer) error { return Print(w, projects, false) }},
+		{"print/projects-long", func(w io.Writer) error { return Print(w, longProjects, false) }},
+		{"task-detail/wrapped", func(w io.Writer) error { return PrintTaskWithChecklist(w, wrapped, wrappedItems, false) }},
+		{"hint", func(w io.Writer) error { return PrintHint(w, "run `things show 1` for the detail", fitWidth()) }},
+	}
+	for _, p := range piped {
+		cases = append(cases, goldenCase{name: p.name + "@piped", piped: true, write: p.write})
+	}
+
+	// KNOWN BUG, pinned as it renders today: a title holding a tab or a
+	// newline breaks its row. A tab measures as no columns but pads out to
+	// four, so the padded title wraps onto a second line; a newline splits
+	// the row in two. These cases are here so the fix shows up as a diff in
+	// this file, not to say the output is right.
+	broken := []model.Task{
+		{
+			UUID: "kb1", Title: "Pack\tthe bags", Type: model.TypeTask, Status: model.StatusOpen,
+			Tags: []string{"travel"}, Deadline: thingsDate(t, "2026-09-12"),
+		},
+		{
+			UUID: "kb2", Title: "First line\nsecond line", Type: model.TypeTask, Status: model.StatusOpen,
+			Tags: []string{"home"},
+		},
+		{UUID: "kb3", Title: "Plain title", Type: model.TypeTask, Status: model.StatusOpen},
+	}
+	cases = append(cases,
+		goldenCase{
+			name:  "print/tasks-KNOWN-BUG-tab-newline-titles@80",
+			width: 80,
+			write: func(w io.Writer) error { return Print(w, broken, false) },
+		},
+		goldenCase{
+			name:  "print/tasks-KNOWN-BUG-tab-newline-titles@piped",
+			piped: true,
+			write: func(w io.Writer) error { return Print(w, broken, false) },
+		},
+	)
 	return cases
 }
 
@@ -417,14 +525,8 @@ func renderGolden(t *testing.T) string {
 	// The detail block prints its UTC timestamps in local time, so the document
 	// is rendered for a reader in UTC — otherwise it would change with the zone
 	// of the machine running the test.
-	prevNow, prevWidth, prevTerm, prevLocal := nowFn, termWidth, stdoutIsTerminal, time.Local
-	t.Cleanup(func() {
-		nowFn, termWidth, stdoutIsTerminal, time.Local = prevNow, prevWidth, prevTerm, prevLocal
-		_ = SetColorMode("never")
-	})
-	time.Local = time.UTC
-	nowFn = func() time.Time { return goldenNow }
-	stdoutIsTerminal = func() bool { return true }
+	pinClock(t, goldenNow, time.UTC)
+	t.Cleanup(func() { _ = SetColorMode("never") })
 
 	var b strings.Builder
 	for _, mode := range []string{"never", "always"} {
@@ -436,7 +538,7 @@ func renderGolden(t *testing.T) string {
 			if width == 0 {
 				width = 120
 			}
-			termWidth = func() int { return width }
+			pinLayout(t, width, !c.piped)
 
 			var buf bytes.Buffer
 			if err := c.write(&buf); err != nil {
