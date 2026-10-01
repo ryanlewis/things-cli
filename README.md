@@ -165,7 +165,7 @@ unchanged, and commands that fail on a single item carry no `items` at all.
 | `--config PATH` | Read defaults from this config file instead of the default location | see [Configuration](#configuration) |
 | `--no-verify` | Skip the read-back that confirms a `complete`/`cancel` actually landed | `false` |
 | `--verify-timeout DURATION` | How long the read-back waits before reporting a write as not applied, e.g. `2500ms`; must be above zero | `5s` |
-| `--hints` / `--no-hints` | Print the hint line under a plain task listing | `true` |
+| `--hints` / `--no-hints` | Print a line of next actions under a plain task listing | `true` |
 | `-v, --version` | Print version, commit, and build date and exit (same as `things version`) | — |
 
 ### Configuration
