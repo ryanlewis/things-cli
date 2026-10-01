@@ -159,22 +159,23 @@ func printTasks(w io.Writer, tasks []model.Task) error {
 			compactDate = styledCompactDate(t.StartDate, false)
 		}
 
-		tbl.row(
-			fmt.Sprintf("%d.", i+1),
-			styledStatus(t.Status),
-			title,
-			styledChecklist(t.ChecklistProgress),
-			styledTags(t.Tags),
-			start,
-			date,
-		)
-		tbl.tail(colTitle, marker)
+		tags := cell{text: styledTags(t.Tags)}
+		dateCell := cell{text: date}
 		// Only on a terminal: a relative date goes stale in a saved file and
 		// defeats grep, so piped output keeps the full date or none.
 		if tty {
-			tbl.alt(colTags, styledCompactTags(t.Tags))
-			tbl.alt(colDate, compactDate)
+			tags.alt = styledCompactTags(t.Tags)
+			dateCell.alt = compactDate
 		}
+		tbl.add(
+			cell{text: fmt.Sprintf("%d.", i+1)},
+			cell{text: styledStatus(t.Status)},
+			cell{text: title, tail: marker},
+			cell{text: styledChecklist(t.ChecklistProgress)},
+			tags,
+			cell{text: start},
+			dateCell,
+		)
 
 		g := group{uuid: t.UUID}
 		if t.ProjectUUID != "" {

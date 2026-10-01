@@ -115,8 +115,7 @@ func TestTableTail(t *testing.T) {
 				maxWidth: tt.maxWidth,
 				shrink:   []shrinkCol{{col: 1, min: 2}},
 			}
-			tbl.row("1.", "a long title")
-			tbl.tail(1, " (p)")
+			tbl.add(cell{text: "1."}, cell{text: "a long title", tail: " (p)"})
 			if got := tbl.lines()[0]; got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
@@ -133,8 +132,7 @@ func TestTableTailMixedRows(t *testing.T) {
 		shrink:   []shrinkCol{{col: 1, min: 2}},
 	}
 	tbl.row("1.", "a long to-do")
-	tbl.row("2.", "a long project")
-	tbl.tail(1, " (p)")
+	tbl.add(cell{text: "2."}, cell{text: "a long project", tail: " (p)"})
 	tbl.row("3.", "another to-do")
 	want := []string{"1.  a long to…", "2.  a lon… (p)", "3.  another t…"}
 	got := tbl.lines()
@@ -207,8 +205,8 @@ func TestTableFitNeverOverruns(t *testing.T) {
 			shrink:    []shrinkCol{{col: 2, min: 10, soft: 40}},
 		}
 		tbl.row("1.", "[ ]", strings.Repeat("a", 75), "[work, waiting]", "due:2026-10-02")
-		tbl.row("2.", "[ ]", "a long project title to cut", "", "2026-09-28")
-		tbl.tail(2, " (project)")
+		tbl.add(cell{text: "2."}, cell{text: "[ ]"}, cell{text: "a long project title to cut", tail: " (project)"},
+			cell{}, cell{text: "2026-09-28"})
 		tbl.row("3.", "[ ]", "short", "[x]", "")
 		return tbl
 	}
@@ -218,10 +216,9 @@ func TestTableFitNeverOverruns(t *testing.T) {
 	prevKept := -1
 	for w := 100; w >= 1; w-- {
 		tbl := build(w)
-		keep, _, _ := tbl.fit(tbl.widths())
 		kept := 0
-		for _, k := range keep {
-			if k {
+		for _, k := range tbl.fit() {
+			if k.keep {
 				kept++
 			}
 		}
@@ -330,10 +327,8 @@ func TestTableCompactBeforeDrop(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tbl := &table{gap: columnGap, maxWidth: tt.maxWidth, dropOrder: []int{2}}
-			tbl.row("1.", "title", "2026-10-02")
-			tbl.alt(2, "Fri")
-			tbl.row("2.", "other", "2026-10-09")
-			tbl.alt(2, "9 Oct")
+			tbl.add(cell{text: "1."}, cell{text: "title"}, cell{text: "2026-10-02", alt: "Fri"})
+			tbl.add(cell{text: "2."}, cell{text: "other"}, cell{text: "2026-10-09", alt: "9 Oct"})
 			tbl.row("3.", "third", "soon")
 			got := tbl.lines()
 			if len(got) != len(tt.want) {
@@ -369,9 +364,8 @@ func TestTableCompactTierBeforeDrops(t *testing.T) {
 	// a lot: once the date is short, the tags fit whole again.
 	t.Run("tags whole again beside a short date", func(t *testing.T) {
 		tbl := &table{gap: columnGap, maxWidth: 34, dropOrder: []int{2, 3}}
-		tbl.row("1.", "title", "[aaaa, bbbbb]", "2026-10-02 abc")
-		tbl.alt(2, "[aaaa +1xx]")
-		tbl.alt(3, "Fri")
+		tbl.add(cell{text: "1."}, cell{text: "title"},
+			cell{text: "[aaaa, bbbbb]", alt: "[aaaa +1xx]"}, cell{text: "2026-10-02 abc", alt: "Fri"})
 		if got, want := tbl.lines()[0], "1.  title  [aaaa, bbbbb]  Fri"; got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
@@ -379,9 +373,8 @@ func TestTableCompactTierBeforeDrops(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tbl := &table{gap: columnGap, maxWidth: tt.maxWidth, dropOrder: []int{2, 3}}
-			tbl.row("1.", "title", "[alpha, beta]", "2026-10-02")
-			tbl.alt(2, "[alpha +1]")
-			tbl.alt(3, "Fri")
+			tbl.add(cell{text: "1."}, cell{text: "title"},
+				cell{text: "[alpha, beta]", alt: "[alpha +1]"}, cell{text: "2026-10-02", alt: "Fri"})
 			if got := tbl.lines()[0]; got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
