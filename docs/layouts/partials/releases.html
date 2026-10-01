@@ -1,0 +1,40 @@
+{{- /* Published releases, newest first, read from the GitHub API at build
+       time so the changelog never needs editing by hand. Drafts and
+       pre-releases are left out, matching the version badge.
+
+       One request at per_page=100, the API's maximum. "truncated" is set
+       when that page comes back full, so the changelog can say older
+       releases are on GitHub rather than fetching further pages.
+
+       Unauthenticated requests are limited to 60 an hour per IP. The Pages
+       workflow passes its read-only GITHUB_TOKEN (allowed through in the
+       security block of hugo.toml); local builds work without one.
+
+       If the request fails, a CI build stops rather than deploying a site
+       with an empty changelog. A local build warns and the page links to
+       GitHub instead, so `hugo server` works offline. */ -}}
+{{- $url := printf "https://api.github.com/repos/%s/releases?per_page=100" site.Params.repo -}}
+{{- $headers := dict "Accept" "application/vnd.github+json" "X-GitHub-Api-Version" "2022-11-28" -}}
+{{- with os.Getenv "GITHUB_TOKEN" -}}
+  {{- $headers = merge $headers (dict "Authorization" (printf "Bearer %s" .)) -}}
+{{- end -}}
+{{- $releases := slice -}}
+{{- $truncated := false -}}
+{{- with try (resources.GetRemote $url (dict "headers" $headers)) -}}
+  {{- with .Err -}}
+    {{- if os.Getenv "CI" -}}
+      {{- errorf "changelog: could not fetch releases: %s" . -}}
+    {{- else -}}
+      {{- warnf "changelog: could not fetch releases, the page will link to GitHub instead: %s" . -}}
+    {{- end -}}
+  {{- else with .Value -}}
+    {{- $page := . | transform.Unmarshal -}}
+    {{- $truncated = ge (len $page) 100 -}}
+    {{- range $page -}}
+      {{- if not (or .draft .prerelease) -}}
+        {{- $releases = $releases | append . -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- return dict "releases" $releases "truncated" $truncated -}}
