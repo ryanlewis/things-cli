@@ -35,6 +35,14 @@
         {{- $releases = $releases | append . -}}
       {{- end -}}
     {{- end -}}
+  {{- else -}}
+    {{- /* GetRemote does not treat a 404 as an error: it returns nil, as
+           for a wrong repo name. Handle it the same way as a failure. */ -}}
+    {{- if os.Getenv "CI" -}}
+      {{- errorf "changelog: no releases found at %s" $url -}}
+    {{- else -}}
+      {{- warnf "changelog: no releases found at %s, the page will link to GitHub instead" $url -}}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 {{- return dict "releases" $releases "truncated" $truncated -}}
