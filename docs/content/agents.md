@@ -354,8 +354,11 @@ an open task, and a template never completes. `things list -p <project>`
 hides that template, so it can report no open tasks for a project whose
 `openCount` is 1.
 
-Colour and column alignment are for terminals; they switch off when the
-output is piped or under `NO_COLOR`, and `--json` is never styled.
+Colour is for terminals; it switches off when the output is piped or
+under `NO_COLOR`, and `--json` is never styled. Piped output keeps its
+columns aligned but never cuts or shortens a title, tag or date, and a
+plain listing prints each task on one line, with a line break or tab in
+a title shown as a space. Use `--json` for a title exactly as written.
 
 ## What can and cannot go wrong
 

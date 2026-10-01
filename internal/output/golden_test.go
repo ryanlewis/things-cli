@@ -485,12 +485,10 @@ func goldenCases(t *testing.T) []goldenCase {
 		cases = append(cases, goldenCase{name: p.name + "@piped", piped: true, write: p.write})
 	}
 
-	// KNOWN BUG, pinned as it renders today: a title holding a tab or a
-	// newline breaks its row. A tab measures as no columns but pads out to
-	// four, so the padded title wraps onto a second line; a newline splits
-	// the row in two. These cases are here so the fix shows up as a diff in
-	// this file, not to say the output is right.
-	broken := []model.Task{
+	// A title holding a tab or a line break prints on one line in a listing,
+	// each tab or break as a space, on a terminal and piped alike. These
+	// rows used to split in two.
+	controlChars := []model.Task{
 		{
 			UUID: "kb1", Title: "Pack\tthe bags", Type: model.TypeTask, Status: model.StatusOpen,
 			Tags: []string{"travel"}, Deadline: thingsDate(t, "2026-09-12"),
@@ -501,18 +499,80 @@ func goldenCases(t *testing.T) []goldenCase {
 		},
 		{UUID: "kb3", Title: "Plain title", Type: model.TypeTask, Status: model.StatusOpen},
 	}
+	// The same for a carriage return, a dim title styled a character at a
+	// time, a tag, and a group header.
+	moreControlChars := []model.Task{
+		{
+			UUID: "cc1", Title: "Windows\r\nline end and a lone\rreturn", Type: model.TypeTask,
+			Status: model.StatusOpen, AreaUUID: "ca1", AreaTitle: "Home\nand garden",
+			Tags: []string{"tab\ttag"},
+		},
+		{
+			UUID: "cc2", Title: "Done\nacross two lines", Type: model.TypeTask, Status: model.StatusCompleted,
+			AreaUUID: "ca1", AreaTitle: "Home\nand garden", Deadline: thingsDate(t, "2026-09-12"),
+		},
+	}
+	controlProjects := []model.Project{
+		{UUID: "cp1", Title: "Two\nlines", TaskCount: 2, OpenCount: 1, AreaTitle: "Area\twith tab", Tags: []string{"a\nb"}},
+		{UUID: "cp2", Title: "Plain", TaskCount: 1, OpenCount: 1},
+	}
+	controlAreas := []model.Area{{UUID: "ca1", Title: "Home\nand garden", Visible: true}}
+	controlTags := []model.Tag{{UUID: "ct1", Title: "tab\ttag", Shortcut: "t"}}
 	cases = append(cases,
 		goldenCase{
-			name:  "print/tasks-KNOWN-BUG-tab-newline-titles@80",
+			name:  "print/tasks-tab-newline-titles@80",
 			width: 80,
-			write: func(w io.Writer) error { return Print(w, broken, false) },
+			write: func(w io.Writer) error { return Print(w, controlChars, false) },
 		},
 		goldenCase{
-			name:  "print/tasks-KNOWN-BUG-tab-newline-titles@piped",
+			name:  "print/tasks-tab-newline-titles@piped",
 			piped: true,
-			write: func(w io.Writer) error { return Print(w, broken, false) },
+			write: func(w io.Writer) error { return Print(w, controlChars, false) },
+		},
+		goldenCase{
+			name:  "print/tasks-more-control-chars@40",
+			width: 40,
+			write: func(w io.Writer) error { return Print(w, moreControlChars, false) },
+		},
+		goldenCase{
+			name:  "print/tasks-more-control-chars@piped",
+			piped: true,
+			write: func(w io.Writer) error { return Print(w, moreControlChars, false) },
+		},
+		goldenCase{
+			name:  "print/collections-control-chars@piped",
+			piped: true,
+			write: func(w io.Writer) error {
+				for _, v := range []any{controlProjects, controlAreas, controlTags} {
+					if err := Print(w, v, false); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
 		},
 	)
+
+	// Wide-rune titles cut on rows of their own, each with a date: the cut
+	// can stop a column short, since half a wide rune cannot print, and the
+	// column's padding takes up the spare cell, so the dates line up.
+	wideDated := []model.Task{
+		{
+			UUID: "wd1", Title: "日本語のタイトルはとても長いので切り詰められます", Type: model.TypeTask,
+			Status: model.StatusOpen, Deadline: thingsDate(t, "2026-09-12"),
+		},
+		{
+			UUID: "wd2", Title: "Aこちらも長い日本語のタイトルで切り詰められます", Type: model.TypeTask,
+			Status: model.StatusOpen, Deadline: thingsDate(t, "2026-09-14"),
+		},
+	}
+	for _, width := range []int{60, 40} {
+		cases = append(cases, goldenCase{
+			name:  fmt.Sprintf("print/tasks-wide-runes-dated@%d", width),
+			width: width,
+			write: func(w io.Writer) error { return Print(w, wideDated, false) },
+		})
+	}
 	return cases
 }
 

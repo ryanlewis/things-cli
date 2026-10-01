@@ -189,7 +189,7 @@ func styledTags(tags []string) string {
 	if len(tags) == 0 {
 		return ""
 	}
-	return tagStyle.Render("[" + strings.Join(tags, ", ") + "]")
+	return tagStyle.Render("[" + oneLine(strings.Join(tags, ", ")) + "]")
 }
 
 // compactTagWidth caps the first tag in styledCompactTags: most tags are a
@@ -205,12 +205,13 @@ func styledCompactTags(tags []string) string {
 	case len(tags) == 0:
 		return ""
 	case len(tags) == 1:
-		if lipgloss.Width(tags[0]) <= compactTagWidth {
+		first := oneLine(tags[0])
+		if lipgloss.Width(first) <= compactTagWidth {
 			return ""
 		}
-		return tagStyle.Render("[" + ansi.Truncate(tags[0], compactTagWidth, "…") + "]")
+		return tagStyle.Render("[" + ansi.Truncate(first, compactTagWidth, "…") + "]")
 	}
-	first := ansi.Truncate(tags[0], compactTagWidth, "…")
+	first := ansi.Truncate(oneLine(tags[0]), compactTagWidth, "…")
 	return tagStyle.Render(fmt.Sprintf("[%s +%d]", first, len(tags)-1))
 }
 

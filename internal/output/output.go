@@ -143,7 +143,7 @@ func printTasks(w io.Writer, tasks []model.Task, lay layout) error {
 // stale in a saved file and defeats grep, so piped output keeps the full date
 // or none.
 func taskCells(n int, t *model.Task, tty bool) []cell {
-	title := t.Title
+	title := oneLine(t.Title)
 	if t.Status == model.StatusCompleted || t.Status == model.StatusCancelled {
 		title = titleDimStyle.Render(title)
 	}
@@ -211,9 +211,9 @@ func groupHeaders(tasks []model.Task) []header {
 	prevUUID := ""
 	for i := range tasks {
 		t := &tasks[i]
-		key, title, isProject := t.AreaUUID, t.AreaTitle, false
+		key, title, isProject := t.AreaUUID, oneLine(t.AreaTitle), false
 		if t.ProjectUUID != "" {
-			key, title, isProject = t.ProjectUUID, t.ProjectTitle, true
+			key, title, isProject = t.ProjectUUID, oneLine(t.ProjectTitle), true
 		}
 		current, other := &currentArea, &currentProject
 		if isProject {
@@ -240,6 +240,18 @@ func groupHeaders(tasks []model.Task) []header {
 	}
 	return headers
 }
+
+// oneLine puts text from the database on one line, for a listing row or a
+// group header: each line break (\r\n, \r or \n) and each tab becomes a
+// space. Left in, a line break splits the row, and a tab, which measures as
+// no columns but prints as several, throws the padding out and wraps it. A
+// space keeps the words apart and the text greppable as one line per row;
+// the detail block and --json still carry the text as written.
+func oneLine(s string) string {
+	return oneLineReplacer.Replace(s)
+}
+
+var oneLineReplacer = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ")
 
 // fitHeader cuts a group header short with an ellipsis so that it fits width
 // rather than wrapping. A width of zero keeps the header whole.
@@ -484,8 +496,8 @@ func printProjects(w io.Writer, projects []model.Project, lay layout) error {
 	for _, p := range projects {
 		tbl.row(
 			styledProjectIcon(p),
-			p.Title,
-			areaStyle.Render(p.AreaTitle),
+			oneLine(p.Title),
+			areaStyle.Render(oneLine(p.AreaTitle)),
 			styledTags(p.Tags),
 		)
 	}
@@ -499,7 +511,7 @@ func printAreas(w io.Writer, areas []model.Area) error {
 		if !a.Visible {
 			vis = dimStyle.Render("(hidden)")
 		}
-		tbl.row(a.Title, vis)
+		tbl.row(oneLine(a.Title), vis)
 	}
 	return tbl.render(w)
 }
@@ -509,9 +521,9 @@ func printTags(w io.Writer, tags []model.Tag) error {
 	for _, t := range tags {
 		var shortcut string
 		if t.Shortcut != "" {
-			shortcut = dimStyle.Render("(" + t.Shortcut + ")")
+			shortcut = dimStyle.Render("(" + oneLine(t.Shortcut) + ")")
 		}
-		tbl.row(t.Title, shortcut)
+		tbl.row(oneLine(t.Title), shortcut)
 	}
 	return tbl.render(w)
 }

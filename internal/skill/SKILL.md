@@ -270,6 +270,8 @@ The brief carries the title as a heading, then UUID, status, project/area/headin
 
 A plain listing from `list` or `search`, printed to a terminal, ends with a `hint:` line pointing at `--agent`. It never appears under `--json` or when the output is piped, so it will not turn up in anything you parse.
 
+A plain listing prints each task on one line: a line break or tab in a title, tag, project or area shows as a space. Use `--json` when you need a title exactly as written.
+
 ## Date and multi-line values
 
 `--when` takes a keyword (`today`, `tomorrow`, `evening`, `anytime`, `someday`), a date `YYYY-MM-DD`, a time `HH:MM`, a date+time `YYYY-MM-DD@HH:MM`, or an RFC3339 timestamp. English phrases (`friday`, `next monday`) are passed through to Things. Likely keyword typos (edit distance ≤ 2, e.g. `tommorrow`) are rejected with a "did you mean" hint.
