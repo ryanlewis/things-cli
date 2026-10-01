@@ -156,7 +156,7 @@ func TestAgentHintWrapsToStubbedTerminal(t *testing.T) {
 	}
 	want := "\nthings complete <n> · show <n>\n(disable with hints = false in the config file)\n"
 	if !strings.HasSuffix(out, want) {
-		t.Errorf("hint not wrapped to the 40-column stub\ngot:\n%s\nwant suffix:\n%s", out, want)
+		t.Errorf("hint not fitted to the 50-column stub\ngot:\n%s\nwant suffix:\n%s", out, want)
 	}
 }
 

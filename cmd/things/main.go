@@ -35,7 +35,7 @@ type CLI struct {
 
 	VerifyTimeout time.Duration `help:"How long the read-back waits before reporting a write as not applied, e.g. 5s or 2500ms." name:"verify-timeout" type:"verifytimeout" default:"5s"`
 
-	Hints bool `help:"Print the hint line under a plain task listing. Use --no-hints to turn it off." negatable:"" default:"true"`
+	Hints bool `help:"Print a line of next actions under a plain task listing. Use --no-hints to turn it off." negatable:"" default:"true"`
 
 	List     ListCmd     `cmd:"" help:"List tasks (today,inbox,upcoming,anytime,someday,repeating,logbook,trash,deadlines). Use as: things today, things inbox, etc." default:"withargs"`
 	Projects ProjectsCmd `cmd:"" help:"List projects."`

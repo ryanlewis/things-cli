@@ -159,7 +159,8 @@ config file with `json = true` is only a default; the explicit `--agent`
 wins, as any flag does.
 
 Plain listings from `things list` and `things search`, printed to a
-terminal, end with a line of common next actions, then a note on how to turn it off:
+terminal, end with a line of common next actions, then a note on how to
+turn it off:
 
 ```text
 things complete <n> · show <n> · edit <n> --when tomorrow · show <n> --agent
