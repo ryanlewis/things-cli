@@ -359,7 +359,7 @@ func TestCreateTagsRefusesWithoutTheDatabase(t *testing.T) {
 	deps.DB = nil
 	deps.DBPath = writeTempFile(t, "not a database")
 
-	err := verifyTags(deps, TagFlags{CreateTags: true}, []string{"anything"})
+	_, err := verifyTags(deps, TagFlags{CreateTags: true}, []string{"anything"})
 	if err == nil || !strings.Contains(err.Error(), "--create-tags") {
 		t.Fatalf("expected a --create-tags failure, got %v", err)
 	}

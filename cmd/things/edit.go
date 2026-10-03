@@ -138,7 +138,8 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	}
 	// After checkRepeating: no point warning about tags on an edit Things
 	// is going to refuse anyway.
-	if err := verifyTagStrings(d, s.TagFlags, f.Tags, f.AddTags); err != nil {
+	unknown, err := verifyTagStrings(d, s.TagFlags, f.Tags, f.AddTags)
+	if err != nil {
 		return err
 	}
 
@@ -162,31 +163,24 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 		})
 	}
 	uncovered := ownSet || f.uncoveredSet()
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, droppedTags(database, s.TagFlags, f.Tags, f.AddTags))
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown))
 	return applyEdit(d, database, task, changed, checklist, s.Complete, s.Cancel, s.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
 // leaves the item as it is, so there is no modification to wait for.
 // uncovered says whether any field flag outside coveredFields is set, and
-// dropped holds the folded tag names Things will drop (droppedTags).
+// dropped holds the folded tag names Things will drop (foldTags).
 func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}) bool {
 	return !uncovered && f.covered().unchanged(task, dropped)
 }
 
-// droppedTags returns the folded names in the --tags and --add-tags values
-// that Things will drop because no such tag exists, so the no-op check can
-// leave them out. --create-tags has made them by now, so none is dropped
-// then; --strict-tags has already refused the edit. A failed lookup counts
-// every tag as known, and the edit waits for its read-back as before.
-func droppedTags(database *db.DB, flags TagFlags, values ...*string) map[string]struct{} {
-	if flags.CreateTags {
-		return nil
-	}
-	unknown, err := database.UnknownTags(splitTagValues(values...))
-	if err != nil {
-		return nil
-	}
+// foldTags folds the names verifyTags says Things will drop, so the no-op
+// check can leave them out. --create-tags has made them by then, so none is
+// dropped; --strict-tags has already refused the edit. A failed lookup
+// returns none, so every tag counts as known and the edit waits for its
+// read-back as before.
+func foldTags(unknown []string) map[string]struct{} {
 	dropped := make(map[string]struct{}, len(unknown))
 	for _, t := range unknown {
 		dropped[db.FoldTag(t)] = struct{}{}

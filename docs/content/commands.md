@@ -336,6 +336,19 @@ things add "Groceries" --checklist "Milk\nBread\nEggs"
 `YYYY-MM-DD@HH:MM`, or an RFC3339 timestamp. `--deadline` accepts a
 `YYYY-MM-DD` date only.
 
+Things files the to-do by matching `--list` (or `--project`) against the
+titles of open projects and areas, ignoring case, and `--heading` against
+the headings of that project. When nothing matches it does not complain: it
+puts the to-do in the Inbox, or adds it to the list without the heading. A
+completed or trashed project does not match, and neither does a UUID. The
+add warns on stderr when this will happen, then sends it anyway:
+
+```
+warning: Things has no open project or area called "Nowhere"; it will put the to-do in the Inbox
+warning: "Tools" has no heading "Later"; Things will add the to-do there without a heading
+warning: --heading "Later" needs --list or --project; Things will ignore it and put the to-do in the Inbox
+```
+
 `things project add` creates a new project with the same flag set
 (`--notes`, `--when`, `--deadline`, `--tags`, `--area`, `--todos`).
 

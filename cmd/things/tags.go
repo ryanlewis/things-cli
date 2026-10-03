@@ -24,25 +24,28 @@ type TagFlags struct {
 
 // verifyTags checks requested tag names against the tags in the Things
 // database and deals with the ones that don't exist. By default it warns on
-// stderr and returns nil so the write still happens; --strict-tags turns that
-// into an error and the caller writes nothing; --create-tags creates them and
-// lets the write proceed with every tag applied.
-func verifyTags(d *Deps, flags TagFlags, names []string) error {
+// stderr and returns them, with a nil error, so the write still happens;
+// --strict-tags turns that into an error and the caller writes nothing;
+// --create-tags creates them and lets the write proceed with every tag
+// applied. The names returned are the ones Things will drop, so a caller that
+// needs them does not read the tag list a second time. When the tag list
+// cannot be read, none is returned.
+func verifyTags(d *Deps, flags TagFlags, names []string) ([]string, error) {
 	if len(names) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	unavailable := func(err error) error {
+	unavailable := func(err error) ([]string, error) {
 		switch {
 		case flags.StrictTags:
-			return fmt.Errorf("--strict-tags: cannot check tags against the Things database: %w", err)
+			return nil, fmt.Errorf("--strict-tags: cannot check tags against the Things database: %w", err)
 		case flags.CreateTags:
-			return fmt.Errorf("--create-tags: cannot check tags against the Things database: %w", err)
+			return nil, fmt.Errorf("--create-tags: cannot check tags against the Things database: %w", err)
 		}
 		fmt.Fprintf(d.errOut(), "warning: could not check tags against the Things database: %v\n", err)
 		fmt.Fprintf(d.errOut(), "warning: tags that do not already exist in Things will be dropped without notice\n")
 		d.dbWarned = true
-		return nil
+		return nil, nil
 	}
 
 	database, err := d.Database()
@@ -54,20 +57,20 @@ func verifyTags(d *Deps, flags TagFlags, names []string) error {
 		return unavailable(err)
 	}
 	if len(unknown) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	if flags.CreateTags {
-		return createTags(d, unknown)
+		return nil, createTags(d, unknown)
 	}
 
 	list := strings.Join(unknown, ", ")
 	if flags.StrictTags {
-		return fmt.Errorf("these tags do not exist in Things: %s — create them in Things first, run `%s`, or drop --strict-tags to write anyway", list, tagAddHint(unknown))
+		return nil, fmt.Errorf("these tags do not exist in Things: %s — create them in Things first, run `%s`, or drop --strict-tags to write anyway", list, tagAddHint(unknown))
 	}
 	fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things and will be ignored: %s\n", list)
 	fmt.Fprintf(d.errOut(), "warning: Things only applies tags that already exist — create them with --create-tags or `things tag add`, or use --strict-tags to fail instead of dropping them\n")
-	return nil
+	return unknown, nil
 }
 
 // tagAddHint renders a copy-pastable `things tag add` command for names.
@@ -113,7 +116,7 @@ func createTags(d *Deps, names []string) error {
 
 // verifyTagStrings checks comma-separated tag values (as passed to --tags /
 // --add-tags). nil pointers and empty strings contribute nothing.
-func verifyTagStrings(d *Deps, flags TagFlags, values ...*string) error {
+func verifyTagStrings(d *Deps, flags TagFlags, values ...*string) ([]string, error) {
 	return verifyTags(d, flags, splitTagValues(values...))
 }
 

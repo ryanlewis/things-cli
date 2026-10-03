@@ -406,3 +406,55 @@ func TestAddUnreadableWithTagsWarnsOnce(t *testing.T) {
 		t.Errorf("stderr reports the database error %d times, want once:\n%s", n, stderr)
 	}
 }
+
+// Things files an add whose --list or --project names no open project or
+// area in the Inbox, and drops a --heading it cannot find, all without a
+// word. The add warns on stderr when that will happen and still sends the
+// write.
+func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string // "" for no warning
+	}{
+		{"knownProject", []string{"--list", "tools"}, ""},
+		{"knownProjectFlag", []string{"--project", "Tools"}, ""},
+		{"knownArea", []string{"--list", "Personal"}, ""},
+		{"knownHeading", []string{"--list", "Tools", "--heading", "setup"}, ""},
+		{"unknownList", []string{"--list", "Nowhere"}, `no open project or area called "Nowhere"`},
+		{"unknownProjectFlag", []string{"--project", "Nowhere"}, `no open project or area called "Nowhere"`},
+		{"completedProject", []string{"--list", "Old"}, `no open project or area called "Old"`},
+		{"unknownHeading", []string{"--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"`},
+		{"headingInArea", []string{"--list", "Personal", "--heading", "Setup"}, `"Personal" has no heading "Setup"`},
+		{"headingWithoutList", []string{"--heading", "Setup"}, `--heading "Setup" needs --list or --project`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Project("proj-1", "Tools", 5)
+			fx.Project("proj-done", "Old", 6, dbtest.Status(model.StatusCompleted))
+			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+			calls := stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk"})
+
+			_, stderr, err := runStreams(t, database, append([]string{"add", "Buy oat milk"}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("add: %v", err)
+			}
+			if *calls != 1 {
+				t.Errorf("issued %d writes, want the add sent once", *calls)
+			}
+			if tc.want == "" {
+				if stderr != "" {
+					t.Errorf("stderr = %q, want no warning", stderr)
+				}
+				return
+			}
+			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
+			}
+		})
+	}
+}

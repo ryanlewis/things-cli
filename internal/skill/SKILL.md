@@ -97,6 +97,8 @@ already exists: Work
 
 Both routes create over AppleScript, so Things3 must be running, and both skip names that already exist, matching case-insensitively as Things does. `tag add` then re-reads the tag list and exits non-zero if a creation did not land; `--no-verify` (or `no_verify = true`) skips that check, so a dropped creation would be reported as success.
 
+`add` warns the same way when `--list`/`--project` names no open project or area (Things puts the to-do in the Inbox; a UUID does not match either) or `--heading` names no heading of that project (Things drops the heading). The add still goes ahead; fix the name and move the to-do if it matters.
+
 ### 2. Repeating items refuse status, `when` and `deadline`
 
 A repeating task is a template plus the tasks it generates. Things refuses to change `when`, `deadline`, completed/canceled status, or duplication on a repeating item, and **drops the request silently**. The CLI checks first and exits non-zero:
