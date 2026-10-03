@@ -19,7 +19,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 | --- | --- |
 | UUID | Always unambiguous. **Prefer this.** |
 | Numeric index | 1-based, from the last *plain-text* `list` or `search` only, and only for four hours after it. For a person at a terminal — **not for you**. |
-| Title substring | Matched literally and case-insensitively — `%` and `_` are characters, not wildcards. Interactive runs prompt; non-TTY runs error with the match list. |
+| Title substring | Matched literally and case-insensitively — `%` and `_` are characters, not wildcards. A title typed in its exact case wins over titles that differ from it only by case. Interactive runs prompt; non-TTY runs error with the match list. |
 
 **Use `--json` and act on the `uuid`** — `things show <uuid>`, `things complete <uuid>`, `things edit <uuid>`. Never act on a row number. The numbered list is a convenience for a person reading a terminal, and the numbers behind it come from a single cache file shared by everyone on the machine: another agent, or the user, can renumber it between your listing and your write, so a number you read is not reliably the item you meant. A UUID names the same item forever. Resolve once and use it for the rest of the job:
 
@@ -169,6 +169,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # there too. Name a view to scope the filter to it
     # (`things today --project X`); plain output then prints a `view: <name>`
     # line so a slice isn't read as the whole project.
+    # Names ignore case and surrounding spaces, but a --project title typed in
+    # its exact case lists only that project, even when another project's
+    # title differs from it only by case.
     # Tasks under a project heading belong to that project — they match
     # --project and the project's --area, and report projectTitle.
     # Trashing a project leaves its tasks untrashed in the database; every

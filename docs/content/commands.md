@@ -157,7 +157,9 @@ inside a project Things generated from the template are ordinary.
 Results carry `"repeating": true`.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. Names
-ignore case and surrounding spaces. On their
+ignore case and surrounding spaces. A project title typed in its exact case
+lists only that project, even when another project's title differs from it
+only by case. On their
 own the filters cover everything open in the project, area, or tag — so
 `things -a Work` lists that area's own projects as well as its tasks, while
 `-p` still returns a project's contents rather than the project row. Add a
@@ -274,7 +276,10 @@ not wrapped, and keep a note's tabs.
 A title reference is matched as a substring, literally and
 case-insensitively. There is no wildcard syntax: `%` and `_` are characters
 to find, so `things show "20_30 review"` finds the task spelled with an
-underscore and not the one spelled with a colon.
+underscore and not the one spelled with a colon. A title typed in its exact
+case wins over titles that differ from it only by case: with to-dos `Water`
+and `water`, `things show water` finds the second, while `things show WATER`
+matches both.
 
 A title matching more than one item is reported rather than guessed at: an
 interactive run prints the candidates and asks which one, and a non-TTY run
