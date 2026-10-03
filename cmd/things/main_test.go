@@ -12,6 +12,7 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
+	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -468,5 +469,45 @@ func TestListCommandLineCarriesDBFlag(t *testing.T) {
 	want := `things --db '/tmp/things test.sqlite' today`
 	if got != want {
 		t.Errorf("commandLine = %q, want %q", got, want)
+	}
+}
+
+// A --config file can be what set the database, so the recorded command keeps
+// it: without it a re-run reads the default config and maybe another database.
+func TestListCommandLineCarriesConfigFlag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "my config.toml")
+	if err := os.WriteFile(path, []byte("db = \"/tmp/other.sqlite\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cfg.Source = config.SourceFlag
+
+	cases := []struct {
+		name   string
+		dbPath string
+		want   string
+	}{
+		{"config sets the db", "/tmp/other.sqlite", "things --config '" + path + "' today"},
+		{"--db overrides the config", "/tmp/mine.sqlite", "things --db /tmp/mine.sqlite --config '" + path + "' today"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &Deps{DBPath: tc.dbPath, Config: cfg}
+			if got := (&ListCmd{}).commandLine(d, "today", ""); got != tc.want {
+				t.Errorf("commandLine = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	// A config found through the environment or the default location is
+	// found again by a re-run, so it is not spelled out.
+	envCfg := *cfg
+	envCfg.Source = config.SourceEnv
+	d := &Deps{DBPath: "/tmp/other.sqlite", Config: &envCfg}
+	if got := (&ListCmd{}).commandLine(d, "today", ""); got != "things today" {
+		t.Errorf("commandLine = %q, want %q", got, "things today")
 	}
 }

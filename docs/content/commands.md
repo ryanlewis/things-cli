@@ -633,8 +633,8 @@ Re-running that listing renumbers the rows and clears the refusal. A
 UUID is never refused, and neither is a title. A cache file written by
 a version before 0.8.0 records no time, so the first numeric reference
 after upgrading is refused until you list again. The named listing
-carries `--db` when the flag supplied one, so it re-reads the database
-the rows came from.
+carries `--db` when the flag supplied one, and `--config` when the flag
+named the config file, so it re-reads the database the rows came from.
 
 The cache also records which database the listing read, by its resolved
 path. A numeric reference made against a different database is refused
