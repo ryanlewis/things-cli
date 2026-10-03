@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -61,11 +60,21 @@ func confirmAction(d *Deps, msg string) bool {
 	if !d.interactive() {
 		return false
 	}
-	fmt.Fprintf(os.Stderr, "%s [y/N]: ", msg)
-	scanner := bufio.NewScanner(os.Stdin)
-	if !scanner.Scan() {
+	line, ok := promptLine(d, fmt.Sprintf("%s [y/N]: ", msg))
+	if !ok {
 		return false
 	}
-	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	answer := strings.ToLower(line)
 	return answer == "y" || answer == "yes"
+}
+
+// promptLine writes question to stderr and reads one line of the answer from
+// stdin, trimmed. It reports false when stdin ends before a line arrives.
+func promptLine(d *Deps, question string) (string, bool) {
+	fmt.Fprint(d.errOut(), question)
+	scanner := bufio.NewScanner(d.in())
+	if !scanner.Scan() {
+		return "", false
+	}
+	return strings.TrimSpace(scanner.Text()), true
 }

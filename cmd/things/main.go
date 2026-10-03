@@ -69,6 +69,7 @@ type Deps struct {
 	JSON   bool
 	Stdout io.Writer
 	Stderr io.Writer
+	Stdin  io.Reader
 
 	// NoVerify skips the post-write read-back on complete/cancel and edits.
 	NoVerify bool
@@ -117,6 +118,15 @@ func (d *Deps) errOut() io.Writer {
 		return os.Stderr
 	}
 	return d.Stderr
+}
+
+// in is where prompts read answers from, defaulting to os.Stdin the way
+// errOut defaults to os.Stderr.
+func (d *Deps) in() io.Reader {
+	if d.Stdin == nil {
+		return os.Stdin
+	}
+	return d.Stdin
 }
 
 // interactive reports whether the process may prompt the user. --json means a
@@ -232,7 +242,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, NoVerify: cli.NoVerify, VerifyTimeout: cli.VerifyTimeout, Hints: cli.Hints, Config: cfg}
+	deps := &Deps{DBPath: cli.DB, JSON: cli.JSON, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoVerify: cli.NoVerify, VerifyTimeout: cli.VerifyTimeout, Hints: cli.Hints, Config: cfg}
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {
