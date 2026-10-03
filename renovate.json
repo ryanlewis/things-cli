@@ -3,5 +3,15 @@
   "extends": [
     "github>ryanlewis/renovate-config",
     ":preserveSemverRanges"
+  ],
+  "customManagers": [
+    {
+      "description": "Tool versions pinned as env vars in workflows, marked with a renovate annotation comment. Covers govulncheck, which CI runs with go run, so no built-in manager sees it.",
+      "customType": "regex",
+      "managerFilePatterns": ["/\\.github/workflows/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)\\s*\\n\\s*[A-Z_]+_VERSION: (?<currentValue>[^\\s]+)"
+      ]
+    }
   ]
 }
