@@ -179,8 +179,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # (`things today --project X`); plain output then prints a `view: <name>`
     # line so a slice isn't read as the whole project.
     # Names ignore case as Things does (-t STRASSE finds "Straße") and
-    # surrounding spaces, but a --project, --area or
-    # --tag name typed in its exact case lists only that one, even when
+    # surrounding spaces. An accented letter matches whether typed precomposed
+    # or with a combining accent, but not the bare letter. A --project,
+    # --area or --tag name typed in its exact case lists only that one, even when
     # another title differs from it only by case.
     # Tasks under a project heading belong to that project — they match
     # --project and the project's --area, and report projectTitle.

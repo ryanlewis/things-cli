@@ -115,6 +115,86 @@ func TestNamesRepeatingProjectIgnoresNonASCIICase(t *testing.T) {
 	}
 }
 
+// The filters, title lookups and search treat a name typed with precomposed
+// letters (NFC, "é") and one typed with combining accents (NFD, "e" plus
+// U+0301) as the same name, as Things does for tags and list titles. The
+// "Café" rows are stored NFC and the "Noël" rows NFD, and each is asked for
+// in the other form.
+func TestFiltersIgnoreNormalisation(t *testing.T) {
+	d := newTestDB(t)
+
+	const (
+		cafeNFC = "Café"
+		cafeNFD = "Café"
+		noelNFC = "Noël"
+		noelNFD = "Noël"
+	)
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('ar-c', ?, 1, 1), ('ar-n', ?, 1, 2)`, cafeNFC, noelNFD)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
+		('proj-c', ?, 1, 0, 0, 'ar-c', 1), ('proj-n', ?, 1, 0, 0, 'ar-n', 2)`, cafeNFC, noelNFD)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
+		('tg-c', ?, 1), ('tg-n', ?, 2)`, cafeNFC, noelNFD)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, notes, type, status, trashed, start, startBucket, project, "index") VALUES
+		('in-c', ?, '', 0, 0, 0, 1, 0, 'proj-c', 3),
+		('in-n', ?, '', 0, 0, 0, 1, 0, 'proj-n', 4)`, "Crème brûlée", "Piña")
+	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-c', 'tg-c'), ('in-n', 'tg-n')`)
+
+	for _, tc := range []struct {
+		name   string
+		filter TaskFilter
+		want   []string
+	}{
+		{"project NFD to NFC", TaskFilter{Project: cafeNFD}, []string{"in-c"}},
+		{"project NFC to NFD", TaskFilter{Project: noelNFC}, []string{"in-n"}},
+		{"area NFD to NFC", TaskFilter{Area: cafeNFD}, []string{"proj-c", "in-c"}},
+		{"area NFC to NFD", TaskFilter{Area: noelNFC}, []string{"proj-n", "in-n"}},
+		{"tag NFD to NFC", TaskFilter{Tag: cafeNFD}, []string{"in-c"}},
+		{"tag NFC to NFD", TaskFilter{Tag: noelNFC}, []string{"in-n"}},
+		{"tag NFD upper case", TaskFilter{Tag: "CAFÉ"}, []string{"in-c"}},
+		{"project without the accent", TaskFilter{Project: "Cafe"}, nil},
+	} {
+		t.Run("list "+tc.name, func(t *testing.T) {
+			got, err := d.ListTasks("project", tc.filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(got), tc.want) {
+				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
+			}
+		})
+	}
+
+	t.Run("title lookup", func(t *testing.T) {
+		for ref, want := range map[string]string{
+			"Crème brûlée": "in-c", "PIÑA": "in-n",
+		} {
+			got, err := d.FindTasksByTitle(ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || got[0].UUID != want {
+				t.Errorf("FindTasksByTitle(%q) = %v, want [%s]", ref, uuidsOf(got), want)
+			}
+		}
+	})
+
+	t.Run("search", func(t *testing.T) {
+		for query, want := range map[string][]string{
+			"brûlée": {"in-c"}, "piñ": {"in-n"}, "NOËL": {"proj-n"},
+		} {
+			got, err := d.SearchTasks(query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(got), want) {
+				t.Errorf("SearchTasks(%q) = %v, want %v", query, uuidsOf(got), want)
+			}
+		}
+	})
+}
+
 // FoldCase does full case folding, as Things does: a tag "Straße" is found as
 // "STRASSE", and "ﬁx" as "FIX". Everything strings.EqualFold equates still
 // folds together, and the Turkish dotless "ı" and dotted "İ" stay apart from
@@ -132,6 +212,12 @@ func TestFoldCase(t *testing.T) {
 		{"STRAẞE", "strasse", true}, {"ﬁx", "FIX", true}, {"ﬀ", "Ff", true}, {"ŉ", "ʼN", true},
 		{"ı", "i", false}, {"ı", "I", false}, {"İ", "i", false}, {"İ", "I", false},
 		{"ß", "s", false}, {"a", "b", false},
+		// Canonically equivalent forms fold together, case or not, but
+		// compatibility forms (fullwidth "Ｃ") and a missing accent do not.
+		{"Café", "Café", true}, {"CAFÉ", "café", true},
+		{"Å", "å", true}, {"q̣̇", "Q̣̇", true},
+		{"ǰ", "J̌", true}, {"ᾳ", "ᾼ", true},
+		{"Cafe", "Café", false}, {"Ｃafé", "Café", false},
 	} {
 		if got := FoldCase(tc.a) == FoldCase(tc.b); got != tc.equal {
 			t.Errorf("FoldCase(%q) == FoldCase(%q) is %v, want %v", tc.a, tc.b, got, tc.equal)
@@ -142,11 +228,26 @@ func TestFoldCase(t *testing.T) {
 	}
 }
 
+// A folded name still contains every folded part of itself, so a substring
+// search keeps working once FoldCase composes its result. Iota folds with the
+// combining ypogegrammeni (U+0345), and composing that after an alpha would
+// have turned "αι" into "ᾳ", hiding the "ι" a search asked for.
+func TestFoldCaseKeepsSubstrings(t *testing.T) {
+	for _, tc := range []struct{ s, sub string }{
+		{"αι", "ι"}, {"ΑΙ", "ι"}, {"ηι", "Ι"}, {"Café", "caf"}, {"Straße", "SS"},
+	} {
+		if !strings.Contains(FoldCase(tc.s), FoldCase(tc.sub)) {
+			t.Errorf("FoldCase(%q) = %q does not contain FoldCase(%q) = %q",
+				tc.s, FoldCase(tc.s), tc.sub, FoldCase(tc.sub))
+		}
+	}
+}
+
 // fold() is registered for every connection, dbtest's included, keeps NULL as
 // NULL, and gives the same answer as FoldCase.
 func TestFoldSQLMatchesGo(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	for _, s := range []string{"Ärger", "ΚΟΣ", "κος", "Straße", "MiXeD 50%_"} {
+	for _, s := range []string{"Ärger", "ΚΟΣ", "κος", "Straße", "Café", "MiXeD 50%_"} {
 		var got string
 		if err := sqlDB.QueryRow(`SELECT fold(?)`, s).Scan(&got); err != nil {
 			t.Fatalf("fold(%q): %v", s, err)

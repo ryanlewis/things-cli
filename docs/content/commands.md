@@ -195,7 +195,9 @@ Results carry `"repeating": true`.
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. Names
 ignore case and surrounding spaces. Case is ignored the way Things ignores it,
 so `-t STRASSE` finds a tag named
-`Straße`. A project, area or tag name typed in
+`Straße`. An accented letter matches whether it was typed as one character or
+as a letter plus a combining accent, as in Things, but never the bare letter:
+`-t Cafe` does not find `Café`. A project, area or tag name typed in
 its exact case lists only that one, even when another title differs from it
 only by case. On their
 own the filters cover everything open in the project, area, or tag — so
