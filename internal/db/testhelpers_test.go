@@ -106,6 +106,7 @@ var (
 	cancelled     = dbtest.Cancelled
 	status        = dbtest.Status
 	deadline      = dbtest.Deadline
+	suppressed    = dbtest.DeadlineSuppressed
 	todayIndex    = dbtest.TodayIndex
 	todayIndexRef = dbtest.TodayIndexRef
 	repeats       = dbtest.Repeats

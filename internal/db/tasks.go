@@ -212,10 +212,25 @@ const todoOrProject = "t.type IN (0, 1)"
 const closedTodayUnlogged = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime')`
 
 // todayScheduled is the today view's scheduling test: the rows Things files
-// under Today at all. It is named because the Logbook needs it too — the
-// Logbook only withholds a closed item while Today is still holding it, and
-// Today never holds a row this test rejects.
+// under Today by their start date. todayDue is the other way in, and
+// todayScope joins the two.
 const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL"
+
+// todayDue is the other way into Today: a to-do with no start date whose
+// deadline has arrived, from the Inbox or from Anytime, and for as long as it
+// is overdue. Measured on 3 Oct 2026 with test to-dos, the app's Today held
+// all four of those shapes and the CLI none. It left out the two whose
+// deadlineSuppressionDate equalled their deadline, which is how Things records
+// "taken out of Today for this deadline"; the app cleared that column when a
+// deadline was changed. No project, and no Someday-bucket to-do, of this shape
+// was measured, so both are left out rather than guessed at (issue #294).
+const todayDue = "t.start IN (0, 1) AND t.startDate IS NULL AND t.type = 0 AND t.deadline <= " + thingsToday +
+	" AND t.deadlineSuppressionDate IS NULL"
+
+// todayScope is Today's whole scope: the two ways in, either of which is
+// enough. The Logbook only withholds a closed item while Today is still
+// holding it, so heldByToday uses this same test.
+const todayScope = "((" + todayScheduled + ") OR (" + todayDue + "))"
 
 // thingsToday is today's local date in the ThingsDate encoding
 // (year<<16 | month<<12 | day<<7), so it compares directly with startDate and
@@ -243,9 +258,10 @@ const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16
 // as issue #229 settled.
 //
 // Anytime's half is not redundant with Today's. A to-do can sit in the Anytime
-// bucket with no start date, which Today rejects, and Anytime is where the app
-// goes on showing it for the rest of the day. Today's half is not redundant
-// either: it carries project rows, which Anytime does not.
+// bucket with no start date and no deadline due, which Today rejects, and
+// Anytime is where the app goes on showing it for the rest of the day. Today's
+// half is not redundant either: it carries project rows, which Anytime does
+// not, and Inbox to-dos whose deadline has come (issue #294).
 //
 // Upcoming's half is not redundant either: a to-do closed ahead of its date
 // sits in the Someday bucket with a start date, which neither of the other two
@@ -283,7 +299,7 @@ const heldByUpcoming = upcomingScope + " AND " + closedTodayUnlogged
 // startBucket are nullable columns, and a NULL there would leave the AND chain
 // NULL, which "NOT" leaves NULL too — dropping the row out of the Logbook by
 // accident.
-const heldByToday = todayScheduled + " AND " + closedTodayUnlogged
+const heldByToday = todayScope + " AND " + closedTodayUnlogged
 
 // parentClosed is true for a row whose parent project has been completed or
 // cancelled. p is resolved through COALESCE(t.project, h.project), so a to-do
@@ -556,7 +572,7 @@ func (s viewSpec) where(o whereOpts) string {
 // described.
 var views = map[string]viewSpec{
 	ViewToday: {
-		scope: todayScheduled, status: openRows, trashed: untrashedRows,
+		scope: todayScope, status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Today takes the shared grouping and then todayIndex, which is the
 		// one signal the app orders within a group by. Measured against the
