@@ -55,18 +55,21 @@ func seedTasks(t *testing.T, d *DB) {
 func TestCompletableViews(t *testing.T) {
 	want := map[string]bool{"today": true, "anytime": true, "upcoming": true}
 	for view := range views {
-		if got := CompletableView(view, false); got != want[view] {
-			t.Errorf("CompletableView(%q, false) = %v, want %v", view, got, want[view])
+		if got := CompletableView(view, false, false); got != want[view] {
+			t.Errorf("CompletableView(%q, false, false) = %v, want %v", view, got, want[view])
 		}
-		// Naming a project adds the catch-all, which then lists the project's
-		// contents (issue #295), and nothing else.
+		// Naming a project or an area adds the catch-all, which then lists
+		// that project's or area's contents (issue #295), and nothing else.
 		wantNamed := want[view] || view == ViewProject
-		if got := CompletableView(view, true); got != wantNamed {
-			t.Errorf("CompletableView(%q, true) = %v, want %v", view, got, wantNamed)
+		if got := CompletableView(view, true, false); got != wantNamed {
+			t.Errorf("CompletableView(%q, true, false) = %v, want %v", view, got, wantNamed)
+		}
+		if got := CompletableView(view, false, true); got != wantNamed {
+			t.Errorf("CompletableView(%q, false, true) = %v, want %v", view, got, wantNamed)
 		}
 	}
-	if CompletableView("bogus", true) {
-		t.Error("CompletableView(\"bogus\", true) = true, want false")
+	if CompletableView("bogus", true, true) {
+		t.Error("CompletableView(\"bogus\", true, true) = true, want false")
 	}
 	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "today", "upcoming"}) {
 		t.Errorf("CompletableViewNames() = %v, want [anytime today upcoming]", got)
@@ -1304,6 +1307,48 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	}
 	if !sameSet(uuidsOf(afterLog), []string{"open-todo"}) {
 		t.Errorf("after Log Completed Now: got %v, want [open-todo]", uuidsOf(afterLog))
+	}
+}
+
+// The app's area page keeps an item closed today in place until it is logged,
+// as a project's page does: measured on 3 Oct 2026, `to dos of area id X`
+// held loose to-dos closed out of Anytime, Upcoming and Someday, and a project
+// completed that day, but not that project's to-dos, which its row stands for.
+// A bare --area listing also carries the area's projects' to-dos, and a
+// project's page keeps those (issue #295), so the flag reaches them too.
+func TestAreaFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
+	d, fx := newFixture(t)
+
+	stopToday := model.TimeToUnix(time.Now())
+	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
+	later := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 2)))
+	fx.Area("ar", "Work", 1)
+	fx.Project("proj-open", "Live", 1, inArea("ar"))
+	fx.Project("proj-done", "Shipped", 2, inArea("ar"), completed(stopToday))
+
+	fx.Todo("open-todo", "To do", 3, anytime(), inArea("ar"))
+	fx.Todo("done-anytime", "Done", 4, anytime(), inArea("ar"), completed(stopToday))
+	fx.Todo("done-ahead", "Done ahead", 5, somedayOn(later), inArea("ar"), completed(stopToday))
+	fx.Todo("done-someday", "Done someday", 6, someday(), inArea("ar"), cancelled(stopToday))
+	fx.Todo("done-yesterday", "Done yesterday", 7, anytime(), inArea("ar"), completed(stopYesterday))
+	fx.Todo("child-done", "Child done", 8, anytime(), inProject("proj-open"), completed(stopToday))
+	fx.Todo("child-of-done", "Child of done", 9, anytime(), inProject("proj-done"), completed(stopToday))
+
+	plain, err := d.ListTasks("project", TaskFilter{Area: "ar"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(plain), []string{"proj-open", "open-todo"}) {
+		t.Errorf("--area ar: got %v, want [proj-open open-todo]", uuidsOf(plain))
+	}
+
+	got, err := d.ListTasks("project", TaskFilter{Area: "ar", IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"proj-open", "proj-done", "open-todo", "done-anytime", "done-ahead", "done-someday", "child-done"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("--area ar --include-completed: got %v, want %v", uuidsOf(got), want)
 	}
 }
 

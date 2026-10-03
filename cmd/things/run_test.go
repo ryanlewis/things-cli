@@ -305,17 +305,26 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 		}
 	}
 
-	// A bare --area or --tag sweep lists through the catch-all view, which
-	// rejects the flag: the app's answer there has not been measured.
-	err := runWith(t, database, "list", "--area", "Home", "--include-completed")
+	// A bare --tag sweep lists through the catch-all view, which rejects the
+	// flag: tags are a filter in the app, not a list with a page of its own.
+	err := runWith(t, database, "list", "--tag", "urgent", "--include-completed")
 	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, today and upcoming views") {
-		t.Fatalf("area filter: expected view-rejection error, got: %v", err)
+		t.Fatalf("tag filter: expected view-rejection error, got: %v", err)
+	}
+
+	// A named area lists its contents, which the app's area page keeps a
+	// to-do closed today in, as a project's page does.
+	if err := runWith(t, database, "list", "--area", "Home", "--include-completed"); err != nil {
+		t.Fatalf("--area: %v", err)
+	}
+	if err := runWith(t, database, "list", "--area", "Home", "--tag", "urgent", "--include-completed"); err != nil {
+		t.Fatalf("--area + --tag: %v", err)
 	}
 
 	// --project on a view that rejects the flag is still rejected, and the
 	// message says --project helps only with no view named.
 	err = runWith(t, database, "list", "inbox", "--project", "Chores", "--include-completed")
-	if err == nil || !strings.Contains(err.Error(), "on a --project listing with no view") {
+	if err == nil || !strings.Contains(err.Error(), "on a --project or --area listing with no view") {
 		t.Fatalf("inbox + --project: expected view-rejection error, got: %v", err)
 	}
 

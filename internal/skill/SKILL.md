@@ -246,7 +246,10 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # as the app's project page shows them, whichever list each was closed out
     # of. That is contents rather than a list, so those rows also come back
     # from today, anytime, upcoming or logbook, except the deferred-project
-    # case above. A bare --area/--tag sweep rejects the flag.
+    # case above. `things --area <A> --include-completed` (no view) does the
+    # same for an area: its open contents plus the tasks and projects in it
+    # closed today and not yet logged, a closed project as one row. A bare
+    # --tag sweep rejects the flag; name a view, e.g. `things today --tag T`.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

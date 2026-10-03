@@ -122,8 +122,15 @@ nothing.
 `things -p "Launch v2" --include-completed` lists an open project's tasks plus
 every one of them closed today and not yet logged, struck through in the app's
 project page until the day rolls over, whichever list it was closed out of. A
-project's contents are not one of the lists above, so they overlap them. A bare `--area` or `--tag`
-sweep rejects the flag.
+project's contents are not one of the lists above, so they overlap them.
+
+A bare `--area` takes it the same way: `things -a Work --include-completed`
+adds the area's tasks and projects closed today and not yet logged, as the
+app's area page shows them, and its projects' tasks closed today, as each
+project's page does. A project closed today is one row there, as in
+`logbook`. A bare `--tag` sweep rejects the flag: a tag is a filter in the
+app, not a list with a page of its own, so name the view: `things today -t
+urgent --include-completed`.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none

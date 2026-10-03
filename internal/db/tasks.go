@@ -32,14 +32,18 @@ type TaskFilter struct {
 // widens the status test when the flag is set, so the question the CLI asks
 // and the SQL it then runs cannot disagree.
 //
-// projectNamed is whether --project names a project. The catch-all view takes
-// the flag only then, because only then does it answer with the project's
-// contents (widensToProjectContents), and the app keeps a to-do closed today
-// in its project (issue #295). A bare --area or --tag sweep through the same
-// view still rejects it: the app's answer there was not measured.
-func CompletableView(view string, projectNamed bool) bool {
+// projectNamed is whether --project names a project, and areaNamed whether
+// --area names an area. The catch-all view takes the flag only then. Naming a
+// project lists its contents (widensToProjectContents), and the app keeps a
+// to-do closed today on the project's page (issue #295). Naming an area lists
+// the area's page, which keeps one too (see completesWithArea). A bare --tag
+// sweep through the same view still rejects it: a tag is a filter in the app,
+// not a list with a page of its own, so there is no app answer to match.
+func CompletableView(view string, projectNamed, areaNamed bool) bool {
 	spec := views[view]
-	return spec.supportsIncludeCompleted || (projectNamed && spec.widensToProjectContents)
+	return spec.supportsIncludeCompleted ||
+		(projectNamed && spec.widensToProjectContents) ||
+		(areaNamed && spec.completesWithArea)
 }
 
 // CompletableViewNames lists those views in a stable order, for error text.
@@ -557,6 +561,17 @@ type viewSpec struct {
 	// its usual WHERE with a project filter. Only the catch-all has it.
 	widensToProjectContents bool
 
+	// completesWithArea marks the view that takes --include-completed when
+	// --area names an area, as it does when --project names a project. Only
+	// the catch-all has it. The app's area page keeps an item closed today in
+	// place until it is logged: measured on 3 Oct 2026, `to dos of area id X`
+	// held loose to-dos closed out of Anytime, Upcoming and Someday, and a
+	// project completed that day, but not that project's own to-dos, which
+	// its row stands for, so the closed-parent fold stays on. The listing
+	// also carries the area's projects' to-dos, and the project's page keeps
+	// one closed today (issue #295), so the flag reaches those too.
+	completesWithArea bool
+
 	// keepsTrashedParentGuard marks the view that keeps untrashedParent even
 	// when --project names a project, where every other view lifts it. Only
 	// trash has it; see buildListQuery.
@@ -572,7 +587,7 @@ func (s viewSpec) rowKinds() string {
 }
 
 // whereOpts carries the parts of a TaskFilter that change how the WHERE is
-// composed, as against the clauses buildListQuery appends after it. Both
+// composed, as against the clauses buildListQuery appends after it. The
 // fields reach only the status test today; they are a struct rather than
 // parameters so a third does not turn every call site into a row of bare
 // booleans.
@@ -584,12 +599,16 @@ type whereOpts struct {
 	// projectNamed is set when --project names one project, which lifts the
 	// closed-parent fold. See openOrJustClosed for why.
 	projectNamed bool
+
+	// areaNamed is set when --area names an area, which lets the flag reach
+	// the view that completesWithArea.
+	areaNamed bool
 }
 
 // where composes the view's WHERE clause.
 func (s viewSpec) where(o whereOpts) string {
 	status := s.status
-	if o.includeCompleted && s.supportsIncludeCompleted {
+	if o.includeCompleted && (s.supportsIncludeCompleted || (o.areaNamed && s.completesWithArea)) {
 		status = openOrJustClosed(o)
 	}
 	parts := make([]string, 0, 4+len(s.extra))
@@ -796,7 +815,7 @@ var views = map[string]viewSpec{
 	ViewProject: {
 		status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsDateFilter: true,
-		widensToProjectContents: true,
+		widensToProjectContents: true, completesWithArea: true,
 		// A filter that spans projects — `things --area X`, `things --tag y` —
 		// groups by area then project so the rendered group headers stay
 		// contiguous instead of repeating as rows interleave by index. Within a
@@ -1052,6 +1071,7 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	where := spec.where(whereOpts{
 		includeCompleted: opts.IncludeCompleted,
 		projectNamed:     opts.Project != "",
+		areaNamed:        opts.Area != "",
 	})
 	// untrashedParent is what stops a trashed project's children outliving it
 	// in the lists. Naming a project is asking for that project's contents, so
