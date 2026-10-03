@@ -476,6 +476,21 @@ type viewSpec struct {
 	// they used to reach through a fallback in ListTasks; naming it here means
 	// no view's ordering is decided anywhere but in this table.
 	orderBy string
+
+	// dateColumn is what --on/--from/--to compare against. Empty means
+	// t.startDate, which is right for every view but the two that are read by
+	// another date.
+	dateColumn string
+
+	// widensToProjectContents marks the view that answers --project with the
+	// project's whole contents (closedProjectContents) instead of composing
+	// its usual WHERE with a project filter. Only the catch-all has it.
+	widensToProjectContents bool
+
+	// keepsTrashedParentGuard marks the view that keeps untrashedParent even
+	// when --project names a project, where every other view lifts it. Only
+	// trash has it; see buildListQuery.
+	keepsTrashedParentGuard bool
 }
 
 // rowKinds is the type test, which closes every view's WHERE.
@@ -521,7 +536,7 @@ func (s viewSpec) where(o whereOpts) string {
 // views is the table: one row per list view, and the only place a view is
 // described.
 var views = map[string]viewSpec{
-	"today": {
+	ViewToday: {
 		scope: todayScheduled, status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Today takes the shared grouping and then todayIndex, which is the
@@ -545,11 +560,11 @@ var views = map[string]viewSpec{
 		// by.
 		orderBy: "ORDER BY " + listGrouping + ", t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
-	"inbox": {
+	ViewInbox: {
 		scope: inboxBucket, status: openRows, trashed: untrashedRows,
 		orderBy: indexOrderBy,
 	},
-	"upcoming": {
+	ViewUpcoming: {
 		scope: upcomingScope, status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsDateFilter: true,
 		// Upcoming is a diary, so it reads by date and not by list position.
@@ -557,7 +572,8 @@ var views = map[string]viewSpec{
 		// within-day position it also keys Today on; the view listed in bare
 		// t."index" order before, which interleaved the dates (issue #217).
 		// A to-do there only by its deadline sorts by that day in the same way.
-		orderBy: "ORDER BY " + upcomingDate + " ASC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
+		dateColumn: upcomingDate,
+		orderBy:    "ORDER BY " + upcomingDate + " ASC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
 	// Anytime is the one scheduled view that does not carry project rows, and
 	// that is the app's own shape rather than an inconsistency. Every active
@@ -573,7 +589,7 @@ var views = map[string]viewSpec{
 	// --include-completed works here on the same rule as Today: the app keeps
 	// an item closed today visible in whatever list it was in until the day
 	// rolls over, and Anytime is a list like Today (issue #238).
-	"anytime": {
+	ViewAnytime: {
 		scope: anytimeBucket, status: openRows, trashed: untrashedRows,
 		supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Anytime groups the way the app presents it: the project is the
@@ -593,7 +609,7 @@ var views = map[string]viewSpec{
 	// stay listed (issue #206). Resolving p through COALESCE(t.project,
 	// h.project) means a to-do under a project heading is filed by its heading's
 	// project, not left looking unparented.
-	"someday": {
+	ViewSomeday: {
 		scope: somedayDeferred, status: openRows, trashed: untrashedRows,
 		extra:                []string{unparented},
 		includesProjects:     true,
@@ -637,7 +653,7 @@ var views = map[string]viewSpec{
 	// held no to-do at all whose parent project was closed, against 328 such
 	// rows in the CLI (issue #229). The trashed-parent half of the fold is the
 	// clause buildListQuery appends for every view.
-	"logbook": {
+	ViewLogbook: {
 		status: closedRows, trashed: untrashedRows,
 		extra:             []string{notHeldInPlace, parentNotClosed},
 		includesProjects:  true,
@@ -656,12 +672,13 @@ var views = map[string]viewSpec{
 	// was closed but not trashed, and none whose parent was trashed. Throwing
 	// away a to-do out of a finished project is an ordinary thing to do, and
 	// the project is not in Trash to fold it into (issue #229).
-	"trash": {
+	ViewTrash: {
 		trashed: trashedRows,
 		// No status test: a trashed row is in Trash whatever state it is in.
-		includesProjects:  true,
-		includesTemplates: true,
-		orderBy:           indexOrderBy,
+		includesProjects:        true,
+		includesTemplates:       true,
+		keepsTrashedParentGuard: true,
+		orderBy:                 indexOrderBy,
 	},
 	// Deadlines carries projects too: a project takes a deadline exactly as a
 	// to-do does, `things projects` reports it, and agents.md advertises this
@@ -669,10 +686,11 @@ var views = map[string]viewSpec{
 	// project deadline from the sweep (issue #213). The view orders by
 	// t.deadline, so project rows fall in among the to-dos by date rather than
 	// forming a block of their own.
-	"deadlines": {
+	ViewDeadlines: {
 		scope: hasDeadline, status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsDateFilter: true,
-		orderBy: "ORDER BY t.deadline ASC, t.\"index\" ASC" + uuidTiebreak,
+		dateColumn: "t.deadline",
+		orderBy:    "ORDER BY t.deadline ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
 	// Things' Repeating list: the templates that generate to-dos and
 	// projects, not the items they generate. A template carries the
@@ -681,7 +699,7 @@ var views = map[string]viewSpec{
 	// carries projects as well as to-dos: a project can repeat too, and the
 	// app's Repeating list shows both kinds, so the view carries project
 	// templates and `things projects` leaves them out (issue #165).
-	"repeating": {
+	ViewRepeating: {
 		scope: isTemplate, status: openRows, trashed: untrashedRows,
 		includesProjects:  true,
 		includesTemplates: true,
@@ -697,9 +715,10 @@ var views = map[string]viewSpec{
 	// that area, and the area's own projects are part of what the app shows
 	// there (issue #222). A --project filter still returns no project rows: a
 	// project has no parent project of its own, so p.uuid never matches.
-	"project": {
+	ViewProject: {
 		status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsDateFilter: true,
+		widensToProjectContents: true,
 		// A single-project listing keeps its start/index order (the area and
 		// project keys are constant across it), while a filter that spans
 		// projects — `things --area X`, `things --tag y` — groups by area then
@@ -785,6 +804,24 @@ const indexOrderBy = `ORDER BY t."index" ASC` + uuidTiebreak
 // row instead — 77 rows in the CLI's logbook and 4 in its trash (issue #229).
 // With the exemption gone the clause is unconditional.
 const untrashedParent = "COALESCE(p.trashed, 0) = 0"
+
+// The list view names, which key the views table. They are plain strings so
+// the callers that carry a view as text — argv, the output layer — need no
+// conversion.
+const (
+	ViewToday     = "today"
+	ViewInbox     = "inbox"
+	ViewUpcoming  = "upcoming"
+	ViewAnytime   = "anytime"
+	ViewSomeday   = "someday"
+	ViewLogbook   = "logbook"
+	ViewTrash     = "trash"
+	ViewDeadlines = "deadlines"
+	ViewRepeating = "repeating"
+	// ViewProject is the catch-all open set, not a name a user can type. It is
+	// what a bare --project/--area/--tag filter lists.
+	ViewProject = "project"
+)
 
 // ValidView reports whether the name is one of the list views.
 func ValidView(name string) bool {
@@ -902,9 +939,9 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	switch {
 	case opts.Project == "":
 		where += " AND " + untrashedParent
-	case view == "project":
+	case spec.widensToProjectContents:
 		where = closedProjectContents
-	case view == "trash":
+	case spec.keepsTrashedParentGuard:
 		// Trash keeps the guard even under --project. Its rows are the ones
 		// thrown away on their own account, and a to-do thrown away out of a
 		// project that is itself in the Trash is reachable nowhere, as in the
@@ -944,12 +981,9 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	if opts.On != nil || opts.From != nil || opts.To != nil {
 		// ThingsDate is bit-encoded year<<16|month<<12|day<<7 — directly
 		// comparable across (year, month, day), so no decode is needed.
-		col := "t.startDate"
-		switch view {
-		case "deadlines":
-			col = "t.deadline"
-		case "upcoming":
-			col = upcomingDate
+		col := spec.dateColumn
+		if col == "" {
+			col = "t.startDate"
 		}
 		if opts.On != nil {
 			where += " AND " + col + " = ?"
