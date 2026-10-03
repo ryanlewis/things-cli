@@ -186,8 +186,8 @@ inside a project Things generated from the template are ordinary.
 Results carry `"repeating": true`.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. Names
-ignore case and surrounding spaces. A project title typed in its exact case
-lists only that project, even when another project's title differs from it
+ignore case and surrounding spaces. A project, area or tag name typed in
+its exact case lists only that one, even when another title differs from it
 only by case. On their
 own the filters cover everything open in the project, area, or tag — so
 `things -a Work` lists that area's own projects as well as its tasks, while
@@ -237,8 +237,8 @@ tag, project, area or group header shows as a space. `things show` keeps
 a title's own line breaks, and `--json` carries it exactly as written.
 
 `things projects`, `things areas`, and `things tags` list the
-collections themselves. `things projects` accepts `--area` and
-`--completed`.
+collections themselves. `things projects` accepts `--area`, which takes
+a name the way the list filters do, and `--completed`.
 
 On a terminal, `things projects` fits the width the same way: a title
 longer than 30 columns is cut first, then, if that is not enough, an area

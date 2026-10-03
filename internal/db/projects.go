@@ -45,8 +45,9 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 		// The same --area flag as the list filters, escaped the same way so
 		// the two commands cannot disagree about what a name matches
 		// (issue #262).
-		query += " AND (a.uuid = ? OR fold(a.title) LIKE ?" + escapeClause + ")"
-		args = append(args, areaFilter, nameLike(areaFilter))
+		clause, clauseArgs := areaNameMatch("a.uuid", "a.title", areaFilter)
+		query += " AND " + clause
+		args = append(args, clauseArgs...)
 	}
 
 	// t.uuid last for the same reason the task views take it: two projects in
