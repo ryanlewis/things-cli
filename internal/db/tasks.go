@@ -804,14 +804,15 @@ var views = map[string]viewSpec{
 // in heading order. Within each of those the Anytime to-dos come first by
 // index, a to-do scheduled for today among them; then the scheduled ones by
 // start date and then todayIndex, the keys Upcoming orders by; then the
-// Someday ones by index.
+// Someday ones by index. The heading's uuid follows its index so that two
+// headings sharing an index still keep their to-dos apart.
 //
 // Measured on 3 Oct 2026 against `to dos of project id X`, the CLI's old
 // t.start, t."index" order differed from the app's in 7 of 20 open projects,
 // mostly because it ordered the scheduled to-dos by index rather than date.
 // No open project had a heading, so the heading keys come from a throwaway
 // project built in Things for the purpose.
-const projectPageOrder = `CASE WHEN t.heading IS NULL THEN 0 ELSE 1 END, COALESCE(h."index", 0), ` +
+const projectPageOrder = `CASE WHEN t.heading IS NULL THEN 0 ELSE 1 END, COALESCE(h."index", 0), COALESCE(h.uuid, ''), ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN 1 WHEN ` + somedayDeferred + ` THEN 2 ELSE 0 END, ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN t.startDate END, ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN t.todayIndex END, ` +
