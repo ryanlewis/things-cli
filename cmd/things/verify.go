@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -102,12 +103,20 @@ func restrictedEdits(when, deadline *string, complete, cancel, duplicate bool) [
 // whose clock runs ahead of this Mac's gets an earlier date from this write.
 // since is nil when the item had no modification date before the write; any
 // date then counts.
+//
+// The one exception is the checklist: Things leaves the to-do's modification
+// date alone when only its checklist rows change. When watchChecklist is set,
+// the edit also counts as landed once the item's checklist differs from
+// checklist, as read before the write.
 type statusWant struct {
 	uuid  string
 	title string
 	want  model.Status
 	edit  bool
 	since *time.Time
+
+	watchChecklist bool
+	checklist      []model.ChecklistItem
 }
 
 // landed reports whether current shows the change w asked for.
@@ -119,6 +128,16 @@ func (w statusWant) landed(current *model.Task) bool {
 		return true
 	}
 	return current.ModificationDate != nil && (w.since == nil || !current.ModificationDate.Equal(*w.since))
+}
+
+// checklistChanged reports whether items differs from the checklist w saw
+// before the write. It compares each row's uuid and title in order: append
+// and prepend add rows, and a replace writes new ones even for the same
+// titles.
+func (w statusWant) checklistChanged(items []model.ChecklistItem) bool {
+	return !slices.EqualFunc(items, w.checklist, func(a, b model.ChecklistItem) bool {
+		return a.UUID == b.UUID && a.Title == b.Title
+	})
 }
 
 // statusResult is the outcome for one item of a batch read-back. err is nil
@@ -174,10 +193,18 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 		for _, i := range pending {
 			w := wants[i]
 			current := found[w.uuid]
+			readErr := err
+			landed := readErr == nil && current != nil && w.landed(current)
+			if !landed && readErr == nil && current != nil && w.watchChecklist && current.Status == w.want {
+				var items []model.ChecklistItem
+				if items, readErr = database.GetChecklistItems(w.uuid); readErr == nil {
+					landed = w.checklistChanged(items)
+				}
+			}
 			switch {
-			case err != nil:
+			case readErr != nil:
 				if expired {
-					results[i].err = fmt.Errorf("verifying status change: %w", err)
+					results[i].err = fmt.Errorf("verifying status change: %w", readErr)
 					continue
 				}
 			case current == nil:
@@ -187,7 +214,7 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 					results[i].err = fmt.Errorf("verifying status change: %s no longer exists in the Things database", w.uuid)
 					continue
 				}
-			case w.landed(current):
+			case landed:
 				results[i].task = current
 				continue
 			case expired && current.Status == w.want:
@@ -251,7 +278,18 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 // it names is already the item's) has nothing to wait for; the item is
 // printed as it stands. A status-only edit waits for the status alone, the
 // same check `complete` and `cancel` make.
-func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, cancel, duplicate bool, update func() error) error {
+//
+// checklist says whether the edit changes the checklist. The checklist is
+// read before the write so the read-back can see it change; if that read
+// fails, the read-back waits for the modification date alone.
+func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist, complete, cancel, duplicate bool, update func() error) error {
+	var before []model.ChecklistItem
+	watchChecklist := false
+	if checklist && changed && !duplicate && !d.NoVerify {
+		var err error
+		before, err = database.GetChecklistItems(task.UUID)
+		watchChecklist = err == nil
+	}
 	if err := update(); err != nil {
 		return err
 	}
@@ -273,6 +311,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, ca
 	if changed || want != task.Status {
 		res := verifyStatuses(database, []statusWant{{
 			uuid: task.UUID, title: task.Title, want: want, edit: changed, since: task.ModificationDate,
+			watchChecklist: watchChecklist, checklist: before,
 		}}, d.readBackTimeout())[0]
 		if res.err != nil {
 			return res.err

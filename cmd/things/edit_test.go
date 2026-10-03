@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // A field edit that lands prints the item as `things show` would, in both
@@ -127,6 +130,99 @@ func TestDroppedFieldEditFails(t *testing.T) {
 				t.Fatalf("run %v = %v, want a did-not-apply error", args, err)
 			}
 		})
+	}
+}
+
+// stubExecChecklist mocks an edit that only changes the checklist. Things
+// writes the TMChecklistItem rows and leaves the to-do's own modification
+// date alone, so apply runs with no bump. An empty apply changes nothing.
+func stubExecChecklist(t *testing.T, sqlDB *sql.DB, apply string) {
+	t.Helper()
+	prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
+		if apply != "" {
+			if _, err := sqlDB.Exec(apply); err != nil {
+				t.Errorf("simulating Things write: %v", err)
+			}
+		}
+		return exec.Command("true")
+	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+}
+
+// A checklist-only edit is confirmed by the checklist itself: Things does not
+// move the to-do's modification date when only its checklist rows change, so
+// waiting for the date alone reported a false "did not apply" for an edit
+// that landed, and a retry would add the items twice.
+func TestEditChecklistOnlyConfirmsByChecklist(t *testing.T) {
+	cases := []struct {
+		name  string
+		seed  string
+		flag  string
+		apply string
+	}{
+		{"append", "", "--append-checklist",
+			`INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES ('cl-a', 'stamp', 0, 0, 'one-1'), ('cl-b', 'envelope', 0, 1, 'one-1')`},
+		{"prepend", `INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES ('cl-1', 'envelope', 0, 0, 'one-1')`, "--prepend-checklist",
+			`INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES ('cl-a', 'stamp', 0, -1, 'one-1')`},
+		// A replace with the same titles still makes new rows.
+		{"replace", `INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES ('cl-1', 'stamp', 0, 0, 'one-1')`, "--checklist",
+			`DELETE FROM TMChecklistItem WHERE uuid = 'cl-1'; INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES ('cl-a', 'stamp', 0, 0, 'one-1')`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			if _, err := sqlDB.Exec(`UPDATE TMTask SET userModificationDate = 1790000000.5`); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+			if tc.seed != "" {
+				if _, err := sqlDB.Exec(tc.seed); err != nil {
+					t.Fatalf("seed checklist: %v", err)
+				}
+			}
+			stubExecChecklist(t, sqlDB, tc.apply)
+
+			got, err := runOut(t, database, "edit", "one-1", tc.flag, `stamp\nenvelope`)
+			if err != nil {
+				t.Fatalf("checklist-only edit: %v", err)
+			}
+			want, err := runOut(t, database, "show", "one-1")
+			if err != nil {
+				t.Fatalf("show: %v", err)
+			}
+			if got != want {
+				t.Errorf("output = %q, want the show output %q", got, want)
+			}
+		})
+	}
+}
+
+// A checklist-only edit Things drops still fails: neither the date nor the
+// checklist moved. A change to another item's checklist is not this one's.
+func TestEditChecklistOnlyDroppedFails(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecChecklist(t, sqlDB, `INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES ('cl-x', 'stamp', 0, 0, 'rep-1')`)
+
+	err := runWith(t, database, "edit", "one-1", "--append-checklist", "stamp")
+	if err == nil || !strings.Contains(err.Error(), "edit did not apply") {
+		t.Fatalf("dropped checklist edit = %v, want an edit-did-not-apply error", err)
+	}
+}
+
+// A mixed edit still confirms through the modification date, which Things
+// moves for the title change.
+func TestEditMixedChecklistConfirmsByDate(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecEditing(t, sqlDB, `UPDATE TMTask SET title = 'Post the letter' WHERE uuid = 'one-1'`)
+
+	got, err := runOut(t, database, "edit", "one-1", "--title", "Post the letter", "--append-checklist", "stamp")
+	if err != nil {
+		t.Fatalf("mixed edit: %v", err)
+	}
+	if !strings.Contains(got, "Post the letter") {
+		t.Errorf("output = %q, want the edited item", got)
 	}
 }
 

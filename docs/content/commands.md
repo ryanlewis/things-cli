@@ -357,7 +357,9 @@ things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
 Things reports nothing back from an edit, so the CLI waits for the item's
 modification date to change (and, with `--complete` or `--cancel`, for the
 status to change too; an edit with only one of those is checked on the
-status alone), then prints the item the way `things show` does — the same
+status alone). Things does not change the modification date when only the
+checklist changes, so an edit with a checklist flag also counts once the
+checklist differs from what it was before. It then prints the item the way `things show` does — the same
 object under `--json`:
 
 ```sh

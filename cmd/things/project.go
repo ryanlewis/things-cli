@@ -51,7 +51,7 @@ type ProjectEditCmd struct {
 }
 
 func (c *ProjectEditCmd) Run(d *Deps) error {
-	return runEdit(d, c.Project, projectEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), func(u things.UpdateCommon) error {
+	return runEdit(d, c.Project, projectEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), false, func(u things.UpdateCommon) error {
 		return things.UpdateProject(things.UpdateProjectParams{
 			UpdateCommon: u,
 			Area:         c.Area,
