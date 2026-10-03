@@ -89,6 +89,10 @@ type Deps struct {
 	// by the time it runs.
 	Config *config.File
 
+	// dbWarned records that a warning has already said the database cannot
+	// be read, so a later step of the same command does not say it again.
+	dbWarned bool
+
 	// dbIdent caches dbIdentity's answer.
 	dbIdent string
 }

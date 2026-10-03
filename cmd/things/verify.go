@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -368,7 +369,11 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		return printUnconfirmedAdd(d, title, "no-verify", "Sent to Things, not confirmed (--no-verify)", nil)
 	}
 	unreadable := func(err error) error {
-		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the add: %v\n", err)
+		// The tag check may have said the database cannot be read already;
+		// the unconfirmed line below is enough on top of that.
+		if !d.dbWarned {
+			fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the add: %v\n", err)
+		}
 		return printUnconfirmedAdd(d, title, "unreadable", "Sent to Things, not confirmed (database unreadable)", nil)
 	}
 
@@ -395,6 +400,7 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 	budget := d.readBackTimeout()
 	var found []model.Task
 	var readErr error
+	readOK := false
 	matched := 0
 	_ = pollUntil(budget, func(bool) (bool, error) {
 		created, err := database.TasksCreatedSince(typ, since)
@@ -404,7 +410,7 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 			readErr = err
 			return false, nil
 		}
-		readErr = nil
+		readOK = true
 		found = found[:0]
 		for _, t := range created {
 			if _, old := before[t.UUID]; !old && strings.TrimSpace(t.Title) == strings.TrimSpace(title) {
@@ -417,15 +423,18 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		return matched > addSettleRounds, nil
 	})
 	switch {
-	case len(found) == 0 && readErr != nil:
+	case len(found) == 0 && !readOK:
+		// Not one read-back read worked. A read that failed after others
+		// had worked is only a busy moment: those reads saw no item.
 		return unreadable(readErr)
 	case len(found) == 0:
 		kind := "to-do"
 		if typ == model.TypeProject {
 			kind = "project"
 		}
-		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `things search %s` before retrying; do not retry blindly",
-			kind, title, budget, shellQuote(strings.TrimSpace(title)))
+		search := append(append([]string{"things"}, rerunFlags(d)...), "search", shellQuote(strings.TrimSpace(title)))
+		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `%s` before retrying; do not retry blindly",
+			kind, title, budget, strings.Join(search, " "))
 	case len(found) > 1:
 		uuids := make([]string, len(found))
 		for i, t := range found {
@@ -434,6 +443,17 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		return printUnconfirmedAdd(d, title, "ambiguous", "Sent to Things, not confirmed (more than one new item has this title)", uuids)
 	}
 	return printItem(d, database, &found[0])
+}
+
+// rerunFlags renders the global flags a printed command needs to read the
+// same database as this run: globalFlags' --db, and --config when the flag
+// named the file, since that file may be what set the database.
+func rerunFlags(d *Deps) []string {
+	flags := globalFlags(d)
+	if cfg := d.config(); cfg.Source == config.SourceFlag {
+		flags = append(flags, "--config", shellQuote(cfg.Path))
+	}
+	return flags
 }
 
 // unconfirmedAdd is the --json output for an add that was sent but not read

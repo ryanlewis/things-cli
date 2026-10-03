@@ -3,11 +3,13 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -344,5 +346,63 @@ func TestAddUnconfirmed(t *testing.T) {
 				t.Errorf("got %v, want no uuid", got)
 			}
 		})
+	}
+}
+
+// A read that fails late in a read-back that had been reading fine does not
+// make the add unreadable: the database answered and the item was not there,
+// so the add is not confirmed, with the search hint.
+func TestAddLateReadFailureIsNotConfirmed(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecDropping(t)
+	verifySleep = func(time.Duration) { _ = sqlDB.Close() }
+
+	_, err := runOut(t, database, "--json", "add", "Buy oat milk")
+	if err == nil || !strings.Contains(err.Error(), "add not confirmed") {
+		t.Fatalf("err = %v, want add not confirmed", err)
+	}
+}
+
+// The search hint carries --db and --config when they were given, so it reads
+// the same database the add was checked against.
+func TestAddNotFoundSearchHintKeepsGlobalFlags(t *testing.T) {
+	fastVerify(t)
+	database, _ := seedWritable(t)
+	stubExecDropping(t)
+	d := &Deps{
+		DB:     database,
+		DBPath: "/tmp/my things.sqlite",
+		Config: &config.File{Path: "/tmp/c.toml", Source: config.SourceFlag},
+		Stdout: io.Discard,
+		Stderr: io.Discard,
+	}
+
+	err := applyAdd(d, model.TypeTask, "Buy oat milk", func() error { return things.AddTask(things.AddParams{Title: "Buy oat milk"}) })
+	want := "things --db '/tmp/my things.sqlite' --config /tmp/c.toml search 'Buy oat milk'"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want the hint %q", err, want)
+	}
+}
+
+// An add with tags against a database that cannot be read says so once: the
+// tag check reports it, and the read-back does not repeat it.
+func TestAddUnreadableWithTagsWarnsOnce(t *testing.T) {
+	fastVerify(t)
+	closed := dbtest.NewSQL(t)
+	if err := closed.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	stubExecDropping(t)
+
+	out, stderr, err := runStreams(t, db.NewFromSQL(closed), "add", "Buy oat milk", "--tags", "Errand")
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if !strings.Contains(out, "not confirmed") {
+		t.Errorf("output = %q, want the unconfirmed line", out)
+	}
+	if n := strings.Count(stderr, "database is closed"); n != 1 {
+		t.Errorf("stderr reports the database error %d times, want once:\n%s", n, stderr)
 	}
 }

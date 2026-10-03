@@ -41,6 +41,7 @@ func verifyTags(d *Deps, flags TagFlags, names []string) error {
 		}
 		fmt.Fprintf(d.errOut(), "warning: could not check tags against the Things database: %v\n", err)
 		fmt.Fprintf(d.errOut(), "warning: tags that do not already exist in Things will be dropped without notice\n")
+		d.dbWarned = true
 		return nil
 	}
 
