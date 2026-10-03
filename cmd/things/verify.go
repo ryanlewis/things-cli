@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -432,7 +431,7 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		if typ == model.TypeProject {
 			kind = "project"
 		}
-		search := append(append([]string{"things"}, rerunFlags(d)...), "search", shellQuote(strings.TrimSpace(title)))
+		search := append(append([]string{"things"}, globalFlags(d)...), "search", shellQuote(strings.TrimSpace(title)))
 		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `%s` before retrying; do not retry blindly",
 			kind, title, budget, strings.Join(search, " "))
 	case len(found) > 1:
@@ -443,17 +442,6 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		return printUnconfirmedAdd(d, title, "ambiguous", "Sent to Things, not confirmed (more than one new item has this title)", uuids)
 	}
 	return printItem(d, database, &found[0])
-}
-
-// rerunFlags renders the global flags a printed command needs to read the
-// same database as this run: globalFlags' --db, and --config when the flag
-// named the file, since that file may be what set the database.
-func rerunFlags(d *Deps) []string {
-	flags := globalFlags(d)
-	if cfg := d.config(); cfg.Source == config.SourceFlag {
-		flags = append(flags, "--config", shellQuote(cfg.Path))
-	}
-	return flags
 }
 
 // unconfirmedAdd is the --json output for an add that was sent but not read

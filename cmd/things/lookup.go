@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
+	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -189,13 +190,20 @@ func needsShellQuoting(r rune) bool {
 	return !strings.ContainsRune("-_./:=@+,%", r)
 }
 
-// globalFlags renders the global flags a re-run of a listing needs to reach the
-// same rows. Only --db qualifies: the rest change how a listing prints, not
-// which items it holds. A path the config file supplied is left out, since a
-// re-run picks that up on its own.
+// globalFlags renders the global flags a printed command needs to read the
+// same database as this run, for a listing's re-run and the search hints.
+// Only --db and --config qualify: the rest change how a command prints, not
+// which items it reads. A --db the config file supplied is left out, since a
+// re-run picks that up on its own. --config is kept when the flag named the
+// file, since that file may be what set the database.
 func globalFlags(d *Deps) []string {
-	if d.DBPath == "" || d.config().SetsDB(d.DBPath) {
-		return nil
+	var flags []string
+	cfg := d.config()
+	if d.DBPath != "" && !cfg.SetsDB(d.DBPath) {
+		flags = append(flags, "--db", shellQuote(d.DBPath))
 	}
-	return []string{"--db", shellQuote(d.DBPath)}
+	if cfg.Source == config.SourceFlag {
+		flags = append(flags, "--config", shellQuote(cfg.Path))
+	}
+	return flags
 }
