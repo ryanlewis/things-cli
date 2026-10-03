@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -129,7 +130,30 @@ func cacheFromThisDB(d *Deps, last cache.LastList) bool {
 	if last.DB == "" {
 		return d.DBPath == ""
 	}
-	return last.DB == d.dbIdentity()
+	current := d.dbIdentity()
+	if last.DB == current {
+		return true
+	}
+	// Resolved paths can still differ for one file: the default macOS volume
+	// ignores case, so `Main.sqlite` and `main.sqlite` name the same database
+	// without EvalSymlinks folding them together.
+	return sameFile(last.DB, current)
+}
+
+// sameFile reports whether two paths name one existing file.
+func sameFile(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
 }
 
 // shellQuote renders one argument as the user would have to type it. Anything

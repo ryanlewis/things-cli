@@ -604,7 +604,8 @@ $ things complete 2
 Error: task #2 comes from a listing of a different database: `things --db /Users/me/backup/main.sqlite today` read /Users/me/backup/main.sqlite, and this command reads /Users/me/Library/Group Containers/…/main.sqlite. Re-run the listing against this database and use the new row number, or pass the task's uuid.
 ```
 
-A relative path or a symlink to the same file counts as the same
+A relative path, a symlink, or a hard link to the same file, or the same
+path typed in a different case, counts as the same
 database. A cache file written before the database was recorded backs a
 row number only when no `--db` is in play (from the flag or the config
 file); with one, the reference is refused until you list again.

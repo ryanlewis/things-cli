@@ -378,7 +378,7 @@ func TestResolveTaskNumericRefusedFromOtherDatabase(t *testing.T) {
 }
 
 // The same database still resolves, however its path is spelled: through a
-// symlink, or relative to the working directory.
+// symlink or a hard link, or relative to the working directory.
 func TestResolveTaskNumericSameDatabaseResolves(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	live, _ := dbFiles(t)
@@ -386,12 +386,18 @@ func TestResolveTaskNumericSameDatabaseResolves(t *testing.T) {
 	if err := os.Symlink(live, link); err != nil {
 		t.Fatal(err)
 	}
+	// A hard link stands in for a second spelling EvalSymlinks does not fold,
+	// such as a different case on the default macOS volume.
+	hard := filepath.Join(t.TempDir(), "hard.sqlite")
+	if err := os.Link(live, hard); err != nil {
+		t.Fatal(err)
+	}
 	database := seedResolveTaskDB(t)
 
 	cacheTaskUUIDs(&Deps{DBPath: live}, "things today", []model.Task{{UUID: "abc-123"}})
 
 	t.Chdir(filepath.Dir(live))
-	for _, path := range []string{live, link, "live.sqlite", "./live.sqlite"} {
+	for _, path := range []string{live, link, "live.sqlite", "./live.sqlite", hard} {
 		got, err := resolveTask(&Deps{DBPath: path}, "1", database)
 		if err != nil {
 			t.Errorf("--db %s: resolveTask: %v", path, err)
