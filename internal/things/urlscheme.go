@@ -151,18 +151,77 @@ func AddProject(params AddProjectParams) error {
 	return openThingsURL("add-project", v)
 }
 
-type UpdateParams struct {
+// UpdateCommon holds the fields `update` and `update-project` share.
+// UpdateParams and UpdateProjectParams embed it.
+type UpdateCommon struct {
 	ID        string
 	AuthToken string
 
-	Title            *string
-	Notes            *string
-	PrependNotes     *string
-	AppendNotes      *string
-	When             *string
-	Deadline         *string
-	Tags             *string
-	AddTags          *string
+	Title        *string
+	Notes        *string
+	PrependNotes *string
+	AppendNotes  *string
+	When         *string
+	Deadline     *string
+	Tags         *string
+	AddTags      *string
+	Completed    bool
+	Canceled     bool
+	Duplicate    bool
+	Reveal       bool
+}
+
+// values checks the id and auth token, returns invalid if the caller's
+// validation failed, normalises When and Deadline, and sets the shared
+// keys. command prefixes the guard errors; kind names the item ("task",
+// "project").
+func (c UpdateCommon) values(command, kind string, invalid error) (url.Values, error) {
+	if c.ID == "" {
+		return nil, fmt.Errorf("%s: %s id is required", command, kind)
+	}
+	if c.AuthToken == "" {
+		return nil, fmt.Errorf("%s: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once", command)
+	}
+	if invalid != nil {
+		return nil, invalid
+	}
+	if c.When != nil {
+		v, err := NormalizeWhen(*c.When)
+		if err != nil {
+			return nil, err
+		}
+		c.When = &v
+	}
+	if c.Deadline != nil {
+		v, err := NormalizeDeadline(*c.Deadline)
+		if err != nil {
+			return nil, err
+		}
+		c.Deadline = &v
+	}
+
+	v := url.Values{}
+	v.Set("id", c.ID)
+	v.Set("auth-token", c.AuthToken)
+
+	setStr(v, "title", c.Title)
+	setStr(v, "notes", c.Notes)
+	setStr(v, "prepend-notes", c.PrependNotes)
+	setStr(v, "append-notes", c.AppendNotes)
+	setStr(v, "when", c.When)
+	setStr(v, "deadline", c.Deadline)
+	setStr(v, "tags", c.Tags)
+	setStr(v, "add-tags", c.AddTags)
+	setBool(v, "completed", c.Completed)
+	setBool(v, "canceled", c.Canceled)
+	setBool(v, "duplicate", c.Duplicate)
+	setBool(v, "reveal", c.Reveal)
+	return v, nil
+}
+
+type UpdateParams struct {
+	UpdateCommon
+
 	Checklist        *string
 	PrependChecklist *string
 	AppendChecklist  *string
@@ -170,49 +229,13 @@ type UpdateParams struct {
 	ListID           *string
 	Heading          *string
 	HeadingID        *string
-	Completed        bool
-	Canceled         bool
-	Duplicate        bool
-	Reveal           bool
 }
 
 func UpdateTask(params UpdateParams) error {
-	if params.ID == "" {
-		return fmt.Errorf("update: task id is required")
-	}
-	if params.AuthToken == "" {
-		return fmt.Errorf("update: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once")
-	}
-	if err := validateUpdate(params); err != nil {
+	v, err := params.values("update", "task", validateUpdate(params))
+	if err != nil {
 		return err
 	}
-	if params.When != nil {
-		v, err := NormalizeWhen(*params.When)
-		if err != nil {
-			return err
-		}
-		params.When = &v
-	}
-	if params.Deadline != nil {
-		v, err := NormalizeDeadline(*params.Deadline)
-		if err != nil {
-			return err
-		}
-		params.Deadline = &v
-	}
-
-	v := url.Values{}
-	v.Set("id", params.ID)
-	v.Set("auth-token", params.AuthToken)
-
-	setStr(v, "title", params.Title)
-	setStr(v, "notes", params.Notes)
-	setStr(v, "prepend-notes", params.PrependNotes)
-	setStr(v, "append-notes", params.AppendNotes)
-	setStr(v, "when", params.When)
-	setStr(v, "deadline", params.Deadline)
-	setStr(v, "tags", params.Tags)
-	setStr(v, "add-tags", params.AddTags)
 	setStr(v, "checklist-items", params.Checklist)
 	setStr(v, "prepend-checklist-items", params.PrependChecklist)
 	setStr(v, "append-checklist-items", params.AppendChecklist)
@@ -220,11 +243,6 @@ func UpdateTask(params UpdateParams) error {
 	setStr(v, "list-id", params.ListID)
 	setStr(v, "heading", params.Heading)
 	setStr(v, "heading-id", params.HeadingID)
-	setBool(v, "completed", params.Completed)
-	setBool(v, "canceled", params.Canceled)
-	setBool(v, "duplicate", params.Duplicate)
-	setBool(v, "reveal", params.Reveal)
-
 	return openThingsURL("update", v)
 }
 
@@ -250,69 +268,19 @@ func ImportJSON(data, authToken string, reveal bool) error {
 }
 
 type UpdateProjectParams struct {
-	ID        string
-	AuthToken string
+	UpdateCommon
 
-	Title        *string
-	Notes        *string
-	PrependNotes *string
-	AppendNotes  *string
-	When         *string
-	Deadline     *string
-	Tags         *string
-	AddTags      *string
-	Area         *string
-	AreaID       *string
-	Completed    bool
-	Canceled     bool
-	Duplicate    bool
-	Reveal       bool
+	Area   *string
+	AreaID *string
 }
 
 func UpdateProject(params UpdateProjectParams) error {
-	if params.ID == "" {
-		return fmt.Errorf("update-project: project id is required")
-	}
-	if params.AuthToken == "" {
-		return fmt.Errorf("update-project: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once")
-	}
-	if err := validateUpdateProject(params); err != nil {
+	v, err := params.values("update-project", "project", validateUpdateProject(params))
+	if err != nil {
 		return err
 	}
-	if params.When != nil {
-		v, err := NormalizeWhen(*params.When)
-		if err != nil {
-			return err
-		}
-		params.When = &v
-	}
-	if params.Deadline != nil {
-		v, err := NormalizeDeadline(*params.Deadline)
-		if err != nil {
-			return err
-		}
-		params.Deadline = &v
-	}
-
-	v := url.Values{}
-	v.Set("id", params.ID)
-	v.Set("auth-token", params.AuthToken)
-
-	setStr(v, "title", params.Title)
-	setStr(v, "notes", params.Notes)
-	setStr(v, "prepend-notes", params.PrependNotes)
-	setStr(v, "append-notes", params.AppendNotes)
-	setStr(v, "when", params.When)
-	setStr(v, "deadline", params.Deadline)
-	setStr(v, "tags", params.Tags)
-	setStr(v, "add-tags", params.AddTags)
 	setStr(v, "area", params.Area)
 	setStr(v, "area-id", params.AreaID)
-	setBool(v, "completed", params.Completed)
-	setBool(v, "canceled", params.Canceled)
-	setBool(v, "duplicate", params.Duplicate)
-	setBool(v, "reveal", params.Reveal)
-
 	return openThingsURL("update-project", v)
 }
 
