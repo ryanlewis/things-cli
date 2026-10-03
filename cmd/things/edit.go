@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -56,7 +58,7 @@ type EditCmd struct {
 }
 
 func (c *EditCmd) Run(d *Deps) error {
-	return runEdit(d, c.Task, taskEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), c.checklistSet(), func(u things.UpdateCommon) error {
+	return runEdit(d, c.Task, taskEdit, &c.commonEditFlags, &c.editStatusFlags, c.checkOwn, c.checklistSet(), func(u things.UpdateCommon) error {
 		return things.UpdateTask(things.UpdateParams{
 			UpdateCommon:     u,
 			Checklist:        expandNewlinesPtr(c.Checklist),
@@ -70,12 +72,68 @@ func (c *EditCmd) Run(d *Deps) error {
 	})
 }
 
-// ownFieldsSet reports whether any of this command's own field flags is set.
-// None of them is in coveredFields; runEdit adds the shared ones. Every field
-// flag belongs either here, in commonEditFlags.uncoveredSet, or in covered,
-// so a new one cannot be missed by changesFields and still pass certainNoOp.
-func (c *EditCmd) ownFieldsSet() bool {
-	return anySet(c.Checklist, c.PrependChecklist, c.AppendChecklist, c.List, c.ListID, c.Heading, c.HeadingID)
+// checkOwn reports whether any of this command's own field flags may change
+// the task. None of them is in coveredFields; runEdit adds the shared ones.
+// Every field flag belongs either here, in commonEditFlags.uncoveredSet, or in
+// covered, so a new one cannot be missed by changesFields and still pass
+// certainNoOp. A move Things will drop (checkMove) does not count.
+func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
+	return c.checkMove(d, database, task) || c.checklistSet()
+}
+
+// checkMove warns when Things will not move the task where --list and
+// --heading say, sends a uuid given to --list as list-id, and reports whether
+// the move flags may change the task. Checked in Things 3 with
+// things:///update: a list or heading title is matched ignoring case but not
+// surrounding space, and a uuid only as list-id. An unknown list leaves the
+// to-do where it is. An unknown heading in a known list moves it to the list
+// with no heading. A heading alone is looked up in the to-do's own project,
+// and left out when it is not there. Those are reported as no change; an
+// unknown list with a heading still counts as one, as that was not checked.
+// A database that cannot be read gives no warning here, and the move counts as
+// a change.
+func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
+	if c.HeadingID != nil || c.List == nil && c.ListID == nil && c.Heading == nil {
+		return anySet(c.List, c.ListID, c.HeadingID)
+	}
+	heading := ""
+	if c.Heading != nil {
+		heading = *c.Heading
+	}
+	switch {
+	case c.List != nil:
+		list := *c.List
+		target, found, err := database.AddTarget(list, heading)
+		switch {
+		case err != nil:
+		case target == "":
+			fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; the to-do will stay where it is\n", list)
+			return c.ListID != nil || c.Heading != nil
+		case target == strings.TrimSpace(list) && c.ListID == nil:
+			c.List, c.ListID = nil, &target
+		}
+		if err == nil && c.Heading != nil && !found {
+			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
+		}
+	case c.ListID != nil:
+		if c.Heading == nil {
+			return true
+		}
+		target, found, err := database.AddTarget(*c.ListID, heading)
+		if err == nil && target != "" && !found {
+			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", target, heading)
+		}
+	case task.ProjectUUID == "":
+		fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list: the to-do is not in a project, so Things will leave it where it is\n", heading)
+		return false
+	default:
+		target, found, err := database.AddTarget(task.ProjectUUID, heading)
+		if err == nil && target != "" && !found {
+			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will leave the to-do where it is\n", task.ProjectTitle, heading)
+			return false
+		}
+	}
+	return true
 }
 
 // checklistSet reports whether any checklist flag is set.
@@ -109,12 +167,13 @@ var (
 
 // runEdit is the shared Run of `edit` and `project edit`: resolve ref, refuse
 // the wrong kind of item and any change Things drops on repeating items,
-// check the tags, then send the write and confirm it with applyEdit. ownSet
-// says whether the command set any of its own field flags, none of which is
-// in coveredFields, and checklist whether it set a checklist flag, which
-// only `edit` has. write sends the update, given the shared params with the
-// item's id and the auth token filled in.
-func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, ownSet, checklist bool, write func(things.UpdateCommon) error) error {
+// check the tags and the command's own flags, then send the write and confirm
+// it with applyEdit. checkOwn warns about the command's own field flags, none
+// of which is in coveredFields, and reports whether they may change the item.
+// checklist says whether the command set a checklist flag, which only `edit`
+// has. write sends the update, given the shared params with the item's id and
+// the auth token filled in.
+func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, checkOwn func(*Deps, *db.DB, *model.Task) bool, checklist bool, write func(things.UpdateCommon) error) error {
 	database, err := d.Database()
 	if err != nil {
 		return err
@@ -142,6 +201,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	if err != nil {
 		return err
 	}
+	ownSet := checkOwn(d, database, task)
 
 	token := authToken(d, database)
 	update := func() error {

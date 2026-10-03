@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -125,7 +126,8 @@ func TestDroppedFieldEditFails(t *testing.T) {
 	for _, args := range cases {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fastVerify(t)
-			database, _ := seedWritable(t)
+			database, sqlDB := seedWritable(t)
+			dbtest.NewFixture(t, sqlDB).Area("area-1", "Home", 1)
 			stubExecDropping(t)
 
 			_, err := runOut(t, database, args...)
@@ -374,6 +376,7 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 				`INSERT INTO TMTag (uuid, title) VALUES ('tag-1', 'Errand'), ('tag-2', 'Urgent'), ('tag-3', 'Home')`,
 				`INSERT INTO TMTaskTag (tasks, tags) VALUES ('one-1', 'tag-1'), ('one-1', 'tag-2')`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('two-1', 'Undated', 0, 0, 0, 1)`,
+				`INSERT INTO TMArea (uuid, title, "index") VALUES ('area-1', 'Home', 1)`,
 			}
 			for _, s := range stmts {
 				if _, err := sqlDB.Exec(s); err != nil {
@@ -515,5 +518,128 @@ func TestEditReadsTagListOnce(t *testing.T) {
 	_, _ = runOut(t, db.NewFromSQL(sqlDB), "edit", "one-1", "--add-tags", "Errand,Ghost")
 	if tagReads != 1 {
 		t.Errorf("read the tag list %d times, want once", tagReads)
+	}
+}
+
+// Things matches an update's list, heading and area titles ignoring case but
+// not surrounding space. When nothing matches it leaves the item where it is,
+// and drops a heading it cannot find, all without a word. The edit warns on
+// stderr when that will happen and still sends the write. A move Things will
+// drop is no change, so an edit made only of one prints the item at once
+// rather than waiting for a change that never comes; anything else still
+// waits, which the dropping stub turns into a failure.
+func TestEditWarnsOnUnresolvedMove(t *testing.T) {
+	cases := []struct {
+		name     string
+		args     []string
+		want     string // "" for no warning
+		noChange bool
+	}{
+		{"knownList", []string{"edit", "one-1", "--list", "tools"}, "", false},
+		{"knownArea", []string{"edit", "one-1", "--list", "Personal"}, "", false},
+		{"listUUID", []string{"edit", "one-1", "--list", "proj-1"}, "", false},
+		{"knownHeading", []string{"edit", "one-1", "--list", "Tools", "--heading", "setup"}, "", false},
+		{"unknownList", []string{"edit", "one-1", "--list", "Nowhere"}, `no open project or area called "Nowhere"; the to-do will stay where it is`, true},
+		{"paddedList", []string{"edit", "one-1", "--list", " Tools "}, `no open project or area called " Tools "`, true},
+		{"completedProject", []string{"edit", "one-1", "--list", "Old"}, `no open project or area called "Old"`, true},
+		{"unknownListAndTitle", []string{"edit", "one-1", "--list", "Nowhere", "--title", "Post the letter"}, `no open project or area called "Nowhere"`, false},
+		{"unknownListAndHeading", []string{"edit", "one-1", "--list", "Nowhere", "--heading", "Setup"}, `no open project or area called "Nowhere"`, false},
+		{"unknownHeading", []string{"edit", "one-1", "--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will move the to-do there without a heading`, false},
+		{"paddedHeading", []string{"edit", "one-1", "--list", "Tools", "--heading", " Setup "}, `"Tools" has no heading " Setup "`, false},
+		{"unknownHeadingInListID", []string{"edit", "one-1", "--list-id", "proj-1", "--heading", "Later"}, `"proj-1" has no heading "Later"`, false},
+		{"knownHeadingInListID", []string{"edit", "one-1", "--list-id", "proj-1", "--heading", "Setup"}, "", false},
+		{"unknownHeadingInListUUID", []string{"edit", "one-1", "--list", "proj-1", "--heading", "Later"}, `"proj-1" has no heading "Later"`, false},
+		{"headingInAreaUUID", []string{"edit", "one-1", "--list", "area-1", "--heading", "Setup"}, `"area-1" has no heading "Setup"`, false},
+		{"headingOnlyKnown", []string{"edit", "tool-1", "--heading", "SETUP"}, "", false},
+		{"headingOnlyUnknown", []string{"edit", "tool-1", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will leave the to-do where it is`, true},
+		{"headingOnlyNoProject", []string{"edit", "one-1", "--heading", "Setup"}, `--heading "Setup" needs --list: the to-do is not in a project, so Things will leave it where it is`, true},
+		{"headingID", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "head-1"}, "", false},
+		{"projectKnownArea", []string{"project", "edit", "repproj-1", "--area", "personal"}, "", false},
+		{"projectAreaUUID", []string{"project", "edit", "repproj-1", "--area", "area-1"}, "", false},
+		{"projectUnknownArea", []string{"project", "edit", "repproj-1", "--area", "Nowhere"}, `no area called "Nowhere"; the project will stay where it is`, true},
+		{"projectPaddedArea", []string{"project", "edit", "repproj-1", "--area", " Personal "}, `no area called " Personal "`, true},
+		{"projectUnknownAreaAndTitle", []string{"project", "edit", "repproj-1", "--area", "Nowhere", "--title", "Monthly review"}, `no area called "Nowhere"`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Project("proj-1", "Tools", 5)
+			fx.Project("proj-done", "Old", 6, dbtest.Status(model.StatusCompleted))
+			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+			fx.Todo("tool-1", "Oil hinges", 7, dbtest.Anytime(), dbtest.InProject("proj-1"))
+			calls := stubExecDropping(t)
+
+			_, stderr, err := runStreams(t, database, tc.args...)
+			if *calls != 1 {
+				t.Errorf("issued %d writes, want the URL sent once either way", *calls)
+			}
+			if tc.noChange {
+				if err != nil {
+					t.Fatalf("%v: %v — a move Things will drop must not wait for a change", tc.args, err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "did not apply") {
+				t.Fatalf("%v = %v, want the read-back to wait and fail", tc.args, err)
+			}
+			if tc.want == "" {
+				if strings.Contains(stderr, "warning: ") {
+					t.Errorf("stderr = %q, want no warning", stderr)
+				}
+				return
+			}
+			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
+			}
+		})
+	}
+}
+
+// Things matches an update's list and area by title only, so a uuid left the
+// item where it was. A uuid of an open project or area now goes to Things as
+// list-id or area-id; a title still goes as list or area.
+func TestEditSendsUUIDAsListID(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"projectUUID", []string{"edit", "one-1", "--list", "proj-1"}, "list-id=proj-1"},
+		{"paddedUUID", []string{"edit", "one-1", "--list", " proj-1 "}, "list-id=proj-1"},
+		{"areaUUID", []string{"edit", "one-1", "--list", "area-1"}, "list-id=area-1"},
+		{"title", []string{"edit", "one-1", "--list", "Tools"}, "list=Tools"},
+		{"unknown", []string{"edit", "one-1", "--list", "Nowhere"}, "list=Nowhere"},
+		{"projectAreaUUID", []string{"project", "edit", "repproj-1", "--area", "area-1"}, "area-id=area-1"},
+		{"projectPaddedAreaUUID", []string{"project", "edit", "repproj-1", "--area", " area-1 "}, "area-id=area-1"},
+		{"projectAreaTitle", []string{"project", "edit", "repproj-1", "--area", "Personal"}, "area=Personal"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Project("proj-1", "Tools", 5)
+			var url string
+			prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+				url = args[len(args)-1]
+				return exec.Command("true")
+			})
+			t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+			_, _, _ = runStreams(t, database, append([]string{"--no-verify"}, tc.args...)...)
+			params := strings.Split(url[strings.Index(url, "?")+1:], "&")
+			if !slices.Contains(params, tc.want) {
+				t.Errorf("url = %q, want %s", url, tc.want)
+			}
+			if key, _, _ := strings.Cut(tc.want, "-id="); key != tc.want {
+				for _, p := range params {
+					if strings.HasPrefix(p, key+"=") {
+						t.Errorf("url = %q, want no %s title beside %s-id", url, key, key)
+					}
+				}
+			}
+		})
 	}
 }

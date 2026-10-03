@@ -32,7 +32,7 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	}
 	// Things matches area by title only; a uuid has to go as area-id.
 	area, areaID := c.Area, ""
-	if id := projectAreaID(d, area); id != "" {
+	if id, _ := projectAreaID(d, area, "it will create the project with no area"); id != "" {
 		area, areaID = "", id
 	}
 	return applyAdd(d, model.TypeProject, c.Title, func() error {
@@ -52,20 +52,22 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 // projectAreaID returns area when it is the uuid of an area, which has to go
 // to Things as area-id, and warns when Things will not file the project under
 // any area. Things matches the title ignoring case but not surrounding space,
-// and when nothing matches it creates the project with no area without
-// reporting it. The add still goes ahead. A database that cannot be read gives
-// no warning here: the read-back reports that.
-func projectAreaID(d *Deps, area string) string {
+// and when nothing matches it goes ahead without the area and without
+// reporting it: add creates the project with no area, and update leaves it
+// where it is. fallback says which, for the warning. known is false only when
+// the warning was given. A database that cannot be read gives no warning here:
+// the read-back reports that.
+func projectAreaID(d *Deps, area, fallback string) (id string, known bool) {
 	if area == "" {
-		return ""
+		return "", true
 	}
 	database, err := d.Database()
 	if err != nil {
-		return ""
+		return "", true
 	}
 	areas, err := database.ListAreas()
 	if err != nil {
-		return ""
+		return "", true
 	}
 	// Not FindAreaUUID: it ignores surrounding space, and Things does not.
 	// Checked in Things 3 with " Personal " against an area called Personal,
@@ -74,14 +76,14 @@ func projectAreaID(d *Deps, area string) string {
 	for _, a := range areas {
 		// A uuid goes as area-id, which is sent trimmed.
 		if a.UUID == strings.TrimSpace(area) {
-			return a.UUID
+			return a.UUID, true
 		}
 		found = found || db.FoldCase(a.Title) == db.FoldCase(area)
 	}
 	if !found {
-		fmt.Fprintf(d.errOut(), "warning: Things has no area called %q; it will create the project with no area\n", area)
+		fmt.Fprintf(d.errOut(), "warning: Things has no area called %q; %s\n", area, fallback)
 	}
-	return ""
+	return "", found
 }
 
 type ProjectEditCmd struct {
@@ -96,7 +98,7 @@ type ProjectEditCmd struct {
 }
 
 func (c *ProjectEditCmd) Run(d *Deps) error {
-	return runEdit(d, c.Project, projectEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), false, func(u things.UpdateCommon) error {
+	return runEdit(d, c.Project, projectEdit, &c.commonEditFlags, &c.editStatusFlags, c.checkOwn, false, func(u things.UpdateCommon) error {
 		return things.UpdateProject(things.UpdateProjectParams{
 			UpdateCommon: u,
 			Area:         c.Area,
@@ -105,8 +107,17 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 	})
 }
 
-// ownFieldsSet reports whether any of this command's own field flags is set.
-// None of them is in coveredFields; runEdit adds the shared ones.
-func (c *ProjectEditCmd) ownFieldsSet() bool {
-	return anySet(c.Area, c.AreaID)
+// checkOwn reports whether any of this command's own field flags may change
+// the project. None of them is in coveredFields; runEdit adds the shared ones.
+// An --area Things cannot match is warned about and counts as no change, since
+// Things leaves the project where it is; an area uuid goes as area-id.
+func (c *ProjectEditCmd) checkOwn(d *Deps, _ *db.DB, _ *model.Task) bool {
+	if c.Area == nil || c.AreaID != nil {
+		return anySet(c.Area, c.AreaID)
+	}
+	id, known := projectAreaID(d, *c.Area, "the project will stay where it is")
+	if id != "" {
+		c.Area, c.AreaID = nil, &id
+	}
+	return known
 }

@@ -438,6 +438,25 @@ things edit 3 --when tomorrow
 things edit 3 --notes "From Holland & Barrett"
 things edit 3 --append-checklist "Almond too"
 things edit 3 --complete                 # also: --cancel, --duplicate, --reveal
+things edit 3 --list Tools --heading Setup
+```
+
+`--list` and `--heading` move the to-do. Things matches them the way it
+does for `add`: ignoring case but not surrounding space, and only against
+open projects and areas. `--list` also takes a UUID of an open project or
+area, which the CLI sends to Things as `list-id`; `--list-id` and
+`--heading-id` take UUIDs directly. `--heading` on its own looks in the
+project the to-do is already in. When nothing matches, Things does not
+complain: an unknown list leaves the to-do where it is, an unknown heading
+in a known list moves the to-do to that list with no heading, and an
+unknown heading on its own is ignored. `edit` warns on stderr when that
+will happen, then sends the edit anyway:
+
+```
+warning: Things has no open project or area called "Nowhere"; the to-do will stay where it is
+warning: "Tools" has no heading "Later"; Things will move the to-do there without a heading
+warning: "Tools" has no heading "Later"; Things will leave the to-do where it is
+warning: --heading "Later" needs --list: the to-do is not in a project, so Things will leave it where it is
 ```
 
 Things reports nothing back from an edit, so the CLI waits for the item's
@@ -469,7 +488,8 @@ An edit that sets every field to the value
 it already has is detected before the wait when every flag is `--title`,
 `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a
 `--deadline` date. Tags that do not exist in Things count as no change,
-since Things drops them, unless `--create-tags` creates them first. It
+since Things drops them, unless `--create-tags` creates them first. So
+does a move the warnings above say will leave the item where it is. It
 then prints the item straight away. Any other
 re-set value, `--when` included, still waits and reports the same error,
 so on that error check the item with `things show` before retrying.
@@ -496,7 +516,13 @@ way, pointing back at `things edit`.
 `--prepend-notes`/`--append-notes`, `--when`, `--deadline`, `--tags`,
 `--add-tags`, `--complete`, `--cancel`, `--duplicate`, `--reveal`) plus
 `--area`/`--area-id` to move the project. It has no checklist or
-heading flags.
+heading flags. `--area` takes an area name or UUID, matched as for
+`project add`; a UUID goes to Things as `area-id`. An area Things cannot
+match leaves the project where it is, and `project edit` warns:
+
+```
+warning: Things has no area called "Nowhere"; the project will stay where it is
+```
 
 ## Tags must already exist
 
