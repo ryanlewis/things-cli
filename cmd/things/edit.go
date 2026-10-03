@@ -9,9 +9,10 @@ import (
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
-type EditCmd struct {
-	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
-
+// commonEditFlags are the field flags `edit` and `project edit` share. They
+// come before each command's own field flags in --help, and editStatusFlags
+// after them, so the two structs keep the flags in their documented order.
+type commonEditFlags struct {
 	Title *string `help:"Replace title."`
 
 	Notes        *string `help:"Replace notes."`
@@ -23,6 +24,24 @@ type EditCmd struct {
 
 	Tags    *string `help:"Replace all tags (comma-separated)."`
 	AddTags *string `help:"Add tags (comma-separated)." name:"add-tags"`
+}
+
+// editStatusFlags are the status and action flags `edit` and `project edit`
+// share, with the tag policy flags. Each command names its item with
+// set:"item=..." on the embed, so the help reads "Mark the task as completed."
+type editStatusFlags struct {
+	Complete  bool `help:"Mark the ${item} as completed." xor:"status"`
+	Cancel    bool `help:"Mark the ${item} as canceled." xor:"status"`
+	Duplicate bool `help:"Duplicate the ${item} before applying edits."`
+	Reveal    bool `help:"Reveal the ${item} in Things after editing."`
+
+	TagFlags
+}
+
+type EditCmd struct {
+	Task string `arg:"" required:"" help:"Task title, UUID, or numeric index from last list."`
+
+	commonEditFlags `embed:""`
 
 	Checklist        *string `help:"Replace checklist items (newline-separated)."`
 	PrependChecklist *string `help:"Prepend checklist items (newline-separated)." name:"prepend-checklist"`
@@ -33,66 +52,13 @@ type EditCmd struct {
 	Heading   *string `help:"Set heading within project by name."`
 	HeadingID *string `help:"Set heading by UUID." name:"heading-id"`
 
-	Complete  bool `help:"Mark the task as completed." xor:"status"`
-	Cancel    bool `help:"Mark the task as canceled." xor:"status"`
-	Duplicate bool `help:"Duplicate the task before applying edits."`
-	Reveal    bool `help:"Reveal the task in Things after editing."`
-
-	TagFlags
+	editStatusFlags `embed:"" set:"item=task"`
 }
 
 func (c *EditCmd) Run(d *Deps) error {
-	database, err := d.Database()
-	if err != nil {
-		return err
-	}
-	task, err := resolveTask(d, c.Task, database)
-	if err != nil {
-		return err
-	}
-	// resolveTask returns projects too, and things:///update cannot address
-	// one: Things answers a project id with a modal "does not exist" dialog
-	// and changes nothing (issue #189). Refuse before anything is opened
-	// rather than routing to update-project, which would silently drop the
-	// task-only flags (checklist, list, heading).
-	if task.Type == model.TypeProject {
-		return &wrongKindError{
-			Token: "not a task",
-			Kind:  "project",
-			Query: c.Task,
-			UUID:  task.UUID,
-			Title: task.Title,
-			Retry: "things project edit",
-		}
-	}
-	if err := checkRepeating(task, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
-		return err
-	}
-	// After checkRepeating: no point warning about tags on an edit Things
-	// is going to refuse anyway.
-	if err := verifyTagStrings(d, c.TagFlags, c.Tags, c.AddTags); err != nil {
-		return err
-	}
-
-	token := authToken(d, database)
-	update := func() error {
+	return runEdit(d, c.Task, taskEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), func(u things.UpdateCommon) error {
 		return things.UpdateTask(things.UpdateParams{
-			UpdateCommon: things.UpdateCommon{
-				ID:           task.UUID,
-				AuthToken:    token,
-				Title:        c.Title,
-				Notes:        c.Notes,
-				PrependNotes: c.PrependNotes,
-				AppendNotes:  c.AppendNotes,
-				When:         c.When,
-				Deadline:     c.Deadline,
-				Tags:         c.Tags,
-				AddTags:      c.AddTags,
-				Completed:    c.Complete,
-				Canceled:     c.Cancel,
-				Duplicate:    c.Duplicate,
-				Reveal:       c.Reveal,
-			},
+			UpdateCommon:     u,
 			Checklist:        expandNewlinesPtr(c.Checklist),
 			PrependChecklist: expandNewlinesPtr(c.PrependChecklist),
 			AppendChecklist:  expandNewlinesPtr(c.AppendChecklist),
@@ -101,32 +67,120 @@ func (c *EditCmd) Run(d *Deps) error {
 			Heading:          c.Heading,
 			HeadingID:        c.HeadingID,
 		})
+	})
+}
+
+// ownFieldsSet reports whether any of this command's own field flags is set.
+// None of them is in coveredFields; runEdit adds the shared ones. Every field
+// flag belongs either here, in commonEditFlags.uncoveredSet, or in covered,
+// so a new one cannot be missed by changesFields and still pass certainNoOp.
+func (c *EditCmd) ownFieldsSet() bool {
+	return anySet(c.Checklist, c.PrependChecklist, c.AppendChecklist, c.List, c.ListID, c.Heading, c.HeadingID)
+}
+
+// editKind is what differs between `edit` and `project edit` before the
+// write: which item type the command addresses, and the wrongKindError for
+// the other one.
+type editKind struct {
+	project bool
+	token   string
+	other   string
+	retry   string
+}
+
+var (
+	// things:///update cannot address a project: Things answers a project id
+	// with a modal "does not exist" dialog and changes nothing (issue #189).
+	// Refuse before anything is opened rather than routing to update-project,
+	// which would silently drop the task-only flags (checklist, list,
+	// heading).
+	taskEdit = editKind{project: false, token: "not a task", other: "project", retry: "things project edit"}
+	// The mirror: a to-do would go to things:///update-project, which cannot
+	// address one (issue #191). Same structured error, so an agent can branch
+	// on the token in either direction rather than string-matching the
+	// message.
+	projectEdit = editKind{project: true, token: "not a project", other: "task", retry: "things edit"}
+)
+
+// runEdit is the shared Run of `edit` and `project edit`: resolve ref, refuse
+// the wrong kind of item and any change Things drops on repeating items,
+// check the tags, then send the write and confirm it with applyEdit. ownSet
+// says whether the command set any of its own field flags, none of which is
+// in coveredFields. write sends the update, given the shared params with the
+// item's id and the auth token filled in.
+func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, ownSet bool, write func(things.UpdateCommon) error) error {
+	database, err := d.Database()
+	if err != nil {
+		return err
 	}
-	changed := c.changesFields() && !c.certainNoOp(task)
-	return applyEdit(d, database, task, changed, c.Complete, c.Cancel, c.Duplicate, update)
+	task, err := resolveTask(d, ref, database)
+	if err != nil {
+		return err
+	}
+	if (task.Type == model.TypeProject) != kind.project {
+		return &wrongKindError{
+			Token: kind.token,
+			Kind:  kind.other,
+			Query: ref,
+			UUID:  task.UUID,
+			Title: task.Title,
+			Retry: kind.retry,
+		}
+	}
+	if err := checkRepeating(task, restrictedEdits(f.When, f.Deadline, s.Complete, s.Cancel, s.Duplicate)); err != nil {
+		return err
+	}
+	// After checkRepeating: no point warning about tags on an edit Things
+	// is going to refuse anyway.
+	if err := verifyTagStrings(d, s.TagFlags, f.Tags, f.AddTags); err != nil {
+		return err
+	}
+
+	token := authToken(d, database)
+	update := func() error {
+		return write(things.UpdateCommon{
+			ID:           task.UUID,
+			AuthToken:    token,
+			Title:        f.Title,
+			Notes:        f.Notes,
+			PrependNotes: f.PrependNotes,
+			AppendNotes:  f.AppendNotes,
+			When:         f.When,
+			Deadline:     f.Deadline,
+			Tags:         f.Tags,
+			AddTags:      f.AddTags,
+			Completed:    s.Complete,
+			Canceled:     s.Cancel,
+			Duplicate:    s.Duplicate,
+			Reveal:       s.Reveal,
+		})
+	}
+	uncovered := ownSet || f.uncoveredSet()
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered)
+	return applyEdit(d, database, task, changed, s.Complete, s.Cancel, s.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
-// leaves the task as it is, so there is no modification to wait for.
-func (c *EditCmd) certainNoOp(task *model.Task) bool {
-	return !c.uncoveredSet() && c.covered().unchanged(task)
+// leaves the item as it is, so there is no modification to wait for.
+// uncovered says whether any field flag outside coveredFields is set.
+func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool) bool {
+	return !uncovered && f.covered().unchanged(task)
 }
 
-// changesFields reports whether the edit sets any attribute besides the status.
-func (c *EditCmd) changesFields() bool {
-	return c.covered().set() || c.uncoveredSet()
+// changesFields reports whether the edit sets any attribute besides the
+// status. uncovered says whether any field flag outside coveredFields is set.
+func (f *commonEditFlags) changesFields(uncovered bool) bool {
+	return f.covered().set() || uncovered
 }
 
-func (c *EditCmd) covered() coveredFields {
-	return coveredFields{c.Title, c.Notes, c.Deadline, c.Tags, c.AddTags}
+func (f *commonEditFlags) covered() coveredFields {
+	return coveredFields{f.Title, f.Notes, f.Deadline, f.Tags, f.AddTags}
 }
 
-// uncoveredSet reports whether any field flag outside coveredFields is set.
-// Every field flag belongs either here or in covered, so a new one cannot be
-// missed by changesFields and still pass certainNoOp.
-func (c *EditCmd) uncoveredSet() bool {
-	return anySet(c.PrependNotes, c.AppendNotes, c.When, c.Checklist, c.PrependChecklist, c.AppendChecklist,
-		c.List, c.ListID, c.Heading, c.HeadingID)
+// uncoveredSet reports whether any shared field flag outside coveredFields is
+// set. runEdit adds the command's own flags (ownFieldsSet).
+func (f *commonEditFlags) uncoveredSet() bool {
+	return anySet(f.PrependNotes, f.AppendNotes, f.When)
 }
 
 // coveredFields are the edit flags whose effect can be predicted exactly from
