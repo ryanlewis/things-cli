@@ -55,12 +55,18 @@ func seedTasks(t *testing.T, d *DB) {
 func TestCompletableViews(t *testing.T) {
 	want := map[string]bool{"today": true, "anytime": true}
 	for view := range views {
-		if got := CompletableView(view); got != want[view] {
-			t.Errorf("CompletableView(%q) = %v, want %v", view, got, want[view])
+		if got := CompletableView(view, false); got != want[view] {
+			t.Errorf("CompletableView(%q, false) = %v, want %v", view, got, want[view])
+		}
+		// Naming a project adds the catch-all, which then lists the project's
+		// contents (issue #295), and nothing else.
+		wantNamed := want[view] || view == ViewProject
+		if got := CompletableView(view, true); got != wantNamed {
+			t.Errorf("CompletableView(%q, true) = %v, want %v", view, got, wantNamed)
 		}
 	}
-	if CompletableView("bogus") {
-		t.Error("CompletableView(\"bogus\") = true, want false")
+	if CompletableView("bogus", true) {
+		t.Error("CompletableView(\"bogus\", true) = true, want false")
 	}
 	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "today"}) {
 		t.Errorf("CompletableViewNames() = %v, want [anytime today]", got)
@@ -1206,6 +1212,62 @@ func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
 				t.Errorf("--project %s: got %v, want %v", tc.project, uuidsOf(got), tc.want)
 			}
 		})
+	}
+}
+
+// A named open project lists the to-dos closed today under --include-completed,
+// the way anytime does since issue #238: the app keeps them in the project,
+// struck through, until the day rolls over. Measured on 3 Oct 2026, AppleScript
+// `to dos of project id X` held every to-do closed that day in three open
+// projects, including two closed ahead of their date out of Upcoming, which
+// neither today nor anytime would hold (issue #295).
+func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
+	d, fx := newFixture(t)
+
+	stopToday := model.TimeToUnix(time.Now())
+	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
+	later := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 2)))
+	fx.Project("proj-open", "Live", 1)
+	fx.Heading("head", "Phase 1", 2, inProject("proj-open"))
+
+	fx.Todo("open-todo", "To do", 3, anytime(), inProject("proj-open"))
+	fx.Todo("done-today", "Done today", 4, anytime(), inProject("proj-open"), completed(stopToday))
+	fx.Todo("dropped-today", "Dropped today", 5, anytime(), inProject("proj-open"), cancelled(stopToday))
+	fx.Todo("done-ahead", "Done ahead", 6, somedayOn(later), inProject("proj-open"), completed(stopToday))
+	fx.Todo("done-under-heading", "Done under heading", 7, anytime(), underHeading("head"), completed(stopToday))
+	fx.Todo("done-yesterday", "Done yesterday", 8, anytime(), inProject("proj-open"), completed(stopYesterday))
+
+	plain, err := d.ListTasks("project", TaskFilter{Project: "proj-open"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(plain), []string{"open-todo"}) {
+		t.Errorf("--project proj-open: got %v, want [open-todo]", uuidsOf(plain))
+	}
+
+	// The one closed yesterday stays out: Things logged it when the day
+	// rolled over.
+	want := []string{"open-todo", "done-today", "dropped-today", "done-ahead", "done-under-heading"}
+	for _, project := range []string{"proj-open", "Live"} {
+		got, err := d.ListTasks("project", TaskFilter{Project: project, IncludeCompleted: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sameSet(uuidsOf(got), want) {
+			t.Errorf("--project %s --include-completed: got %v, want %v", project, uuidsOf(got), want)
+		}
+	}
+
+	// "Log Completed Now" files the day's closed items early, here as in
+	// anytime.
+	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
+	afterLog, err := d.ListTasks("project", TaskFilter{Project: "proj-open", IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(afterLog), []string{"open-todo"}) {
+		t.Errorf("after Log Completed Now: got %v, want [open-todo]", uuidsOf(afterLog))
 	}
 }
 

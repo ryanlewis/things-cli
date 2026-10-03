@@ -16,7 +16,7 @@ type ListCmd struct {
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
 
-	IncludeCompleted bool   `help:"On the today and anytime views, also show items closed today that Things hasn't logged out of the list yet (UI-parity). Not supported on other views."`
+	IncludeCompleted bool   `help:"On the today and anytime views, and with --project, also show items closed today that Things hasn't logged out of the list yet (UI-parity). Not supported on other views."`
 	On               string `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline. Mutually exclusive with --from/--to."`
 	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
 	To               string `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
@@ -52,11 +52,12 @@ func (c *ListCmd) Run(d *Deps) error {
 	}
 
 	// --include-completed only changes the views the app keeps a just-closed
-	// item visible in — today and anytime (issue #238). Reject it elsewhere
-	// (including when a filter defaults today → project) rather than silently
-	// ignoring it, matching how --on/--from/--to reject views.
-	if c.IncludeCompleted && !db.CompletableView(view) {
-		return fmt.Errorf("--include-completed is only supported on the %s views, not %q; name the view explicitly, e.g. `things today --project NAME`",
+	// item visible in — today and anytime (issue #238), and a named project's
+	// contents (issue #295). Reject it elsewhere (including a bare --area or
+	// --tag sweep) rather than silently ignoring it, matching how
+	// --on/--from/--to reject views.
+	if c.IncludeCompleted && !db.CompletableView(view, project != "") {
+		return fmt.Errorf("--include-completed is only supported on the %s views and with --project, not %q; name the view explicitly, e.g. `things today --area NAME`",
 			strings.Join(db.CompletableViewNames(), " and "), view)
 	}
 

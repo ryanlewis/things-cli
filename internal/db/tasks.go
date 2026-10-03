@@ -17,8 +17,9 @@ type TaskFilter struct {
 
 	// IncludeCompleted keeps completed/cancelled items that Things has not yet
 	// logged out of the list they are in (UI-parity). It reaches the views
-	// CompletableView reports — today and anytime — and without it those views
-	// return only open tasks. Ignored by every other view.
+	// CompletableView reports — today, anytime, and the catch-all when Project
+	// names a project — and without it those return only open tasks. Ignored
+	// by every other view.
 	IncludeCompleted bool
 
 	On   *model.ThingsDate
@@ -30,8 +31,15 @@ type TaskFilter struct {
 // The answer comes off the view's own spec, and it is the same field that
 // widens the status test when the flag is set, so the question the CLI asks
 // and the SQL it then runs cannot disagree.
-func CompletableView(view string) bool {
-	return views[view].supportsIncludeCompleted
+//
+// projectNamed is whether --project names a project. The catch-all view takes
+// the flag only then, because only then does it answer with the project's
+// contents (widensToProjectContents), and the app keeps a to-do closed today
+// in its project (issue #295). A bare --area or --tag sweep through the same
+// view still rejects it: the app's answer there was not measured.
+func CompletableView(view string, projectNamed bool) bool {
+	spec := views[view]
+	return spec.supportsIncludeCompleted || (projectNamed && spec.widensToProjectContents)
 }
 
 // CompletableViewNames lists those views in a stable order, for error text.
@@ -846,7 +854,18 @@ func ValidView(name string) bool {
 // The parent test is evaluated against the named project because --project
 // constrains p to it. When that project is open the clause reduces to the
 // ordinary open set, so `things --project <open project>` is unchanged.
-const closedProjectContents = "(" + parentClosedOrTrashed + " OR t.status = 0) AND t.trashed = 0 AND " + todoOrProject
+//
+// Under --include-completed an open project also lists the to-dos closed today
+// and not yet logged, through openOrJustClosed, so it cannot answer that
+// question differently from today and anytime. The app keeps such a to-do in
+// its project whatever list it was closed out of: measured on 3 Oct 2026,
+// `to dos of project id X` held all of them in three open projects, two closed
+// ahead of their date out of Upcoming among them (issue #295). The project is
+// named, so the closed-parent fold does not apply.
+func closedProjectContents(includeCompleted bool) string {
+	status := openOrJustClosed(whereOpts{includeCompleted: includeCompleted, projectNamed: true})
+	return "(" + parentClosedOrTrashed + " OR " + status + ") AND t.trashed = 0 AND " + todoOrProject
+}
 
 // parentClosedOrTrashed is true for a row whose parent project has been closed
 // or thrown away — parentClosed widened to take the trash in too, so the two
@@ -946,7 +965,7 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	// Trash goes the other way and keeps the guard — see its case below.
 	switch {
 	case opts.Project != "" && spec.widensToProjectContents:
-		where = closedProjectContents
+		where = closedProjectContents(opts.IncludeCompleted)
 	case opts.Project == "" || spec.keepsTrashedParentGuard:
 		// Trash keeps the guard even under --project. Its rows are the ones
 		// thrown away on their own account, and a to-do thrown away out of a
