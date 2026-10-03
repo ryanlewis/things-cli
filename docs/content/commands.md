@@ -334,17 +334,20 @@ see `--verify-timeout` under Editing).
 
 - If no such item appears, the command exits non-zero with `add not
   confirmed: …`. Things may have dropped it (check that Things3 is running)
-  or may be slow to save. Run `things search` for the title before retrying,
-  so a retry does not create a duplicate.
+  or may be slow to save. Run the `things search` command the error prints
+  before retrying, so a retry does not create a duplicate. It carries
+  `--db` and `--config` when the add was given them.
 - If more than one new item with that title is visible together when the
   add is read back (the same title added elsewhere at the same moment),
   the CLI does not guess. It prints `Sent to Things, not confirmed
   (more than one new item has this title): "Buy oat milk" (uuid1, uuid2)`
   and exits 0.
 - `--no-verify` (or `no_verify = true`) skips the read-back and prints
-  `Sent to Things, not confirmed (--no-verify): "Buy oat milk"`. If the
-  database cannot be read, the item is still sent, with a warning, and the
-  line says `(database unreadable)`.
+  `Sent to Things, not confirmed (--no-verify): "Buy oat milk"`. If no
+  read of the database works, the item is still sent, with one warning
+  (the tag check's, when `--tags` was given), and the line says
+  `(database unreadable)`. A read that fails after earlier reads worked
+  does not count: the add is then not confirmed, as above.
 
 Under `--json` the unconfirmed cases print `{"title": …, "confirmed":
 false, "reason": "no-verify"|"unreadable"|"ambiguous"}`, with
