@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # One pin for both govulncheck runs below. Renovate bumps it through the
+  # custom manager in renovate.json.
+  # renovate: datasource=go depName=golang.org/x/vuln
+  GOVULNCHECK_VERSION: v1.8.0
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -42,7 +48,7 @@ jobs:
       # the merge. The govulncheck-sarif job below is the same scan for the
       # Security tab — SARIF mode never fails the build, hence both.
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
 
   govulncheck-sarif:
     runs-on: ubuntu-latest
@@ -50,11 +56,19 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          output-format: sarif
-          output-file: govulncheck.sarif
+          cache: true
+
+      # Run directly rather than through golang/govulncheck-action, which
+      # always installs govulncheck@latest and has no input to pin it.
+      - name: govulncheck (SARIF)
+        run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" -format sarif ./... > govulncheck.sarif
 
       - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
