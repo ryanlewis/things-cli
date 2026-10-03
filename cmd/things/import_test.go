@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -136,5 +137,23 @@ func TestRunImportEmptyPayload(t *testing.T) {
 	err := runWith(t, database, "import", "--file", path)
 	if err == nil || !strings.Contains(err.Error(), "empty payload") {
 		t.Fatalf("expected empty-payload error, got %v", err)
+	}
+}
+
+// import reads its payload through Deps.Stdin, like the prompts do, so a
+// caller that supplies stdin is the one read.
+func TestRunImportReadsDepsStdin(t *testing.T) {
+	database := seedFullDB(t)
+	captured := stubExec(t)
+	stubTTY(t, false)
+	payload := `[{"type":"project","attributes":{"title":"P"}}]`
+	d := &Deps{DB: database, Stdin: strings.NewReader(payload), Stdout: io.Discard, Stderr: io.Discard}
+
+	if err := (&ImportCmd{}).Run(d); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	parsed, _ := url.Parse((*captured)[2])
+	if got := parsed.Query().Get("data"); got != payload {
+		t.Errorf("data = %q, want %q", got, payload)
 	}
 }

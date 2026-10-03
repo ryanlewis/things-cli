@@ -72,6 +72,10 @@ type Deps struct {
 	Stderr io.Writer
 	Stdin  io.Reader
 
+	// TTY reports whether stdin is a terminal. Nil means the real check on
+	// os.Stdin; see stdinTTY.
+	TTY func() bool
+
 	// NoVerify skips the post-write read-back on complete/cancel and edits.
 	NoVerify bool
 
@@ -175,7 +179,16 @@ func (d *Deps) in() io.Reader {
 // machine is reading stdout, so a prompt would hang it — the flag implies
 // non-interactive regardless of whether stdin is a terminal (issue #152).
 func (d *Deps) interactive() bool {
-	return !d.JSON && isInteractive()
+	return !d.JSON && d.stdinTTY()
+}
+
+// stdinTTY reports whether stdin is a terminal, defaulting to the real check
+// the way in defaults to os.Stdin.
+func (d *Deps) stdinTTY() bool {
+	if d.TTY == nil {
+		return isInteractive()
+	}
+	return d.TTY()
 }
 
 // Database returns the lazily-opened DB. Subsequent calls return the same
@@ -397,9 +410,9 @@ func flagAsksJSON(flag string) (asks, takesValue bool) {
 	return false, false
 }
 
-// isInteractive reports whether stdin is a terminal. It is a var so tests can
-// stub the terminal check — see (*Deps).interactive, which is what callers
-// should use.
+// isInteractive reports whether os.Stdin is a terminal. It is a var so tests
+// can stub the terminal check — see (*Deps).interactive and stdinTTY, which
+// are what callers should use.
 var isInteractive = func() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
