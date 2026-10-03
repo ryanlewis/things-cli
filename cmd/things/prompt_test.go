@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -71,5 +72,23 @@ func TestCacheWarningGoesToDepsStderr(t *testing.T) {
 	cacheTaskUUIDs(&Deps{Stderr: &stderr}, "today", nil)
 	if !strings.Contains(stderr.String(), "warning: failed to cache task list") {
 		t.Errorf("stderr = %q, want the cache warning", stderr.String())
+	}
+}
+
+// Whether stdin is a terminal comes from Deps.TTY when it is set, the way
+// Stdin and Stderr do, so a caller can say it without touching the global.
+func TestInteractiveUsesDepsTTY(t *testing.T) {
+	stubTTY(t, false)
+	tty := func() bool { return true }
+	d := &Deps{TTY: tty, Stdin: strings.NewReader("y\n"), Stderr: &bytes.Buffer{}}
+	if !confirmAction(d, "Go?") {
+		t.Errorf("confirmAction = false, want the injected terminal to prompt and read y")
+	}
+	if (&Deps{TTY: tty, JSON: true}).interactive() {
+		t.Errorf("interactive under --json = true, want false")
+	}
+	err := (&ImportCmd{}).Run(&Deps{DB: seedFullDB(t), TTY: tty, Stdin: strings.NewReader("[]"), Stdout: io.Discard, Stderr: io.Discard})
+	if err == nil || !strings.Contains(err.Error(), "no JSON on stdin") {
+		t.Errorf("import on an injected terminal = %v, want the no-JSON error", err)
 	}
 }

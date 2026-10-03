@@ -32,10 +32,10 @@ func (c *ImportCmd) Run(d *Deps) error {
 	} else {
 		// Not d.interactive(): under --json it is false even on a terminal,
 		// and the import would block reading the keyboard.
-		if isInteractive() {
+		if d.stdinTTY() {
 			return fmt.Errorf("no JSON on stdin and no --file given")
 		}
-		data, err = io.ReadAll(os.Stdin)
+		data, err = io.ReadAll(d.in())
 		if err != nil {
 			return fmt.Errorf("reading stdin: %w", err)
 		}
