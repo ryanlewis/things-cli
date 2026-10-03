@@ -261,12 +261,22 @@ func (c *ShowCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
+	if c.Agent {
+		items, err := database.GetChecklistItems(task.UUID)
+		if err != nil {
+			return err
+		}
+		return showAgentBrief(d, database, task, items)
+	}
+	return printItem(d, database, task)
+}
+
+// printItem prints task with its checklist, as `things show` does. A
+// confirmed edit prints through it too, so the two outputs cannot drift.
+func printItem(d *Deps, database *db.DB, task *model.Task) error {
 	items, err := database.GetChecklistItems(task.UUID)
 	if err != nil {
 		return err
-	}
-	if c.Agent {
-		return showAgentBrief(d, database, task, items)
 	}
 	return output.PrintTaskWithChecklist(d.Stdout, task, items, d.JSON)
 }
