@@ -303,7 +303,11 @@ An item you tick off in Today, Anytime or Upcoming is not in `logbook` yet —
 Things keeps it where it was until the day rolls over, or until `things log`
 files it early, and `--include-completed` is how to see those on any of the
 three views. Anything closed outside them goes straight to `logbook`,
-including today's closes. `logbook` is disjoint from the other three, but they
+including today's closes. The exception is a task closed today inside a
+project in Someday or scheduled for later: `anytime` leaves out that
+project's tasks, as the app's Anytime does, and like the app's Logbook,
+`logbook` holds it back until the day is logged, so only its project listing
+has it. `logbook` is disjoint from the other three, but they
 are not disjoint from each other: a task scheduled for today sits in the
 Anytime bucket as well, and an undated one due later is in Anytime and
 Upcoming, so each comes back from two lists. None of the four is a whole day on
@@ -314,7 +318,9 @@ upcoming --include-completed -j` plus `things logbook -j` filtered on
 the overlapping ones twice. An agent reporting
 on history needs `logbook` alone. For one open project, `things --project
 <uuid> --include-completed -j` is the app's project page: its open tasks plus
-those closed today and not yet logged, from whichever list.
+those closed today and not yet logged, from whichever list. A day's sweep
+misses a task closed today inside a project in Someday or scheduled for
+later unless it adds that project's listing.
 
 A closed project is one `logbook` row, not a row plus its contents, and a
 trashed project is one `trash` row the same way — the app folds their tasks

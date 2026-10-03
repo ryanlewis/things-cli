@@ -60,7 +60,10 @@ unfiled items first, then areas, and inside an area its own loose tasks before
 its projects' — so plain output prints each project name once as a group header
 above its tasks. `anytime` carries no project rows of its own because every
 active project is trivially "anytime": listing them all would bury the tasks,
-so the app uses each project as a group header instead. `today` and `someday`
+so the app uses each project as a group header instead. Like the app, it
+leaves out the tasks of a project in Someday or scheduled for a later date,
+including those under one of its headings and those Today shows; `today` and
+`upcoming` still list theirs. `today` and `someday`
 group the same way but do list their project rows, because a project put in
 Today or Someday has actually been put somewhere. `someday` reaches only the
 first half of the arrangement: it carries no task with a parent project, so it
@@ -101,7 +104,10 @@ undated one due later is in both `anytime` and `upcoming`, so sweeping them
 means merging on `uuid`. One closed inside a project that is itself closed or
 trashed is in none of the unfiltered lists — not `logbook`, not `today`, not
 `anytime`, not `upcoming` — for the reason the next paragraph gives. Naming
-that project brings it back. `--include-completed` works on `today`, `anytime`
+that project brings it back. One closed today inside a project in Someday or
+scheduled for later, and not shown by `today` or `upcoming`, is in none of
+those lists either until Things logs it, as in the app, which shows it only on
+the project's page: `things --project <uuid> --include-completed` lists it. `--include-completed` works on `today`, `anytime`
 and `upcoming`; with a
 filter, name the view: `things today -p "Launch v2" --include-completed`
 returns the tasks of a closed "Launch v2" that closed today, rather than

@@ -208,7 +208,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # every active project is trivially anytime, so the app groups its tasks
     # under the project name instead of listing the project among them. Plain
     # output prints that name as the group header. To sweep projects, use
-    # `things projects`.
+    # `things projects`. anytime leaves out the tasks of a project in Someday
+    # or scheduled for later (headings included), as the app does; today and
+    # upcoming still list theirs.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
     # upcoming also lists an undated anytime task due after today, filed (and
@@ -224,7 +226,10 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # what was in it while open (a task closed ahead of its date, or an undated
     # one due later). logbook holds every other closed item, including things
     # closed today from the Inbox, so a closed item whose project is still open
-    # is either logged or still listed, never both. The three lists overlap
+    # is either logged or still listed, never both. One exception: a task
+    # closed today inside a project in Someday or scheduled for later, which
+    # no list shows, is held back from logbook until the day is logged, as in
+    # the app; only `--project <uuid> --include-completed` has it. The three lists overlap
     # each other though — a task scheduled for today is in the Anytime bucket
     # too, and an undated one due later is in anytime and upcoming — so for a
     # whole day's closes sweep all four, filter logbook on stopDate, and merge
@@ -240,7 +245,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # project's contents plus every task in it closed today and not yet logged,
     # as the app's project page shows them, whichever list each was closed out
     # of. That is contents rather than a list, so those rows also come back
-    # from today, anytime, upcoming or logbook. A bare --area/--tag sweep rejects the flag.
+    # from today, anytime, upcoming or logbook, except the deferred-project
+    # case above. A bare --area/--tag sweep rejects the flag.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

@@ -34,7 +34,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=project
 ARGS: []interface {}{"Launch v2", "Launch v2", "launch v2", 1, "Launch v2"}
@@ -72,7 +72,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=area
 ARGS: []interface {}{"Work", "work"}
@@ -110,7 +110,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=tag
 ARGS: []interface {}{"urgent"}
@@ -148,7 +148,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=on
 ARGS: []interface {}{132813696}
@@ -186,7 +186,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate = ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate = ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=from
 ARGS: []interface {}{132813696}
@@ -224,7 +224,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=to
 ARGS: []interface {}{132814464}
@@ -262,7 +262,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=from+to
 ARGS: []interface {}{132813696, 132814464}
@@ -300,7 +300,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=project+area+tag
 ARGS: []interface {}{"Launch v2", "Launch v2", "launch v2", 1, "Launch v2", "Work", "work", "urgent"}
@@ -338,7 +338,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=false filters=all
 ARGS: []interface {}{"Launch v2", "Launch v2", "launch v2", 1, "Launch v2", "Work", "work", "urgent", 132813696, 132814464}
@@ -376,7 +376,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND t.status = 0 AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=none
 ARGS: []interface {}(nil)
@@ -414,7 +414,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=project
 ARGS: []interface {}{"Launch v2", "Launch v2", "launch v2", 1, "Launch v2"}
@@ -452,7 +452,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime'))) AND t.trashed = 0 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime'))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=area
 ARGS: []interface {}{"Work", "work"}
@@ -490,7 +490,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=tag
 ARGS: []interface {}{"urgent"}
@@ -528,7 +528,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=on
 ARGS: []interface {}{132813696}
@@ -566,7 +566,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate = ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate = ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=from
 ARGS: []interface {}{132813696}
@@ -604,7 +604,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=to
 ARGS: []interface {}{132814464}
@@ -642,7 +642,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=from+to
 ARGS: []interface {}{132813696, 132814464}
@@ -680,7 +680,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') AND NOT (COALESCE(p.status, 0) IN (2, 3)))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND COALESCE(p.trashed, 0) = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=project+area+tag
 ARGS: []interface {}{"Launch v2", "Launch v2", "launch v2", 1, "Launch v2", "Work", "work", "urgent"}
@@ -718,7 +718,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime'))) AND t.trashed = 0 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime'))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=anytime includeCompleted=true filters=all
 ARGS: []interface {}{"Launch v2", "Launch v2", "launch v2", 1, "Launch v2", "Work", "work", "urgent", 132813696, 132814464}
@@ -756,7 +756,7 @@ LEFT JOIN TMArea a ON t.area = a.uuid
 LEFT JOIN TMArea pa ON p.area = pa.uuid
 LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
- WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime'))) AND t.trashed = 0 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
+ WHERE t.start = 1 AND (t.status = 0 OR (t.status IN (2, 3) AND COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime'))) AND t.trashed = 0 AND COALESCE(p.start, 1) != 2 AND t.type = 0 AND t."rt1_recurrenceRule" IS NULL AND p."rt1_recurrenceRule" IS NULL AND (p.uuid = ? OR p.title = ? OR (fold(p.title) LIKE ? ESCAPE '\' AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?))) AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ? ESCAPE '\') AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ? ESCAPE '\') AND t.startDate >= ? AND t.startDate <= ? GROUP BY t.uuid ORDER BY CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, COALESCE(a."index", pa."index", 0), CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, COALESCE(p."index", 0), t."index" ASC, t.uuid ASC
 
 ### view=deadlines includeCompleted=false filters=none
 ARGS: []interface {}(nil)
