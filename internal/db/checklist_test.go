@@ -51,10 +51,10 @@ func TestGetChecklistItemsEmpty(t *testing.T) {
 // repeated by the count, which a join onto the items would do.
 func TestListTasksCarriesChecklistProgress(t *testing.T) {
 	d, f := newFixture(t)
-	f.tag("g1", "home", 0)
-	f.todo("with", "Pack for the trip", 0, anytime())
-	f.tagged("with", "g1")
-	f.todo("without", "Water the plants", 1, anytime())
+	f.Tag("g1", "home", 0)
+	f.Todo("with", "Pack for the trip", 0, anytime())
+	f.Tagged("with", "g1")
+	f.Todo("without", "Water the plants", 1, anytime())
 	mustExec(t, d, `INSERT INTO TMChecklistItem (uuid, title, status, "index", task) VALUES
 		('c1', 'passport', 3, 0, 'with'),
 		('c2', 'charger',  0, 1, 'with'),

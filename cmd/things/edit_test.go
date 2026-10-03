@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -204,9 +205,7 @@ func TestEditWithNothingToChangeDoesNotWait(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fastVerify(t)
 			database, sqlDB := seedWritable(t)
-			if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('done-1', 'Filed', 0, 3, 0, 1)`); err != nil {
-				t.Fatalf("seed: %v", err)
-			}
+			dbtest.NewFixture(t, sqlDB).Todo("done-1", "Filed", 1, dbtest.Status(model.StatusCompleted), dbtest.Anytime())
 			stubExecDropping(t)
 
 			out, err := runOut(t, database, args...)

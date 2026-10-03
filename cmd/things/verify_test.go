@@ -36,20 +36,13 @@ func fastVerify(t *testing.T) {
 func seedWritable(t *testing.T) (*db.DB, *sql.DB) {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
-	stmts := []string{
-		`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`,
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, start, rt1_recurrenceRule)
-		 VALUES ('rep-1', 'Water plants', 0, 0, 0, 2, x'0102')`,
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, start)
-		 VALUES ('one-1', 'Post letter', 0, 0, 0, 2)`,
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, rt1_recurrenceRule)
-		 VALUES ('repproj-1', 'Weekly review', 1, 0, 0, x'0102')`,
+	if _, err := sqlDB.Exec(`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`); err != nil {
+		t.Fatalf("seed settings: %v", err)
 	}
-	for _, s := range stmts {
-		if _, err := sqlDB.Exec(s); err != nil {
-			t.Fatalf("seed %q: %v", s, err)
-		}
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("rep-1", "Water plants", 0, dbtest.Someday(), dbtest.Repeats())
+	fx.Todo("one-1", "Post letter", 1, dbtest.Someday())
+	fx.Project("repproj-1", "Weekly review", 2, dbtest.Repeats())
 	return db.NewFromSQL(sqlDB), sqlDB
 }
 

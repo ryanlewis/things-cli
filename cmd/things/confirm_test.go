@@ -18,16 +18,10 @@ import (
 func seedProject(t *testing.T) (*db.DB, *sql.DB) {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
-	stmts := []string{
-		`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`,
-		`INSERT INTO TMTask (uuid, title, type, status, trashed)
-		 VALUES ('proj-1', 'Chores', 1, 0, 0)`,
+	if _, err := sqlDB.Exec(`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`); err != nil {
+		t.Fatalf("seed settings: %v", err)
 	}
-	for _, s := range stmts {
-		if _, err := sqlDB.Exec(s); err != nil {
-			t.Fatalf("seed %q: %v", s, err)
-		}
-	}
+	dbtest.NewFixture(t, sqlDB).Project("proj-1", "Chores", 0)
 	return db.NewFromSQL(sqlDB), sqlDB
 }
 
