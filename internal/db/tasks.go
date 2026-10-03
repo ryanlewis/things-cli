@@ -427,8 +427,10 @@ const (
 	// out every to-do of a project in Someday or scheduled for a later date,
 	// in the project or under one of its headings, and even one Today shows.
 	// Measured on 3 Oct 2026 with test to-dos (issue #346). Both kinds of
-	// project are start = 2. COALESCE keeps an unparented to-do.
-	parentNotDeferred = "COALESCE(p.start, 1) != 2"
+	// project are start = 2. A start = 2 project whose day has come is not
+	// deferred any more, only not yet moved (scheduledArrived), so its to-dos
+	// stay (issue #363). COALESCE keeps an unparented to-do.
+	parentNotDeferred = "NOT (COALESCE(p.start, 1) = 2 AND (p.startDate IS NULL OR p.startDate > " + thingsToday + "))"
 	// notHeldInPlace is the Logbook's complement of what Things has not yet
 	// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosed, which it shares with the
 	// --include-completed views since #252, so it is defined with its pair.

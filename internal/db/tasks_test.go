@@ -2694,6 +2694,34 @@ func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
 	}
 }
 
+// A project in the same state is no longer deferred either: Anytime keeps
+// its to-dos, in the project and under its headings, as it does for any
+// project whose day has come. A project scheduled after today still hides
+// them (issue #363).
+func TestAnytimeKeepsToDosOfProjectNotYetMoved(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+
+	fx.Project("proj-stuck", "Project scheduled today, not yet moved", 1, somedayOn(today))
+	fx.Project("proj-tomorrow", "Project scheduled tomorrow", 2, somedayOn(tomorrow))
+	fx.Heading("head-stuck", "Heading", 3, anytime(), inProject("proj-stuck"))
+
+	fx.Todo("in-stuck", "In stuck project", 10, anytime(), inProject("proj-stuck"))
+	fx.Todo("in-stuck-heading", "Under stuck heading", 11, anytime(), underHeading("head-stuck"))
+	fx.Todo("in-tomorrow", "In tomorrow's project", 12, anytime(), inProject("proj-tomorrow"))
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"in-stuck", "in-stuck-heading"}; !sameSet(uuidsOf(got), want) {
+		t.Errorf("anytime: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
 // On a project's page the same row sorts with the to-dos for today, among
 // the Anytime ones by index, not with the scheduled ones (issue #363).
 func TestProjectPageOrdersNotYetMovedRowAsToday(t *testing.T) {
