@@ -56,7 +56,7 @@ type EditCmd struct {
 }
 
 func (c *EditCmd) Run(d *Deps) error {
-	return runEdit(d, c.Task, taskEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), func(u things.UpdateCommon) error {
+	return runEdit(d, c.Task, taskEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), c.checklistSet(), func(u things.UpdateCommon) error {
 		return things.UpdateTask(things.UpdateParams{
 			UpdateCommon:     u,
 			Checklist:        expandNewlinesPtr(c.Checklist),
@@ -76,6 +76,11 @@ func (c *EditCmd) Run(d *Deps) error {
 // so a new one cannot be missed by changesFields and still pass certainNoOp.
 func (c *EditCmd) ownFieldsSet() bool {
 	return anySet(c.Checklist, c.PrependChecklist, c.AppendChecklist, c.List, c.ListID, c.Heading, c.HeadingID)
+}
+
+// checklistSet reports whether any checklist flag is set.
+func (c *EditCmd) checklistSet() bool {
+	return anySet(c.Checklist, c.PrependChecklist, c.AppendChecklist)
 }
 
 // editKind is what differs between `edit` and `project edit` before the
@@ -106,9 +111,10 @@ var (
 // the wrong kind of item and any change Things drops on repeating items,
 // check the tags, then send the write and confirm it with applyEdit. ownSet
 // says whether the command set any of its own field flags, none of which is
-// in coveredFields. write sends the update, given the shared params with the
+// in coveredFields, and checklist whether it set a checklist flag, which
+// only `edit` has. write sends the update, given the shared params with the
 // item's id and the auth token filled in.
-func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, ownSet bool, write func(things.UpdateCommon) error) error {
+func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, ownSet, checklist bool, write func(things.UpdateCommon) error) error {
 	database, err := d.Database()
 	if err != nil {
 		return err
@@ -157,7 +163,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	}
 	uncovered := ownSet || f.uncoveredSet()
 	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, droppedTags(database, s.TagFlags, f.Tags, f.AddTags))
-	return applyEdit(d, database, task, changed, s.Complete, s.Cancel, s.Duplicate, update)
+	return applyEdit(d, database, task, changed, checklist, s.Complete, s.Cancel, s.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
