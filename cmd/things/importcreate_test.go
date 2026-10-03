@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"os/exec"
 	"strings"
 	"testing"
@@ -397,5 +399,62 @@ func TestImportReportsCreatedAndStatusFailuresTogether(t *testing.T) {
 		if !strings.Contains(p.Message, want) {
 			t.Errorf("message missing %q: %s", want, p.Message)
 		}
+	}
+}
+
+// An item the payload gives a creation-date is saved with that date, so the
+// read-back could never find it among the items created since the write.
+// It is reported as not checked, exits 0, and the rest are still read back.
+func TestImportCreatedWithCreationDateIsNotChecked(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk"})
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Old note","creation-date":"2020-01-01T09:00:00Z"}},
+	  {"type":"to-do","attributes":{"title":"Buy oat milk"}}
+	]`
+	out, _, err := runImportOut(t, database, payload)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	want := `Sent to Things, not checked (creation-date set): [0] "Old note"
+Created and confirmed: [1] "Buy oat milk" (new-1)
+`
+	if out != want {
+		t.Errorf("output =\n%s\nwant\n%s", out, want)
+	}
+
+	stubExecDropping(t)
+	out, _, err = runImportOut(t, database, `[{"type":"project","attributes":{"title":"Old","creation-date":"2020-01-01T09:00:00Z"}}]`, "--json")
+	if err != nil {
+		t.Fatalf("import --json: %v", err)
+	}
+	got := decodeCreated(t, out)
+	if len(got) != 1 || got[0].Confirmed || got[0].Reason != "creation-date" || got[0].Kind != "project" {
+		t.Errorf("got %+v, want one project not checked for its creation-date", got)
+	}
+}
+
+// An unreadable created item beside a failed import says why it is not
+// confirmed, rather than leaving an empty line in the error.
+func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
+	database, _ := seedWritable(t)
+	d := &Deps{DB: database, Stdout: io.Discard, Stderr: io.Discard}
+	creates := []importCreate{{path: "[1]", typ: model.TypeTask, title: "Buy oat milk"}}
+	created := readBackCreates(d, database, creates, createdSnapshot{}, errors.New("database is locked"), time.Millisecond)
+	err := &importVerifyError{
+		items:   []importVerifyItem{{Path: "[0]", err: errors.New("status change did not apply")}},
+		total:   1,
+		created: created,
+		search:  "things search",
+	}
+
+	want := `  Sent to Things, not confirmed (database unreadable): [1] "Buy oat milk"`
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error missing %q:\n%v", want, err)
+	}
+	if strings.Contains(err.Error(), "[1]: \n") || strings.HasSuffix(err.Error(), "[1]: ") {
+		t.Errorf("error has an empty line for the item:\n%v", err)
 	}
 }

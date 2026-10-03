@@ -84,6 +84,10 @@ type importCreate struct {
 	path  string
 	typ   model.TaskType
 	title string // trimmed
+	// dated is set when the payload gives the item a `creation-date`.
+	// Things saves it with that date, so it never shows up among the items
+	// created since the write and is not read back.
+	dated bool
 }
 
 func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
@@ -120,7 +124,8 @@ func importCreates(data []byte) []importCreate {
 		if title = strings.TrimSpace(title); title == "" {
 			return
 		}
-		creates = append(creates, importCreate{path: path, typ: typ, title: title})
+		_, dated := attrs["creation-date"]
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: dated})
 	})
 	return creates
 }
@@ -331,7 +336,8 @@ func (e *importVerifyError) Error() string {
 // uuid it was found under; an unconfirmed one carries the reason, as an
 // unconfirmed add does: "no-verify", "unreadable", "ambiguous" (candidates
 // lists the new items with its title), or "not-found" (candidates lists the
-// ones that did appear when fewer than the payload asked for did).
+// ones that did appear when fewer than the payload asked for did). An item
+// with a `creation-date` is not checked at all: reason "creation-date".
 type importCreated struct {
 	Path       string   `json:"path"`
 	Kind       string   `json:"kind"`
@@ -431,13 +437,13 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 
 	var snap createdSnapshot
 	var snapErr error
-	if len(plan.creates) > 0 {
-		var types []model.TaskType
-		for _, c := range plan.creates {
-			if !slices.Contains(types, c.typ) {
-				types = append(types, c.typ)
-			}
+	var types []model.TaskType
+	for _, c := range plan.creates {
+		if !c.dated && !slices.Contains(types, c.typ) {
+			types = append(types, c.typ)
 		}
+	}
+	if len(types) > 0 {
 		snap, snapErr = snapshotCreated(database, types)
 	}
 	if err := write(); err != nil {
@@ -471,18 +477,22 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 // and paired with the payload's items in the order Things saved them. More is
 // ambiguous and fewer is not found, both naming the new items that did
 // appear. A snapshot or read-back that could not read the database at all
-// leaves every item unconfirmed as unreadable, with a warning.
+// leaves every item unconfirmed as unreadable, with a warning. An item the
+// payload gives a creation-date is not looked for, and is reported as not
+// checked.
 func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, budget time.Duration) []importCreated {
 	if len(creates) == 0 {
 		return nil
 	}
 	want := map[createdKey]int{}
 	for _, c := range creates {
-		want[c.key()]++
+		if !c.dated {
+			want[c.key()]++
+		}
 	}
 	var found map[createdKey][]model.Task
 	err := snapErr
-	if err == nil {
+	if err == nil && len(want) > 0 {
 		var readOK bool
 		found, readOK, err = findCreated(database, snap, want, budget)
 		if readOK {
@@ -501,6 +511,8 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			uuids[n] = t.UUID
 		}
 		switch n := want[key]; {
+		case c.dated:
+			out[i].Reason = "creation-date"
 		case err != nil:
 			out[i].Reason = "unreadable"
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
@@ -521,7 +533,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.kind(), c.title, budget, strings.Join(uuids, ", "))
 		}
 	}
-	if err != nil && !d.dbWarned {
+	if err != nil && len(want) > 0 && !d.dbWarned {
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
 	return out
