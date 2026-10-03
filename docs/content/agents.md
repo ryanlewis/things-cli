@@ -384,6 +384,10 @@ instead of assuming:
   `import` that sets a status, the CLI re-reads the item and exits non-zero
   if the status never changed. A non-zero exit means "still open", not
   "done".
+- **New items are read back.** `add` and `project add` find the item they
+  created and print it as `things show` would, so the agent has its UUID
+  without a `things search`. If it never appears they exit non-zero; search
+  for the title before retrying, so a retry does not make a duplicate.
 - **Edits are read back.** `edit` and `project edit` wait for Things to
   record the change, then print the item as `things show` would. Exit 0
   with the item printed is the confirmation, so the agent does not need a

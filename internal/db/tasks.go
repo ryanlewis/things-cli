@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -1041,6 +1042,19 @@ func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 // bounded by the macOS URL length limit anyway, so in practice one chunk
 // covers them and the loop never runs twice.
 const uuidChunkSize = 500
+
+// TasksCreatedSince returns the items of typ created at or after since,
+// oldest first, leaving out trashed rows, repeating templates and the
+// instances Things generates from them. It is how a write that returns no
+// uuid, such as things:///add, finds the item it created.
+func (d *DB) TasksCreatedSince(typ model.TaskType, since time.Time) ([]model.Task, error) {
+	query := d.taskQuery() + ` WHERE t.creationDate >= ? AND COALESCE(t.type, 0) = ? AND COALESCE(t.trashed, 0) = 0 AND ` + d.recurrenceCol() + ` IS NULL`
+	if d.templateColumn != "" {
+		query += ` AND ` + recurrenceRef("t", d.templateColumn) + ` IS NULL`
+	}
+	query += ` GROUP BY t.uuid ORDER BY t.creationDate` + uuidTiebreak
+	return d.collectTasks(query, model.TimeToUnix(since), int(typ))
+}
 
 // GetTasksByUUIDs looks up many tasks in one query instead of one query per
 // uuid, and returns them keyed by uuid. An id that matches nothing is simply

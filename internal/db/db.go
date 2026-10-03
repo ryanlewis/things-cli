@@ -22,6 +22,9 @@ type DB struct {
 	repeatOnce   sync.Once
 	repeatColumn string
 	repeatQuery  string
+	// templateColumn is the probed column linking a generated instance to
+	// its repeating template ("" when the schema carries none).
+	templateColumn string
 }
 
 // FindDBPath locates the Things3 SQLite database.

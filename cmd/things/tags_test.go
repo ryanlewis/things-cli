@@ -166,7 +166,7 @@ func TestRunAddWarnsOnUnknownTag(t *testing.T) {
 	database := seedFullDB(t)
 	captured := stubExec(t)
 
-	stderr, err := runCapturingStderr(t, database, "add", "Buy milk", "--tags", "urgent,nope")
+	stderr, err := runCapturingStderr(t, database, "--no-verify", "add", "Buy milk", "--tags", "urgent,nope")
 	if err != nil {
 		t.Fatalf("run add: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestRunAddKnownTagIsSilent(t *testing.T) {
 	database := seedFullDB(t)
 	stubExec(t)
 
-	stderr, err := runCapturingStderr(t, database, "add", "Buy milk", "--tags", "urgent", "--strict-tags")
+	stderr, err := runCapturingStderr(t, database, "--no-verify", "add", "Buy milk", "--tags", "urgent", "--strict-tags")
 	if err != nil {
 		t.Fatalf("run add: %v", err)
 	}
