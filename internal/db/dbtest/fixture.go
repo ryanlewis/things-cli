@@ -7,8 +7,6 @@ import (
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
-// --- fixtures ---
-
 // Fixture seeds the rows a test asserts on, one row per call, so a test reads
 // as the list it expects back.
 //
@@ -45,19 +43,21 @@ func (f *Fixture) exec(query string, args ...any) {
 	}
 }
 
+// Area seeds an area.
 func (f *Fixture) Area(uuid, title string, index int) {
 	f.t.Helper()
 	f.exec(`INSERT INTO TMArea (uuid, title, visible, "index") VALUES (?, ?, 1, ?)`,
 		uuid, title, index)
 }
 
+// Tag seeds a tag.
 func (f *Fixture) Tag(uuid, title string, index int) {
 	f.t.Helper()
 	f.exec(`INSERT INTO TMTag (uuid, title, "index") VALUES (?, ?, ?)`,
 		uuid, title, index)
 }
 
-// tagged attaches tags to a task, as TMTaskTag does.
+// Tagged attaches tags to a task, as TMTaskTag does.
 func (f *Fixture) Tagged(task string, tags ...string) {
 	f.t.Helper()
 	for _, tag := range tags {
@@ -65,17 +65,19 @@ func (f *Fixture) Tagged(task string, tags ...string) {
 	}
 }
 
+// Todo seeds a to-do.
 func (f *Fixture) Todo(uuid, title string, index int, opts ...Opt) {
 	f.t.Helper()
 	f.insert(model.TypeTask, uuid, title, index, opts)
 }
 
+// Project seeds a project.
 func (f *Fixture) Project(uuid, title string, index int, opts ...Opt) {
 	f.t.Helper()
 	f.insert(model.TypeProject, uuid, title, index, opts)
 }
 
-// heading is structure inside a project, never a list row, and it carries the
+// Heading is structure inside a project, never a list row, and it carries the
 // project for the to-dos filed under it — they leave t.project NULL.
 func (f *Fixture) Heading(uuid, title string, index int, opts ...Opt) {
 	f.t.Helper()
@@ -134,7 +136,7 @@ func Anytime() Opt { return bucket(1, 0, nil) }
 
 func AnytimeOn(date int64) Opt { return bucket(1, 0, date) }
 
-// evening is the Anytime bucket's second half, which Today lists beneath its
+// Evening is the Anytime bucket's second half, which Today lists beneath its
 // main list.
 func Evening(date int64) Opt { return bucket(1, 1, date) }
 
@@ -166,19 +168,19 @@ func Cancelled(stop float64) Opt {
 	return func(r *taskRow) { r.status, r.stopDate = model.StatusCancelled, stop }
 }
 
-// status closes a row without giving it a stopDate. That is a fixture shape in
+// Status closes a row without giving it a stopDate. That is a fixture shape in
 // its own right: the Logbook's NULL guard is what keeps such a row in a list
 // rather than dropping it out of every one.
 func Status(s model.Status) Opt { return func(r *taskRow) { r.status = s } }
 
 func Deadline(date int64) Opt { return func(r *taskRow) { r.deadline = date } }
 
-// todayIndex is the within-day position Today and Upcoming order on, and
-// todayIndexRef the day that position was set for.
+// TodayIndex is the within-day position Today and Upcoming order on, and
+// TodayIndexRef the day that position was set for.
 func TodayIndex(v int) Opt { return func(r *taskRow) { r.todayIndex = v } }
 
 func TodayIndexRef(date int64) Opt { return func(r *taskRow) { r.todayIndexRef = date } }
 
-// repeats makes the row a repeating template. Only whether the rule is present
+// Repeats makes the row a repeating template. Only whether the rule is present
 // is ever read, never its content.
 func Repeats() Opt { return func(r *taskRow) { r.recurrence = []byte{0x01, 0x02} } }
