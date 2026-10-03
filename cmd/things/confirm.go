@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"strings"
@@ -70,11 +69,26 @@ func confirmAction(d *Deps, msg string) bool {
 
 // promptLine writes question to stderr and reads one line of the answer from
 // stdin, trimmed. It reports false when stdin ends before a line arrives.
+// It reads a byte at a time so nothing past the newline is consumed: a
+// buffered reader would swallow the input a later prompt needs.
 func promptLine(d *Deps, question string) (string, bool) {
 	fmt.Fprint(d.errOut(), question)
-	scanner := bufio.NewScanner(d.in())
-	if !scanner.Scan() {
-		return "", false
+	var line []byte
+	buf := make([]byte, 1)
+	for {
+		n, err := d.in().Read(buf)
+		if n == 1 {
+			if buf[0] == '\n' {
+				break
+			}
+			line = append(line, buf[0])
+		}
+		if err != nil {
+			if len(line) == 0 {
+				return "", false
+			}
+			break
+		}
 	}
-	return strings.TrimSpace(scanner.Text()), true
+	return strings.TrimSpace(string(line)), true
 }
