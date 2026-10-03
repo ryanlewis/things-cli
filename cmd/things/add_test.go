@@ -501,3 +501,38 @@ func TestAddSendsUUIDAsListID(t *testing.T) {
 		})
 	}
 }
+
+// Things matches project add's area by title only, so a uuid filed the new
+// project under no area. A uuid of an area now goes to Things as area-id; a
+// title still goes as area.
+func TestProjectAddSendsUUIDAsAreaID(t *testing.T) {
+	cases := []struct {
+		name, value, want string
+	}{
+		{"uuid", "area-1", "area-id=area-1"},
+		{"title", "Personal", "area=Personal"},
+		{"unknown", "Nowhere", "area=Nowhere"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			dbtest.NewFixture(t, sqlDB).Area("area-1", "Personal", 1)
+			var url string
+			prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+				url = args[len(args)-1]
+				return exec.Command("true")
+			})
+			t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+			_, _, _ = runStreams(t, database, "--no-verify", "project", "add", "Launch", "--area", tc.value)
+			params := strings.Split(url[strings.Index(url, "?")+1:], "&")
+			if !slices.Contains(params, tc.want) {
+				t.Errorf("url = %q, want %s", url, tc.want)
+			}
+			if strings.HasPrefix(tc.want, "area-id=") && slices.ContainsFunc(params, func(p string) bool { return strings.HasPrefix(p, "area=") }) {
+				t.Errorf("url = %q, want no area title beside area-id", url)
+			}
+		})
+	}
+}

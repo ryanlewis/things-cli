@@ -26,6 +26,15 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	if _, err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
 		return err
 	}
+	// Things matches area by title only; a uuid has to go as area-id.
+	area, areaID := c.Area, ""
+	if area != "" {
+		if database, err := d.Database(); err == nil {
+			if id, err := database.FindAreaUUID(area); err == nil && id != "" && id == area {
+				area, areaID = "", id
+			}
+		}
+	}
 	return applyAdd(d, model.TypeProject, c.Title, func() error {
 		return things.AddProject(things.AddProjectParams{
 			Title:    c.Title,
@@ -33,7 +42,8 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 			When:     c.When,
 			Deadline: c.Deadline,
 			Tags:     c.Tags,
-			Area:     c.Area,
+			Area:     area,
+			AreaID:   areaID,
 			Todos:    expandNewlines(c.Todos),
 		})
 	})

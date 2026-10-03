@@ -26,6 +26,7 @@ type AddProjectParams struct {
 	Deadline string
 	Tags     string
 	Area     string
+	AreaID   string
 	Todos    string
 }
 
@@ -148,6 +149,7 @@ func AddProject(params AddProjectParams) error {
 	setNonEmpty(v, "deadline", params.Deadline)
 	setNonEmpty(v, "tags", params.Tags)
 	setNonEmpty(v, "area", params.Area)
+	setNonEmpty(v, "area-id", params.AreaID)
 	setNonEmpty(v, "to-dos", params.Todos)
 	return openThingsURL("add-project", v)
 }
