@@ -119,7 +119,7 @@ func (c *ListCmd) commandLine(d *Deps, view, project string) string {
 		{"--to", c.To},
 	} {
 		if f.value != "" {
-			parts = append(parts, f.flag, quoteArg(f.value))
+			parts = append(parts, f.flag, shellQuote(f.value))
 		}
 	}
 	if c.IncludeCompleted {
@@ -285,7 +285,7 @@ func (c *SearchCmd) Run(d *Deps) error {
 		return err
 	}
 	command := append([]string{"things"}, globalFlags(d)...)
-	command = append(command, "search", quoteArg(c.Query))
+	command = append(command, "search", shellQuote(c.Query))
 	cacheTaskUUIDs(d, strings.Join(command, " "), tasks)
 	// Search results are a listing like `list`, backed by the same cache, so
 	// they share PrintTaskList's path (and hint) rather than the bare Print
