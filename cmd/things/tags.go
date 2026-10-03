@@ -292,22 +292,22 @@ func (c *TagAddCmd) Run(d *Deps) error {
 // its SQLite database a moment after AppleScript returns, hence the poll.
 // --no-verify skips it.
 func verifyTagsCreated(database *db.DB, names []string, budget time.Duration) error {
-	deadline := time.Now().Add(budget)
-	for {
+	return pollUntil(budget, func(expired bool) (bool, error) {
 		missing, err := database.UnknownTags(names)
 		switch {
 		case err != nil:
-			if !time.Now().Before(deadline) {
-				return fmt.Errorf("verifying tag creation: %w", err)
+			if expired {
+				return false, fmt.Errorf("verifying tag creation: %w", err)
 			}
+			return false, nil
 		case len(missing) == 0:
-			return nil
-		case !time.Now().Before(deadline):
-			return fmt.Errorf("tag creation did not apply: %s still missing from the Things database after %s. Things accepted the command and then dropped it silently — check that Things3 is running",
+			return true, nil
+		case expired:
+			return false, fmt.Errorf("tag creation did not apply: %s still missing from the Things database after %s. Things accepted the command and then dropped it silently — check that Things3 is running",
 				strings.Join(missing, ", "), budget)
 		}
-		verifyPause(deadline)
-	}
+		return false, nil
+	})
 }
 
 // dedupeTagNames trims the requested names, drops empties, and collapses ones

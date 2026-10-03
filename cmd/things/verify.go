@@ -33,6 +33,23 @@ func verifyPause(deadline time.Time) {
 	verifySleep(min(verifyInterval, max(time.Until(deadline), 0)))
 }
 
+// pollUntil runs step in rounds until it reports done, returns an error, or
+// is called with expired set. expired is read once per round, before step
+// runs, so everything step judges in a round is judged against the same
+// clock; a round run with expired set is the last. Between rounds it waits
+// with verifyPause.
+func pollUntil(budget time.Duration, step func(expired bool) (done bool, err error)) error {
+	deadline := time.Now().Add(budget)
+	for {
+		expired := !time.Now().Before(deadline)
+		done, err := step(expired)
+		if err != nil || done || expired {
+			return err
+		}
+		verifyPause(deadline)
+	}
+}
+
 // checkRepeating refuses a write that Things would silently drop. Things
 // rejects status, when, deadline and duplicate changes on repeating tasks and
 // projects without reporting an error, so an attempt would look like success.
@@ -138,12 +155,12 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 		pending[i] = i
 	}
 
-	deadline := time.Now().Add(budget)
-	for len(pending) > 0 {
-		// Read the clock once per round so every item in it is judged against
-		// the same deadline.
-		expired := !time.Now().Before(deadline)
-
+	// pollUntil reads the clock once per round, so every item in it is
+	// judged against the same deadline.
+	_ = pollUntil(budget, func(expired bool) (bool, error) {
+		if len(pending) == 0 {
+			return true, nil
+		}
 		// One query per round for every item still pending, rather than one
 		// per item per round (issue #167).
 		uuids := make([]string, len(pending))
@@ -190,15 +207,10 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 			next = append(next, i)
 		}
 		pending = next
-		if expired {
-			// Every item was judged in this round; anything still listed would
-			// only spin.
-			break
-		}
-		if len(pending) > 0 {
-			verifyPause(deadline)
-		}
-	}
+		// An expired round judged every item, so pending is empty and
+		// pollUntil stops.
+		return len(pending) == 0, nil
+	})
 	return results
 }
 
