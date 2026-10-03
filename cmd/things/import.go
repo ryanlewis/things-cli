@@ -54,10 +54,9 @@ func (c *ImportCmd) Run(d *Deps) error {
 	}
 	// A token read error is only a warning: the payload may be create-only.
 	token := authToken(d, database)
-	if err := things.ImportJSON(string(data), token, c.Reveal); err != nil {
-		return err
-	}
-	return verifyImportStatuses(d, database, plan)
+	return applyImport(d, database, plan, func() error {
+		return things.ImportJSON(string(data), token, c.Reveal)
+	})
 }
 
 // validateImportJSON checks the payload is a non-empty JSON array — the shape

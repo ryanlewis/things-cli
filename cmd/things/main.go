@@ -32,7 +32,7 @@ type CLI struct {
 	Config  string           `help:"Path to the TOML config file (default ~/.config/things-cli/config.toml)." placeholder:"PATH"`
 	Version kong.VersionFlag `help:"Print version and exit." short:"v"`
 
-	NoVerify bool `help:"Skip the read-back that confirms an add, a complete/cancel, an edit, tag creation, or an import's status changes actually landed." name:"no-verify" default:"false"`
+	NoVerify bool `help:"Skip the read-back that confirms an add, a complete/cancel, an edit, tag creation, or an import's new items and status changes actually landed." name:"no-verify" default:"false"`
 
 	VerifyTimeout time.Duration `help:"How long the read-back waits before reporting a write as not applied, e.g. 5s or 2500ms." name:"verify-timeout" type:"verifytimeout" default:"5s"`
 

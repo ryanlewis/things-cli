@@ -300,7 +300,7 @@ func TestImportCreateTags(t *testing.T) {
 	calls := stubExecCreatingTags(t, sqlDB)
 
 	path := writeTempFile(t, `[{"type":"to-do","attributes":{"title":"x","tags":["focus","Work"]}}]`)
-	if _, err := runOut(t, database, "import", "--file", path, "--create-tags"); err != nil {
+	if _, err := runOut(t, database, "--no-verify", "import", "--file", path, "--create-tags"); err != nil {
 		t.Fatalf("import --create-tags: %v", err)
 	}
 	if got := osascriptTagNames(*calls); len(got) != 1 || got[0] != "focus" {

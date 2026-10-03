@@ -409,6 +409,9 @@ instead of assuming:
   for the title before retrying, so a retry does not make a duplicate.
   Exit 0 with `"confirmed": false` (two new items with the title,
   `--no-verify`, or an unreadable database) is not a confirmation either.
+  `import` does the same for every to-do and project it creates, and
+  prints one verdict per item, with its `path` in the payload. It exits
+  non-zero with `import partially applied` if any of them never appeared.
   If Things is often closed, the first add after it launches can take
   longer than the five-second wait; raise `--verify-timeout`.
 - **Edits are read back.** `edit` and `project edit` wait for Things to

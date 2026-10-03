@@ -279,7 +279,7 @@ func TestRunImportWarnsOnUnknownTag(t *testing.T) {
 		t.Fatalf("write payload: %v", err)
 	}
 
-	stderr, err := runCapturingStderr(t, database, "import", "--file", path)
+	stderr, err := runCapturingStderr(t, database, "--no-verify", "import", "--file", path)
 	if err != nil {
 		t.Fatalf("run import: %v", err)
 	}

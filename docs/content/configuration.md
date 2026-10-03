@@ -70,7 +70,7 @@ an error rather than a coin toss.
 | `color` | — | `"auto"` \| `"always"` \| `"never"` | `"auto"` | every command | When to colour output; `auto` means only on a terminal |
 | `hints` | — | boolean | `true` | every command | Print a line of common next actions, and a note on turning it off, under a plain task listing |
 | `db` | — | path | auto-detected | every command | Where the Things3 SQLite database is; the file must exist |
-| `no_verify` | `no-verify` | boolean | `false` | `add`, `project add`, `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a new item, a status change, an edit, or a tag creation landed |
+| `no_verify` | `no-verify` | boolean | `false` | `add`, `project add`, `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a new item (an import's included), a status change, an edit, or a tag creation landed |
 | `verify_timeout` | `verify-timeout` | duration string | `"5s"` | the same writes as `no_verify` | How long the read-back waits before reporting a write as not applied |
 | `strict_tags` | `strict-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Fail instead of writing when a tag does not exist |
 | `create_tags` | `create-tags` | boolean | `false` | `add`, `edit`, `project add`, `project edit`, `import` | Create missing tags before writing |
@@ -139,7 +139,7 @@ commented out. Uncomment a line to change that default.
 # db = "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite"
 
 # Skip the read-back that confirms an add, a complete/cancel, an edit, tag
-# creation, or an import's status changes actually landed.
+# creation, or an import's new items and status changes actually landed.
 # Same as --no-verify. Faster, but a write Things silently drops is
 # then reported as a success.
 # no_verify = false

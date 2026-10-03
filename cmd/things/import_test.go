@@ -62,7 +62,7 @@ func TestRunImportFromFile(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	if err := runWith(t, database, "import", "--file", path, "--reveal"); err != nil {
+	if err := runWith(t, database, "--no-verify", "import", "--file", path, "--reveal"); err != nil {
 		t.Fatalf("runWith: %v", err)
 	}
 	if len(*captured) < 3 {
@@ -101,7 +101,7 @@ func TestRunImportFromStdin(t *testing.T) {
 	os.Stdin = r
 	t.Cleanup(func() { os.Stdin = orig; r.Close() })
 
-	if err := runWith(t, database, "import"); err != nil {
+	if err := runWith(t, database, "--no-verify", "import"); err != nil {
 		t.Fatalf("runWith: %v", err)
 	}
 	parsed, _ := url.Parse((*captured)[2])
@@ -147,7 +147,7 @@ func TestRunImportReadsDepsStdin(t *testing.T) {
 	captured := stubExec(t)
 	stubTTY(t, false)
 	payload := `[{"type":"project","attributes":{"title":"P"}}]`
-	d := &Deps{DB: database, Stdin: strings.NewReader(payload), Stdout: io.Discard, Stderr: io.Discard}
+	d := &Deps{DB: database, Stdin: strings.NewReader(payload), Stdout: io.Discard, Stderr: io.Discard, NoVerify: true}
 
 	if err := (&ImportCmd{}).Run(d); err != nil {
 		t.Fatalf("import: %v", err)

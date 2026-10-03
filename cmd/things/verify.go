@@ -169,6 +169,13 @@ type statusResult struct {
 // surfaced once the deadline passes. A row that is missing is treated the same
 // way, since Things may not have finished writing it.
 func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) []statusResult {
+	return verifyStatusesWithin(database, wants, budget, budget)
+}
+
+// verifyStatusesWithin is verifyStatuses for a read-back that has only wait
+// left of the budget it reports, because another read-back of the same write
+// spent the rest.
+func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time.Duration) []statusResult {
 	results := make([]statusResult, len(wants))
 	pending := make([]int, len(wants))
 	for i := range wants {
@@ -177,7 +184,7 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 
 	// pollUntil reads the clock once per round, so every item in it is
 	// judged against the same deadline.
-	_ = pollUntil(budget, func(expired bool) (bool, error) {
+	_ = pollUntil(wait, func(expired bool) (bool, error) {
 		if len(pending) == 0 {
 			return true, nil
 		}
@@ -351,21 +358,112 @@ const createdSlack = time.Second
 // moment later is seen and reported as ambiguous rather than missed.
 const addSettleRounds = 2
 
+// createdKey is what the read-back matches a created item on: its type and
+// its title with surrounding whitespace trimmed.
+type createdKey struct {
+	typ   model.TaskType
+	title string
+}
+
+func newCreatedKey(typ model.TaskType, title string) createdKey {
+	return createdKey{typ: typ, title: strings.TrimSpace(title)}
+}
+
+// createdSnapshot is what was there before a write that creates items: the
+// start of the window the new items are looked for in, and the items already
+// created inside it, which are not the write's.
+type createdSnapshot struct {
+	since  time.Time
+	before map[string]struct{}
+}
+
+// snapshotCreated records the items of each of types created in the last
+// createdSlack, just before a write that creates items.
+func snapshotCreated(database *db.DB, types []model.TaskType) (createdSnapshot, error) {
+	snap := createdSnapshot{since: time.Now().Add(-createdSlack), before: map[string]struct{}{}}
+	for _, typ := range types {
+		existing, err := database.TasksCreatedSince(typ, snap.since)
+		if err != nil {
+			return snap, err
+		}
+		for _, t := range existing {
+			snap.before[t.UUID] = struct{}{}
+		}
+	}
+	return snap, nil
+}
+
+// findCreated polls for the items a write created, by what they must be: an
+// item of the key's type with the key's title, created after the write
+// started, that was not in snap. want says how many new items each key should
+// have. Once every key has that many, it polls addSettleRounds more rounds,
+// so a second item with the same title saved a moment later is seen too.
+//
+// found holds the new items for each key as the last read that worked saw
+// them, oldest first. readOK says whether any read worked; readErr is the
+// last read error.
+func findCreated(database *db.DB, snap createdSnapshot, want map[createdKey]int, budget time.Duration) (found map[createdKey][]model.Task, readOK bool, readErr error) {
+	var types []model.TaskType
+	for k := range want {
+		if !slices.Contains(types, k.typ) {
+			types = append(types, k.typ)
+		}
+	}
+	slices.Sort(types)
+
+	matched := 0
+	_ = pollUntil(budget, func(bool) (bool, error) {
+		round := map[createdKey][]model.Task{}
+		for _, typ := range types {
+			created, err := database.TasksCreatedSince(typ, snap.since)
+			if err != nil {
+				// Things is writing while we poll; a busy read is retried,
+				// and found keeps what the last good read saw.
+				readErr = err
+				return false, nil
+			}
+			for _, t := range created {
+				key := newCreatedKey(typ, t.Title)
+				if _, old := snap.before[t.UUID]; !old && want[key] > 0 {
+					round[key] = append(round[key], t)
+				}
+			}
+		}
+		readOK = true
+		found = round
+		for key, n := range want {
+			if len(found[key]) < n {
+				return false, nil
+			}
+		}
+		matched++
+		return matched > addSettleRounds, nil
+	})
+	return found, readOK, readErr
+}
+
+// unconfirmedMsg is the line an add or an import prints for an item it sent
+// but could not confirm, by reason.
+var unconfirmedMsg = map[string]string{
+	"no-verify":  "Sent to Things, not confirmed (--no-verify)",
+	"unreadable": "Sent to Things, not confirmed (database unreadable)",
+	"ambiguous":  "Sent to Things, not confirmed (more than one new item has this title)",
+}
+
 // applyAdd sends write, which creates an item of typ titled title, then finds
 // that item in the database and prints it as `things show` does.
 // things:///add returns no uuid (issue #19), so the item is found by what it
-// must be: an item of typ with that title, created after the write started,
-// that was not there before it. More than one such item visible together
-// when the read-back settles — the same title added elsewhere at the same
-// moment — is reported unconfirmed with the candidates rather than guessed.
-// Under --no-verify, or when the database cannot be read, the write still
-// goes out and the output says it is unconfirmed.
+// must be (see findCreated). More than one such item visible together when
+// the read-back settles — the same title added elsewhere at the same moment —
+// is reported unconfirmed with the candidates rather than guessed. Under
+// --no-verify, or when the database cannot be read, the write still goes out
+// and the output says it is unconfirmed.
 func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) error {
 	if d.NoVerify {
 		if err := write(); err != nil {
 			return err
 		}
-		return printUnconfirmedAdd(d, title, "no-verify", "Sent to Things, not confirmed (--no-verify)", nil)
+		return printUnconfirmedAdd(d, title, "no-verify", nil)
 	}
 	unreadable := func(err error) error {
 		// The tag check may have said the database cannot be read already;
@@ -373,14 +471,13 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		if !d.dbWarned {
 			fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the add: %v\n", err)
 		}
-		return printUnconfirmedAdd(d, title, "unreadable", "Sent to Things, not confirmed (database unreadable)", nil)
+		return printUnconfirmedAdd(d, title, "unreadable", nil)
 	}
 
-	since := time.Now().Add(-createdSlack)
 	database, err := d.Database()
-	var existing []model.Task
+	var snap createdSnapshot
 	if err == nil {
-		existing, err = database.TasksCreatedSince(typ, since)
+		snap, err = snapshotCreated(database, []model.TaskType{typ})
 	}
 	if err != nil {
 		if err := write(); err != nil {
@@ -388,39 +485,14 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		}
 		return unreadable(err)
 	}
-	before := make(map[string]struct{}, len(existing))
-	for _, t := range existing {
-		before[t.UUID] = struct{}{}
-	}
 
 	if err := write(); err != nil {
 		return err
 	}
 	budget := d.readBackTimeout()
-	var found []model.Task
-	var readErr error
-	readOK := false
-	matched := 0
-	_ = pollUntil(budget, func(bool) (bool, error) {
-		created, err := database.TasksCreatedSince(typ, since)
-		if err != nil {
-			// Things is writing while we poll; a busy read is retried, and
-			// found keeps what the last good read saw.
-			readErr = err
-			return false, nil
-		}
-		readOK = true
-		found = found[:0]
-		for _, t := range created {
-			if _, old := before[t.UUID]; !old && strings.TrimSpace(t.Title) == strings.TrimSpace(title) {
-				found = append(found, t)
-			}
-		}
-		if len(found) > 0 {
-			matched++
-		}
-		return matched > addSettleRounds, nil
-	})
+	key := newCreatedKey(typ, title)
+	results, readOK, readErr := findCreated(database, snap, map[createdKey]int{key: 1}, budget)
+	found := results[key]
 	switch {
 	case len(found) == 0 && !readOK:
 		// Not one read-back read worked. A read that failed after others
@@ -431,17 +503,23 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		if typ == model.TypeProject {
 			kind = "project"
 		}
-		search := append(append([]string{"things"}, globalFlags(d)...), "search", shellQuote(strings.TrimSpace(title)))
 		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `%s` before retrying; do not retry blindly",
-			kind, title, budget, strings.Join(search, " "))
+			kind, title, budget, searchCommand(d, title))
 	case len(found) > 1:
 		uuids := make([]string, len(found))
 		for i, t := range found {
 			uuids[i] = t.UUID
 		}
-		return printUnconfirmedAdd(d, title, "ambiguous", "Sent to Things, not confirmed (more than one new item has this title)", uuids)
+		return printUnconfirmedAdd(d, title, "ambiguous", uuids)
 	}
 	return printItem(d, database, &found[0])
+}
+
+// searchCommand renders the `things search` command that looks for title in
+// the database this run reads, quoted for the shell.
+func searchCommand(d *Deps, title string) string {
+	search := append(append([]string{"things"}, globalFlags(d)...), "search", shellQuote(strings.TrimSpace(title)))
+	return strings.Join(search, " ")
 }
 
 // unconfirmedAdd is the --json output for an add that was sent but not read
@@ -455,7 +533,8 @@ type unconfirmedAdd struct {
 }
 
 // printUnconfirmedAdd is printUnconfirmedEdit for an add.
-func printUnconfirmedAdd(d *Deps, title, reason, msg string, candidates []string) error {
+func printUnconfirmedAdd(d *Deps, title, reason string, candidates []string) error {
+	msg := unconfirmedMsg[reason]
 	if d.JSON {
 		return output.PrintJSON(d.Stdout, unconfirmedAdd{Title: title, Reason: reason, Candidates: candidates})
 	}
