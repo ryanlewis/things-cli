@@ -288,6 +288,15 @@ const heldInPlace = "(((" + heldByToday + ") OR (" + heldByAnytime + ") OR (" + 
 const notATemplate = repeatingPlaceholder + " IS NULL AND " + repeatingParentPlaceholder + " IS NULL"
 
 // heldByAnytime is the Anytime half — the bucket test the view itself uses.
+//
+// It is wider than the view's scope since issue #346: the view leaves out a
+// to-do of a project in Someday or scheduled for later (parentNotDeferred),
+// and this test still holds that to-do back from the Logbook once it closes.
+// That is the app's answer, measured on 3 Oct 2026: such a to-do closed that
+// day was in neither the app's Anytime nor its Logbook, only on its project's
+// page, and the app's Logbook held none of the 23 rows closed that day. The
+// CLI's project listing is that page — `--project <uuid> --include-completed`
+// lists it (issue #295) — so the row is not stranded.
 const heldByAnytime = "t.start = 1 AND t.type = 0 AND " + closedTodayUnlogged
 
 // heldByUpcoming is the Upcoming half — the scope test the view itself uses.
@@ -412,6 +421,12 @@ const (
 	// unparented is someday's parity rule: a to-do inside a project stays
 	// inside it however it is deferred (issue #211).
 	unparented = "p.uuid IS NULL"
+	// parentNotDeferred is anytime's parity rule: the app's Anytime leaves
+	// out every to-do of a project in Someday or scheduled for a later date,
+	// in the project or under one of its headings, and even one Today shows.
+	// Measured on 3 Oct 2026 with test to-dos (issue #346). Both kinds of
+	// project are start = 2. COALESCE keeps an unparented to-do.
+	parentNotDeferred = "COALESCE(p.start, 1) != 2"
 	// notHeldInPlace is the Logbook's complement of what today, anytime and
 	// upcoming still show. COALESCE makes the negation null-safe — see
 	// heldInPlace. The Logbook's other extra is parentNotClosed, which it shares with the
@@ -645,6 +660,7 @@ var views = map[string]viewSpec{
 	// rolls over, and Anytime is a list like Today (issue #238).
 	ViewAnytime: {
 		scope: anytimeBucket, status: openRows, trashed: untrashedRows,
+		extra:                    []string{parentNotDeferred},
 		supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Anytime groups the way the app presents it: the project is the
 		// header above its own to-dos, not a row among them. The view listed

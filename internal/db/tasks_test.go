@@ -2027,6 +2027,124 @@ func TestAnytimeHasNoProjectRows(t *testing.T) {
 	}
 }
 
+// Anytime leaves out the to-dos of a project in Someday or scheduled for a
+// later date, whether they sit in the project or under one of its headings,
+// and even when Today shows them. Today and Upcoming keep theirs. Measured
+// against the app on 3 Oct 2026 (issue #346).
+func TestAnytimeLeavesOutToDosInDeferredProjects(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
+
+	fx.Project("proj-someday", "Someday project", 1, someday())
+	fx.Project("proj-scheduled", "Scheduled project", 2, somedayOn(later))
+	fx.Project("proj-anytime", "Anytime project", 3, anytime())
+	fx.Heading("head-someday", "Someday heading", 4, anytime(), inProject("proj-someday"))
+
+	fx.Todo("in-someday", "In someday", 10, anytime(), inProject("proj-someday"))
+	fx.Todo("in-someday-heading", "Under someday heading", 11, anytime(), underHeading("head-someday"))
+	fx.Todo("in-someday-dated-today", "Dated today", 12, anytimeOn(today), inProject("proj-someday"))
+	fx.Todo("in-someday-due-later", "Due later", 13, anytime(), inProject("proj-someday"), deadline(later))
+	fx.Todo("in-scheduled", "In scheduled", 14, anytime(), inProject("proj-scheduled"))
+	fx.Todo("in-anytime", "In anytime", 15, anytime(), inProject("proj-anytime"))
+	fx.Todo("loose", "Loose", 16, anytime())
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"in-anytime", "loose"}; !sameSet(uuidsOf(got), want) {
+		t.Errorf("anytime: got %v, want %v", uuidsOf(got), want)
+	}
+
+	for _, tc := range []struct{ view, uuid string }{
+		{"today", "in-someday-dated-today"},
+		{"upcoming", "in-someday-due-later"}, // issue #296
+	} {
+		rows, err := d.ListTasks(tc.view, TaskFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(uuidsOf(rows), tc.uuid) {
+			t.Errorf("%s: got %v, want it to keep %s", tc.view, uuidsOf(rows), tc.uuid)
+		}
+	}
+}
+
+// A to-do of a deferred project closed today is in no list view and not in
+// the Logbook, only in its project until Things logs it — the app's answer on
+// 3 Oct 2026 (issue #346). So the partition here counts the project listing:
+// the row is in exactly one of the Logbook, a view, or (for this shape only)
+// its project. One in an Anytime project stays in Anytime for the rest of the
+// day (issue #238).
+func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
+	now := time.Now()
+	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
+	stop := model.TimeToUnix(now)
+
+	cases := []struct {
+		uuid        string
+		project     string
+		opts        []dbtest.Opt
+		heldBy      []string // the views that should have it
+		projectOnly bool     // held only by its project listing
+	}{
+		{"in-someday", "proj-someday", []dbtest.Opt{inProject("proj-someday")}, nil, true},
+		{"in-someday-heading", "proj-someday", []dbtest.Opt{underHeading("head-someday")}, nil, true},
+		{"in-scheduled", "proj-scheduled", []dbtest.Opt{inProject("proj-scheduled")}, nil, true},
+		{"in-anytime", "proj-anytime", []dbtest.Opt{inProject("proj-anytime")}, []string{"anytime"}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.uuid, func(t *testing.T) {
+			d, fx := newFixture(t)
+			fx.Project("proj-someday", "Someday project", 1, someday())
+			fx.Project("proj-scheduled", "Scheduled project", 2, somedayOn(later))
+			fx.Project("proj-anytime", "Anytime project", 3, anytime())
+			fx.Heading("head-someday", "Someday heading", 4, anytime(), inProject("proj-someday"))
+			fx.Todo(tc.uuid, "Closed", 10, append([]dbtest.Opt{anytime(), completed(stop)}, tc.opts...)...)
+
+			logged, err := d.ListTasks("logbook", TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if slices.Contains(uuidsOf(logged), tc.uuid) {
+				t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
+			}
+
+			held := 0
+			for _, view := range []string{"today", "anytime", "upcoming"} {
+				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+				if err != nil {
+					t.Fatal(err)
+				}
+				gotHeld := slices.Contains(uuidsOf(got), tc.uuid)
+				if want := slices.Contains(tc.heldBy, view); gotHeld != want {
+					t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
+				}
+				if gotHeld {
+					held++
+				}
+			}
+
+			// Its project lists it either way, as the app's project page does
+			// (issue #295), so the row is never stranded.
+			inProj, err := d.ListTasks("project", TaskFilter{Project: tc.project, IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Contains(uuidsOf(inProj), tc.uuid) {
+				t.Errorf("--project %s --include-completed = %v, want it listed", tc.project, uuidsOf(inProj))
+			}
+			if got := held == 0; got != tc.projectOnly {
+				t.Errorf("held only by its project: %v, want %v", got, tc.projectOnly)
+			}
+		})
+	}
+}
+
 // The app arranges Anytime as unfiled items, then areas, and inside an area
 // its own loose to-dos before those of its projects. Bare t."index" order
 // interleaved all of it, so a project's to-dos were scattered and the rendered
