@@ -367,7 +367,14 @@ warning: --heading "Later" needs --list or --project; Things will ignore it and 
 `things project add` creates a new project with the same flag set
 (`--notes`, `--when`, `--deadline`, `--tags`, `--area`, `--todos`). `--area`
 takes an area name or UUID; a UUID goes to Things as `area-id`, since
-Things matches `area` by title only.
+Things matches `area` by title only. It matches the title ignoring case but
+not surrounding space, and when nothing matches it creates the project with
+no area. `project add` warns on stderr when that will happen, then sends the
+project anyway:
+
+```
+warning: Things has no area called "Nowhere"; it will create the project with no area
+```
 
 `add` and `project add` then find the new item in the database and print it
 exactly as `things show` would, the same object under `--json`. Things
