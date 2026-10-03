@@ -302,21 +302,30 @@ func printUnconfirmedEdit(d *Deps, task *model.Task, reason, msg string) error {
 // still inside it.
 const createdSlack = time.Second
 
+// addSettleRounds is how many more rounds applyAdd polls after the first one
+// that finds the new item, so a second item with the same title saved a
+// moment later is seen and reported as ambiguous rather than missed.
+const addSettleRounds = 2
+
 // applyAdd sends write, which creates an item of typ titled title, then finds
 // that item in the database and prints it as `things show` does.
 // things:///add returns no uuid (issue #19), so the item is found by what it
 // must be: an item of typ with that title, created after the write started,
-// that was not there before it. More than one such item — the same title
-// added elsewhere at the same moment — is reported unconfirmed with the
-// candidates rather than guessed. Under --no-verify, or when the database
-// cannot be read, the write still goes out and the output says it is
-// unconfirmed.
+// that was not there before it. More than one such item visible together
+// when the read-back settles — the same title added elsewhere at the same
+// moment — is reported unconfirmed with the candidates rather than guessed.
+// Under --no-verify, or when the database cannot be read, the write still
+// goes out and the output says it is unconfirmed.
 func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) error {
 	if d.NoVerify {
 		if err := write(); err != nil {
 			return err
 		}
 		return printUnconfirmedAdd(d, title, "no-verify", "Sent to Things, not confirmed (--no-verify)", nil)
+	}
+	unreadable := func(err error) error {
+		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the add: %v\n", err)
+		return printUnconfirmedAdd(d, title, "unreadable", "Sent to Things, not confirmed (database unreadable)", nil)
 	}
 
 	since := time.Now().Add(-createdSlack)
@@ -326,11 +335,10 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		existing, err = database.TasksCreatedSince(typ, since)
 	}
 	if err != nil {
-		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the add: %v\n", err)
 		if err := write(); err != nil {
 			return err
 		}
-		return printUnconfirmedAdd(d, title, "unreadable", "Sent to Things, not confirmed (database unreadable)", nil)
+		return unreadable(err)
 	}
 	before := make(map[string]struct{}, len(existing))
 	for _, t := range existing {
@@ -342,33 +350,38 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 	}
 	budget := d.readBackTimeout()
 	var found []model.Task
-	err = pollUntil(budget, func(expired bool) (bool, error) {
+	var readErr error
+	matched := 0
+	_ = pollUntil(budget, func(bool) (bool, error) {
 		created, err := database.TasksCreatedSince(typ, since)
 		if err != nil {
-			// Things is writing while we poll; a busy read is retried.
-			if expired {
-				return false, fmt.Errorf("verifying add: %w", err)
-			}
+			// Things is writing while we poll; a busy read is retried, and
+			// found keeps what the last good read saw.
+			readErr = err
 			return false, nil
 		}
+		readErr = nil
 		found = found[:0]
 		for _, t := range created {
 			if _, old := before[t.UUID]; !old && strings.TrimSpace(t.Title) == strings.TrimSpace(title) {
 				found = append(found, t)
 			}
 		}
-		return len(found) > 0, nil
+		if len(found) > 0 {
+			matched++
+		}
+		return matched > addSettleRounds, nil
 	})
 	switch {
-	case err != nil:
-		return err
+	case len(found) == 0 && readErr != nil:
+		return unreadable(readErr)
 	case len(found) == 0:
 		kind := "to-do"
 		if typ == model.TypeProject {
 			kind = "project"
 		}
-		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `things search %q` before retrying; do not retry blindly",
-			kind, title, budget, title)
+		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `things search %s` before retrying; do not retry blindly",
+			kind, title, budget, shellQuote(strings.TrimSpace(title)))
 	case len(found) > 1:
 		uuids := make([]string, len(found))
 		for i, t := range found {

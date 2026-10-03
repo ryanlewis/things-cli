@@ -16,8 +16,9 @@ import (
 // jsonErrorPayload is the machine-readable form of a command failure. Under
 // --json a failing command prints one of these to stdout and exits non-zero,
 // so a consumer reading stdout sees a JSON failure rather than English prose,
-// and can branch on the "error" token (issue #152). A successful write command
-// still prints nothing — only the read commands emit JSON on success.
+// and can branch on the "error" token (issue #152). On success the read
+// commands print their result; add, project add, edit and project edit print
+// the item, and tag add what it created.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
 // "not a project", "stale list cache", or "error" for a failure with no

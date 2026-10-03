@@ -326,8 +326,9 @@ see `--verify-timeout` under Editing).
   confirmed: …`. Things may have dropped it (check that Things3 is running)
   or may be slow to save. Run `things search` for the title before retrying,
   so a retry does not create a duplicate.
-- If more than one appears (the same title added elsewhere at the same
-  moment), the CLI does not guess. It prints `Sent to Things, not confirmed
+- If more than one new item with that title is visible together when the
+  add is read back (the same title added elsewhere at the same moment),
+  the CLI does not guess. It prints `Sent to Things, not confirmed
   (more than one new item has this title): "Buy oat milk" (uuid1, uuid2)`
   and exits 0.
 - `--no-verify` (or `no_verify = true`) skips the read-back and prints
