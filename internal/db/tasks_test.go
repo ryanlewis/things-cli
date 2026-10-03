@@ -351,7 +351,10 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 		{"t-closed-due-later", 1, 0, nil, future, []string{"anytime", "upcoming"}},
 		// An undated to-do whose deadline has come is in Today while open
 		// (issue #294), from the Inbox as well as from Anytime.
-		{"t-closed-inbox-due-today", 0, 0, nil, today, []string{"today"}},
+		// It is in Anytime too, where the app's Anytime lists it.
+		{"t-closed-inbox-due-today", 0, 0, nil, today, []string{"today", "anytime"}},
+		// An undated Inbox to-do due later is in neither Anytime nor Upcoming.
+		{"t-closed-inbox-due-later", 0, 0, nil, future, nil},
 		{"t-closed-anytime-due-today", 1, 0, nil, today, []string{"today", "anytime"}},
 	}
 
@@ -2407,6 +2410,34 @@ func TestInboxLeavesOutToDosTodayHolds(t *testing.T) {
 		if slices.Contains(uuidsOf(got), u) {
 			t.Errorf("%s is in both inbox and today", u)
 		}
+	}
+}
+
+// The app's Anytime lists the undated Inbox to-dos whose deadline has come,
+// the same ones its Today takes out of the Inbox. Measured on 3 Oct 2026, it
+// held an Inbox to-do due that day and one overdue, and none due later and
+// none taken out of Today for its deadline.
+func TestAnytimeListsInboxToDosTodayHolds(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
+
+	fx.Todo("inbox-plain", "Inbox plain", 1, inbox())
+	fx.Todo("inbox-due-today", "Inbox due today", 2, inbox(), deadline(today))
+	fx.Todo("inbox-overdue", "Inbox overdue", 3, inbox(), deadline(earlier))
+	fx.Todo("inbox-due-tomorrow", "Inbox due tomorrow", 4, inbox(), deadline(tomorrow))
+	fx.Todo("inbox-suppressed", "Inbox suppressed", 5, inbox(), deadline(earlier), suppressed(earlier))
+
+	got, err := d.ListTasks("anytime", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"inbox-due-today", "inbox-overdue"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("anytime: got %v, want %v", uuidsOf(got), want)
 	}
 }
 
