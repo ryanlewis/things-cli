@@ -43,7 +43,7 @@ func (c *ImportCmd) Run(d *Deps) error {
 	if err := validateImportJSON(data); err != nil {
 		return err
 	}
-	if err := verifyTags(d, c.TagFlags, importTags(data)); err != nil {
+	if _, err := verifyTags(d, c.TagFlags, importTags(data)); err != nil {
 		return err
 	}
 	// Refuse before anything is sent if any `operation: update` item would

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"os/exec"
 	"strconv"
@@ -9,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
@@ -442,5 +445,75 @@ func TestEditWarnsWhenAuthTokenReadFails(t *testing.T) {
 				t.Errorf("stderr = %q, want the auth token read warning", stderr)
 			}
 		})
+	}
+}
+
+// countingConn counts the queries that read the tag list (ListTags), so a
+// test can check how often a command reads it.
+type countingConn struct {
+	driver.Conn
+	tagReads *int
+}
+
+func (c countingConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	if strings.Contains(query, "FROM TMTag\n") {
+		*c.tagReads++
+	}
+	return c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
+}
+
+func (c countingConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	return c.Conn.(driver.ExecerContext).ExecContext(ctx, query, args)
+}
+
+type countingConnector struct {
+	drv      driver.Driver
+	tagReads *int
+}
+
+func (c countingConnector) Connect(context.Context) (driver.Conn, error) {
+	conn, err := c.drv.Open(":memory:")
+	if err != nil {
+		return nil, err
+	}
+	return countingConn{conn, c.tagReads}, nil
+}
+
+func (c countingConnector) Driver() driver.Driver { return c.drv }
+
+// An edit with tags reads the tag list once: the tag check and the no-op
+// check share the one read.
+func TestEditReadsTagListOnce(t *testing.T) {
+	fastVerify(t)
+	src := dbtest.NewSQL(t)
+	tagReads := 0
+	sqlDB := sql.OpenDB(countingConnector{drv: src.Driver(), tagReads: &tagReads})
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	rows, err := src.Query(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL`)
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	for rows.Next() {
+		var stmt string
+		if err := rows.Scan(&stmt); err != nil {
+			t.Fatalf("scan schema: %v", err)
+		}
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			t.Fatalf("apply %q: %v", stmt, err)
+		}
+	}
+	_ = rows.Close()
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("one-1", "Post letter", 1)
+	fx.Tag("tag-1", "Errand", 1)
+	if _, err := sqlDB.Exec(`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+	stubExecDropping(t)
+
+	_, _ = runOut(t, db.NewFromSQL(sqlDB), "edit", "one-1", "--add-tags", "Errand,Ghost")
+	if tagReads != 1 {
+		t.Errorf("read the tag list %d times, want once", tagReads)
 	}
 }

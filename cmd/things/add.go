@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -20,13 +22,14 @@ type AddCmd struct {
 }
 
 func (c *AddCmd) Run(d *Deps) error {
-	if err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
+	if _, err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
 		return err
 	}
 	list := c.List
 	if list == "" {
 		list = c.Project
 	}
+	warnAddTarget(d, list, c.Heading)
 	return applyAdd(d, model.TypeTask, c.Title, func() error {
 		return things.AddTask(things.AddParams{
 			Title:     c.Title,
@@ -39,4 +42,30 @@ func (c *AddCmd) Run(d *Deps) error {
 			List:      list,
 		})
 	})
+}
+
+// warnAddTarget warns when Things will not file the to-do where list and
+// heading say. Things matches them by title and, when nothing matches, puts
+// the to-do in the Inbox or leaves out the heading without reporting it. The
+// add still goes ahead. A database that cannot be read gives no warning here:
+// the tag check or the read-back reports that.
+func warnAddTarget(d *Deps, list, heading string) {
+	if list == "" {
+		if heading != "" {
+			fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list or --project; Things will ignore it and put the to-do in the Inbox\n", heading)
+		}
+		return
+	}
+	database, err := d.Database()
+	if err != nil {
+		return
+	}
+	listFound, headingFound, err := database.AddTarget(list, heading)
+	switch {
+	case err != nil:
+	case !listFound:
+		fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; it will put the to-do in the Inbox\n", list)
+	case heading != "" && !headingFound:
+		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
+	}
 }
