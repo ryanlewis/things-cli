@@ -15,9 +15,9 @@ import (
 // target is the uuid of the row list matched, "" when none did. heading
 // matches an untrashed heading of that project, ignoring case; a heading
 // under an area, or one the project lacks, is dropped and the to-do goes to
-// the list without one. When open projects differ only in case, the one
-// whose title matches list exactly is checked for the heading, as the list
-// lookup does. headingFound is false whenever target is "".
+// the list without one. When open projects differ only in case, the CLI
+// checks the one whose title matches list exactly; which one Things picks
+// is not known. headingFound is false whenever target is "".
 func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, err error) {
 	list = strings.TrimSpace(list)
 	var project string
