@@ -362,8 +362,9 @@ things add "Groceries" --checklist "Milk\nBread\nEggs"
 `YYYY-MM-DD` date only.
 
 Things files the to-do by matching `--list` (or `--project`) against the
-titles of open projects and areas, ignoring case, and `--heading` against
-the headings of that project. When nothing matches it does not complain: it
+titles of open projects and areas, and `--heading` against the headings of
+that project. Both ignore case but not surrounding space, so `" Tools "`
+does not match a project called Tools. When nothing matches it does not complain: it
 puts the to-do in the Inbox, or adds it to the list without the heading. A
 completed or trashed project does not match. A UUID of an open project or
 area works too: the CLI sends it to Things as `list-id`. The add warns on

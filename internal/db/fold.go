@@ -40,8 +40,10 @@ func foldRune(r rune) rune {
 	return r
 }
 
-// FoldTag is FoldCase after trimming surrounding space: the key tag and area
-// names are compared under, since Things ignores both differences.
+// FoldTag is FoldCase after trimming surrounding space: the key tag names are
+// compared under, since Things ignores both differences in a tag. It does not
+// trim a project, area or heading title in things:///add, so those compare
+// under FoldCase alone.
 func FoldTag(s string) string {
 	return FoldCase(strings.TrimSpace(s))
 }
