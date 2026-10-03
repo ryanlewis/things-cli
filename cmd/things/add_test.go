@@ -536,3 +536,48 @@ func TestProjectAddSendsUUIDAsAreaID(t *testing.T) {
 		})
 	}
 }
+
+// Things creates a project with no area when --area names none, without a
+// word. Checked against Things 3: it matches the title ignoring case but not
+// surrounding space. project add warns on stderr and still sends the write.
+func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
+	cases := []struct {
+		name, area string
+		want       string // "" for no warning
+	}{
+		{"title", "Personal", ""},
+		{"otherCase", "personal", ""},
+		{"uuid", "area-1", ""},
+		{"unknown", "Nowhere", `no area called "Nowhere"`},
+		{"padded", " Personal ", `no area called " Personal "`},
+		{"paddedTitle", "Errands ", ""},
+		{"paddedTitleUnpadded", "Errands", `no area called "Errands"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Area("area-2", "Errands ", 2)
+			calls := stubExecAdding(t, sqlDB, createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject})
+
+			_, stderr, err := runStreams(t, database, "project", "add", "Launch", "--area", tc.area)
+			if err != nil {
+				t.Fatalf("project add: %v", err)
+			}
+			if *calls != 1 {
+				t.Errorf("issued %d writes, want the add sent once", *calls)
+			}
+			if tc.want == "" {
+				if stderr != "" {
+					t.Errorf("stderr = %q, want no warning", stderr)
+				}
+				return
+			}
+			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
+			}
+		})
+	}
+}

@@ -99,7 +99,7 @@ Both routes create over AppleScript, so Things3 must be running, and both skip n
 
 `add` warns the same way when `--list`/`--project` names no open project or area by title or UUID (Things puts the to-do in the Inbox) or `--heading` names no heading of that project (Things drops the heading). The add still goes ahead; fix the name and move the to-do if it matters.
 
-`project add --area` takes an area name or UUID.
+`project add --area` takes an area name or UUID. It warns the same way when `--area` names no area (Things creates the project with no area), and still creates the project.
 
 ### 2. Repeating items refuse status, `when` and `deadline`
 
