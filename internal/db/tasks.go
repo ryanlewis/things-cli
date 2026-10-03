@@ -232,6 +232,12 @@ const todayDue = "t.start IN (0, 1) AND t.startDate IS NULL AND t.type = 0 AND t
 // holding it, so heldByToday uses this same test.
 const todayScope = "((" + todayScheduled + ") OR (" + todayDue + "))"
 
+// todayDate is the day --on/--from/--to match a Today row on: its start date,
+// or for a todayDue row, which has none, today itself. That is the day the
+// app shows it under; its deadline is in the past when it is overdue, so
+// matching on that would drop it from `today --on <today>`.
+const todayDate = "COALESCE(t.startDate, " + thingsToday + ")"
+
 // thingsToday is today's local date in the ThingsDate encoding
 // (year<<16 | month<<12 | day<<7), so it compares directly with startDate and
 // deadline. It reads the day the same way closedTodayUnlogged does.
@@ -513,8 +519,8 @@ type viewSpec struct {
 	orderBy string
 
 	// dateColumn is what --on/--from/--to compare against. Empty means
-	// t.startDate, which is right for every view but the two that are read by
-	// another date.
+	// t.startDate, which is right for every view but the three that are read
+	// by another date.
 	dateColumn string
 
 	// widensToProjectContents marks the view that answers --project with the
@@ -574,6 +580,7 @@ var views = map[string]viewSpec{
 	ViewToday: {
 		scope: todayScope, status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsIncludeCompleted: true, supportsDateFilter: true,
+		dateColumn: todayDate,
 		// Today takes the shared grouping and then todayIndex, which is the
 		// one signal the app orders within a group by. Measured against the
 		// app on 10 Sep 2026 over a 27-row Today, these keys reproduce its

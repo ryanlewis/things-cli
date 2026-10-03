@@ -72,7 +72,7 @@ come, under the deadline's day, and `--on`/`--from`/`--to` match it on that
 day. `today` likewise lists an undated task in the Inbox or Anytime once its
 deadline is today or past, unless it was taken out of Today for that deadline.
 Such a task also comes back from `inbox` or `anytime`, so merge a sweep on
-`uuid`.
+`uuid`. `--on`/`--from`/`--to` match it on today, the day Today shows it.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
 task or a project logs it under its stop date beside the completed ones, the

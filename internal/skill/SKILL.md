@@ -212,7 +212,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # comes back from both upcoming and anytime; dedupe a sweep on uuid.
     # today likewise lists an undated inbox or anytime task once its deadline
     # is today or past (unless it was taken out of Today for that deadline),
-    # so it also comes back from inbox or anytime.
+    # so it also comes back from inbox or anytime. --on/--from/--to match it
+    # on today, not on its deadline.
     # --include-completed works on today, anytime and upcoming: items ticked
     # off in that list which Things hasn't logged out yet. upcoming keeps only
     # what was in it while open (a task closed ahead of its date, or an undated
