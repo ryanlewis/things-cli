@@ -116,7 +116,8 @@ var Keys = []Key{
 		Flag:    "no-verify",
 		Default: false,
 		Comment: []string{
-			"Skip the read-back that confirms a complete/cancel or an edit actually landed.",
+			"Skip the read-back that confirms an add, a complete/cancel, an edit, tag",
+			"creation, or an import's status changes actually landed.",
 			"Same as --no-verify. Faster, but a write Things silently drops is",
 			"then reported as a success.",
 		},

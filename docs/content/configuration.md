@@ -138,7 +138,8 @@ commented out. Uncomment a line to change that default.
 # Leave unset to let things-cli find it. The file must exist.
 # db = "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite"
 
-# Skip the read-back that confirms a complete/cancel or an edit actually landed.
+# Skip the read-back that confirms an add, a complete/cancel, an edit, tag
+# creation, or an import's status changes actually landed.
 # Same as --no-verify. Faster, but a write Things silently drops is
 # then reported as a success.
 # no_verify = false
