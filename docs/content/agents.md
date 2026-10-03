@@ -322,7 +322,7 @@ on history needs `logbook` alone. For one open project, `things --project
 those closed today and not yet logged, from whichever list. `things --area
 <uuid> --include-completed -j` is the area's page the same way, with each of
 its open projects' pages added. Both are contents rather than lists, so their
-closed rows also come back from the sweep below. A day's sweep
+closed rows also come back from the sweep above. A day's sweep
 misses a task closed today inside a project in Someday or scheduled for
 later unless it adds that project's listing.
 
