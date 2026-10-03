@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -40,104 +39,26 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 type ProjectEditCmd struct {
 	Project string `arg:"" required:"" help:"Project title, UUID, or numeric index from last list."`
 
-	Title *string `help:"Replace title."`
-
-	Notes        *string `help:"Replace notes."`
-	PrependNotes *string `help:"Prepend text to notes." name:"prepend-notes"`
-	AppendNotes  *string `help:"Append text to notes." name:"append-notes"`
-
-	When     *string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, RFC3339, or empty to clear."`
-	Deadline *string `help:"Deadline date (YYYY-MM-DD) or empty to clear."`
-
-	Tags    *string `help:"Replace all tags (comma-separated)."`
-	AddTags *string `help:"Add tags (comma-separated)." name:"add-tags"`
+	commonEditFlags `embed:""`
 
 	Area   *string `help:"Move to area by name."`
 	AreaID *string `help:"Move to area by UUID." name:"area-id"`
 
-	Complete  bool `help:"Mark the project as completed." xor:"status"`
-	Cancel    bool `help:"Mark the project as canceled." xor:"status"`
-	Duplicate bool `help:"Duplicate the project before applying edits."`
-	Reveal    bool `help:"Reveal the project in Things after editing."`
-
-	TagFlags
+	editStatusFlags `embed:"" set:"item=project"`
 }
 
 func (c *ProjectEditCmd) Run(d *Deps) error {
-	database, err := d.Database()
-	if err != nil {
-		return err
-	}
-	project, err := resolveTask(d, c.Project, database)
-	if err != nil {
-		return err
-	}
-	// The mirror of the guard in EditCmd.Run: a to-do here would go to
-	// things:///update-project, which cannot address one (issue #191). Same
-	// structured error, so an agent can branch on the token in either
-	// direction rather than string-matching the message.
-	if project.Type != model.TypeProject {
-		return &wrongKindError{
-			Token: "not a project",
-			Kind:  "task",
-			Query: c.Project,
-			UUID:  project.UUID,
-			Title: project.Title,
-			Retry: "things edit",
-		}
-	}
-	if err := checkRepeating(project, restrictedEdits(c.When, c.Deadline, c.Complete, c.Cancel, c.Duplicate)); err != nil {
-		return err
-	}
-	// After checkRepeating: no point warning about tags on an edit Things
-	// is going to refuse anyway.
-	if err := verifyTagStrings(d, c.TagFlags, c.Tags, c.AddTags); err != nil {
-		return err
-	}
-
-	token := authToken(d, database)
-	update := func() error {
+	return runEdit(d, c.Project, projectEdit, &c.commonEditFlags, &c.editStatusFlags, c.ownFieldsSet(), func(u things.UpdateCommon) error {
 		return things.UpdateProject(things.UpdateProjectParams{
-			UpdateCommon: things.UpdateCommon{
-				ID:           project.UUID,
-				AuthToken:    token,
-				Title:        c.Title,
-				Notes:        c.Notes,
-				PrependNotes: c.PrependNotes,
-				AppendNotes:  c.AppendNotes,
-				When:         c.When,
-				Deadline:     c.Deadline,
-				Tags:         c.Tags,
-				AddTags:      c.AddTags,
-				Completed:    c.Complete,
-				Canceled:     c.Cancel,
-				Duplicate:    c.Duplicate,
-				Reveal:       c.Reveal,
-			},
-			Area:   c.Area,
-			AreaID: c.AreaID,
+			UpdateCommon: u,
+			Area:         c.Area,
+			AreaID:       c.AreaID,
 		})
-	}
-	changed := c.changesFields() && !c.certainNoOp(project)
-	return applyEdit(d, database, project, changed, c.Complete, c.Cancel, c.Duplicate, update)
+	})
 }
 
-// certainNoOp reports whether every field flag set on the edit provably
-// leaves the project as it is, so there is no modification to wait for.
-func (c *ProjectEditCmd) certainNoOp(project *model.Task) bool {
-	return !c.uncoveredSet() && c.covered().unchanged(project)
-}
-
-// changesFields reports whether the edit sets any attribute besides the status.
-func (c *ProjectEditCmd) changesFields() bool {
-	return c.covered().set() || c.uncoveredSet()
-}
-
-func (c *ProjectEditCmd) covered() coveredFields {
-	return coveredFields{c.Title, c.Notes, c.Deadline, c.Tags, c.AddTags}
-}
-
-// uncoveredSet reports whether any field flag outside coveredFields is set.
-func (c *ProjectEditCmd) uncoveredSet() bool {
-	return anySet(c.PrependNotes, c.AppendNotes, c.When, c.Area, c.AreaID)
+// ownFieldsSet reports whether any of this command's own field flags is set.
+// None of them is in coveredFields; runEdit adds the shared ones.
+func (c *ProjectEditCmd) ownFieldsSet() bool {
+	return anySet(c.Area, c.AreaID)
 }
