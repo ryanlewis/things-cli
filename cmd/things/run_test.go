@@ -300,7 +300,7 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	// not until the app's behaviour there has been measured (issue #238).
 	for _, view := range []string{"inbox", "someday"} {
 		err := runWith(t, database, "list", view, "--include-completed")
-		if err == nil || !strings.Contains(err.Error(), "only supported on the anytime and today views") {
+		if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, today and upcoming views") {
 			t.Fatalf("%s: expected view-rejection error, got: %v", view, err)
 		}
 	}
@@ -308,7 +308,7 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	// A bare --area or --tag sweep lists through the catch-all view, which
 	// rejects the flag: the app's answer there has not been measured.
 	err := runWith(t, database, "list", "--area", "Home", "--include-completed")
-	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime and today views") {
+	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, today and upcoming views") {
 		t.Fatalf("area filter: expected view-rejection error, got: %v", err)
 	}
 
@@ -334,6 +334,9 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	}
 	if err := runWith(t, database, "list", "anytime", "--include-completed"); err != nil {
 		t.Fatalf("anytime: %v", err)
+	}
+	if err := runWith(t, database, "list", "upcoming", "--include-completed"); err != nil {
+		t.Fatalf("upcoming: %v", err)
 	}
 }
 

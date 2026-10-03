@@ -205,15 +205,17 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # upcoming also lists an undated anytime task due after today, filed (and
     # filtered) under its deadline, as the app's Upcoming does — so that task
     # comes back from both upcoming and anytime; dedupe a sweep on uuid.
-    # --include-completed works on today and anytime: items ticked off in that
-    # list which Things hasn't logged out yet. logbook holds every other closed
-    # item, including things closed today from Inbox/Upcoming, so a closed item
-    # whose project is still open is either logged or still listed, never both.
-    # today and anytime overlap each other though — a task scheduled for today
-    # is in the Anytime bucket too — so for a whole day's closes sweep all
-    # three, filter logbook on stopDate, and merge on uuid. One closed inside a
-    # project that is itself closed or trashed is in none of the three sweeps —
-    # not logbook, not today, not anytime: it is folded into the project row,
+    # --include-completed works on today, anytime and upcoming: items ticked
+    # off in that list which Things hasn't logged out yet. upcoming keeps only
+    # what was in it while open (a task closed ahead of its date, or an undated
+    # one due later). logbook holds every other closed item, including things
+    # closed today from the Inbox, so a closed item whose project is still open
+    # is either logged or still listed, never both. The three lists overlap
+    # each other though — a task scheduled for today is in the Anytime bucket
+    # too, and an undated one due later is in anytime and upcoming — so for a
+    # whole day's closes sweep all four, filter logbook on stopDate, and merge
+    # on uuid. One closed inside a project that is itself closed or trashed is
+    # in none of those sweeps: it is folded into the project row,
     # per the note above. Name the project to reach it: `--project <uuid>`
     # always works, and for a closed project `things today --project <uuid>
     # --include-completed` lifts the fold in the view too, for the ones it
@@ -224,7 +226,7 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # project's contents plus every task in it closed today and not yet logged,
     # as the app's project page shows them, whichever list each was closed out
     # of. That is contents rather than a list, so those rows also come back
-    # from today, anytime or logbook. A bare --area/--tag sweep rejects the flag.
+    # from today, anytime or upcoming. A bare --area/--tag sweep rejects the flag.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

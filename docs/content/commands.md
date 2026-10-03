@@ -81,18 +81,21 @@ An item you tick off in Today is not in `logbook` yet. Things keeps it under
 Today for the rest of the day and files it into the Logbook when the day rolls
 over, or sooner if you run `things log` — the app's "Log Completed Now", which
 files the day's closed items straight away. `things today --include-completed`
-shows the ones still waiting. `anytime` behaves the same way and takes the
-same flag, because the app goes on showing a just-closed item there too.
-Everything else closed goes to `logbook` at once, today's closes included: a
-task ticked off in the Inbox, or ahead of its date in Upcoming, is under
-neither list, so nothing holds it back. A closed item whose project is still
-open is therefore either in `logbook` or in a list still showing it, never both
-and never neither — but `today` and `anytime` overlap each other, since a task
-scheduled for today is in the Anytime bucket too, so sweeping both means
-merging them on `uuid`. One closed inside a project that is itself closed or
-trashed is in none of the three unfiltered lists — not `logbook`, not `today`,
-not `anytime` — for the reason the next paragraph gives. Naming that project
-brings it back. `--include-completed` works on `today` and `anytime`; with a
+shows the ones still waiting. `anytime` and `upcoming` behave the same way and
+take the same flag, because the app goes on showing a just-closed item there
+too. `upcoming` keeps only what was in it while open: a task closed ahead of
+its date, or an undated one with a deadline after today. Everything else
+closed goes to `logbook` at once, today's closes included: a task ticked off in
+the Inbox is under none of these lists, so nothing holds it back. A closed item
+whose project is still open is therefore either in `logbook` or in a list
+still showing it, never both and never neither — but the lists overlap each
+other, since a task scheduled for today is in the Anytime bucket too and an
+undated one due later is in both `anytime` and `upcoming`, so sweeping them
+means merging on `uuid`. One closed inside a project that is itself closed or
+trashed is in none of the unfiltered lists — not `logbook`, not `today`, not
+`anytime`, not `upcoming` — for the reason the next paragraph gives. Naming
+that project brings it back. `--include-completed` works on `today`, `anytime`
+and `upcoming`; with a
 filter, name the view: `things today -p "Launch v2" --include-completed`
 returns the tasks of a closed "Launch v2" that closed today, rather than
 nothing.
@@ -100,9 +103,8 @@ nothing.
 `--include-completed` also works on a bare `--project`, with no view:
 `things -p "Launch v2" --include-completed` lists an open project's tasks plus
 every one of them closed today and not yet logged, struck through in the app's
-project page until the day rolls over. That includes a task closed ahead of its
-date out of Upcoming, which `logbook` also lists: a project's contents are not
-one of the lists above, so they overlap all three. A bare `--area` or `--tag`
+project page until the day rolls over, whichever list it was closed out of. A
+project's contents are not one of the lists above, so they overlap them. A bare `--area` or `--tag`
 sweep rejects the flag.
 
 A closed project is one row in `logbook`, not a row plus its contents. The

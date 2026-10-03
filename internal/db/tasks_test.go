@@ -53,7 +53,7 @@ func seedTasks(t *testing.T, d *DB) {
 // now read the view table, so pin both against the answer spelled out rather
 // than against the table they are derived from (issue #240).
 func TestCompletableViews(t *testing.T) {
-	want := map[string]bool{"today": true, "anytime": true}
+	want := map[string]bool{"today": true, "anytime": true, "upcoming": true}
 	for view := range views {
 		if got := CompletableView(view, false); got != want[view] {
 			t.Errorf("CompletableView(%q, false) = %v, want %v", view, got, want[view])
@@ -68,8 +68,8 @@ func TestCompletableViews(t *testing.T) {
 	if CompletableView("bogus", true) {
 		t.Error("CompletableView(\"bogus\", true) = true, want false")
 	}
-	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "today"}) {
-		t.Errorf("CompletableViewNames() = %v, want [anytime today]", got)
+	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "today", "upcoming"}) {
+		t.Errorf("CompletableViewNames() = %v, want [anytime today upcoming]", got)
 	}
 }
 
@@ -325,11 +325,12 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 // today" from the Logbook outright would leave those rows in no list at all
 // (issue #230).
 //
-// Anytime is the case that is not like the other two. Since issue #238 the
-// app's Anytime goes on showing a row closed out of it, so the Logbook
-// withholds it for the rest of the day and `anytime --include-completed` has
-// it instead. Each case therefore names the list that should be holding the
-// row, and every case asserts it is in exactly one place.
+// Anytime and Upcoming are not like the Inbox. Since issue #238 the app's
+// Anytime goes on showing a row closed out of it, and since issue #293 so does
+// its Upcoming, so the Logbook withholds such a row for the rest of the day and
+// `--include-completed` on that view has it instead. Each case therefore names
+// the lists that should be holding the row, and every case asserts it is in
+// the Logbook or in those lists, never both and never neither.
 func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 	future := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3)))
 	stopNow := model.TimeToUnix(time.Now())
@@ -339,26 +340,30 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 		start       int
 		startBucket int
 		startDate   any
-		heldBy      string // the view that should have it, "" for the logbook
+		deadline    any
+		heldBy      []string // the views that should have it, none for the logbook
 	}{
-		{"t-closed-inbox", 0, 0, nil, ""},          // closed straight out of the Inbox
-		{"t-closed-anytime", 1, 0, nil, "anytime"}, // closed out of Anytime — no startDate
-		{"t-closed-upcoming", 2, 0, future, ""},    // closed ahead of its Upcoming date
+		{"t-closed-inbox", 0, 0, nil, nil, nil},                        // closed straight out of the Inbox
+		{"t-closed-anytime", 1, 0, nil, nil, []string{"anytime"}},      // closed out of Anytime — no startDate
+		{"t-closed-upcoming", 2, 0, future, nil, []string{"upcoming"}}, // closed ahead of its Upcoming date
+		// An undated Anytime to-do due later is in both lists while open, as
+		// the app's Upcoming files it under its deadline, and stays in both.
+		{"t-closed-due-later", 1, 0, nil, future, []string{"anytime", "upcoming"}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.uuid, func(t *testing.T) {
 			d := newTestDB(t)
 			mustExec(t, d, `INSERT INTO TMTask
-				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
-				VALUES (?, 'Closed', 0, 3, 0, ?, ?, ?, ?, 1)`,
-				tc.uuid, tc.start, tc.startBucket, tc.startDate, stopNow)
+				(uuid, title, type, status, trashed, start, startBucket, startDate, deadline, stopDate, "index")
+				VALUES (?, 'Closed', 0, 3, 0, ?, ?, ?, ?, ?, 1)`,
+				tc.uuid, tc.start, tc.startBucket, tc.startDate, tc.deadline, stopNow)
 
 			logged, err := d.ListTasks("logbook", TaskFilter{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantLogged := tc.heldBy == ""
+			wantLogged := len(tc.heldBy) == 0
 			if gotLogged := len(logged) == 1; gotLogged != wantLogged {
 				t.Errorf("logbook = %v, want held there: %v", uuidsOf(logged), wantLogged)
 			}
@@ -372,18 +377,22 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 				t.Errorf("today = %v, want empty", uuidsOf(inToday))
 			}
 
-			inAnytime, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
-			if err != nil {
-				t.Fatal(err)
-			}
-			wantAnytime := tc.heldBy == "anytime"
-			if gotAnytime := len(inAnytime) == 1; gotAnytime != wantAnytime {
-				t.Errorf("anytime --include-completed = %v, want held there: %v", uuidsOf(inAnytime), wantAnytime)
+			held := 0
+			for _, view := range []string{"anytime", "upcoming"} {
+				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := slices.Contains(tc.heldBy, view)
+				if gotHeld := len(got) == 1; gotHeld != want {
+					t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
+				}
+				held += len(got)
 			}
 
-			// Exactly one list, never both and never neither.
-			if n := len(logged) + len(inAnytime); n != 1 {
-				t.Errorf("row is in %d lists, want exactly 1", n)
+			// The Logbook or the lists holding it, never both and never neither.
+			if (len(logged) == 1) == (held > 0) {
+				t.Errorf("logbook has it: %v, held by %d lists — want exactly one of the two", len(logged) == 1, held)
 			}
 		})
 	}
@@ -2393,6 +2402,72 @@ func TestAnytimeIncludeCompleted(t *testing.T) {
 	}
 	if !sameSet(uuidsOf(afterLog), []string{"open-one"}) {
 		t.Errorf("after Log Completed Now: got %v, want [open-one]", uuidsOf(afterLog))
+	}
+}
+
+// Upcoming keeps a to-do closed today in place, struck through, until the day
+// rolls over, as Today and Anytime do. Measured on 3 Oct 2026, the app's
+// Upcoming held three to-dos closed that day ahead of their date, and its
+// Logbook held none of them (issue #293). Only rows that were in Upcoming while
+// open come back: the flag widens the status test, not the scope.
+func TestUpcomingIncludeCompleted(t *testing.T) {
+	d, fx := newFixture(t)
+
+	stopToday := model.TimeToUnix(time.Now())
+	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
+	later := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 2)))
+
+	fx.Todo("open-later", "Open", 1, somedayOn(later))
+	fx.Todo("done-ahead", "Done ahead", 2, somedayOn(later), completed(stopToday))
+	fx.Todo("dropped-ahead", "Dropped ahead", 3, somedayOn(later), cancelled(stopToday))
+	fx.Todo("done-due-later", "Done, due later", 4, anytime(), deadline(later), completed(stopToday))
+	fx.Todo("done-yesterday", "Done yesterday", 5, somedayOn(later), completed(stopYesterday))
+	// Closed today, but never in Upcoming: no date and no deadline.
+	fx.Todo("done-anytime", "Done in Anytime", 6, anytime(), completed(stopToday))
+
+	plain, err := d.ListTasks("upcoming", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(plain), []string{"open-later"}) {
+		t.Errorf("upcoming: got %v, want [open-later]", uuidsOf(plain))
+	}
+
+	got, err := d.ListTasks("upcoming", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"open-later", "done-ahead", "dropped-ahead", "done-due-later"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("upcoming --include-completed: got %v, want %v", uuidsOf(got), want)
+	}
+
+	// The Logbook withholds what Upcoming is holding, and takes the rest.
+	logged, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(logged), []string{"done-yesterday"}) {
+		t.Errorf("logbook: got %v, want [done-yesterday]", uuidsOf(logged))
+	}
+
+	// "Log Completed Now" files the day's closed items early, here as in
+	// today and anytime, and the Logbook takes them back.
+	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
+	afterLog, err := d.ListTasks("upcoming", TaskFilter{IncludeCompleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(afterLog), []string{"open-later"}) {
+		t.Errorf("after Log Completed Now: got %v, want [open-later]", uuidsOf(afterLog))
+	}
+	loggedAfter, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loggedAfter) != 5 {
+		t.Errorf("logbook after Log Completed Now: got %v, want all five closed rows", uuidsOf(loggedAfter))
 	}
 }
 

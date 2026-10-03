@@ -295,17 +295,19 @@ shows them. `status` separates them, `"completed"` or `"cancelled"`, so an
 agent asked what actually got done should filter on it rather than assume
 every logbook row is a success.
 
-An item you tick off in Today or in Anytime is not in `logbook` yet — Things
-keeps it where it was until the day rolls over, or until `things log` files it
-early, and `--include-completed` is how to see those on either view. Anything
-closed outside both goes straight to `logbook`, including today's closes.
-`logbook` is disjoint from the other two, but `today` and `anytime` are not
-disjoint from each other: a task scheduled for today sits in the Anytime
-bucket as well, so it comes back from both. None of the three is a whole day on
-its own, so an agent reporting on a day's work sweeps all three — `things today
---include-completed -j` and `things anytime --include-completed -j` plus
-`things logbook -j` filtered on `stopDate` — and merges them on `uuid` rather
-than concatenating, or it counts the scheduled ones twice. An agent reporting
+An item you tick off in Today, Anytime or Upcoming is not in `logbook` yet —
+Things keeps it where it was until the day rolls over, or until `things log`
+files it early, and `--include-completed` is how to see those on any of the
+three views. Anything closed outside them goes straight to `logbook`,
+including today's closes. `logbook` is disjoint from the other three, but they
+are not disjoint from each other: a task scheduled for today sits in the
+Anytime bucket as well, and an undated one due later is in Anytime and
+Upcoming, so each comes back from two lists. None of the four is a whole day on
+its own, so an agent reporting on a day's work sweeps all four — `things today
+--include-completed -j`, `things anytime --include-completed -j` and `things
+upcoming --include-completed -j` plus `things logbook -j` filtered on
+`stopDate` — and merges them on `uuid` rather than concatenating, or it counts
+the overlapping ones twice. An agent reporting
 on history needs `logbook` alone. For one open project, `things --project
 <uuid> --include-completed -j` is the app's project page: its open tasks plus
 those closed today and not yet logged, from whichever list.
@@ -316,8 +318,8 @@ into the project row and so does the CLI. An agent counting what got done from
 `logbook` counts projects once, not once plus every task inside them — which
 also means the day sweep above reports the project rather than the tasks
 `things complete <project> --yes` closed along with it: the fold applies to
-`today --include-completed` and `anytime --include-completed` as well as to
-`logbook`, so those tasks are in none of the three sweeps above. To read
+`today`, `anytime` and `upcoming` under `--include-completed` as well as to
+`logbook`, so those tasks are in none of the sweeps above. To read
 the contents, name the project: `things --project <uuid> -j` on a closed or
 trashed project returns its tasks whatever their status, and
 `things show <uuid> --agent` lists them under `## Tasks` with `[x]`, `[~]` or

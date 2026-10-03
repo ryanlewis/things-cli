@@ -17,7 +17,7 @@ type TaskFilter struct {
 
 	// IncludeCompleted keeps completed/cancelled items that Things has not yet
 	// logged out of the list they are in (UI-parity). It reaches the views
-	// CompletableView reports — today, anytime, and the catch-all when Project
+	// CompletableView reports — today, anytime, upcoming, and the catch-all when Project
 	// names a project — and without it those return only open tasks. Ignored
 	// by every other view.
 	IncludeCompleted bool
@@ -224,17 +224,17 @@ const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16
 	`(CAST(strftime('%d', 'now', 'localtime') AS INTEGER) << 7))`
 
 // heldInPlace is the set the Logbook withholds: the closed rows some other
-// view is still showing where the app leaves them. Today is one such view and
-// Anytime is the other, so the test is the union of the two (issues #230,
-// #238), and the Logbook takes anything neither of them holds.
+// view is still showing where the app leaves them. Today, Anytime and Upcoming
+// are such views, so the test is the union of the three (issues #230, #238,
+// #293), and the Logbook takes anything none of them holds.
 //
 // The scheduling half matters as much as the day: a to-do closed straight out
-// of the Inbox, or ahead of its date out of Upcoming, is under neither list,
-// so the Logbook takes it the moment it closes. Withholding it on the day
-// alone would leave it listed nowhere at all (issue #230).
+// of the Inbox is under none of those lists, so the Logbook takes it the
+// moment it closes. Withholding it on the day alone would leave it listed
+// nowhere at all (issue #230).
 //
-// The fold issue #249 adds to those two views needs no matching guard here,
-// unlike the template one. The test is left claiming today and anytime still
+// The fold issue #249 adds to those views needs no matching guard here,
+// unlike the template one. The test is left claiming those views still
 // hold a closed project's to-dos, which since #249 they do not, and that
 // over-claim is harmless: the Logbook rejects exactly those rows on its own
 // parentNotClosed clause, so the withhold can never be what strands one. They
@@ -246,21 +246,29 @@ const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16
 // goes on showing it for the rest of the day. Today's half is not redundant
 // either: it carries project rows, which Anytime does not.
 //
-// notATemplate is the third half of the test and the reason for it is the same
-// "listed nowhere at all" hazard: today and anytime both drop repeating
+// Upcoming's half is not redundant either: a to-do closed ahead of its date
+// sits in the Someday bucket with a start date, which neither of the other two
+// holds. Measured on 3 Oct 2026, the app's Upcoming held three such to-dos
+// closed that day and its Logbook held none of them (issue #293).
+//
+// notATemplate is the last half of the test and the reason for it is the same
+// "listed nowhere at all" hazard: today, anytime and upcoming all drop repeating
 // templates and the contents of repeating project templates, while the Logbook
 // keeps them (includesTemplates), so withholding such a row would take
 // it out of every list. Both halves are "IS NULL" tests, which are never NULL
 // themselves, so they cannot turn a true held-test into NULL.
-const heldInPlace = "(((" + heldByToday + ") OR (" + heldByAnytime + ")) AND " + notATemplate + ")"
+const heldInPlace = "(((" + heldByToday + ") OR (" + heldByAnytime + ") OR (" + heldByUpcoming + ")) AND " + notATemplate + ")"
 
-// notATemplate excludes the rows today and anytime never carry: the template
+// notATemplate excludes the rows those views never carry: the template
 // row itself, and a to-do inside a repeating project template, which carries
 // no rule of its own — only its project does (issue #171).
 const notATemplate = repeatingPlaceholder + " IS NULL AND " + repeatingParentPlaceholder + " IS NULL"
 
 // heldByAnytime is the Anytime half — the bucket test the view itself uses.
 const heldByAnytime = "t.start = 1 AND t.type = 0 AND " + closedTodayUnlogged
+
+// heldByUpcoming is the Upcoming half — the scope test the view itself uses.
+const heldByUpcoming = upcomingScope + " AND " + closedTodayUnlogged
 
 // heldByToday is the Today half.
 //
@@ -301,8 +309,8 @@ const parentNotClosed = "NOT (" + parentClosed + ")"
 // openOrJustClosed is the status test for the views that --include-completed
 // applies to. By default only open rows; with the flag, also the rows the app
 // is still showing in place because they were closed today, not yet logged,
-// and not folded into a closed project's row. Shared so today and anytime
-// cannot answer the question differently.
+// and not folded into a closed project's row. Shared so today, anytime and
+// upcoming cannot answer the question differently.
 //
 // The fold sits inside the closed branch rather than beside it, so it can only
 // ever remove a row --include-completed just added. An open to-do under a
@@ -331,7 +339,7 @@ func openOrJustClosed(o whereOpts) string {
 // among them, so a change to one meant finding the rest by eye (issue #240).
 const (
 	// openRows is the default status test. Almost every view is the open set;
-	// today and anytime widen past it under --include-completed, and only the
+	// today, anytime and upcoming widen past it under --include-completed, and only the
 	// logbook and trash are built on something else.
 	openRows = "t.status = 0"
 	// closedRows is the Logbook's status test: completed and cancelled both,
@@ -381,9 +389,9 @@ const (
 	// unparented is someday's parity rule: a to-do inside a project stays
 	// inside it however it is deferred (issue #211).
 	unparented = "p.uuid IS NULL"
-	// notHeldInPlace is the Logbook's complement of what today and anytime
-	// still show. COALESCE makes the negation null-safe — see heldInPlace.
-	// The Logbook's other extra is parentNotClosed, which it shares with the
+	// notHeldInPlace is the Logbook's complement of what today, anytime and
+	// upcoming still show. COALESCE makes the negation null-safe — see
+	// heldInPlace. The Logbook's other extra is parentNotClosed, which it shares with the
 	// --include-completed views since #252, so it is defined with its pair.
 	notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
 )
@@ -438,7 +446,8 @@ type viewSpec struct {
 
 	// supportsIncludeCompleted marks the views --include-completed applies to:
 	// the lists the app keeps a just-closed item visible in until the day
-	// rolls over. today and anytime are both such lists (issues #106, #238).
+	// rolls over. today, anytime and upcoming are all such lists (issues #106,
+	// #238, #293).
 	// someday would be too if it behaved the same way, but there was no item
 	// closed out of Someday in the data on 10 Sep 2026 to measure the app's
 	// answer against, and its list matched the CLI exactly, so it is left out
@@ -575,12 +584,16 @@ var views = map[string]viewSpec{
 	},
 	ViewUpcoming: {
 		scope: upcomingScope, status: openRows, trashed: untrashedRows,
-		includesProjects: true, supportsDateFilter: true,
+		includesProjects: true, supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Upcoming is a diary, so it reads by date and not by list position.
 		// The app orders it by start date and then by todayIndex, which is the
 		// within-day position it also keys Today on; the view listed in bare
 		// t."index" order before, which interleaved the dates (issue #217).
 		// A to-do there only by its deadline sorts by that day in the same way.
+		//
+		// --include-completed works here on the same rule as Today and
+		// Anytime, over the same scope: a to-do closed today stays in Upcoming,
+		// struck through, only if it was there while open (issue #293).
 		dateColumn: upcomingDate,
 		orderBy:    "ORDER BY " + upcomingDate + " ASC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
@@ -645,14 +658,15 @@ var views = map[string]viewSpec{
 	// (issue #210). Callers tell the two apart by `status`, which reads
 	// "cancelled" or "completed" in JSON and prints [~] or [x] in plain output.
 	// Over the rows these views can carry, Logbook is the exact complement of
-	// what today and anytime keep under --include-completed, so such a closed
-	// item is in the Logbook or in one of those lists and never in both:
-	// Things moves an item out of its list and into the Logbook at the same
-	// moment (issues #230, #238). The complement is taken over heldInPlace,
+	// what today, anytime and upcoming keep under --include-completed, so such
+	// a closed item is in the Logbook or in one of those lists and never in
+	// both: Things moves an item out of its list and into the Logbook at the
+	// same moment (issues #230, #238, #293). The complement is taken over heldInPlace,
 	// not over the day alone — a closed item no list held is logged straight
-	// away, whatever day it closed on. today and anytime overlap each other,
-	// though: a to-do scheduled for today sits in the Anytime bucket too, so a
-	// sweep across both dedupes by uuid. parentNotClosed narrows what "these
+	// away, whatever day it closed on. The three lists overlap each other,
+	// though: a to-do scheduled for today sits in the Anytime bucket too, and
+	// an undated one due later is in Anytime and Upcoming both, so a sweep
+	// across them dedupes by uuid. parentNotClosed narrows what "these
 	// views can carry" means: a closed to-do inside a closed or trashed
 	// project is in neither list, and is reached by naming the project.
 	//
