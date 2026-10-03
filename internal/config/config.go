@@ -347,7 +347,7 @@ func coerce(key Key, value any) (any, error) {
 				return nil, fmt.Errorf("key %q %v — to skip the read-back entirely, set no_verify = true", key.Name, err)
 			}
 		}
-		if len(key.Enum) > 0 && !contains(key.Enum, s) {
+		if len(key.Enum) > 0 && !slices.Contains(key.Enum, s) {
 			return nil, fmt.Errorf("key %q must be one of %s, got %q",
 				key.Name, strings.Join(key.Enum, ", "), s)
 		}
@@ -367,15 +367,6 @@ func ParseDuration(s string) (time.Duration, error) {
 		return 0, fmt.Errorf("must be a positive duration such as \"5s\" or \"2500ms\", got %q", s)
 	}
 	return d, nil
-}
-
-func contains(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
 }
 
 func typeName(v any) string {

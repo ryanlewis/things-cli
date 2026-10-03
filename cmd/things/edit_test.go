@@ -294,3 +294,27 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		})
 	}
 }
+
+// A database error reading the auth token must reach the user as a warning on
+// stderr, not vanish into an empty token that later reads as "auth token is
+// required".
+func TestEditWarnsWhenAuthTokenReadFails(t *testing.T) {
+	for _, args := range [][]string{
+		{"edit", "one-1", "--title", "Post the letter"},
+		{"project", "edit", "repproj-1", "--title", "Post the letter"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			if _, err := sqlDB.Exec(`DROP TABLE TMSettings`); err != nil {
+				t.Fatalf("drop settings: %v", err)
+			}
+			stubExec(t)
+
+			stderr, _ := runCapturingStderr(t, database, args...)
+			if !strings.Contains(stderr, "warning: could not read Things auth token") {
+				t.Errorf("stderr = %q, want the auth token read warning", stderr)
+			}
+		})
+	}
+}

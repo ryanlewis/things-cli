@@ -34,7 +34,7 @@ func (c *SkillInstallCmd) Run(d *Deps) error {
 			return fmt.Errorf("skill already installed at %s — pass -y to overwrite", dir)
 		}
 		if !confirmAction(d, fmt.Sprintf("Skill already installed at %s. Overwrite?", dir)) {
-			return fmt.Errorf("cancelled")
+			return errCancelled
 		}
 	}
 	if err := skill.Install(agent, dir); err != nil {
@@ -72,7 +72,7 @@ func (c *SkillUninstallCmd) Run(d *Deps) error {
 			return fmt.Errorf("refusing to uninstall non-interactively — pass -y to confirm")
 		}
 		if !confirmAction(d, fmt.Sprintf("Remove %s skill at %s?", agent.Name(), dir)) {
-			return fmt.Errorf("cancelled")
+			return errCancelled
 		}
 	}
 	if err := skill.Uninstall(agent, dir); err != nil {

@@ -77,7 +77,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
-		return nil, fmt.Errorf("cancelled")
+		return nil, errCancelled
 	}
 	choice, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
 	if err != nil || choice < 1 || choice > len(ambig.Matches) {
