@@ -1422,6 +1422,28 @@ func TestListTasksProjectOrderMatchesProjectPage(t *testing.T) {
 	}
 }
 
+// Two headings that share an index still list as two blocks: without a key
+// after the heading's index, their to-dos would interleave by their own.
+func TestListTasksProjectOrderKeepsTiedHeadingsApart(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Project("proj", "Ship v2", 1)
+	fx.Heading("head-a", "Phase A", 5, inProject("proj"))
+	fx.Heading("head-b", "Phase B", 5, inProject("proj"))
+	fx.Todo("b1", "B1", 1, anytime(), underHeading("head-b"))
+	fx.Todo("a1", "A1", 2, anytime(), underHeading("head-a"))
+	fx.Todo("b2", "B2", 3, anytime(), underHeading("head-b"))
+	fx.Todo("a2", "A2", 4, anytime(), underHeading("head-a"))
+
+	got, err := d.ListTasks("project", TaskFilter{Project: "proj"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"a1", "a2", "b1", "b2"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("project order: got %v, want %v", got, want)
+	}
+}
+
 // --- heading exclusion from lookups (issue #146) ---
 //
 // Two heading shapes matter to a lookup: "head-phase", with a title of its
