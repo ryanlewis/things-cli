@@ -2,6 +2,7 @@
 /coverage.out
 /.claude/*
 !/.claude/settings.json
+!/.claude/hooks/
 /dist/
 /.worktrees/
 __pycache__/
