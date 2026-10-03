@@ -937,11 +937,9 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	// answers with the project's whole contents rather than a slice of a list.
 	// Trash goes the other way and keeps the guard — see its case below.
 	switch {
-	case opts.Project == "":
-		where += " AND " + untrashedParent
-	case spec.widensToProjectContents:
+	case opts.Project != "" && spec.widensToProjectContents:
 		where = closedProjectContents
-	case spec.keepsTrashedParentGuard:
+	case opts.Project == "" || spec.keepsTrashedParentGuard:
 		// Trash keeps the guard even under --project. Its rows are the ones
 		// thrown away on their own account, and a to-do thrown away out of a
 		// project that is itself in the Trash is reachable nowhere, as in the
