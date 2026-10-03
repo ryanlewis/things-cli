@@ -68,7 +68,7 @@ func TestColorMode_Never_StripsANSI(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	tasks := []model.Task{{UUID: "u1", Title: "Done", Status: model.StatusCompleted}}
-	if err := Print(&buf, tasks, false); err != nil {
+	if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -91,7 +91,7 @@ func TestColorMode_Always_EmitsANSI(t *testing.T) {
 	// the tag's color sequence proves always-mode emits *color*, not merely text
 	// decoration that would survive an accidental downsample to ASCII.
 	tasks := []model.Task{{UUID: "u1", Title: "Done", Status: model.StatusCompleted, Tags: []string{"tag"}}}
-	if err := Print(&buf, tasks, false); err != nil {
+	if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if out := buf.String(); !strings.Contains(out, "\x1b[33m") {
@@ -144,7 +144,7 @@ func TestColorMode_Auto_StripsWhenNonTTY(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	tasks := []model.Task{{UUID: "u1", Title: "Done", Status: model.StatusCompleted}}
-	if err := Print(&buf, tasks, false); err != nil {
+	if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()

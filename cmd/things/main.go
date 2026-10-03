@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
-	"github.com/mattn/go-isatty"
 	"github.com/willabides/kongplete"
+	"golang.org/x/term"
 
 	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -348,8 +348,7 @@ func flagAsksJSON(flag string) (asks, takesValue bool) {
 // stub the terminal check — see (*Deps).interactive, which is what callers
 // should use.
 var isInteractive = func() bool {
-	fd := os.Stdin.Fd()
-	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // expandNewlines converts the literal two-character sequence `\n` into real

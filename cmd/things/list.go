@@ -209,7 +209,7 @@ func (c *ProjectsCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	return output.Print(d.Stdout, projects, d.JSON)
+	return output.PrintProjects(d.Stdout, projects, d.JSON)
 }
 
 type AreasCmd struct{}
@@ -223,7 +223,7 @@ func (c *AreasCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	return output.Print(d.Stdout, areas, d.JSON)
+	return output.PrintAreas(d.Stdout, areas, d.JSON)
 }
 
 type TagsCmd struct{}
@@ -237,7 +237,7 @@ func (c *TagsCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	return output.Print(d.Stdout, tags, d.JSON)
+	return output.PrintTags(d.Stdout, tags, d.JSON)
 }
 
 type ShowCmd struct {
