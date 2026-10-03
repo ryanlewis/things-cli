@@ -331,6 +331,7 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 // the lists that should be holding the row, and every case asserts it is in
 // the Logbook or in those lists, never both and never neither.
 func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(time.Now()))
 	future := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3)))
 	stopNow := model.TimeToUnix(time.Now())
 
@@ -348,6 +349,10 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 		// An undated Anytime to-do due later is in both lists while open, as
 		// the app's Upcoming files it under its deadline, and stays in both.
 		{"t-closed-due-later", 1, 0, nil, future, []string{"anytime", "upcoming"}},
+		// An undated to-do whose deadline has come is in Today while open
+		// (issue #294), from the Inbox as well as from Anytime.
+		{"t-closed-inbox-due-today", 0, 0, nil, today, []string{"today"}},
+		{"t-closed-anytime-due-today", 1, 0, nil, today, []string{"today", "anytime"}},
 	}
 
 	for _, tc := range cases {
@@ -367,17 +372,8 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 				t.Errorf("logbook = %v, want held there: %v", uuidsOf(logged), wantLogged)
 			}
 
-			// today never has it: none of these rows is scheduled for today.
-			inToday, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(inToday) != 0 {
-				t.Errorf("today = %v, want empty", uuidsOf(inToday))
-			}
-
 			held := 0
-			for _, view := range []string{"anytime", "upcoming"} {
+			for _, view := range []string{"today", "anytime", "upcoming"} {
 				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
 				if err != nil {
 					t.Fatal(err)
@@ -2108,6 +2104,40 @@ func TestUpcomingListsAnytimeToDosDueLater(t *testing.T) {
 	want = []string{"due-later", "sched-later"}
 	if got := uuidsOf(got); !slices.Equal(got, want) {
 		t.Errorf("upcoming --on: got %v, want %v", got, want)
+	}
+}
+
+// The app's Today also lists a to-do with no start date once its deadline
+// has arrived, whether it sits in the Inbox or in Anytime, and goes on listing
+// it while it is overdue. The one exception is a to-do taken out of Today for
+// that deadline, which Things records in deadlineSuppressionDate. Today held
+// only rows with a start date, so these were missing from it (issue #294).
+func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
+
+	fx.Todo("sched-today", "Scheduled today", 1, anytimeOn(today))
+	fx.Todo("anytime-due-today", "Anytime due today", 2, anytime(), deadline(today))
+	fx.Todo("anytime-overdue", "Anytime overdue", 3, anytime(), deadline(earlier))
+	fx.Todo("inbox-due-today", "Inbox due today", 4, inbox(), deadline(today))
+	fx.Todo("inbox-overdue", "Inbox overdue", 5, inbox(), deadline(earlier))
+	// Taken out of Today for this deadline.
+	fx.Todo("suppressed", "Suppressed", 6, anytime(), deadline(earlier), suppressed(earlier))
+	// Due later is Upcoming's business, and no deadline is no reason at all.
+	fx.Todo("due-tomorrow", "Due tomorrow", 7, anytime(), deadline(tomorrow))
+	fx.Todo("no-deadline", "No deadline", 8, anytime())
+
+	got, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"sched-today", "anytime-due-today", "anytime-overdue", "inbox-due-today", "inbox-overdue"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("today: got %v, want %v", uuidsOf(got), want)
 	}
 }
 

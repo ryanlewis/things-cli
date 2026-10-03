@@ -12,6 +12,7 @@ CREATE TABLE TMTask (
     startDate                       INTEGER,
     startBucket                     INTEGER,
     deadline                        INTEGER,
+    deadlineSuppressionDate         INTEGER,
     "index"                         INTEGER,
     todayIndex                      INTEGER,
     todayIndexReferenceDate         INTEGER,

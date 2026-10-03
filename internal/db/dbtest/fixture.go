@@ -92,12 +92,13 @@ func (f *Fixture) insert(kind model.TaskType, uuid, title string, index int, opt
 	}
 	f.exec(`INSERT INTO TMTask
 		(uuid, title, notes, type, status, trashed, start, startBucket, startDate,
-		 todayIndexReferenceDate, todayIndex, deadline, stopDate, project, area,
-		 heading, "index", rt1_recurrenceRule)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 todayIndexReferenceDate, todayIndex, deadline, deadlineSuppressionDate,
+		 stopDate, project, area, heading, "index", rt1_recurrenceRule)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		uuid, title, r.notes, int(r.kind), int(r.status), r.trashed,
 		r.start, r.startBucket, r.startDate, r.todayIndexRef, r.todayIndex,
-		r.deadline, r.stopDate, r.project, r.area, r.heading, index, r.recurrence)
+		r.deadline, r.deadlineSuppressed, r.stopDate, r.project, r.area, r.heading,
+		index, r.recurrence)
 }
 
 // taskRow holds the columns a TMTask row is built from. A nil field is written
@@ -114,11 +115,13 @@ type taskRow struct {
 	todayIndex    any
 	todayIndexRef any
 	deadline      any
-	stopDate      any
-	project       any
-	area          any
-	heading       any
-	recurrence    any
+	// deadlineSuppressed is TMTask.deadlineSuppressionDate.
+	deadlineSuppressed any
+	stopDate           any
+	project            any
+	area               any
+	heading            any
+	recurrence         any
 }
 
 // Opt sets a column on the row Todo, Project or Heading writes.
@@ -174,6 +177,12 @@ func Cancelled(stop float64) Opt {
 func Status(s model.Status) Opt { return func(r *taskRow) { r.status = s } }
 
 func Deadline(date int64) Opt { return func(r *taskRow) { r.deadline = date } }
+
+// DeadlineSuppressed records that the to-do was taken out of Today for the
+// deadline on the given day, so Today stops listing it for that deadline.
+func DeadlineSuppressed(date int64) Opt {
+	return func(r *taskRow) { r.deadlineSuppressed = date }
+}
 
 // TodayIndex is the within-day position Today and Upcoming order on, and
 // TodayIndexRef the day that position was set for.

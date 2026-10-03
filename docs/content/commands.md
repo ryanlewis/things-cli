@@ -21,7 +21,8 @@ third Things type never reaches the output.
 project rows. It is the list an item falls back to when it carries no date,
 so it does not on its own say which list the app shows the item in: a dated
 `"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and
-only an undated one is in Someday.
+only an undated one is in Someday. An undated `"inbox"` or `"anytime"` task
+whose deadline is today or past is in Today as well.
 
 In v0.7.0 and earlier `type` and `start` were both integers, so a caller
 matching on `.type==1` has to become `.type=="project"`, and one matching
@@ -68,7 +69,10 @@ which leaves an item closed today where it was rather than moving it to the
 end. `upcoming` reads by date instead, the way the app's own Upcoming does.
 Like the app, it also lists an undated Anytime task whose deadline is still to
 come, under the deadline's day, and `--on`/`--from`/`--to` match it on that
-day.
+day. `today` likewise lists an undated task in the Inbox or Anytime once its
+deadline is today or past, unless it was taken out of Today for that deadline.
+Such a task also comes back from `inbox` or `anytime`, so merge a sweep on
+`uuid`.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
 task or a project logs it under its stop date beside the completed ones, the
