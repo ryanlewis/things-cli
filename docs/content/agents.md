@@ -306,7 +306,9 @@ its own, so an agent reporting on a day's work sweeps all three — `things toda
 --include-completed -j` and `things anytime --include-completed -j` plus
 `things logbook -j` filtered on `stopDate` — and merges them on `uuid` rather
 than concatenating, or it counts the scheduled ones twice. An agent reporting
-on history needs `logbook` alone.
+on history needs `logbook` alone. For one open project, `things --project
+<uuid> --include-completed -j` is the app's project page: its open tasks plus
+those closed today and not yet logged, from whichever list.
 
 A closed project is one `logbook` row, not a row plus its contents, and a
 trashed project is one `trash` row the same way — the app folds their tasks

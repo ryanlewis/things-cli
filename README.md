@@ -275,7 +275,7 @@ Filters:
 | `--on DATE` | Only tasks scheduled on `YYYY-MM-DD` (or RFC3339); on `deadlines`, filters by deadline, and on `upcoming` an undated task by its deadline |
 | `--from DATE` | Only tasks scheduled on or after the date |
 | `--to DATE` | Only tasks scheduled on or before the date |
-| `--include-completed` | On `today` and `anytime`: also show items closed today that Things hasn't logged out of the list yet |
+| `--include-completed` | On `today` and `anytime`, and with `--project`: also show items closed today that Things hasn't logged out of the list yet |
 
 `-p`/`-a`/`-t` name what to list, so on their own they cover every open
 task in the project, area, or tag — not just the ones scheduled for today.
@@ -325,9 +325,9 @@ The date filters (`--on`, `--from`, `--to`) apply to date-filterable views —
 `today`, `upcoming`, `anytime`, `deadlines`, and project listings (`someday`
 items have no start date, so they can't be date-filtered, and neither can
 `repeating` templates) — and `--on` can't be combined with `--from`/`--to`.
-`--include-completed` applies to the `today` and `anytime` views, so with a
-filter it needs the view spelled out:
-`things today -p "Launch v2" --include-completed`. It shows the items you
+`--include-completed` applies to the `today` and `anytime` views and to a bare
+`--project` listing, so with an `--area` or `--tag` filter it needs the view
+spelled out: `things today -a Work --include-completed`. It shows the items you
 ticked off in that list which Things still keeps there; `logbook` holds every
 other closed item, today's closes outside both lists included, so a closed item
 whose project is still open is either logged or still listed, never both. The

@@ -220,6 +220,11 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # closed today. Naming a trashed project works in every view that takes
     # --project: `things anytime --project <uuid>` on a trashed project lists
     # its open tasks, which no unfiltered view shows.
+    # `things --project <P> --include-completed` (no view) lists the open
+    # project's contents plus every task in it closed today and not yet logged,
+    # as the app's project page shows them, whichever list each was closed out
+    # of. That is contents rather than a list, so those rows also come back
+    # from today, anytime or logbook. A bare --area/--tag sweep rejects the flag.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed]

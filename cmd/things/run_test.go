@@ -305,10 +305,20 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 		}
 	}
 
-	// A filter with no explicit view lists the whole project, which also rejects.
-	err := runWith(t, database, "list", "Chores", "--include-completed")
+	// A bare --area or --tag sweep lists through the catch-all view, which
+	// rejects the flag: the app's answer there has not been measured.
+	err := runWith(t, database, "list", "--area", "Home", "--include-completed")
 	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime and today views") {
-		t.Fatalf("project filter: expected view-rejection error, got: %v", err)
+		t.Fatalf("area filter: expected view-rejection error, got: %v", err)
+	}
+
+	// A named project lists its contents, which the app keeps a to-do closed
+	// today in (issue #295), by flag or by bare argument.
+	if err := runWith(t, database, "list", "--project", "Chores", "--include-completed"); err != nil {
+		t.Fatalf("--project: %v", err)
+	}
+	if err := runWith(t, database, "list", "Chores", "--include-completed"); err != nil {
+		t.Fatalf("project argument: %v", err)
 	}
 
 	// The two views it does reach keep the flag valid, today alongside a filter.

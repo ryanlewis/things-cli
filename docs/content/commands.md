@@ -97,6 +97,14 @@ filter, name the view: `things today -p "Launch v2" --include-completed`
 returns the tasks of a closed "Launch v2" that closed today, rather than
 nothing.
 
+`--include-completed` also works on a bare `--project`, with no view:
+`things -p "Launch v2" --include-completed` lists an open project's tasks plus
+every one of them closed today and not yet logged, struck through in the app's
+project page until the day rolls over. That includes a task closed ahead of its
+date out of Upcoming, which `logbook` also lists: a project's contents are not
+one of the lists above, so they overlap all three. A bare `--area` or `--tag`
+sweep rejects the flag.
+
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none
 of them separately, and `trash` does the same for a trashed project. To reach
