@@ -790,14 +790,32 @@ var views = map[string]viewSpec{
 		status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsDateFilter: true,
 		widensToProjectContents: true,
-		// A single-project listing keeps its start/index order (the area and
-		// project keys are constant across it), while a filter that spans
-		// projects — `things --area X`, `things --tag y` — groups by area then
-		// project so the rendered group headers stay contiguous instead of
-		// repeating as rows interleave by index.
-		orderBy: "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), t.start ASC, t.\"index\" ASC" + uuidTiebreak,
+		// A filter that spans projects — `things --area X`, `things --tag y` —
+		// groups by area then project so the rendered group headers stay
+		// contiguous instead of repeating as rows interleave by index. Within a
+		// project, and so the whole of a single-project listing, the rows
+		// follow projectPageOrder.
+		orderBy: "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), " + projectPageOrder + uuidTiebreak,
 	},
 }
+
+// projectPageOrder is how the app arranges the to-dos of one project on the
+// project's page. The to-dos under no heading come first, then each heading's
+// in heading order. Within each of those the Anytime to-dos come first by
+// index, a to-do scheduled for today among them; then the scheduled ones by
+// start date and then todayIndex, the keys Upcoming orders by; then the
+// Someday ones by index.
+//
+// Measured on 3 Oct 2026 against `to dos of project id X`, the CLI's old
+// t.start, t."index" order differed from the app's in 7 of 20 open projects,
+// mostly because it ordered the scheduled to-dos by index rather than date.
+// No open project had a heading, so the heading keys come from a throwaway
+// project built in Things for the purpose.
+const projectPageOrder = `CASE WHEN t.heading IS NULL THEN 0 ELSE 1 END, COALESCE(h."index", 0), ` +
+	`CASE WHEN ` + upcomingScheduled + ` THEN 1 WHEN ` + somedayDeferred + ` THEN 2 ELSE 0 END, ` +
+	`CASE WHEN ` + upcomingScheduled + ` THEN t.startDate END, ` +
+	`CASE WHEN ` + upcomingScheduled + ` THEN t.todayIndex END, ` +
+	`t."index" ASC`
 
 // notHeading excludes project headings (TMTask type 2) from the lookup
 // queries. The inbox view pins t.type = 0 outright, but a lookup has to keep
