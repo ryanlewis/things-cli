@@ -30,6 +30,8 @@ func (c *ImportCmd) Run(d *Deps) error {
 			return fmt.Errorf("reading %s: %w", c.File, err)
 		}
 	} else {
+		// Not d.interactive(): under --json it is false even on a terminal,
+		// and the import would block reading the keyboard.
 		if isInteractive() {
 			return fmt.Errorf("no JSON on stdin and no --file given")
 		}

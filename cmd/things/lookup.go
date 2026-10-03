@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -65,21 +63,20 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	}
 
 	// Interactive: prompt user to pick
-	fmt.Fprintf(os.Stderr, "Multiple tasks match %q:\n", ambig.Query)
+	fmt.Fprintf(d.errOut(), "Multiple tasks match %q:\n", ambig.Query)
 	for i, m := range ambig.Matches {
 		project := ""
 		if m.ProjectTitle != "" {
 			project = "  (" + output.OneLine(m.ProjectTitle) + ")"
 		}
-		fmt.Fprintf(os.Stderr, "  %d. %s  [%s]%s\n", i+1, output.OneLine(m.Title), m.Type, project)
+		fmt.Fprintf(d.errOut(), "  %d. %s  [%s]%s\n", i+1, output.OneLine(m.Title), m.Type, project)
 	}
-	fmt.Fprintf(os.Stderr, "Pick [1-%d]: ", len(ambig.Matches))
 
-	scanner := bufio.NewScanner(os.Stdin)
-	if !scanner.Scan() {
+	line, ok := promptLine(d, fmt.Sprintf("Pick [1-%d]: ", len(ambig.Matches)))
+	if !ok {
 		return nil, errCancelled
 	}
-	choice, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
+	choice, err := strconv.Atoi(line)
 	if err != nil || choice < 1 || choice > len(ambig.Matches) {
 		return nil, fmt.Errorf("invalid choice")
 	}
@@ -113,7 +110,7 @@ func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 	}
 	entry := cache.LastList{WrittenAt: time.Now(), Command: command, UUIDs: uuids}
 	if err := cache.WriteLastList(entry); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to cache task list: %v\n", err)
+		fmt.Fprintf(d.errOut(), "warning: failed to cache task list: %v\n", err)
 	}
 }
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/ryanlewis/things-cli/internal/skill"
 )
@@ -63,9 +62,9 @@ func (c *SkillUninstallCmd) Run(d *Deps) error {
 	if len(present) == 0 {
 		return fmt.Errorf("no %s skill installed at %s", agent.Name(), dir)
 	}
-	fmt.Fprintf(os.Stderr, "Will remove %d file(s) from %s:\n", len(present), dir)
+	fmt.Fprintf(d.errOut(), "Will remove %d file(s) from %s:\n", len(present), dir)
 	for _, f := range present {
-		fmt.Fprintf(os.Stderr, "  - %s\n", f)
+		fmt.Fprintf(d.errOut(), "  - %s\n", f)
 	}
 	if !c.Yes {
 		if !d.interactive() {
