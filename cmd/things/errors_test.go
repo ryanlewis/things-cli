@@ -94,18 +94,10 @@ func TestConfirmActionJSONDeclines(t *testing.T) {
 func seedAmbiguousDB(t *testing.T) *db.DB {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, project) VALUES
-			('amb-1', 'Shared title', 0, 0, 0, 'proj-x'),
-			('amb-2', 'Shared title', 0, 0, 0, NULL)`,
-	); err != nil {
-		t.Fatalf("seed tasks: %v", err)
-	}
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('proj-x', 'Chores', 1, 0, 0)`,
-	); err != nil {
-		t.Fatalf("seed project: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("amb-1", "Shared title", 0, dbtest.InProject("proj-x"))
+	fx.Todo("amb-2", "Shared title", 1)
+	fx.Project("proj-x", "Chores", 2)
 	return db.NewFromSQL(sqlDB)
 }
 
@@ -151,13 +143,9 @@ func TestResolveTaskAmbiguousPlainTextUnchanged(t *testing.T) {
 func TestResolveTaskAmbiguousTitleOnOneLine(t *testing.T) {
 	stubTTY(t, false)
 	sqlDB := dbtest.NewSQL(t)
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
-			('nl-1', 'Pack' || char(10) || 'bags', 0, 0, 0),
-			('nl-2', 'Pack' || char(9) || 'boxes', 0, 0, 0)`,
-	); err != nil {
-		t.Fatalf("seed tasks: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("nl-1", "Pack\nbags", 0)
+	fx.Todo("nl-2", "Pack\tboxes", 1)
 
 	_, err := resolveTask(&Deps{}, "Pack", db.NewFromSQL(sqlDB))
 	if err == nil {
@@ -373,13 +361,9 @@ func TestSharedTitleIsAmbiguousForBothCommands(t *testing.T) {
 		t.Run(args[1], func(t *testing.T) {
 			stubTTY(t, true)
 			sqlDB := dbtest.NewSQL(t)
-			if _, err := sqlDB.Exec(
-				`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
-					('proj-chores', 'Chores', 1, 0, 0),
-					('todo-chores', 'Chores', 0, 0, 0)`,
-			); err != nil {
-				t.Fatalf("seed: %v", err)
-			}
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Project("proj-chores", "Chores", 0)
+			fx.Todo("todo-chores", "Chores", 1)
 
 			err := runWith(t, db.NewFromSQL(sqlDB), args...)
 			if err == nil {

@@ -204,11 +204,7 @@ func seedCache(t *testing.T, age time.Duration, command string, uuids ...string)
 func seedResolveTaskDB(t *testing.T) *db.DB {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('abc-123', 'Cached task', 0, 0, 0)`,
-	); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	dbtest.NewFixture(t, sqlDB).Todo("abc-123", "Cached task", 0)
 	return db.NewFromSQL(sqlDB)
 }
 

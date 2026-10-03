@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ryanlewis/things-cli/internal/db"
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -288,9 +289,7 @@ func TestImportDoesNotLookUpUnresolvableTypes(t *testing.T) {
 			database, sqlDB := seedWritable(t)
 			// A real heading row: the lookup filters it out by type, not by
 			// absence, so seeding it proves the skip is what keeps us quiet.
-			if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('head-1', 'Phase 2', 2, 0, 0)`); err != nil {
-				t.Fatalf("seed heading: %v", err)
-			}
+			dbtest.NewFixture(t, sqlDB).Heading("head-1", "Phase 2", 2)
 			stubExecDropping(t)
 
 			stderr, err := runImport(t, database, "["+c.item+"]")
@@ -323,9 +322,7 @@ func stubExecApplyingAll(t *testing.T, sqlDB *sql.DB, statuses map[string]int) {
 func TestImportReadsBackStatusChanges(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('one-2', 'File taxes', 0, 0, 0, 2)`); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	dbtest.NewFixture(t, sqlDB).Todo("one-2", "File taxes", 3, dbtest.Someday())
 	stubExecApplyingAll(t, sqlDB, map[string]int{
 		"one-1": int(model.StatusCompleted),
 		"one-2": int(model.StatusCancelled),
@@ -347,9 +344,7 @@ func TestImportReadsBackStatusChanges(t *testing.T) {
 func TestImportReportsEveryDroppedStatusChange(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('one-2', 'File taxes', 0, 0, 0, 2)`); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	dbtest.NewFixture(t, sqlDB).Todo("one-2", "File taxes", 4, dbtest.Someday())
 	// Things applies the first item and drops the second — the batch shape of
 	// issue #129.
 	stubExecApplyingAll(t, sqlDB, map[string]int{"one-1": int(model.StatusCompleted)})
@@ -436,9 +431,7 @@ func TestImportRefusalDoesNotWarnAboutUnknownIDs(t *testing.T) {
 func TestImportReadsBackAReopen(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('done-1', 'File taxes', 0, 3, 0, 2)`); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	dbtest.NewFixture(t, sqlDB).Todo("done-1", "File taxes", 5, dbtest.Status(model.StatusCompleted), dbtest.Someday())
 	payload := `[{"type":"to-do","operation":"update","id":"done-1","attributes":{"completed":false}}]`
 
 	t.Run("dropped", func(t *testing.T) {
@@ -568,9 +561,7 @@ func TestImportRefusalJSONItems(t *testing.T) {
 func TestImportVerifyJSONItems(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('one-2', 'File taxes', 0, 0, 0, 2)`); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	dbtest.NewFixture(t, sqlDB).Todo("one-2", "File taxes", 6, dbtest.Someday())
 	// Things applies the first and drops the second.
 	stubExecApplyingAll(t, sqlDB, map[string]int{"one-1": int(model.StatusCompleted)})
 
@@ -666,9 +657,7 @@ func TestImportFailuresPlainTextUnchanged(t *testing.T) {
 // duplicate id, an unknown id and a heading in a single pass.
 func TestImportBatchedLookupKeepsCheckBehaviour(t *testing.T) {
 	database, sqlDB := seedWritable(t)
-	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('head-1', 'Phase 2', 2, 0, 0)`); err != nil {
-		t.Fatalf("seed heading: %v", err)
-	}
+	dbtest.NewFixture(t, sqlDB).Heading("head-1", "Phase 2", 7)
 	calls := stubExecDropping(t)
 
 	payload := `[

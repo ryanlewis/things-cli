@@ -24,17 +24,12 @@ import (
 func seedTagDB(t *testing.T) (*db.DB, *sql.DB) {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
-	stmts := []string{
-		`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`,
-		`INSERT INTO TMTag (uuid, title, "index") VALUES ('tag-1', 'Work', 0)`,
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, start)
-		 VALUES ('one-1', 'Post letter', 0, 0, 0, 2)`,
+	if _, err := sqlDB.Exec(`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`); err != nil {
+		t.Fatalf("seed settings: %v", err)
 	}
-	for _, s := range stmts {
-		if _, err := sqlDB.Exec(s); err != nil {
-			t.Fatalf("seed %q: %v", s, err)
-		}
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Tag("tag-1", "Work", 0)
+	fx.Todo("one-1", "Post letter", 0, dbtest.Someday())
 	return db.NewFromSQL(sqlDB), sqlDB
 }
 
@@ -286,11 +281,7 @@ func TestCreateTagsOnEveryTagWrite(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			database, sqlDB := seedTagDB(t)
-			if _, err := sqlDB.Exec(
-				`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('proj-1', 'Chores', 1, 0, 0)`,
-			); err != nil {
-				t.Fatalf("seed project: %v", err)
-			}
+			dbtest.NewFixture(t, sqlDB).Project("proj-1", "Chores", 1)
 			calls := stubExecCreatingTags(t, sqlDB)
 
 			if _, err := runOut(t, database, tc.args...); err != nil {

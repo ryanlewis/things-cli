@@ -92,7 +92,7 @@ func TestFiltersIgnoreNonASCIICase(t *testing.T) {
 
 func TestNamesRepeatingProjectIgnoresNonASCIICase(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.project("p-tmpl", "Ärger review", 1, someday(), repeats())
+	fx.Project("p-tmpl", "Ärger review", 1, someday(), repeats())
 
 	got, err := d.NamesRepeatingProject("ärger REVIEW")
 	if err != nil {

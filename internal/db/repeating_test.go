@@ -424,9 +424,9 @@ func TestRecurrenceColForAlias(t *testing.T) {
 // to-do, neither of which explains an empty listing (issue #174).
 func TestNamesRepeatingProject(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.project("p-tmpl", "Weekly review", 1, someday(), repeats())
-	fx.project("p-real", "Ship it", 2, anytime())
-	fx.todo("t-tmpl", "Water plants", 3, someday(), repeats())
+	fx.Project("p-tmpl", "Weekly review", 1, someday(), repeats())
+	fx.Project("p-real", "Ship it", 2, anytime())
+	fx.Todo("t-tmpl", "Water plants", 3, someday(), repeats())
 
 	cases := []struct {
 		ref  string
@@ -458,7 +458,7 @@ func TestNamesRepeatingProject(t *testing.T) {
 // name.
 func TestNamesRepeatingProjectMatchesLiterally(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.project("p-tmpl", "100% review", 1, someday(), repeats())
+	fx.Project("p-tmpl", "100% review", 1, someday(), repeats())
 
 	for ref, want := range map[string]bool{"100% review": true, "100_ review": false, "%": false} {
 		got, err := d.NamesRepeatingProject(ref)

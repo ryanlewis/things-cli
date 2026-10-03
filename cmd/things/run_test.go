@@ -48,21 +48,10 @@ func withSilentStdout(t *testing.T, fn func()) {
 func seedFullDB(t *testing.T) *db.DB {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
 
-	// Area
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('area-1', 'Home', 1, 0)`,
-	); err != nil {
-		t.Fatalf("seed area: %v", err)
-	}
-
-	// Project
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index")
-		 VALUES ('proj-1', 'Chores', 1, 0, 0, 'area-1', 0)`,
-	); err != nil {
-		t.Fatalf("seed project: %v", err)
-	}
+	fx.Area("area-1", "Home", 0)
+	fx.Project("proj-1", "Chores", 0, dbtest.InArea("area-1"))
 
 	// URL-scheme auth token, required by the update/update-project commands.
 	if _, err := sqlDB.Exec(
@@ -71,50 +60,20 @@ func seedFullDB(t *testing.T) *db.DB {
 		t.Fatalf("seed settings: %v", err)
 	}
 
-	// Tag
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTag (uuid, title, "index") VALUES ('tag-1', 'urgent', 0)`,
-	); err != nil {
-		t.Fatalf("seed tag: %v", err)
-	}
+	fx.Tag("tag-1", "urgent", 0)
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	// Task in today view (start=1, startBucket=0, startDate set, not trashed)
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
-		 VALUES ('task-1', 'Buy milk', 0, 0, 0, 1, 0, ?, 'proj-1', 0)`,
-		today,
-	); err != nil {
-		t.Fatalf("seed task: %v", err)
-	}
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTaskTag (tasks, tags) VALUES ('task-1', 'tag-1')`,
-	); err != nil {
-		t.Fatalf("seed tasktag: %v", err)
-	}
+	fx.Todo("task-1", "Buy milk", 0, dbtest.AnytimeOn(today), dbtest.InProject("proj-1"))
+	fx.Tagged("task-1", "tag-1")
 
 	// Inbox task
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, start, "index")
-		 VALUES ('task-2', 'Think', 0, 0, 0, 0, 1)`,
-	); err != nil {
-		t.Fatalf("seed inbox task: %v", err)
-	}
+	fx.Todo("task-2", "Think", 1, dbtest.Inbox())
 
 	// Heading in proj-1, plus an anytime task filed under it. The task has no
 	// project of its own and no start date, so it is outside the today view.
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, project, "index")
-		 VALUES ('head-1', 'Weekly', 2, 0, 0, 'proj-1', 2)`,
-	); err != nil {
-		t.Fatalf("seed heading: %v", err)
-	}
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, heading, "index")
-		 VALUES ('task-3', 'Sweep floor', 0, 0, 0, 1, 0, 'head-1', 3)`,
-	); err != nil {
-		t.Fatalf("seed heading task: %v", err)
-	}
+	fx.Heading("head-1", "Weekly", 2, dbtest.InProject("proj-1"))
+	fx.Todo("task-3", "Sweep floor", 3, dbtest.Anytime(), dbtest.UnderHeading("head-1"))
 
 	// Checklist item on task-1
 	if _, err := sqlDB.Exec(
@@ -387,13 +346,9 @@ func TestRunListDateFilterRejectsInvertedRange(t *testing.T) {
 
 func TestResolveTaskAmbiguousNonInteractive(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	for _, uuid := range []string{"a1", "a2"} {
-		if _, err := sqlDB.Exec(
-			`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES (?, 'Shared title', 0, 0, 0)`,
-			uuid,
-		); err != nil {
-			t.Fatalf("seed: %v", err)
-		}
+	fx := dbtest.NewFixture(t, sqlDB)
+	for i, uuid := range []string{"a1", "a2"} {
+		fx.Todo(uuid, "Shared title", i)
 	}
 	database := db.NewFromSQL(sqlDB)
 
@@ -413,10 +368,8 @@ func TestResolveTaskAmbiguousNonInteractive(t *testing.T) {
 // task the user never named (issue #267).
 func TestResolveTaskMatchesUnderscoreLiterally(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
-		('t-colon', '20:30 review', 0, 0, 0)`); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("t-colon", "20:30 review", 0)
 	database := db.NewFromSQL(sqlDB)
 
 	// The discriminating case: no task is called '20_30 review', so the
@@ -430,10 +383,7 @@ func TestResolveTaskMatchesUnderscoreLiterally(t *testing.T) {
 	// And once the underscored task does exist the reference finds it, and
 	// only it. The reference is a substring, so this goes through the LIKE
 	// rather than the exact-title branch.
-	if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES
-		('t-under', '20_30 review', 0, 0, 0)`); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	fx.Todo("t-under", "20_30 review", 1)
 	task, err := resolveTask(&Deps{}, "20_30 rev", database)
 	if err != nil {
 		t.Fatalf("resolveTask: %v", err)
@@ -455,11 +405,7 @@ func TestResolveTaskNotFound(t *testing.T) {
 func TestResolveTaskNumericWithoutCache(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	sqlDB := dbtest.NewSQL(t)
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed) VALUES ('uuid-1', 'One', 0, 0, 0)`,
-	); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	dbtest.NewFixture(t, sqlDB).Todo("uuid-1", "One", 0)
 	database := db.NewFromSQL(sqlDB)
 
 	// "1" has no cache — falls through to treating "1" as a title, which
@@ -853,15 +799,9 @@ func TestRunListHeadingTaskShowsProject(t *testing.T) {
 func TestRunShowPrefersGeneratedTodoOverTemplate(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask
-			(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule) VALUES
-			('tpl-water',  'Water plants', 0, 0, 0, 2, 0, NULL, 1, x'0102'),
-			('inst-water', 'Water plants', 0, 0, 0, 1, 0, ?,    2, NULL)`,
-		today,
-	); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("tpl-water", "Water plants", 1, dbtest.Someday(), dbtest.Repeats())
+	fx.Todo("inst-water", "Water plants", 2, dbtest.AnytimeOn(today))
 	database := db.NewFromSQL(sqlDB)
 
 	out, err := runOut(t, database, "--json", "show", "Water plants")
@@ -886,16 +826,9 @@ func TestRunShowPrefersGeneratedTodoOverTemplate(t *testing.T) {
 func TestRunListTodayIncludesScheduledProject(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask
-			(uuid, title, type, status, trashed, start, startBucket, startDate,
-			 todayIndexReferenceDate, "index", todayIndex) VALUES
-			('proj-audit', 'Runbook audit', 1, 0, 0, 1, 0, ?, ?, 1, 2005),
-			('todo-milk',  'Buy milk',      0, 0, 0, 1, 0, ?, ?, 2, 1)`,
-		today, today, today, today,
-	); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-audit", "Runbook audit", 1, dbtest.AnytimeOn(today), dbtest.TodayIndexRef(today), dbtest.TodayIndex(2005))
+	fx.Todo("todo-milk", "Buy milk", 2, dbtest.AnytimeOn(today), dbtest.TodayIndexRef(today), dbtest.TodayIndex(1))
 	database := db.NewFromSQL(sqlDB)
 
 	out, err := runOut(t, database, "--json", "list", "today")
@@ -943,17 +876,11 @@ func TestRunListSomedayAndLogbookIncludeProjects(t *testing.T) {
 	// An earlier calendar day: an item closed today is still under Today
 	// rather than in the Logbook (issue #230).
 	stopDate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask
-			(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
-			('proj-welsh',  'Learn Welsh',  1, 0, 0, 2, 0, NULL, NULL, 1),
-			('todo-book',   'Read a book',  0, 0, 0, 2, 0, NULL, NULL, 2),
-			('proj-site',   'Site rebuild', 1, 3, 0, 1, 0, NULL, ?,    3),
-			('todo-css',    'Ship the CSS', 0, 3, 0, 1, 0, NULL, ?,    4)`,
-		stopDate, stopDate,
-	); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-welsh", "Learn Welsh", 1, dbtest.Someday())
+	fx.Todo("todo-book", "Read a book", 2, dbtest.Someday())
+	fx.Project("proj-site", "Site rebuild", 3, dbtest.Anytime(), dbtest.Completed(stopDate))
+	fx.Todo("todo-css", "Ship the CSS", 4, dbtest.Anytime(), dbtest.Completed(stopDate))
 	database := db.NewFromSQL(sqlDB)
 
 	cases := []struct {
@@ -1018,17 +945,11 @@ var numericTypeField = regexp.MustCompile(`"type":\s*-?\d`)
 func TestRunJSONRendersTypeAsString(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask
-			(uuid, title, type, status, trashed, start, startBucket, startDate, "index", rt1_recurrenceRule) VALUES
-			('proj-audit', 'Runbook audit', 1, 0, 0, 1, 0, ?,    1, NULL),
-			('todo-milk',  'Buy milk',      0, 0, 0, 1, 0, ?,    2, NULL),
-			('tpl-water',  'Water plants',  0, 0, 0, 2, 0, NULL, 3, x'0102'),
-			('tpl-review', 'Weekly review', 1, 0, 0, 2, 0, NULL, 4, x'0102')`,
-		today, today,
-	); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-audit", "Runbook audit", 1, dbtest.AnytimeOn(today))
+	fx.Todo("todo-milk", "Buy milk", 2, dbtest.AnytimeOn(today))
+	fx.Todo("tpl-water", "Water plants", 3, dbtest.Someday(), dbtest.Repeats())
+	fx.Project("tpl-review", "Weekly review", 4, dbtest.Someday(), dbtest.Repeats())
 	database := db.NewFromSQL(sqlDB)
 
 	cases := []struct {
@@ -1081,17 +1002,11 @@ var numericStartField = regexp.MustCompile(`"start":\s*-?\d`)
 func TestRunJSONRendersStartAsString(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask
-			(uuid, title, type, status, trashed, start, startBucket, startDate, "index") VALUES
-			('todo-inbox',   'Sort post',     0, 0, 0, 0, 0, NULL, 1),
-			('todo-today',   'Buy milk',      0, 0, 0, 1, 0, ?,    2),
-			('todo-someday', 'Learn Welsh',   0, 0, 0, 2, 0, NULL, 3),
-			('proj-audit',   'Runbook audit', 1, 0, 0, 1, 0, ?,    4)`,
-		today, today,
-	); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("todo-inbox", "Sort post", 1, dbtest.Inbox())
+	fx.Todo("todo-today", "Buy milk", 2, dbtest.AnytimeOn(today))
+	fx.Todo("todo-someday", "Learn Welsh", 3, dbtest.Someday())
+	fx.Project("proj-audit", "Runbook audit", 4, dbtest.AnytimeOn(today))
 	database := db.NewFromSQL(sqlDB)
 
 	cases := []struct {

@@ -14,25 +14,11 @@ import (
 func seedRepeatingProjectDB(t *testing.T) *db.DB {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, "index", rt1_recurrenceRule)
-		 VALUES ('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102')`,
-	); err != nil {
-		t.Fatalf("seed template project: %v", err)
-	}
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, "index")
-		 VALUES ('p-real', 'Ship it', 1, 0, 0, 2)`,
-	); err != nil {
-		t.Fatalf("seed ordinary project: %v", err)
-	}
-	if _, err := sqlDB.Exec(
-		`INSERT INTO TMTask (uuid, title, type, status, trashed, project, start, startBucket, "index")
-		 VALUES ('t-child', 'Inside the template', 0, 0, 0, 'p-tmpl', 1, 0, 1),
-		        ('t-plain', 'Inside a real one',   0, 0, 0, 'p-real', 1, 0, 2)`,
-	); err != nil {
-		t.Fatalf("seed tasks: %v", err)
-	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("p-tmpl", "Weekly review", 1, dbtest.Repeats())
+	fx.Project("p-real", "Ship it", 2)
+	fx.Todo("t-child", "Inside the template", 1, dbtest.Anytime(), dbtest.InProject("p-tmpl"))
+	fx.Todo("t-plain", "Inside a real one", 2, dbtest.Anytime(), dbtest.InProject("p-real"))
 	return db.NewFromSQL(sqlDB)
 }
 

@@ -17,36 +17,36 @@ import (
 // views and statuses.
 func seedTasks(t *testing.T, d *DB) {
 	t.Helper()
-	fx := &fixture{t: t, d: d}
+	fx := dbtest.NewFixture(t, d.db)
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-1", "Ship MVP", 1, inArea("area-work"))
-	fx.tag("tg-urgent", "urgent", 1)
-	fx.tag("tg-home", "home", 2)
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-1", "Ship MVP", 1, inArea("area-work"))
+	fx.Tag("tg-urgent", "urgent", 1)
+	fx.Tag("tg-home", "home", 2)
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	tomorrow := today + (1 << 7)
 	done := model.TimeToUnix(time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC))
 
-	fx.todo("t-today", "Today task", 10, anytimeOn(today), todayIndexRef(today), todayIndex(1))
-	fx.todo("t-inbox", "Inbox task", 11, inbox(), notes("notes"), todayIndex(0))
-	fx.todo("t-evening", "Evening task", 12, evening(today), todayIndex(0))
-	fx.todo("t-upcoming", "Upcoming task", 22, somedayOn(tomorrow), todayIndex(0))
-	fx.todo("t-anytime", "Anytime task", 13, anytime(), todayIndex(0))
-	fx.todo("t-someday", "Someday task", 14, someday(), todayIndex(0))
+	fx.Todo("t-today", "Today task", 10, anytimeOn(today), todayIndexRef(today), todayIndex(1))
+	fx.Todo("t-inbox", "Inbox task", 11, inbox(), notes("notes"), todayIndex(0))
+	fx.Todo("t-evening", "Evening task", 12, evening(today), todayIndex(0))
+	fx.Todo("t-upcoming", "Upcoming task", 22, somedayOn(tomorrow), todayIndex(0))
+	fx.Todo("t-anytime", "Anytime task", 13, anytime(), todayIndex(0))
+	fx.Todo("t-someday", "Someday task", 14, someday(), todayIndex(0))
 	// A stopDate on the completed to-do so the logbook has something to order
 	// by; the cancelled one deliberately has none, and is the only fixture
 	// exercising the logbook filter's NULL guard.
-	fx.todo("t-done", "Done task", 15, inbox(), completed(done), todayIndex(0))
-	fx.todo("t-cancelled", "Cancelled", 16, inbox(), status(model.StatusCancelled), todayIndex(0))
-	fx.todo("t-trashed", "Trashed task", 17, inbox(), trashed(), todayIndex(0))
-	fx.todo("t-deadline", "Has deadline", 18, anytime(), deadline(tomorrow), todayIndex(0))
-	fx.todo("t-in-proj", "Project task", 19, inbox(), inProject("proj-1"), inArea("area-work"), todayIndex(0))
+	fx.Todo("t-done", "Done task", 15, inbox(), completed(done), todayIndex(0))
+	fx.Todo("t-cancelled", "Cancelled", 16, inbox(), status(model.StatusCancelled), todayIndex(0))
+	fx.Todo("t-trashed", "Trashed task", 17, inbox(), trashed(), todayIndex(0))
+	fx.Todo("t-deadline", "Has deadline", 18, anytime(), deadline(tomorrow), todayIndex(0))
+	fx.Todo("t-in-proj", "Project task", 19, inbox(), inProject("proj-1"), inArea("area-work"), todayIndex(0))
 	// Templates carry the recurrence rule; Things files them under Repeating
 	// while their row otherwise looks exactly like a Someday to-do (issue #147).
-	fx.todo("t-repeat", "Water plants", 20, someday(), inProject("proj-1"), inArea("area-work"), repeats())
+	fx.Todo("t-repeat", "Water plants", 20, someday(), inProject("proj-1"), inArea("area-work"), repeats())
 
-	fx.tagged("t-today", "tg-urgent", "tg-home")
+	fx.Tagged("t-today", "tg-urgent", "tg-home")
 }
 
 // CompletableView and CompletableViewNames used to read a map of their own and
@@ -868,12 +868,12 @@ func TestScanTaskFieldsPopulated(t *testing.T) {
 func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	fx.project("proj-h", "Ship v2", 1)
-	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
-	fx.todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
-	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	fx.Project("proj-h", "Ship v2", 1)
+	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.Todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
+	fx.Todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 	// Outside the project, so the filter has to leave it out.
-	fx.todo("t-loose", "Loose task", 5, anytime())
+	fx.Todo("t-loose", "Loose task", 5, anytime())
 
 	for _, filter := range []string{"proj-h", "Ship v2"} {
 		got, err := d.ListTasks("project", TaskFilter{Project: filter})
@@ -891,13 +891,13 @@ func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
 func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	fx.area("area-launch", "Launch", 1)
-	fx.project("proj-h", "Ship v2", 1, inArea("area-launch"))
-	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
-	fx.todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
-	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	fx.Area("area-launch", "Launch", 1)
+	fx.Project("proj-h", "Ship v2", 1, inArea("area-launch"))
+	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.Todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
+	fx.Todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 	// Filed in no area at all, so the filter has to leave it out.
-	fx.todo("t-loose", "Loose task", 5, anytime())
+	fx.Todo("t-loose", "Loose task", 5, anytime())
 
 	got, err := d.ListTasks("project", TaskFilter{Area: "Launch"})
 	if err != nil {
@@ -913,10 +913,10 @@ func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
 // for a standalone task (issue #139).
 func TestHeadingTaskCarriesProject(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.area("area-launch", "Launch", 1)
-	fx.project("proj-h", "Ship v2", 1, inArea("area-launch"))
-	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
-	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	fx.Area("area-launch", "Launch", 1)
+	fx.Project("proj-h", "Ship v2", 1, inArea("area-launch"))
+	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.Todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 
 	task, err := d.GetTaskByUUID("t-nested")
 	if err != nil {
@@ -941,11 +941,11 @@ func TestHeadingTaskCarriesProject(t *testing.T) {
 func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
 	d, fx := newFixture(t)
 	todayDate := int64(model.ThingsDateFromTime(time.Now()))
-	fx.project("proj-h", "Ship v2", 1)
-	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.Project("proj-h", "Ship v2", 1)
+	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
 	// One of the two is scheduled for today; the today view sees only that one.
-	fx.todo("t-direct", "Direct task", 3, anytimeOn(todayDate), inProject("proj-h"))
-	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	fx.Todo("t-direct", "Direct task", 3, anytimeOn(todayDate), inProject("proj-h"))
+	fx.Todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 
 	today, err := d.ListTasks("today", TaskFilter{Project: "Ship v2"})
 	if err != nil {
@@ -969,13 +969,13 @@ func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
 func TestListTasksTagFilterIncludesHeadingTasks(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	fx.tag("tg-ship", "ship", 1)
-	fx.project("proj-h", "Ship v2", 1)
-	fx.heading("head-1", "Phase one", 2, inProject("proj-h"))
-	fx.todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
-	fx.todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
-	fx.todo("t-loose", "Loose task", 5, anytime())
-	fx.tagged("t-nested", "tg-ship")
+	fx.Tag("tg-ship", "ship", 1)
+	fx.Project("proj-h", "Ship v2", 1)
+	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
+	fx.Todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
+	fx.Todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
+	fx.Todo("t-loose", "Loose task", 5, anytime())
+	fx.Tagged("t-nested", "tg-ship")
 
 	got, err := d.ListTasks("project", TaskFilter{Tag: "ship"})
 	if err != nil {
@@ -1131,16 +1131,16 @@ func TestLogbookFoldsClosedProjectChildren(t *testing.T) {
 	// A closed project and a trashed one, each holding children in several
 	// states, plus an open project as the control (issue #229).
 	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-	fx.project("proj-done", "Finished", 1, completed(stop))
-	fx.project("proj-binned", "Binned", 2, trashed())
-	fx.project("proj-open", "Live", 3)
+	fx.Project("proj-done", "Finished", 1, completed(stop))
+	fx.Project("proj-binned", "Binned", 2, trashed())
+	fx.Project("proj-open", "Live", 3)
 
-	fx.todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
-	fx.todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
-	fx.todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
-	fx.todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
-	fx.todo("binned-logged", "Logged", 8, anytime(), inProject("proj-binned"), completed(stop))
-	fx.todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
+	fx.Todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
+	fx.Todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
+	fx.Todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
+	fx.Todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
+	fx.Todo("binned-logged", "Logged", 8, anytime(), inProject("proj-binned"), completed(stop))
+	fx.Todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
 	logged, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -1173,16 +1173,16 @@ func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
 	// A closed project and a trashed one, each holding children in several
 	// states, plus an open project as the control (issue #229).
 	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-	fx.project("proj-done", "Finished", 1, completed(stop))
-	fx.project("proj-binned", "Binned", 2, trashed())
-	fx.project("proj-open", "Live", 3)
+	fx.Project("proj-done", "Finished", 1, completed(stop))
+	fx.Project("proj-binned", "Binned", 2, trashed())
+	fx.Project("proj-open", "Live", 3)
 
-	fx.todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
-	fx.todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
-	fx.todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
-	fx.todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
-	fx.todo("binned-logged", "Logged", 8, anytime(), inProject("proj-binned"), completed(stop))
-	fx.todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
+	fx.Todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
+	fx.Todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
+	fx.Todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
+	fx.Todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
+	fx.Todo("binned-logged", "Logged", 8, anytime(), inProject("proj-binned"), completed(stop))
+	fx.Todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
 	cases := []struct {
 		name    string
@@ -1218,15 +1218,15 @@ func TestAreaFilterDoesNotWidenToClosedContents(t *testing.T) {
 	// A closed project and an open one in the same area, each holding
 	// children in several states (issue #229).
 	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-	fx.area("ar", "Work", 1)
-	fx.project("proj-done", "Finished", 1, inArea("ar"), completed(stop))
-	fx.project("proj-open", "Live", 3, inArea("ar"))
+	fx.Area("ar", "Work", 1)
+	fx.Project("proj-done", "Finished", 1, inArea("ar"), completed(stop))
+	fx.Project("proj-open", "Live", 3, inArea("ar"))
 
-	fx.todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
-	fx.todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
-	fx.todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
-	fx.todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
-	fx.todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
+	fx.Todo("done-completed", "Shipped", 4, anytime(), inProject("proj-done"), completed(stop))
+	fx.Todo("done-cancelled", "Dropped", 5, anytime(), inProject("proj-done"), cancelled(stop))
+	fx.Todo("done-trashed", "Binned", 6, anytime(), inProject("proj-done"), trashed())
+	fx.Todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
+	fx.Todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
 	got, err := d.ListTasks("project", TaskFilter{Area: "ar"})
 	if err != nil {
@@ -1294,7 +1294,7 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 func TestGetTaskByUUIDExcludesHeading(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
-	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.Heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
 
 	got, err := d.GetTaskByUUID("head-phase")
 	if err != nil {
@@ -1325,7 +1325,7 @@ func TestGetTaskByUUIDKeepsProject(t *testing.T) {
 func TestGetTaskExactTitleSkipsHeading(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
-	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
+	fx.Heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	got, err := d.GetTask("Inbox task")
 	if err != nil {
@@ -1339,8 +1339,8 @@ func TestGetTaskExactTitleSkipsHeading(t *testing.T) {
 func TestGetTaskLikeMatchSkipsHeading(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
-	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
-	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
+	fx.Heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.Heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	// "Phase" matches only the heading, so the lookup should not find a task.
 	if _, err := d.GetTask("Phase"); err == nil {
@@ -1361,8 +1361,8 @@ func TestGetTaskLikeMatchSkipsHeading(t *testing.T) {
 func TestFindTasksByTitleExcludesHeadings(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
-	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
-	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
+	fx.Heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.Heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	got, err := d.FindTasksByTitle("Phase")
 	if err != nil {
@@ -1384,8 +1384,8 @@ func TestFindTasksByTitleExcludesHeadings(t *testing.T) {
 func TestSearchTasksExcludesHeadings(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
-	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
-	fx.heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
+	fx.Heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.Heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
 	byTitle, err := d.SearchTasks("Phase")
 	if err != nil {
@@ -1435,8 +1435,8 @@ func TestSearchTasksExcludesHeadings(t *testing.T) {
 func TestGetTaskExactTitlePrefersInstance(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
-	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
+	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 
 	got, err := d.GetTask("Water plants")
 	if err != nil {
@@ -1473,8 +1473,8 @@ func TestGetTaskExactTitleTemplateOnly(t *testing.T) {
 func TestFindTasksByTitleOrdersTemplatesLast(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
-	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
+	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 
 	got, err := d.FindTasksByTitle("Water")
 	if err != nil {
@@ -1493,8 +1493,8 @@ func TestFindTasksByTitleOrdersTemplatesLast(t *testing.T) {
 func TestGetTaskAmbiguousListsInstanceFirst(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
-	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
+	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 
 	_, err := d.GetTask("ater plant")
 	var ambig *AmbiguousTaskError
@@ -1514,8 +1514,8 @@ func TestGetTaskAmbiguousListsInstanceFirst(t *testing.T) {
 // to-do and then advised a retry that edited it.
 func TestGetTaskExactTitleAmbiguousAcrossKinds(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.project("proj-chores", "Chores", 1)
-	fx.todo("todo-chores", "Chores", 2, anytime())
+	fx.Project("proj-chores", "Chores", 1)
+	fx.Todo("todo-chores", "Chores", 2, anytime())
 
 	_, err := d.GetTask("Chores")
 	var ambig *AmbiguousTaskError
@@ -1544,8 +1544,8 @@ func TestGetTaskExactTitleAmbiguousAcrossKinds(t *testing.T) {
 // user expressed.
 func TestGetTaskExactTitleAmbiguousBetweenTodos(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.todo("todo-a", "Call the vet", 1, anytime())
-	fx.todo("todo-b", "Call the vet", 2, anytime())
+	fx.Todo("todo-a", "Call the vet", 1, anytime())
+	fx.Todo("todo-b", "Call the vet", 2, anytime())
 
 	_, err := d.GetTask("Call the vet")
 	var ambig *AmbiguousTaskError
@@ -1563,9 +1563,9 @@ func TestGetTaskExactTitleAmbiguousBetweenTodos(t *testing.T) {
 func TestGetTaskExactTitleDropsTemplateFromCandidates(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	fx.todo("tpl-water", "Water plants", 1, someday(), repeats())
-	fx.todo("inst-water", "Water plants", 2, anytimeOn(today))
-	fx.todo("inst-water-2", "Water plants", 3, anytimeOn(today))
+	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
+	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
+	fx.Todo("inst-water-2", "Water plants", 3, anytimeOn(today))
 
 	// Two instances behind one template: the template drops out, and the
 	// remaining pair is reported.
@@ -1585,8 +1585,8 @@ func TestGetTaskExactTitleDropsTemplateFromCandidates(t *testing.T) {
 // `things project edit <title>` to the to-do again (issue #194).
 func TestGetTaskExactTitleKeepsTemplateOfAnotherKind(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.project("tpl-chores", "Chores", 1, repeats())
-	fx.todo("todo-chores", "Chores", 2, anytime())
+	fx.Project("tpl-chores", "Chores", 1, repeats())
+	fx.Todo("todo-chores", "Chores", 2, anytime())
 
 	_, err := d.GetTask("Chores")
 	var ambig *AmbiguousTaskError
@@ -1602,9 +1602,9 @@ func TestGetTaskExactTitleKeepsTemplateOfAnotherKind(t *testing.T) {
 // turn a single open match into an ambiguity.
 func TestGetTaskExactTitleIgnoresClosedAndTrashed(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.todo("open-one", "File taxes", 1, anytime())
-	fx.todo("done-one", "File taxes", 2, completed(1_600_000_000))
-	fx.todo("gone-one", "File taxes", 3, anytime(), trashed())
+	fx.Todo("open-one", "File taxes", 1, anytime())
+	fx.Todo("done-one", "File taxes", 2, completed(1_600_000_000))
+	fx.Todo("gone-one", "File taxes", 3, anytime(), trashed())
 
 	got, err := d.GetTask("File taxes")
 	if err != nil {
@@ -1665,7 +1665,7 @@ func TestTitleLookupsWithoutRecurrenceColumn(t *testing.T) {
 func TestGetTasksByUUIDs(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
-	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.Heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
 
 	// A duplicate, an empty string, an unknown id and a heading all go in
 	// alongside the real ones: callers pass a raw list built from a payload.
@@ -1702,7 +1702,7 @@ func TestGetTasksByUUIDs(t *testing.T) {
 func TestGetTasksByUUIDsMatchesGetTaskByUUID(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
-	fx.heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
+	fx.Heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
 
 	ids := []string{"t-today", "t-inbox", "proj-1", "head-phase", "nope"}
 	batch, err := d.GetTasksByUUIDs(ids)
@@ -1784,16 +1784,16 @@ func TestListTasksViewsIncludeProjects(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	tomorrow := today + (1 << 7)
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
-	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
-	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.Project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
 
 	// To-dos for company: one inside the scheduled project, one loose in the
 	// same area, one top-level.
-	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
-	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
-	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
+	fx.Todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	cases := []struct {
 		view string
@@ -1835,17 +1835,17 @@ func TestListTasksProjectsExcludedFromViews(t *testing.T) {
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
-	fx.project("proj-trashed", "Abandoned", 8, anytimeOn(today), todayIndexRef(today), inArea("area-work"), trashed(), todayIndex(0))
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Project("proj-trashed", "Abandoned", 8, anytimeOn(today), todayIndexRef(today), inArea("area-work"), trashed(), todayIndex(0))
 
 	// A repeating project template is filed under Repeating, not under the
 	// bucket its row carries, and its children come with it (issues #147, #171).
-	fx.project("proj-template", "Monthly review", 9, anytimeOn(today), inArea("area-work"), repeats())
-	fx.todo("todo-in-template", "Draft agenda", 10, anytimeOn(today), inProject("proj-template"))
+	fx.Project("proj-template", "Monthly review", 9, anytimeOn(today), inArea("area-work"), repeats())
+	fx.Todo("todo-in-template", "Draft agenda", 10, anytimeOn(today), inProject("proj-template"))
 
 	// A heading (type 2) is structure inside a project, never a list row.
-	fx.heading("head-1", "Phase one", 11, anytimeOn(today), inProject("proj-today"))
+	fx.Heading("head-1", "Phase one", 11, anytimeOn(today), inProject("proj-today"))
 
 	excluded := []string{"proj-template", "todo-in-template", "proj-trashed", "head-1"}
 	for _, view := range []string{"today", "anytime"} {
@@ -1885,16 +1885,16 @@ func TestAnytimeHasNoProjectRows(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	tomorrow := today + (1 << 7)
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
-	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
-	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.Project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
 
 	// To-dos for company: one inside the scheduled project, one loose in the
 	// same area, one top-level.
-	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
-	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
-	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
+	fx.Todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	got, err := d.ListTasks("anytime", TaskFilter{})
 	if err != nil {
@@ -2009,15 +2009,15 @@ func TestUpcomingListsAnytimeToDosDueLater(t *testing.T) {
 	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 3)))
 	yesterday := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1)))
 
-	fx.todo("sched-tomorrow", "Scheduled tomorrow", 1, somedayOn(tomorrow), todayIndex(-100))
-	fx.todo("due-tomorrow", "Due tomorrow", 2, anytime(), deadline(tomorrow), todayIndex(-500))
-	fx.todo("sched-later", "Scheduled later", 3, somedayOn(later), todayIndex(0))
-	fx.todo("due-later", "Due later", 4, anytime(), deadline(later), todayIndex(-50))
+	fx.Todo("sched-tomorrow", "Scheduled tomorrow", 1, somedayOn(tomorrow), todayIndex(-100))
+	fx.Todo("due-tomorrow", "Due tomorrow", 2, anytime(), deadline(tomorrow), todayIndex(-500))
+	fx.Todo("sched-later", "Scheduled later", 3, somedayOn(later), todayIndex(0))
+	fx.Todo("due-later", "Due later", 4, anytime(), deadline(later), todayIndex(-50))
 	// Due today is Today's business, and overdue is not upcoming.
-	fx.todo("due-today", "Due today", 5, anytime(), deadline(today))
-	fx.todo("overdue", "Overdue", 6, anytime(), deadline(yesterday))
+	fx.Todo("due-today", "Due today", 5, anytime(), deadline(today))
+	fx.Todo("overdue", "Overdue", 6, anytime(), deadline(yesterday))
 	// A plain Anytime to-do with no deadline stays out.
-	fx.todo("no-deadline", "No deadline", 7, anytime())
+	fx.Todo("no-deadline", "No deadline", 7, anytime())
 
 	got, err := d.ListTasks("upcoming", TaskFilter{})
 	if err != nil {
@@ -2049,15 +2049,15 @@ func TestListTasksProjectRowsAndFilters(t *testing.T) {
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
 
-	fx.area("area-work", "Work", 1)
-	fx.area("area-home", "Home", 2)
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Area("area-work", "Work", 1)
+	fx.Area("area-home", "Home", 2)
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
 
 	// To-dos for company: one inside the scheduled project, one loose in the
 	// same area, one top-level.
-	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
-	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
-	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
+	fx.Todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	byUUID, err := d.ListTasks("today", TaskFilter{Project: "proj-today"})
 	if err != nil {
@@ -2104,20 +2104,20 @@ func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	tomorrow := today + (1 << 7)
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
-	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
-	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.Project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
 
 	// To-dos for company: one inside the scheduled project, one loose in the
 	// same area, one top-level.
-	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
-	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
-	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
+	fx.Todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
-	fx.tag("tag-urgent", "urgent", 1)
-	fx.tagged("proj-anytime", "tag-urgent")
-	fx.tagged("todo-in-area", "tag-urgent")
+	fx.Tag("tag-urgent", "urgent", 1)
+	fx.Tagged("proj-anytime", "tag-urgent")
+	fx.Tagged("todo-in-area", "tag-urgent")
 
 	byArea, err := d.ListTasks("project", TaskFilter{Area: "area-work"})
 	if err != nil {
@@ -2162,25 +2162,25 @@ func TestListTasksCatchAllViewExclusions(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	tomorrow := today + (1 << 7)
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
-	fx.project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
-	fx.project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
-	fx.project("proj-trashed", "Abandoned", 8, anytimeOn(today), todayIndexRef(today), inArea("area-work"), trashed(), todayIndex(0))
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Project("proj-upcoming", "Q4 planning", 6, somedayOn(tomorrow), inArea("area-work"), todayIndex(0))
+	fx.Project("proj-anytime", "Backlog", 7, anytime(), inArea("area-work"), todayIndex(0))
+	fx.Project("proj-trashed", "Abandoned", 8, anytimeOn(today), todayIndexRef(today), inArea("area-work"), trashed(), todayIndex(0))
 
 	// A repeating project template is filed under Repeating, not under the
 	// bucket its row carries, and its children come with it (issues #147, #171).
-	fx.project("proj-template", "Monthly review", 9, anytimeOn(today), inArea("area-work"), repeats())
-	fx.todo("todo-in-template", "Draft agenda", 10, anytimeOn(today), inProject("proj-template"))
+	fx.Project("proj-template", "Monthly review", 9, anytimeOn(today), inArea("area-work"), repeats())
+	fx.Todo("todo-in-template", "Draft agenda", 10, anytimeOn(today), inProject("proj-template"))
 
 	// A heading (type 2) is structure inside a project, never a list row.
-	fx.heading("head-1", "Phase one", 11, anytimeOn(today), inProject("proj-today"))
+	fx.Heading("head-1", "Phase one", 11, anytimeOn(today), inProject("proj-today"))
 
 	// To-dos for company: one inside the scheduled project, one loose in the
 	// same area, one top-level.
-	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
-	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
-	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
+	fx.Todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	got, err := d.ListTasks("project", TaskFilter{})
 	if err != nil {
@@ -2206,14 +2206,14 @@ func TestListTasksTodayOrderWithProjects(t *testing.T) {
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
 
 	// To-dos for company: one inside the scheduled project, one loose in the
 	// same area, one top-level.
-	fx.todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
-	fx.todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
-	fx.todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
+	fx.Todo("todo-in-proj", "Read logs", 12, anytimeOn(today), todayIndexRef(today), inProject("proj-today"), todayIndex(3000))
+	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
+	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
@@ -2934,11 +2934,11 @@ func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
 	// previous day, which failed this test in the first minute of every day.
 	stopToday := model.TimeToUnix(time.Now())
 
-	fx.area("area-work", "Work", 1)
+	fx.Area("area-work", "Work", 1)
 	// An open project for company, so the default list is not empty and the
 	// exclusion below turns on the status rather than the row's type.
-	fx.project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
-	fx.project("proj-done", "Shipped", 20, anytimeOn(today), todayIndexRef(today), inArea("area-work"), completed(stopToday), todayIndex(9000))
+	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
+	fx.Project("proj-done", "Shipped", 20, anytimeOn(today), todayIndexRef(today), inArea("area-work"), completed(stopToday), todayIndex(9000))
 
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
@@ -2975,14 +2975,14 @@ func TestListTasksSomedayAndLogbookIncludeProjects(t *testing.T) {
 	// and one completed into the Logbook, each with a to-do beside it. Both
 	// stop dates fall on an earlier calendar day, because an item closed today
 	// is still under Today rather than in the Logbook (issue #230).
-	fx.area("area-work", "Work", 1)
+	fx.Area("area-work", "Work", 1)
 	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
 
-	fx.project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
-	fx.todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
-	fx.project("proj-logged", "Site rebuild", 3, anytime(), inArea("area-work"), completed(stopLate))
-	fx.todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
+	fx.Project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
+	fx.Todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
+	fx.Project("proj-logged", "Site rebuild", 3, anytime(), inArea("area-work"), completed(stopLate))
+	fx.Todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
 
 	cases := []struct {
 		view    string
@@ -3022,22 +3022,22 @@ func TestListTasksSomedayLogbookProjectExclusions(t *testing.T) {
 
 	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-	fx.project("proj-someday", "Learn Welsh", 1, someday())
-	fx.project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
+	fx.Project("proj-someday", "Learn Welsh", 1, someday())
+	fx.Project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
 
 	// Trashed rows belong to the trash view, not to Someday or the Logbook.
-	fx.project("proj-someday-trashed", "Dropped idea", 5, someday(), trashed())
-	fx.project("proj-logged-trashed", "Dropped work", 6, anytime(), trashed(), completed(stopEarly))
+	fx.Project("proj-someday-trashed", "Dropped idea", 5, someday(), trashed())
+	fx.Project("proj-logged-trashed", "Dropped work", 6, anytime(), trashed(), completed(stopEarly))
 
 	// A Someday-start repeating project template is filed under Repeating, not
 	// under the bucket its row carries, and its children come with it
 	// (issues #147, #171).
-	fx.project("proj-template", "Annual review", 7, someday(), repeats())
-	fx.todo("todo-in-template", "Draft agenda", 8, someday(), inProject("proj-template"))
+	fx.Project("proj-template", "Annual review", 7, someday(), repeats())
+	fx.Todo("todo-in-template", "Draft agenda", 8, someday(), inProject("proj-template"))
 
 	// A heading is structure inside a project, never a list row.
-	fx.heading("head-someday", "Phase one", 9, someday(), inProject("proj-someday"))
-	fx.heading("head-logged", "Phase two", 10, anytime(), inProject("proj-logged"), completed(stopEarly))
+	fx.Heading("head-someday", "Phase one", 9, someday(), inProject("proj-someday"))
+	fx.Heading("head-logged", "Phase two", 10, anytime(), inProject("proj-logged"), completed(stopEarly))
 
 	excluded := map[string][]string{
 		"someday": {"proj-template", "todo-in-template", "proj-someday-trashed", "head-someday"},
@@ -3077,8 +3077,8 @@ func TestListTasksLogbookOrderWithProject(t *testing.T) {
 	// Logbook ordered newest-first has the project row ahead of the to-do.
 	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
-	fx.project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
-	fx.todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
+	fx.Project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
+	fx.Todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -3096,9 +3096,9 @@ func TestListTasksLogbookOrderWithProject(t *testing.T) {
 func TestListTasksSomedayProjectRowsAndFilters(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.area("area-work", "Work", 1)
-	fx.project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
-	fx.todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
+	fx.Area("area-work", "Work", 1)
+	fx.Project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
+	fx.Todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
 
 	byUUID, err := d.ListTasks("someday", TaskFilter{Project: "proj-someday"})
 	if err != nil {
@@ -3124,17 +3124,17 @@ func TestListTasksSomedayProjectRowsAndFilters(t *testing.T) {
 func TestListTasksTrashIncludesProjects(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.area("area-home", "Home", 1)
-	fx.project("trash-proj", "Dropped project", 1, anytime(), inArea("area-home"), trashed())
-	fx.project("trash-proj-done", "Shelved rebuild", 2, anytime(), inArea("area-home"), trashed(), status(model.StatusCompleted))
-	fx.todo("trash-todo", "Dropped to-do", 3, anytime(), inArea("area-home"), trashed())
+	fx.Area("area-home", "Home", 1)
+	fx.Project("trash-proj", "Dropped project", 1, anytime(), inArea("area-home"), trashed())
+	fx.Project("trash-proj-done", "Shelved rebuild", 2, anytime(), inArea("area-home"), trashed(), status(model.StatusCompleted))
+	fx.Todo("trash-todo", "Dropped to-do", 3, anytime(), inArea("area-home"), trashed())
 
 	// Live rows never belong to the trash view, whichever kind they are, and a
 	// heading is structure inside a project rather than a list row — not even
 	// once its project has been trashed.
-	fx.project("live-proj", "Still going", 4, anytime(), inArea("area-home"))
-	fx.todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
-	fx.heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
+	fx.Project("live-proj", "Still going", 4, anytime(), inArea("area-home"))
+	fx.Todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
+	fx.Heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
 
 	got, err := d.ListTasks("trash", TaskFilter{})
 	if err != nil {
@@ -3160,10 +3160,10 @@ func TestListTasksTrashIncludesProjects(t *testing.T) {
 func TestListTasksTrashProjectExclusions(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.project("trash-proj", "Dropped project", 1, anytime(), trashed())
-	fx.project("live-proj", "Still going", 4, anytime())
-	fx.todo("live-todo", "Still to do", 5, anytime())
-	fx.heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
+	fx.Project("trash-proj", "Dropped project", 1, anytime(), trashed())
+	fx.Project("live-proj", "Still going", 4, anytime())
+	fx.Todo("live-todo", "Still to do", 5, anytime())
+	fx.Heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
 
 	got, err := d.ListTasks("trash", TaskFilter{})
 	if err != nil {
@@ -3183,15 +3183,15 @@ func TestListTasksTrashProjectExclusions(t *testing.T) {
 func TestListTasksTrashProjectRowsAndFilters(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.area("area-home", "Home", 1)
-	fx.project("trash-proj", "Dropped project", 1, anytime(), inArea("area-home"), trashed())
-	fx.project("trash-proj-done", "Shelved rebuild", 2, anytime(), inArea("area-home"), trashed(), status(model.StatusCompleted))
-	fx.todo("trash-todo", "Dropped to-do", 3, anytime(), inArea("area-home"), trashed())
+	fx.Area("area-home", "Home", 1)
+	fx.Project("trash-proj", "Dropped project", 1, anytime(), inArea("area-home"), trashed())
+	fx.Project("trash-proj-done", "Shelved rebuild", 2, anytime(), inArea("area-home"), trashed(), status(model.StatusCompleted))
+	fx.Todo("trash-todo", "Dropped to-do", 3, anytime(), inArea("area-home"), trashed())
 
 	// Live rows in the same area, which the view keeps out however the filter
 	// is written.
-	fx.project("live-proj", "Still going", 4, anytime(), inArea("area-home"))
-	fx.todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
+	fx.Project("live-proj", "Still going", 4, anytime(), inArea("area-home"))
+	fx.Todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
 
 	byArea, err := d.ListTasks("trash", TaskFilter{Area: "area-home"})
 	if err != nil {
@@ -3223,9 +3223,9 @@ func TestListTasksDeadlinesIncludeProjects(t *testing.T) {
 	// Interleaved by date but not by kind, and with "index" running against
 	// the deadline order, so an ordering that fell back to "index" or grouped
 	// by type would put these in a different sequence.
-	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
-	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
-	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
+	fx.Todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
+	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
 	got, err := d.ListTasks("deadlines", TaskFilter{})
 	if err != nil {
@@ -3258,9 +3258,9 @@ func TestListTasksDeadlinesOrderWithProject(t *testing.T) {
 	// Interleaved by date but not by kind, and with "index" running against
 	// the deadline order, so an ordering that fell back to "index" or grouped
 	// by type would put these in a different sequence.
-	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
-	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
-	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
+	fx.Todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
+	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
 	got, err := d.ListTasks("deadlines", TaskFilter{})
 	if err != nil {
@@ -3283,20 +3283,20 @@ func TestListTasksDeadlinesProjectExclusions(t *testing.T) {
 
 	// A project with no deadline is not a deadlines row, and neither a closed
 	// nor a trashed project is, however its deadline reads.
-	fx.project("dl-proj-none", "No date", 4, anytime())
-	fx.project("dl-proj-done", "Shipped", 5, anytime(), status(model.StatusCompleted), deadline(jun1))
-	fx.project("dl-proj-trashed", "Binned", 6, anytime(), trashed(), deadline(jun1))
+	fx.Project("dl-proj-none", "No date", 4, anytime())
+	fx.Project("dl-proj-done", "Shipped", 5, anytime(), status(model.StatusCompleted), deadline(jun1))
+	fx.Project("dl-proj-trashed", "Binned", 6, anytime(), trashed(), deadline(jun1))
 
 	// A heading is structure inside a project, never a list row.
-	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
-	fx.heading("dl-head", "Phase one", 7, deadline(jun1), inProject("dl-proj-mid"))
+	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.Heading("dl-head", "Phase one", 7, deadline(jun1), inProject("dl-proj-mid"))
 
 	// A repeating project template belongs to Repeating, not to the view its
 	// deadline would otherwise put it in, and the to-dos inside it come with
 	// it — they carry no rule of their own, only the project does
 	// (issues #147, #171).
-	fx.project("dl-proj-template", "Quarterly audit", 8, anytime(), deadline(jun1), repeats())
-	fx.todo("dl-todo-in-template", "Pull the figures", 9, anytime(), deadline(jun1), inProject("dl-proj-template"))
+	fx.Project("dl-proj-template", "Quarterly audit", 8, anytime(), deadline(jun1), repeats())
+	fx.Todo("dl-todo-in-template", "Pull the figures", 9, anytime(), deadline(jun1), inProject("dl-proj-template"))
 
 	got, err := d.ListTasks("deadlines", TaskFilter{})
 	if err != nil {
@@ -3326,9 +3326,9 @@ func TestListTasksDeadlinesDateFilterMatchesProject(t *testing.T) {
 	// Interleaved by date but not by kind, and with "index" running against
 	// the deadline order, so an ordering that fell back to "index" or grouped
 	// by type would put these in a different sequence.
-	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
-	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
-	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
+	fx.Todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1))
+	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
+	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
 	on := model.ThingsDate(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
 	got, err := d.ListTasks("deadlines", TaskFilter{On: &on})
@@ -3345,7 +3345,7 @@ func TestListTasksDeadlinesDateFilterMatchesProject(t *testing.T) {
 func TestListTasksDeadlinesProjectRowsAndFilters(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.area("area-ops", "Ops", 1)
+	fx.Area("area-ops", "Ops", 1)
 	jun1 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)))
 	jun2 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
 	jun3 := int64(model.ThingsDateFromTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.Local)))
@@ -3353,9 +3353,9 @@ func TestListTasksDeadlinesProjectRowsAndFilters(t *testing.T) {
 	// Interleaved by date but not by kind, and with "index" running against
 	// the deadline order, so an ordering that fell back to "index" or grouped
 	// by type would put these in a different sequence.
-	fx.todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1), inArea("area-ops"))
-	fx.project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2), inArea("area-ops"))
-	fx.todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3), inArea("area-ops"))
+	fx.Todo("dl-todo-early", "Renew the cert", 3, anytime(), deadline(jun1), inArea("area-ops"))
+	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2), inArea("area-ops"))
+	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3), inArea("area-ops"))
 
 	byArea, err := d.ListTasks("deadlines", TaskFilter{Area: "area-ops"})
 	if err != nil {
@@ -3389,10 +3389,10 @@ func TestListTasksLogbookIncludesCancelled(t *testing.T) {
 	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
 
-	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
-	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
-	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
-	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
+	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
+	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
+	fx.Todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
+	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -3437,10 +3437,10 @@ func TestListTasksLogbookCancelledOrder(t *testing.T) {
 	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
 
-	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
-	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
-	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
-	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
+	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
+	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
+	fx.Todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
+	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -3461,10 +3461,10 @@ func TestListTasksLogbookCancelledExclusions(t *testing.T) {
 
 	// Open rows are not logged, a trashed row belongs to trash however it was
 	// closed, and a heading is structure inside a project, never a list row.
-	fx.todo("log-open", "Still going", 5, anytime())
-	fx.todo("log-cancel-trashed", "Binned", 6, anytime(), trashed(), cancelled(older))
-	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(older))
-	fx.heading("log-head", "Phase one", 7, cancelled(older), inProject("log-proj-done"))
+	fx.Todo("log-open", "Still going", 5, anytime())
+	fx.Todo("log-cancel-trashed", "Binned", 6, anytime(), trashed(), cancelled(older))
+	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(older))
+	fx.Heading("log-head", "Phase one", 7, cancelled(older), inProject("log-proj-done"))
 
 	got, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -3484,7 +3484,7 @@ func TestListTasksLogbookCancelledExclusions(t *testing.T) {
 func TestListTasksLogbookCancelledFilters(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.area("area-lab", "Lab", 1)
+	fx.Area("area-lab", "Lab", 1)
 	// Stop dates interleave the two statuses, and "index" runs against that
 	// order, so a view that grouped by status or fell back to "index" would
 	// return these in a different sequence.
@@ -3493,10 +3493,10 @@ func TestListTasksLogbookCancelledFilters(t *testing.T) {
 	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
 
-	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest), inArea("area-lab"))
-	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer), inArea("area-lab"))
-	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older), inArea("area-lab"))
-	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest), inArea("area-lab"))
+	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest), inArea("area-lab"))
+	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer), inArea("area-lab"))
+	fx.Todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older), inArea("area-lab"))
+	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest), inArea("area-lab"))
 
 	byArea, err := d.ListTasks("logbook", TaskFilter{Area: "area-lab"})
 	if err != nil {
@@ -3529,10 +3529,10 @@ func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
 	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
 	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
 
-	fx.todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
-	fx.project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
-	fx.todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
-	fx.project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
+	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
+	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
+	fx.Todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
+	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
 	// The logbook seed rows are all start = 1 with no startDate, so on their
 	// own they could never appear in today, upcoming or someday whatever their
@@ -3575,28 +3575,28 @@ func TestListTasksViewOrderIsTotalOnTiedKeys(t *testing.T) {
 
 	cases := []struct {
 		view string
-		seed func(fx *fixture)
+		seed func(fx *dbtest.Fixture)
 		want []string
 	}{
 		// Three rows on one deadline, the shape issue #221 was filed on: two
 		// of them tie on "index" as well and only the uuid separates those.
-		{"deadlines", func(fx *fixture) {
-			fx.todo("tie-dl-a", "Renew the cert", 5, anytime(), deadline(jun1))
-			fx.todo("tie-dl-b", "File the form", 5, anytime(), deadline(jun1))
-			fx.todo("tie-dl-c", "Pay the invoice", 1, anytime(), deadline(jun1))
+		{"deadlines", func(fx *dbtest.Fixture) {
+			fx.Todo("tie-dl-a", "Renew the cert", 5, anytime(), deadline(jun1))
+			fx.Todo("tie-dl-b", "File the form", 5, anytime(), deadline(jun1))
+			fx.Todo("tie-dl-c", "Pay the invoice", 1, anytime(), deadline(jun1))
 		}, []string{"tie-dl-c", "tie-dl-a", "tie-dl-b"}},
 
-		{"logbook", func(fx *fixture) {
+		{"logbook", func(fx *dbtest.Fixture) {
 			const stop = 780000000.0
-			fx.todo("tie-lb-a", "Logged first", 5, completed(stop))
-			fx.todo("tie-lb-b", "Logged second", 5, completed(stop))
-			fx.todo("tie-lb-c", "Logged third", 1, completed(stop))
+			fx.Todo("tie-lb-a", "Logged first", 5, completed(stop))
+			fx.Todo("tie-lb-b", "Logged second", 5, completed(stop))
+			fx.Todo("tie-lb-c", "Logged third", 1, completed(stop))
 		}, []string{"tie-lb-c", "tie-lb-a", "tie-lb-b"}},
 
-		{"today", func(fx *fixture) {
-			fx.todo("tie-td-a", "Stand up", 5, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
-			fx.todo("tie-td-b", "Sit down", 5, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
-			fx.todo("tie-td-c", "Walk about", 1, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
+		{"today", func(fx *dbtest.Fixture) {
+			fx.Todo("tie-td-a", "Stand up", 5, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
+			fx.Todo("tie-td-b", "Sit down", 5, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
+			fx.Todo("tie-td-c", "Walk about", 1, anytimeOn(jun1), todayIndex(1), todayIndexRef(1))
 		}, []string{"tie-td-c", "tie-td-a", "tie-td-b"}},
 
 		// Rows filed nowhere, tied on "index": anytime groups before it orders
@@ -3604,9 +3604,9 @@ func TestListTasksViewOrderIsTotalOnTiedKeys(t *testing.T) {
 		// through to the index — which they also tie on, leaving only the
 		// uuid. someday takes the same grouping and reaches the same place;
 		// inbox and trash reach it through the default index ordering.
-		{"anytime", func(fx *fixture) {
-			fx.todo("tie-any-b", "Second", 1, anytime())
-			fx.todo("tie-any-a", "First", 1, anytime())
+		{"anytime", func(fx *dbtest.Fixture) {
+			fx.Todo("tie-any-b", "Second", 1, anytime())
+			fx.Todo("tie-any-a", "First", 1, anytime())
 		}, []string{"tie-any-a", "tie-any-b"}},
 	}
 
@@ -3698,18 +3698,18 @@ func TestListTasksSomedayExcludesProjectChildren(t *testing.T) {
 	// Two parent projects in different buckets. The Someday one is the case
 	// that separates "no parent project" from "no parent project outside
 	// Someday": measured against Things, the app hides that child too.
-	fx.area("area-den", "Den", 1)
-	fx.project("sd-parent-anytime", "Anytime project", 1, anytime(), inArea("area-den"))
-	fx.project("sd-parent-someday", "Someday project", 2, someday(), inArea("area-den"))
+	fx.Area("area-den", "Den", 1)
+	fx.Project("sd-parent-anytime", "Anytime project", 1, anytime(), inArea("area-den"))
+	fx.Project("sd-parent-someday", "Someday project", 2, someday(), inArea("area-den"))
 
 	// Someday to-dos: one under each parent, one under a heading of the
 	// Anytime parent, and two with no parent project at all.
-	fx.todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
-	fx.todo("sd-in-someday", "Filed under someday", 4, someday(), inProject("sd-parent-someday"))
-	fx.heading("sd-head", "Phase one", 5, inProject("sd-parent-anytime"))
-	fx.todo("sd-under-head", "Filed under a heading", 6, someday(), underHeading("sd-head"))
-	fx.todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
-	fx.todo("sd-loose", "Deferred on its own", 8, someday())
+	fx.Todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
+	fx.Todo("sd-in-someday", "Filed under someday", 4, someday(), inProject("sd-parent-someday"))
+	fx.Heading("sd-head", "Phase one", 5, inProject("sd-parent-anytime"))
+	fx.Todo("sd-under-head", "Filed under a heading", 6, someday(), underHeading("sd-head"))
+	fx.Todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
+	fx.Todo("sd-loose", "Deferred on its own", 8, someday())
 
 	got, err := d.ListTasks("someday", TaskFilter{})
 	if err != nil {
@@ -3727,8 +3727,8 @@ func TestListTasksSomedayExcludesProjectChildren(t *testing.T) {
 func TestListTasksSomedayHidesChildOfSomedayProject(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.project("sd-parent-someday", "Someday project", 2, someday())
-	fx.todo("sd-in-someday", "Filed under someday", 4, someday(), inProject("sd-parent-someday"))
+	fx.Project("sd-parent-someday", "Someday project", 2, someday())
+	fx.Todo("sd-in-someday", "Filed under someday", 4, someday(), inProject("sd-parent-someday"))
 
 	got, err := d.ListTasks("someday", TaskFilter{})
 	if err != nil {
@@ -3759,9 +3759,9 @@ func TestListTasksSomedayHidesChildOfSomedayProject(t *testing.T) {
 func TestListTasksSomedayExcludesHeadingNestedChildren(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.project("sd-parent-anytime", "Anytime project", 1, anytime())
-	fx.heading("sd-head", "Phase one", 5, inProject("sd-parent-anytime"))
-	fx.todo("sd-under-head", "Filed under a heading", 6, someday(), underHeading("sd-head"))
+	fx.Project("sd-parent-anytime", "Anytime project", 1, anytime())
+	fx.Heading("sd-head", "Phase one", 5, inProject("sd-parent-anytime"))
+	fx.Todo("sd-under-head", "Filed under a heading", 6, someday(), underHeading("sd-head"))
 
 	got, err := d.ListTasks("someday", TaskFilter{})
 	if err != nil {
@@ -3779,12 +3779,12 @@ func TestListTasksSomedayExcludesHeadingNestedChildren(t *testing.T) {
 func TestListTasksSomedayKeepsUnparentedRows(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.area("area-den", "Den", 1)
-	fx.project("sd-parent-anytime", "Anytime project", 1, anytime(), inArea("area-den"))
-	fx.project("sd-parent-someday", "Someday project", 2, someday(), inArea("area-den"))
-	fx.todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
-	fx.todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
-	fx.todo("sd-loose", "Deferred on its own", 8, someday())
+	fx.Area("area-den", "Den", 1)
+	fx.Project("sd-parent-anytime", "Anytime project", 1, anytime(), inArea("area-den"))
+	fx.Project("sd-parent-someday", "Someday project", 2, someday(), inArea("area-den"))
+	fx.Todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
+	fx.Todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
+	fx.Todo("sd-loose", "Deferred on its own", 8, someday())
 
 	byArea, err := d.ListTasks("someday", TaskFilter{Area: "area-den"})
 	if err != nil {
@@ -3812,14 +3812,14 @@ func TestListTasksSomedayKeepsUnparentedRows(t *testing.T) {
 func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
 	d, fx := newFixture(t)
 
-	fx.project("sd-parent-anytime", "Anytime project", 1, anytime())
-	fx.todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
+	fx.Project("sd-parent-anytime", "Anytime project", 1, anytime())
+	fx.Todo("sd-in-anytime", "Filed under anytime", 3, someday(), inProject("sd-parent-anytime"))
 
 	// The seeded children are all someday-shaped (start=2, no startDate), so
 	// none of them can appear in another view as they stand. Seed one more
 	// child of the same parent in anytime shape to prove the guard is
 	// someday-only rather than global.
-	fx.todo("sd-anytime-child", "Inside, anytime", 9, anytime(), inProject("sd-parent-anytime"))
+	fx.Todo("sd-anytime-child", "Inside, anytime", 9, anytime(), inProject("sd-parent-anytime"))
 
 	got, err := d.ListTasks("anytime", TaskFilter{})
 	if err != nil {
