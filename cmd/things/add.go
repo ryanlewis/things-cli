@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
@@ -29,7 +30,11 @@ func (c *AddCmd) Run(d *Deps) error {
 	if list == "" {
 		list = c.Project
 	}
-	warnAddTarget(d, list, c.Heading)
+	// Things matches list by title only; a uuid has to go as list-id.
+	var listID string
+	if id := resolveAddTarget(d, list, c.Heading); id != "" && id == strings.TrimSpace(list) {
+		list, listID = "", id
+	}
 	return applyAdd(d, model.TypeTask, c.Title, func() error {
 		return things.AddTask(things.AddParams{
 			Title:     c.Title,
@@ -40,32 +45,35 @@ func (c *AddCmd) Run(d *Deps) error {
 			Checklist: expandNewlines(c.Checklist),
 			Heading:   c.Heading,
 			List:      list,
+			ListID:    listID,
 		})
 	})
 }
 
-// warnAddTarget warns when Things will not file the to-do where list and
-// heading say. Things matches them by title and, when nothing matches, puts
-// the to-do in the Inbox or leaves out the heading without reporting it. The
-// add still goes ahead. A database that cannot be read gives no warning here:
-// the tag check or the read-back reports that.
-func warnAddTarget(d *Deps, list, heading string) {
+// resolveAddTarget returns the uuid of the project or area list names, and
+// warns when Things will not file the to-do where list and heading say.
+// Things matches them by title and, when nothing matches, puts the to-do in
+// the Inbox or leaves out the heading without reporting it. The add still
+// goes ahead. A database that cannot be read gives no warning here: the tag
+// check or the read-back reports that.
+func resolveAddTarget(d *Deps, list, heading string) string {
 	if list == "" {
 		if heading != "" {
 			fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list or --project; Things will ignore it and put the to-do in the Inbox\n", heading)
 		}
-		return
+		return ""
 	}
 	database, err := d.Database()
 	if err != nil {
-		return
+		return ""
 	}
-	listFound, headingFound, err := database.AddTarget(list, heading)
+	target, headingFound, err := database.AddTarget(list, heading)
 	switch {
 	case err != nil:
-	case !listFound:
+	case target == "":
 		fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; it will put the to-do in the Inbox\n", list)
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
 	}
+	return target
 }

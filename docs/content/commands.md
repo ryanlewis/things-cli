@@ -340,8 +340,9 @@ Things files the to-do by matching `--list` (or `--project`) against the
 titles of open projects and areas, ignoring case, and `--heading` against
 the headings of that project. When nothing matches it does not complain: it
 puts the to-do in the Inbox, or adds it to the list without the heading. A
-completed or trashed project does not match, and neither does a UUID. The
-add warns on stderr when this will happen, then sends it anyway:
+completed or trashed project does not match. A UUID of an open project or
+area works too: the CLI sends it to Things as `list-id`. The add warns on
+stderr when the to-do will not land where you asked, then sends it anyway:
 
 ```
 warning: Things has no open project or area called "Nowhere"; it will put the to-do in the Inbox

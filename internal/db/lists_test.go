@@ -25,6 +25,11 @@ func TestAddTarget(t *testing.T) {
 		list, heading  string
 		listOK, headOK bool
 	}{
+		{"proj-1", "", true, false},
+		{"area-1", "", true, false},
+		{"proj-1", "Ärger", true, true},
+		{"proj-done", "", false, false},
+		{"proj-trash", "", false, false},
 		{"Tools", "", true, false},
 		{"tools", "", true, false},
 		{"personal", "", true, false},
@@ -38,12 +43,41 @@ func TestAddTarget(t *testing.T) {
 		{"Nowhere", "Ärger", false, false},
 	}
 	for _, tc := range cases {
-		listOK, headOK, err := d.AddTarget(tc.list, tc.heading)
+		target, headOK, err := d.AddTarget(tc.list, tc.heading)
+		listOK := target != ""
 		if err != nil {
 			t.Fatalf("AddTarget(%q, %q): %v", tc.list, tc.heading, err)
 		}
 		if listOK != tc.listOK || headOK != tc.headOK {
 			t.Errorf("AddTarget(%q, %q) = %v, %v, want %v, %v", tc.list, tc.heading, listOK, headOK, tc.listOK, tc.headOK)
+		}
+	}
+}
+
+// Open projects whose titles differ only in case: the exact-case title is the
+// one checked for the heading, whichever row the database returns first.
+func TestAddTargetPrefersExactCase(t *testing.T) {
+	for _, order := range [][2]string{{"work", "Work"}, {"Work", "work"}} {
+		sqlDB := dbtest.NewSQL(t)
+		fx := dbtest.NewFixture(t, sqlDB)
+		uuids := map[string]string{"work": "proj-lower", "Work": "proj-upper"}
+		for i, title := range order {
+			fx.Project(uuids[title], title, i+1)
+		}
+		fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-upper"))
+		d := &DB{db: sqlDB}
+
+		for _, tc := range []struct {
+			list   string
+			headOK bool
+		}{{"Work", true}, {"work", false}} {
+			_, headOK, err := d.AddTarget(tc.list, "Setup")
+			if err != nil {
+				t.Fatalf("AddTarget(%q): %v", tc.list, err)
+			}
+			if headOK != tc.headOK {
+				t.Errorf("insert order %v: AddTarget(%q, Setup) heading = %v, want %v", order, tc.list, headOK, tc.headOK)
+			}
 		}
 	}
 }
