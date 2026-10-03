@@ -274,11 +274,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, complete, ca
 		}
 		current = res.task
 	}
-	items, err := database.GetChecklistItems(current.UUID)
-	if err != nil {
-		return err
-	}
-	return output.PrintTaskWithChecklist(d.Stdout, current, items, d.JSON)
+	return printItem(d, database, current)
 }
 
 // unconfirmedEdit is the --json output for an edit that was sent but not read
