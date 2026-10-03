@@ -41,6 +41,10 @@ type jsonErrorPayload struct {
 	Title   string           `json:"title,omitempty"`
 	Matches []jsonErrorMatch `json:"matches,omitempty"`
 	Items   []jsonErrorItem  `json:"items,omitempty"`
+	// Created is the verdict on every item a partially applied import
+	// created, in the shape a successful import prints, so the confirmed
+	// ones keep their uuids.
+	Created []importCreated `json:"created,omitempty"`
 }
 
 // jsonErrorItem is one item of a batch failure. An import acts on many items
@@ -52,8 +56,8 @@ type jsonErrorPayload struct {
 // item; a status read-back failure sets Wanted and Got, naming the status the
 // payload asked for and the one the item is still in. Got is empty when there
 // was nothing to observe — the row could not be read, or no longer exists. A
-// created item that could not be confirmed sets Confirmed (always false),
-// Reason and Candidates, as an unconfirmed add does.
+// created item that never appeared sets Confirmed (always false), Reason
+// ("not-found") and Candidates, as an unconfirmed add does.
 type jsonErrorItem struct {
 	Path       string   `json:"path"`
 	ID         string   `json:"id,omitempty"`
@@ -273,6 +277,7 @@ func errorPayload(err error) jsonErrorPayload {
 	if errors.As(err, &unapplied) {
 		payload.Error = "import partially applied"
 		payload.Items = unapplied.jsonItems()
+		payload.Created = unapplied.created
 		return payload
 	}
 

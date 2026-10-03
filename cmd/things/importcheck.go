@@ -272,14 +272,27 @@ type importVerifyItem struct {
 
 // importVerifyError is a partially applied import: the payload reached Things,
 // and some of the status changes it asked for did not take, or some of the
-// items it created could not be confirmed.
+// items it created never appeared.
 type importVerifyError struct {
 	items []importVerifyItem
 	total int // status changes the payload requested, landed or not
 
-	created      []importCreated // created items not confirmed
-	createdTotal int             // items the payload created, confirmed or not
-	search       string          // the `things search` command, with the flags this run needs
+	// created is the verdict on every item the payload created, so the
+	// confirmed ones keep their uuids when the import fails.
+	created []importCreated
+	search  string // the `things search` command, with the flags this run needs
+}
+
+// missing is the created items that never appeared: the ones to search for
+// and re-run.
+func (e *importVerifyError) missing() []importCreated {
+	var out []importCreated
+	for _, c := range e.created {
+		if c.Reason == "not-found" {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func (e *importVerifyError) Error() string {
@@ -292,13 +305,23 @@ func (e *importVerifyError) Error() string {
 		parts = append(parts, fmt.Sprintf("%d of %d requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n%s",
 			len(e.items), e.total, strings.Join(lines, "\n")))
 	}
-	if len(e.created) > 0 {
-		lines := make([]string, len(e.created))
-		for i, it := range e.created {
+	missing := e.missing()
+	if len(missing) > 0 {
+		lines := make([]string, len(missing))
+		for i, it := range missing {
 			lines[i] = fmt.Sprintf("  %s: %s", it.Path, it.detail)
 		}
-		parts = append(parts, fmt.Sprintf("%d of %d created items were not confirmed. The rest of the import was still applied. Things may have dropped them (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
-			len(e.created), e.createdTotal, e.search, strings.Join(lines, "\n")))
+		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear. The rest of the import was still applied. Things may have dropped them (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
+			len(missing), len(e.created), e.search, strings.Join(lines, "\n")))
+	}
+	if len(e.created) > len(missing) {
+		lines := []string{"The other created items:"}
+		for _, it := range e.created {
+			if it.Reason != "not-found" {
+				lines = append(lines, "  "+it.line())
+			}
+		}
+		parts = append(parts, strings.Join(lines, "\n"))
 	}
 	return strings.Join(parts, "\n")
 }
@@ -318,7 +341,7 @@ type importCreated struct {
 	Reason     string   `json:"reason,omitempty"`
 	Candidates []string `json:"candidates,omitempty"`
 
-	detail string // what went wrong, for the plain-text error
+	detail string // why a not-found item is missing, for the plain-text error
 }
 
 // prepareImport is the pre-write pass over an import payload. It refuses the
@@ -426,22 +449,15 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	created := readBackCreates(d, database, plan.creates, snap, snapErr, budget)
 	failures, total := verifyImportStatuses(database, plan, max(time.Until(deadline), 0), budget)
 
-	var unconfirmed []importCreated
-	for _, c := range created {
-		if !c.Confirmed {
-			unconfirmed = append(unconfirmed, c)
-		}
-	}
 	// The failures go in the error rather than straight to stderr: under
 	// --json the error is rendered as one object on stdout (issue #152) and
 	// anything written to stderr never reaches the reader, so a summary
 	// pointing at a list printed elsewhere would name detail the consumer
-	// cannot see. Unconfirmed created items go in with them, since the
+	// cannot see. Every created item's verdict goes in with them, since the
 	// success list is not printed beside an error.
-	if len(failures) > 0 || slices.ContainsFunc(unconfirmed, func(c importCreated) bool { return c.Reason == "not-found" }) {
+	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return c.Reason == "not-found" }) {
 		return &importVerifyError{
-			items: failures, total: total,
-			created: unconfirmed, createdTotal: len(created),
+			items: failures, total: total, created: created,
 			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
 		}
 	}
@@ -487,13 +503,16 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		switch n := want[key]; {
 		case err != nil:
 			out[i].Reason = "unreadable"
+		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
+			// Two saved at the same instant cannot be paired with the
+			// payload's items by order, so neither is confirmed.
+			out[i].Reason, out[i].Candidates = "ambiguous", uuids
 		case len(matches) == n:
 			out[i].Confirmed = true
 			out[i].UUID = uuids[paired[key]]
 			paired[key]++
 		case len(matches) > n:
 			out[i].Reason, out[i].Candidates = "ambiguous", uuids
-			out[i].detail = fmt.Sprintf("more than one new %s titled %q appeared (%s)", c.kind(), c.title, strings.Join(uuids, ", "))
 		case len(matches) == 0:
 			out[i].Reason = "not-found"
 			out[i].detail = fmt.Sprintf("no new %s titled %q appeared within %s", c.kind(), c.title, budget)
@@ -508,6 +527,29 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 	return out
 }
 
+// distinctCreationDates reports whether no two of tasks, oldest first, share a
+// creation date, so their order is the order Things saved them in.
+func distinctCreationDates(tasks []model.Task) bool {
+	for i := 1; i < len(tasks); i++ {
+		prev, cur := tasks[i-1].CreationDate, tasks[i].CreationDate
+		if prev == nil || cur == nil || !cur.After(*prev) {
+			return false
+		}
+	}
+	return true
+}
+
+// line renders c the way the plain-text output reports it.
+func (c importCreated) line() string {
+	switch {
+	case c.Confirmed:
+		return fmt.Sprintf("Created and confirmed: %s %q (%s)", c.Path, c.Title, c.UUID)
+	case len(c.Candidates) > 0:
+		return fmt.Sprintf("%s: %s %q (%s)", unconfirmedMsg[c.Reason], c.Path, c.Title, strings.Join(c.Candidates, ", "))
+	}
+	return fmt.Sprintf("%s: %s %q", unconfirmedMsg[c.Reason], c.Path, c.Title)
+}
+
 // printImportCreated reports each created item, a line per item or, under
 // --json, an array. An import that created nothing prints nothing.
 func printImportCreated(d *Deps, created []importCreated) error {
@@ -518,16 +560,7 @@ func printImportCreated(d *Deps, created []importCreated) error {
 		return output.PrintJSON(d.Stdout, created)
 	}
 	for _, c := range created {
-		var err error
-		switch {
-		case c.Confirmed:
-			_, err = fmt.Fprintf(d.Stdout, "Created and confirmed: %s %q (%s)\n", c.Path, c.Title, c.UUID)
-		case len(c.Candidates) > 0:
-			_, err = fmt.Fprintf(d.Stdout, "%s: %s %q (%s)\n", unconfirmedMsg[c.Reason], c.Path, c.Title, strings.Join(c.Candidates, ", "))
-		default:
-			_, err = fmt.Fprintf(d.Stdout, "%s: %s %q\n", unconfirmedMsg[c.Reason], c.Path, c.Title)
-		}
-		if err != nil {
+		if _, err := fmt.Fprintln(d.Stdout, c.line()); err != nil {
 			return err
 		}
 	}
@@ -596,10 +629,11 @@ func (e *importRefusalError) jsonItems() []jsonErrorItem {
 	return out
 }
 
-// jsonItems renders the unapplied status changes, then the unconfirmed
-// created items, for the --json error payload.
+// jsonItems renders the unapplied status changes, then the created items
+// that never appeared, for the --json error payload.
 func (e *importVerifyError) jsonItems() []jsonErrorItem {
-	out := make([]jsonErrorItem, len(e.items), len(e.items)+len(e.created))
+	missing := e.missing()
+	out := make([]jsonErrorItem, len(e.items), len(e.items)+len(missing))
 	for i, it := range e.items {
 		out[i] = jsonErrorItem{
 			Path:   it.Path,
@@ -611,7 +645,7 @@ func (e *importVerifyError) jsonItems() []jsonErrorItem {
 			out[i].Got = it.Got.String()
 		}
 	}
-	for _, it := range e.created {
+	for _, it := range missing {
 		out = append(out, jsonErrorItem{
 			Path:       it.Path,
 			Title:      it.Title,
