@@ -212,25 +212,7 @@ type CompleteCmd struct {
 }
 
 func (c *CompleteCmd) Run(d *Deps) error {
-	database, err := d.Database()
-	if err != nil {
-		return err
-	}
-	task, err := resolveTask(d, c.Task, database)
-	if err != nil {
-		return err
-	}
-	if err := checkRepeating(task, []string{"completed"}); err != nil {
-		return err
-	}
-	write := func() error { return things.CompleteTask(task.UUID) }
-	if task.Type == model.TypeProject {
-		if err := confirmProjectStatusChange(d, c.Yes, "Complete", task.Title); err != nil {
-			return err
-		}
-		write = func() error { return things.CompleteProject(task.UUID) }
-	}
-	return applyStatusWrite(d, database, task, model.StatusCompleted, write)
+	return runStatusChange(d, c.Task, c.Yes, model.StatusCompleted)
 }
 
 type CancelCmd struct {
@@ -239,23 +221,45 @@ type CancelCmd struct {
 }
 
 func (c *CancelCmd) Run(d *Deps) error {
+	return runStatusChange(d, c.Task, c.Yes, model.StatusCancelled)
+}
+
+// statusChange is what `complete` or `cancel` needs for its status: the
+// attribute name checkRepeating reports, the verb the project prompt uses,
+// and the writes for a task and a project.
+type statusChange struct {
+	blockedWord  string
+	verb         string
+	taskWrite    func(uuid string) error
+	projectWrite func(uuid string) error
+}
+
+var statusChanges = map[model.Status]statusChange{
+	model.StatusCompleted: {"completed", "Complete", things.CompleteTask, things.CompleteProject},
+	model.StatusCancelled: {"canceled", "Cancel", things.CancelTask, things.CancelProject},
+}
+
+// runStatusChange resolves ref and moves it to want, asking first when it is
+// a project, then confirms the change landed.
+func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
+	sc := statusChanges[want]
 	database, err := d.Database()
 	if err != nil {
 		return err
 	}
-	task, err := resolveTask(d, c.Task, database)
+	task, err := resolveTask(d, ref, database)
 	if err != nil {
 		return err
 	}
-	if err := checkRepeating(task, []string{"canceled"}); err != nil {
+	if err := checkRepeating(task, []string{sc.blockedWord}); err != nil {
 		return err
 	}
-	write := func() error { return things.CancelTask(task.UUID) }
+	write := func() error { return sc.taskWrite(task.UUID) }
 	if task.Type == model.TypeProject {
-		if err := confirmProjectStatusChange(d, c.Yes, "Cancel", task.Title); err != nil {
+		if err := confirmProjectStatusChange(d, yes, sc.verb, task.Title); err != nil {
 			return err
 		}
-		write = func() error { return things.CancelProject(task.UUID) }
+		write = func() error { return sc.projectWrite(task.UUID) }
 	}
-	return applyStatusWrite(d, database, task, model.StatusCancelled, write)
+	return applyStatusWrite(d, database, task, want, write)
 }
