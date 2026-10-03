@@ -156,15 +156,36 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 		})
 	}
 	uncovered := ownSet || f.uncoveredSet()
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered)
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, droppedTags(database, s.TagFlags, f.Tags, f.AddTags))
 	return applyEdit(d, database, task, changed, s.Complete, s.Cancel, s.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
 // leaves the item as it is, so there is no modification to wait for.
-// uncovered says whether any field flag outside coveredFields is set.
-func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool) bool {
-	return !uncovered && f.covered().unchanged(task)
+// uncovered says whether any field flag outside coveredFields is set, and
+// dropped holds the folded tag names Things will drop (droppedTags).
+func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}) bool {
+	return !uncovered && f.covered().unchanged(task, dropped)
+}
+
+// droppedTags returns the folded names in the --tags and --add-tags values
+// that Things will drop because no such tag exists, so the no-op check can
+// leave them out. --create-tags has made them by now, so none is dropped
+// then; --strict-tags has already refused the edit. A failed lookup counts
+// every tag as known, and the edit waits for its read-back as before.
+func droppedTags(database *db.DB, flags TagFlags, values ...*string) map[string]struct{} {
+	if flags.CreateTags {
+		return nil
+	}
+	unknown, err := database.UnknownTags(splitTagValues(values...))
+	if err != nil {
+		return nil
+	}
+	dropped := make(map[string]struct{}, len(unknown))
+	for _, t := range unknown {
+		dropped[db.FoldTag(t)] = struct{}{}
+	}
+	return dropped
 }
 
 // changesFields reports whether the edit sets any attribute besides the
@@ -200,8 +221,9 @@ func (f coveredFields) set() bool {
 // deliberately narrow: a value whose outcome depends on how Things reads it
 // counts as a change, and the edit waits for its read-back as before. --when
 // is left out for that reason — even `today` on an item already in Today may
-// touch its reminder, which the CLI does not read.
-func (f coveredFields) unchanged(task *model.Task) bool {
+// touch its reminder, which the CLI does not read. Tags named in dropped do
+// not exist in Things, which ignores them, so they count as no change.
+func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}) bool {
 	if f.title != nil && *f.title != task.Title {
 		return false
 	}
@@ -217,7 +239,9 @@ func (f coveredFields) unchanged(task *model.Task) bool {
 	if f.tags != nil {
 		want := make(map[string]struct{})
 		for _, t := range things.SplitTags(*f.tags) {
-			want[db.FoldTag(t)] = struct{}{}
+			if key := db.FoldTag(t); !isDropped(dropped, key) {
+				want[key] = struct{}{}
+			}
 		}
 		if !maps.Equal(want, have) {
 			return false
@@ -225,7 +249,8 @@ func (f coveredFields) unchanged(task *model.Task) bool {
 	}
 	if f.addTags != nil {
 		for _, t := range things.SplitTags(*f.addTags) {
-			if _, ok := have[db.FoldTag(t)]; !ok {
+			key := db.FoldTag(t)
+			if _, ok := have[key]; !ok && !isDropped(dropped, key) {
 				return false
 			}
 		}
@@ -234,6 +259,11 @@ func (f coveredFields) unchanged(task *model.Task) bool {
 		return false
 	}
 	return true
+}
+
+func isDropped(dropped map[string]struct{}, key string) bool {
+	_, ok := dropped[key]
+	return ok
 }
 
 // deadlineUnchanged covers a literal date equal to the item's deadline, and a

@@ -113,13 +113,19 @@ func createTags(d *Deps, names []string) error {
 // verifyTagStrings checks comma-separated tag values (as passed to --tags /
 // --add-tags). nil pointers and empty strings contribute nothing.
 func verifyTagStrings(d *Deps, flags TagFlags, values ...*string) error {
+	return verifyTags(d, flags, splitTagValues(values...))
+}
+
+// splitTagValues splits comma-separated tag values into names, skipping nil
+// pointers.
+func splitTagValues(values ...*string) []string {
 	var names []string
 	for _, v := range values {
 		if v != nil {
 			names = append(names, things.SplitTags(*v)...)
 		}
 	}
-	return verifyTags(d, flags, names)
+	return names
 }
 
 // importTags collects every tag named anywhere in a Things JSON payload. Tags

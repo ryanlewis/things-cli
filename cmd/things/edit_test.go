@@ -244,6 +244,12 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"clearTags", []string{"edit", "one-1", "--tags", ""}, false},
 		{"addTagsPresent", []string{"edit", "one-1", "--add-tags", "ERRAND"}, true},
 		{"addTagsNew", []string{"edit", "one-1", "--add-tags", "Errand,Home"}, false},
+		// Things drops a tag it does not have, so an unknown name is no
+		// change unless --create-tags makes it first (see below).
+		{"sameTagsPlusUnknown", []string{"edit", "one-1", "--tags", "Errand,Urgent,Ghost"}, true},
+		{"addTagsUnknown", []string{"edit", "one-1", "--add-tags", "errand,Ghost"}, true},
+		{"onlyUnknownTags", []string{"edit", "one-1", "--tags", "Ghost"}, false},
+		{"projectUnknownTag", []string{"project", "edit", "repproj-1", "--add-tags", "Ghost"}, true},
 		{"sameDeadline", []string{"edit", "one-1", "--deadline", "2026-10-15"}, true},
 		{"newDeadline", []string{"edit", "one-1", "--deadline", "2026-10-16"}, false},
 		{"clearDeadline", []string{"edit", "one-1", "--deadline", ""}, false},
@@ -266,7 +272,7 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 			stmts := []string{
 				`UPDATE TMTask SET notes = 'second class', start = 1, startBucket = 0, startDate = ` + strconv.Itoa(today) +
 					`, deadline = ` + strconv.Itoa(deadline) + ` WHERE uuid = 'one-1'`,
-				`INSERT INTO TMTag (uuid, title) VALUES ('tag-1', 'Errand'), ('tag-2', 'Urgent')`,
+				`INSERT INTO TMTag (uuid, title) VALUES ('tag-1', 'Errand'), ('tag-2', 'Urgent'), ('tag-3', 'Home')`,
 				`INSERT INTO TMTaskTag (tasks, tags) VALUES ('one-1', 'tag-1'), ('one-1', 'tag-2')`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('two-1', 'Undated', 0, 0, 0, 1)`,
 			}
@@ -291,6 +297,31 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 				t.Fatalf("%v = %v, want the read-back to wait and fail", tc.args, err)
 			}
 		})
+	}
+}
+
+// --create-tags makes a missing tag before the write, so Things applies it
+// and the edit is a real change that waits for its read-back.
+func TestEditCreatedTagIsAChange(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stmts := []string{
+		`INSERT INTO TMTag (uuid, title) VALUES ('tag-1', 'Errand')`,
+		`INSERT INTO TMTaskTag (tasks, tags) VALUES ('one-1', 'tag-1')`,
+	}
+	for _, s := range stmts {
+		if _, err := sqlDB.Exec(s); err != nil {
+			t.Fatalf("seed %q: %v", s, err)
+		}
+	}
+	calls := stubExecDropping(t)
+
+	_, err := runOut(t, database, "edit", "one-1", "--tags", "Errand,Ghost", "--create-tags")
+	if *calls != 2 {
+		t.Errorf("issued %d commands, want the tag created and the URL sent", *calls)
+	}
+	if err == nil || !strings.Contains(err.Error(), "did not apply") {
+		t.Fatalf("err = %v, want the read-back to wait and fail", err)
 	}
 }
 
