@@ -900,6 +900,13 @@ func literalLike(value string) string {
 	return likeEscaper.Replace(FoldCase(value))
 }
 
+// nameLike is literalLike for the --tag, --area and --project filters: the
+// value is trimmed first, the way FoldTag trims it for `open`, so the two
+// paths agree on a value with a stray space (issue #289).
+func nameLike(value string) string {
+	return literalLike(strings.TrimSpace(value))
+}
+
 // containsLike is literalLike for the lookups that match a substring: the
 // value is escaped so nothing inside it is a wildcard, then wrapped in the two
 // the caller did not type. `%` and `_` in the value are characters to find,
@@ -965,15 +972,15 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	var args []any
 	if opts.Project != "" {
 		where += " AND (p.uuid = ? OR fold(p.title) LIKE ?" + escapeClause + ")"
-		args = append(args, opts.Project, literalLike(opts.Project))
+		args = append(args, opts.Project, nameLike(opts.Project))
 	}
 	if opts.Area != "" {
 		where += " AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ?" + escapeClause + ")"
-		args = append(args, opts.Area, literalLike(opts.Area))
+		args = append(args, opts.Area, nameLike(opts.Area))
 	}
 	if opts.Tag != "" {
 		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ?" + escapeClause + ")"
-		args = append(args, literalLike(opts.Tag))
+		args = append(args, nameLike(opts.Tag))
 	}
 
 	if opts.On != nil || opts.From != nil || opts.To != nil {

@@ -117,7 +117,7 @@ func (d *DB) NamesRepeatingProject(ref string) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM TMTask t WHERE t.type = ? AND ` +
 		d.recurrenceCol() + ` IS NOT NULL AND (t.uuid = ? OR fold(t.title) LIKE ?` + escapeClause + `))`
 	var found int
-	if err := d.db.QueryRow(query, int(model.TypeProject), ref, literalLike(ref)).Scan(&found); err != nil {
+	if err := d.db.QueryRow(query, int(model.TypeProject), ref, nameLike(ref)).Scan(&found); err != nil {
 		return false, fmt.Errorf("checking for a repeating project: %w", err)
 	}
 	return found != 0, nil

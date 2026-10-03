@@ -141,7 +141,8 @@ listing there means nothing has been trashed or closed yet.
 `things search` is a lookup rather than a view, so it returns templates too.
 Results carry `"repeating": true`.
 
-Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. On their
+Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. Names
+ignore case and surrounding spaces. On their
 own the filters cover everything open in the project, area, or tag — so
 `things -a Work` lists that area's own projects as well as its tasks, while
 `-p` still returns a project's contents rather than the project row. Add a

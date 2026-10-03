@@ -40,6 +40,9 @@ func TestFiltersIgnoreNonASCIICase(t *testing.T) {
 		{"area final sigma", TaskFilter{Area: "ΚΟΣ"}, []string{"proj-k", "in-k"}},
 		{"tag", TaskFilter{Tag: "ärger"}, []string{"in-a"}},
 		{"tag final sigma", TaskFilter{Tag: "ΚΟΣ"}, []string{"in-k"}},
+		{"tag surrounding space", TaskFilter{Tag: " ärger "}, []string{"in-a"}},
+		{"area surrounding space", TaskFilter{Area: " ärger "}, []string{"proj-a", "in-a"}},
+		{"project surrounding space", TaskFilter{Project: " ärger "}, []string{"in-a"}},
 	} {
 		t.Run("list "+tc.name, func(t *testing.T) {
 			got, err := d.ListTasks("project", tc.filter)
