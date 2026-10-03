@@ -87,6 +87,19 @@ func TestListProjectsAreaFilter(t *testing.T) {
 	}
 }
 
+func TestListProjectsAreaFilterTrimsSpace(t *testing.T) {
+	d := newTestDB(t)
+	seedProjects(t, d)
+
+	got, err := d.ListProjects(" Home ", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].UUID != "p2" {
+		t.Errorf("got %+v", got)
+	}
+}
+
 func TestListProjectsCarriesTagsAndCounts(t *testing.T) {
 	d := newTestDB(t)
 	seedProjects(t, d)
