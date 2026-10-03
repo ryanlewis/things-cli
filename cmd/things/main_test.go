@@ -346,6 +346,8 @@ func TestListCommandLine(t *testing.T) {
 		{"bare view", ListCmd{}, "today", "", "things today"},
 		{"filter only", ListCmd{}, "project", "Some Project", `things --project 'Some Project'`},
 		{"metacharacter in a name", ListCmd{Area: "R&D"}, "project", "", `things --area 'R&D'`},
+		{"non-ASCII and percent stay bare", ListCmd{Area: "café"}, "project", "", `things --area café`},
+		{"percent stays bare", ListCmd{Tag: "100%"}, "anytime", "", "things anytime --tag 100%"},
 		{"view and filter", ListCmd{Area: "Home"}, "today", "", "things today --area Home"},
 		{"tag", ListCmd{Tag: "errand"}, "anytime", "", "things anytime --tag errand"},
 		{"dates", ListCmd{From: "2026-09-01", To: "2026-09-30"}, "upcoming", "", "things upcoming --from 2026-09-01 --to 2026-09-30"},

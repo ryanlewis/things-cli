@@ -309,6 +309,7 @@ func TestTagAddHint(t *testing.T) {
 		{"ampersand", []string{"R&D"}, `things tag add 'R&D'`},
 		{"dollar", []string{"a$HOME"}, `things tag add 'a$HOME'`},
 		{"apostrophe", []string{"Ryan's"}, `things tag add 'Ryan'\''s'`},
+		{"non-ASCII stays bare", []string{"café"}, "things tag add café"},
 		{"empty", []string{""}, `things tag add ''`},
 		// Quoting stops the shell splitting a leading-dash name, but the CLI
 		// would still read it as a flag, so the hint has to end flag parsing.

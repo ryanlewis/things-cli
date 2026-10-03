@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -114,27 +115,31 @@ func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 	}
 }
 
-// quoteArg renders one argument as the user would have to type it. Anything
+// shellQuote renders one argument as the user would have to type it. Anything
 // that is not a bare word is wrapped in single quotes, which a shell takes
 // literally: double quotes would still expand `$rate` or a backtick, and an
 // unquoted value breaks on a space or on the metacharacters an ordinary name
-// carries — an area called `R&D` pasted back unquoted runs two commands.
-func quoteArg(s string) string {
-	if s != "" && !strings.ContainsFunc(s, needsQuote) {
+// carries — an area called `R&D` pasted back unquoted runs two commands. An
+// embedded quote becomes the usual '\” dance.
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsFunc(s, needsShellQuoting) {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// needsQuote reports whether r stops a value being a bare shell word. The safe
-// set is a whitelist, so a character a shell treats specially cannot slip
-// through by having been forgotten here.
-func needsQuote(r rune) bool {
+// needsShellQuoting reports whether r has any meaning to a shell. It is an
+// allow-list: anything outside it gets quoted, so a character the list forgot
+// is merely quoted unnecessarily rather than left live. Non-ASCII letters such
+// as the é in an area called café are not special to a shell.
+func needsShellQuoting(r rune) bool {
 	switch {
 	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
 		return false
+	case r > unicode.MaxASCII:
+		return false
 	}
-	return !strings.ContainsRune("-_./:=@+,", r)
+	return !strings.ContainsRune("-_./:=@+,%", r)
 }
 
 // globalFlags renders the global flags a re-run of a listing needs to reach the
@@ -145,5 +150,5 @@ func globalFlags(d *Deps) []string {
 	if d.DBPath == "" || d.config().SetsDB(d.DBPath) {
 		return nil
 	}
-	return []string{"--db", quoteArg(d.DBPath)}
+	return []string{"--db", shellQuote(d.DBPath)}
 }
