@@ -322,6 +322,63 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 	}
 }
 
+// The app's "Move completed items to Logbook" setting decides how long a
+// closed row stays in place. Things keeps it in TMSettings.logInterval, with
+// the values its preferences menu tags each choice with: 0 immediately, 1
+// daily, 4 manually. A missing setting reads as daily, the rule measured
+// before the setting was known.
+func TestHeldInPlaceFollowsLogSetting(t *testing.T) {
+	now := time.Now()
+	stopToday := model.TimeToUnix(now)
+	stopEarlier := model.TimeToUnix(now.AddDate(0, 0, -3))
+	logBetween := model.TimeToUnix(now.AddDate(0, 0, -5))
+	logAfter := model.TimeToUnix(now.Add(time.Minute))
+
+	cases := []struct {
+		name        string
+		logInterval any
+		manualLog   any
+		stopDate    float64
+		wantHeld    bool
+	}{
+		{"no setting, closed today", nil, nil, stopToday, true},
+		{"daily, closed today", 1, nil, stopToday, true},
+		{"daily, closed earlier", 1, logBetween, stopEarlier, false},
+		{"daily, closed today, logged now", 1, logAfter, stopToday, false},
+		{"immediately, closed today", 0, nil, stopToday, false},
+		{"manually, closed today", 4, logBetween, stopToday, true},
+		{"manually, closed earlier, not logged", 4, logBetween, stopEarlier, true},
+		{"manually, closed today, logged now", 4, logAfter, stopToday, false},
+		{"manually, never logged", 4, nil, stopEarlier, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, stopDate, "index")
+				VALUES ('t-closed', 'Closed', 0, 3, 0, 1, 0, ?, 1)`, tc.stopDate)
+			mustExec(t, d, `INSERT INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
+				tc.logInterval, tc.manualLog)
+
+			held, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			logged, err := d.ListTasks("logbook", TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(held)+len(logged) != 1 {
+				t.Errorf("anytime=%v logbook=%v: want the row in exactly one list", uuidsOf(held), uuidsOf(logged))
+			}
+			if got := len(held) == 1; got != tc.wantHeld {
+				t.Errorf("held in Anytime = %v, want %v", got, tc.wantHeld)
+			}
+		})
+	}
+}
+
 // A closed item no list carries belongs in the Logbook the moment it is
 // closed, whatever calendar day that is, because no list is still showing it.
 // Excluding "closed today" from the Logbook outright would leave those rows in

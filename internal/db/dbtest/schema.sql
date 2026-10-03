@@ -60,5 +60,6 @@ CREATE INDEX index_TMChecklistItem_task ON TMChecklistItem (task);
 CREATE TABLE TMSettings (
     uuid                         TEXT PRIMARY KEY,
     uriSchemeAuthenticationToken TEXT,
+    logInterval                  INTEGER,
     manualLogDate                REAL
 );

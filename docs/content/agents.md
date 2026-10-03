@@ -302,12 +302,15 @@ every logbook row is a success.
 An item you tick off in the Inbox, Today, Anytime or Upcoming is not in `logbook` yet —
 Things keeps it where it was until the day rolls over, or until `things log`
 files it early, and `--include-completed` is how to see those on any of the
-four views. Anything closed outside them goes straight to `logbook`,
+four views. That is the app's default "Move completed items to Logbook:
+Daily" setting, which the CLI reads: under Immediately nothing is held and
+every closed item is in `logbook`; under Manually items stay in place,
+whatever day they closed, until `things log`. Anything closed outside them goes straight to `logbook`,
 including today's closes. The exception is a task closed today inside a
 project in Someday or scheduled for later, and not shown by `today` or
 `upcoming`: `anytime` leaves out that
 project's tasks, as the app's Anytime does, and like the app's Logbook,
-`logbook` holds it back until the day is logged, so only its project listing
+`logbook` holds it back until Things logs it, so only its project listing
 has it. `logbook` is disjoint from the other four, but Today, Anytime and
 Upcoming are not disjoint from each other: a task scheduled for today sits in the
 Anytime bucket as well, and an undated one due later is in Anytime and

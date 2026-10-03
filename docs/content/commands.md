@@ -96,7 +96,11 @@ An item you tick off in Today is not in `logbook` yet. Things keeps it under
 Today for the rest of the day and files it into the Logbook when the day rolls
 over, or sooner if you run `things log` — the app's "Log Completed Now", which
 files the day's closed items straight away. `things today --include-completed`
-shows the ones still waiting. `inbox`, `anytime` and `upcoming` behave the same
+shows the ones still waiting. That is the app's default "Move completed items
+to Logbook: Daily" setting, and the CLI reads the setting: set to Immediately,
+nothing is held and every closed item is in `logbook` at once; set to Manually,
+closed items stay where they were, whatever day they closed, until
+`things log`. `inbox`, `anytime` and `upcoming` behave the same
 way and take the same flag, because the app goes on showing a just-closed item
 there too. `upcoming` keeps only what was in it while open: a task closed ahead
 of its date, or an undated one with a deadline after today. Everything else
