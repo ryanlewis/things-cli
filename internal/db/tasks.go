@@ -947,10 +947,12 @@ func nameLike(value string) string {
 // only when no project carries one does the title match ignoring case and
 // surrounding space — the order `open --tag/--area` take names in. Things lets
 // two projects differ only by case, and without the preference naming one
-// listed both (issue #290).
+// listed both (issue #290). A trashed project does not take the preference:
+// the app no longer shows it, so it must not hide an open project that
+// differs from it only by case. Named exactly, it still matches.
 func projectNameMatch(alias, ref string) (string, []any) {
 	clause := "(" + alias + ".uuid = ? OR " + alias + ".title = ? OR (fold(" + alias + ".title) LIKE ?" + escapeClause +
-		" AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.title = ?)))"
+		" AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?)))"
 	return clause, []any{ref, ref, nameLike(ref), int(model.TypeProject), ref}
 }
 

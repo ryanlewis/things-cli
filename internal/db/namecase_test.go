@@ -42,6 +42,24 @@ func TestProjectFilterPrefersExactCase(t *testing.T) {
 	}
 }
 
+// A trashed project is gone from the app, so its exact-case title must not
+// hide the open project that differs from it only by case. Both still match.
+func TestProjectFilterTrashedExactCaseDoesNotHide(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Project("p-gone", "Garden", 1, anytime(), dbtest.Trashed())
+	fx.Project("p-open", "garden", 2, anytime())
+	fx.Todo("c-gone", "Weed beds", 3, anytime(), dbtest.InProject("p-gone"))
+	fx.Todo("c-open", "Mow lawn", 4, anytime(), dbtest.InProject("p-open"))
+
+	got, err := d.ListTasks(ViewProject, TaskFilter{Project: "Garden"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(got), []string{"c-gone", "c-open"}) {
+		t.Errorf("--project Garden = %v, want [c-gone c-open]", uuidsOf(got))
+	}
+}
+
 // The note on an empty project listing has to name the same project the
 // filter listed, or `--project Garden` on an empty ordinary project would be
 // explained by a repeating template called "garden".
