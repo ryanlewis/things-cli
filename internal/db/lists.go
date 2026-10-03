@@ -26,8 +26,8 @@ func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, 
 	err = d.db.QueryRow(`
 		SELECT uuid FROM TMTask
 		WHERE type = ? AND status = ? AND COALESCE(trashed, 0) = 0 AND (uuid = ? OR fold(title) = ?)
-		ORDER BY uuid = ? DESC, title = ? DESC
-		LIMIT 1`, int(model.TypeProject), int(model.StatusOpen), id, FoldCase(list), id, list).Scan(&project)
+		ORDER BY uuid = ? DESC, nfc(title) = ? DESC
+		LIMIT 1`, int(model.TypeProject), int(model.StatusOpen), id, FoldCase(list), id, normName(list)).Scan(&project)
 	switch {
 	case err == sql.ErrNoRows:
 		var area string

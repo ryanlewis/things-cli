@@ -198,3 +198,98 @@ func TestGetTaskPrefersExactCase(t *testing.T) {
 		}
 	}
 }
+
+// A name typed in its exact case keeps the preference when it was typed in
+// the other Unicode normalisation form: "Café" with a combining accent is
+// still the exact name of a "Café" stored with the precomposed letter, so it
+// does not also list "café". The "Café" rows are stored NFC and the "Noël"
+// rows NFD, and each is asked for in the other form. The lower-case areas and
+// tags sort first, so FindAreaUUID and FindTagUUID only reach the right row
+// through the preference.
+func TestExactCaseIgnoresNormalisation(t *testing.T) {
+	const (
+		cafeNFD  = "Café"
+		noelNFC  = "Noël"
+		upperNFC = "Café"
+		lowerNFC = "café"
+		upperNFD = "Noël"
+		lowerNFD = "noël"
+	)
+	d, fx := newFixture(t)
+	fx.Area("a-cafe-lc", lowerNFC, 1)
+	fx.Area("a-cafe", upperNFC, 2)
+	fx.Area("a-noel-lc", lowerNFD, 3)
+	fx.Area("a-noel", upperNFD, 4)
+	fx.Project("p-cafe", upperNFC, 1, anytime(), dbtest.InArea("a-cafe"))
+	fx.Project("p-cafe-lc", lowerNFC, 2, anytime(), dbtest.InArea("a-cafe-lc"))
+	fx.Project("p-noel", upperNFD, 3, anytime(), dbtest.InArea("a-noel"))
+	fx.Project("p-noel-lc", lowerNFD, 4, anytime(), dbtest.InArea("a-noel-lc"))
+	fx.Tag("g-cafe-lc", lowerNFC, 1)
+	fx.Tag("g-cafe", upperNFC, 2)
+	fx.Tag("g-noel-lc", lowerNFD, 3)
+	fx.Tag("g-noel", upperNFD, 4)
+	for _, c := range []struct{ uuid, title, in, tag string }{
+		{"t-cafe", "Crème", "p-cafe", "g-cafe"},
+		{"t-cafe-lc", "crème", "p-cafe-lc", "g-cafe-lc"},
+		{"t-noel", "Bûche", "p-noel", "g-noel"},
+		{"t-noel-lc", "bûche", "p-noel-lc", "g-noel-lc"},
+	} {
+		fx.Todo(c.uuid, c.title, 5, anytime(), dbtest.InProject(c.in))
+		fx.Tagged(c.uuid, c.tag)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		filter TaskFilter
+		want   []string
+	}{
+		{"project NFD", TaskFilter{Project: cafeNFD}, []string{"t-cafe"}},
+		{"project NFC", TaskFilter{Project: noelNFC}, []string{"t-noel"}},
+		{"area NFD", TaskFilter{Area: cafeNFD}, []string{"t-cafe"}},
+		{"area NFC", TaskFilter{Area: noelNFC}, []string{"t-noel"}},
+		{"tag NFD", TaskFilter{Tag: cafeNFD}, []string{"t-cafe"}},
+		{"tag NFC", TaskFilter{Tag: noelNFC}, []string{"t-noel"}},
+	} {
+		got, err := d.ListTasks(ViewAnytime, tc.filter)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if !sameSet(uuidsOf(got), tc.want) {
+			t.Errorf("%s = %v, want %v", tc.name, uuidsOf(got), tc.want)
+		}
+	}
+
+	for ref, want := range map[string]string{cafeNFD: "a-cafe", noelNFC: "a-noel"} {
+		if got, err := d.FindAreaUUID(ref); err != nil || got != want {
+			t.Errorf("FindAreaUUID(%q) = %q, %v, want %q", ref, got, err, want)
+		}
+	}
+	for ref, want := range map[string]string{cafeNFD: "g-cafe", noelNFC: "g-noel"} {
+		if got, err := d.FindTagUUID(ref); err != nil || got != want {
+			t.Errorf("FindTagUUID(%q) = %q, %v, want %q", ref, got, err, want)
+		}
+	}
+	for ref, want := range map[string]string{"Crème": "t-cafe", "Bûche": "t-noel"} {
+		got, err := d.GetTask(ref)
+		if err != nil || got.UUID != want {
+			t.Errorf("GetTask(%q) = %v, %v, want %q", ref, got, err, want)
+		}
+	}
+}
+
+// --list takes the same preference: a heading of the exact-case project is
+// found when the title was typed in the other normalisation form.
+func TestAddTargetExactCaseIgnoresNormalisation(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Project("p-lower", "café", 1, anytime())
+	fx.Project("p-upper", "Café", 2, anytime())
+	fx.Heading("h-1", "Setup", 1, dbtest.InProject("p-upper"))
+
+	target, headOK, err := d.AddTarget("Café", "Setup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != "p-upper" || !headOK {
+		t.Errorf("AddTarget(Café NFD, Setup) = %q, %v, want p-upper, true", target, headOK)
+	}
+}

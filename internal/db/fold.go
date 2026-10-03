@@ -85,6 +85,14 @@ func foldRune(r rune) rune {
 	return r
 }
 
+// normName returns s in NFC, the form exact names are compared in: a title
+// typed with a combining accent is still the exact name of a title stored
+// with the precomposed letter, and the other way round, since Things may
+// store either. It changes nothing else, so case still counts.
+func normName(s string) string {
+	return norm.NFC.String(s)
+}
+
 // FoldTag is FoldCase after trimming surrounding space: the key tag names are
 // compared under, since Things ignores both differences in a tag. It does not
 // trim a project, area or heading title in things:///add, so those compare
@@ -96,13 +104,20 @@ func FoldTag(s string) string {
 // fold(text) is FoldCase for SQL: `fold(col) LIKE ?` against a value folded
 // in Go ignores case beyond ASCII. Registration is process-wide, so every
 // connection the driver opens has it, test databases included. NULL stays
-// NULL, and anything that is not text passes through untouched.
+// NULL, and anything that is not text passes through untouched. nfc(text) is
+// normName for SQL in the same way, for `nfc(col) = ?` against a value
+// normalised in Go.
 func init() {
-	sqlite.MustRegisterDeterministicScalarFunction("fold", 1,
-		func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
-			if s, ok := args[0].(string); ok {
-				return FoldCase(s), nil
-			}
-			return args[0], nil
-		})
+	sqlite.MustRegisterDeterministicScalarFunction("fold", 1, textFunc(FoldCase))
+	sqlite.MustRegisterDeterministicScalarFunction("nfc", 1, textFunc(normName))
+}
+
+// textFunc wraps f as a SQLite scalar function over one text argument.
+func textFunc(f func(string) string) func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
+	return func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		if s, ok := args[0].(string); ok {
+			return f(s), nil
+		}
+		return args[0], nil
+	}
 }
