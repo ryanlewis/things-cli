@@ -53,7 +53,7 @@ func seedTasks(t *testing.T, d *DB) {
 // now read the view table, so pin both against the answer spelled out rather
 // than against the table they are derived from (issue #240).
 func TestCompletableViews(t *testing.T) {
-	want := map[string]bool{"today": true, "anytime": true, "upcoming": true}
+	want := map[string]bool{"inbox": true, "today": true, "anytime": true, "upcoming": true}
 	for view := range views {
 		if got := CompletableView(view, false, false); got != want[view] {
 			t.Errorf("CompletableView(%q, false, false) = %v, want %v", view, got, want[view])
@@ -71,8 +71,8 @@ func TestCompletableViews(t *testing.T) {
 	if CompletableView("bogus", true, true) {
 		t.Error("CompletableView(\"bogus\", true, true) = true, want false")
 	}
-	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "today", "upcoming"}) {
-		t.Errorf("CompletableViewNames() = %v, want [anytime today upcoming]", got)
+	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "inbox", "today", "upcoming"}) {
+		t.Errorf("CompletableViewNames() = %v, want [anytime inbox today upcoming]", got)
 	}
 }
 
@@ -322,15 +322,17 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 	}
 }
 
-// A closed item no list carries — completed out of the Inbox — belongs in the
-// Logbook the moment it is closed, whatever calendar day that is, because no
-// list is still showing it. Excluding "closed today" from the Logbook outright
-// would leave those rows in no list at all (issue #230).
+// A closed item no list carries belongs in the Logbook the moment it is
+// closed, whatever calendar day that is, because no list is still showing it.
+// Excluding "closed today" from the Logbook outright would leave those rows in
+// no list at all (issue #230).
 //
-// Anytime and Upcoming are not like the Inbox. Since issue #238 the app's
-// Anytime goes on showing a row closed out of it, and since issue #293 so does
-// its Upcoming, so the Logbook withholds such a row for the rest of the day and
-// `--include-completed` on that view has it instead. Each case therefore names
+// The lists the app goes on showing a row closed out of are Anytime (issue
+// #238), Upcoming (issue #293) and the Inbox, so the Logbook withholds such a
+// row for the rest of the day and `--include-completed` on that view has it
+// instead. #230 had assumed the Inbox logged a row at once; measured on 3 Oct
+// 2026, the app's Inbox held a to-do completed out of it, struck through, and
+// its Logbook did not. Each case therefore names
 // the lists that should be holding the row, and every case asserts it is in
 // the Logbook or in those lists, never both and never neither.
 func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
@@ -346,7 +348,7 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 		deadline    any
 		heldBy      []string // the views that should have it, none for the logbook
 	}{
-		{"t-closed-inbox", 0, 0, nil, nil, nil},                        // closed straight out of the Inbox
+		{"t-closed-inbox", 0, 0, nil, nil, []string{"inbox"}},          // closed straight out of the Inbox
 		{"t-closed-anytime", 1, 0, nil, nil, []string{"anytime"}},      // closed out of Anytime — no startDate
 		{"t-closed-upcoming", 2, 0, future, nil, []string{"upcoming"}}, // closed ahead of its Upcoming date
 		// An undated Anytime to-do due later is in both lists while open, as
@@ -356,8 +358,9 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 		// (issue #294), from the Inbox as well as from Anytime.
 		// It is in Anytime too, where the app's Anytime lists it.
 		{"t-closed-inbox-due-today", 0, 0, nil, today, []string{"today", "anytime"}},
-		// An undated Inbox to-do due later is in neither Anytime nor Upcoming.
-		{"t-closed-inbox-due-later", 0, 0, nil, future, nil},
+		// An undated Inbox to-do due later stays in the Inbox, and is in
+		// neither Anytime nor Upcoming.
+		{"t-closed-inbox-due-later", 0, 0, nil, future, []string{"inbox"}},
 		{"t-closed-anytime-due-today", 1, 0, nil, today, []string{"today", "anytime"}},
 	}
 
@@ -379,7 +382,7 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 			}
 
 			held := 0
-			for _, view := range []string{"today", "anytime", "upcoming"} {
+			for _, view := range []string{"inbox", "today", "anytime", "upcoming"} {
 				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
 				if err != nil {
 					t.Fatal(err)
@@ -400,9 +403,9 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 }
 
 // An overdue Inbox to-do taken out of Today for its deadline is back in the
-// Inbox (issue #345), and the Inbox keeps nothing once it is closed, so closing
-// it today logs it at once rather than leaving it under Today.
-func TestClosedSuppressedInboxToDoIsLogged(t *testing.T) {
+// Inbox (issue #345), so closing it today leaves it in the Inbox for the rest
+// of the day, not under Today and not in the Logbook.
+func TestClosedSuppressedInboxToDoStaysInInbox(t *testing.T) {
 	d := newTestDB(t)
 	earlier := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -2)))
 	mustExec(t, d, `INSERT INTO TMTask
@@ -414,16 +417,16 @@ func TestClosedSuppressedInboxToDoIsLogged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logged) != 1 {
-		t.Errorf("logbook = %v, want the row", uuidsOf(logged))
+	if len(logged) != 0 {
+		t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
 	}
-	for _, view := range []string{"today", "anytime", "upcoming"} {
+	for _, view := range []string{"inbox", "today", "anytime", "upcoming"} {
 		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(got) != 0 {
-			t.Errorf("%s --include-completed = %v, want empty", view, uuidsOf(got))
+		if want := view == "inbox"; (len(got) == 1) != want {
+			t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
 		}
 	}
 }
@@ -2271,7 +2274,7 @@ func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
 			}
 
 			held := 0
-			for _, view := range []string{"today", "anytime", "upcoming"} {
+			for _, view := range []string{"inbox", "today", "anytime", "upcoming"} {
 				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
 				if err != nil {
 					t.Fatal(err)

@@ -299,22 +299,23 @@ shows them. `status` separates them, `"completed"` or `"cancelled"`, so an
 agent asked what actually got done should filter on it rather than assume
 every logbook row is a success.
 
-An item you tick off in Today, Anytime or Upcoming is not in `logbook` yet —
+An item you tick off in the Inbox, Today, Anytime or Upcoming is not in `logbook` yet —
 Things keeps it where it was until the day rolls over, or until `things log`
 files it early, and `--include-completed` is how to see those on any of the
-three views. Anything closed outside them goes straight to `logbook`,
+four views. Anything closed outside them goes straight to `logbook`,
 including today's closes. The exception is a task closed today inside a
 project in Someday or scheduled for later, and not shown by `today` or
 `upcoming`: `anytime` leaves out that
 project's tasks, as the app's Anytime does, and like the app's Logbook,
 `logbook` holds it back until the day is logged, so only its project listing
-has it. `logbook` is disjoint from the other three, but they
-are not disjoint from each other: a task scheduled for today sits in the
+has it. `logbook` is disjoint from the other four, but Today, Anytime and
+Upcoming are not disjoint from each other: a task scheduled for today sits in the
 Anytime bucket as well, and an undated one due later is in Anytime and
-Upcoming, so each comes back from two lists. None of the four is a whole day on
-its own, so an agent reporting on a day's work sweeps all four — `things today
---include-completed -j`, `things anytime --include-completed -j` and `things
-upcoming --include-completed -j` plus `things logbook -j` filtered on
+Upcoming, so each comes back from two lists. None of the five is a whole day on
+its own, so an agent reporting on a day's work sweeps all five — `things inbox
+--include-completed -j`, `things today --include-completed -j`, `things anytime
+--include-completed -j` and `things upcoming --include-completed -j` plus
+`things logbook -j` filtered on
 `stopDate` — and merges them on `uuid` rather than concatenating, or it counts
 the overlapping ones twice. An agent reporting
 on history needs `logbook` alone. For one open project, `things --project
