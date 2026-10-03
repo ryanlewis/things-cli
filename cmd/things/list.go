@@ -57,7 +57,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	// --tag sweep) rather than silently ignoring it, matching how
 	// --on/--from/--to reject views.
 	if c.IncludeCompleted && !db.CompletableView(view, project != "") {
-		return fmt.Errorf("--include-completed is only supported on the %s views and with --project, not %q; name the view explicitly, e.g. `things today --area NAME`",
+		return fmt.Errorf("--include-completed is only supported on the %s views and on a --project listing with no view, not %q; name the view explicitly, e.g. `things today --area NAME`",
 			strings.Join(db.CompletableViewNames(), " and "), view)
 	}
 
