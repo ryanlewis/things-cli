@@ -304,7 +304,8 @@ Things keeps it where it was until the day rolls over, or until `things log`
 files it early, and `--include-completed` is how to see those on any of the
 three views. Anything closed outside them goes straight to `logbook`,
 including today's closes. The exception is a task closed today inside a
-project in Someday or scheduled for later: `anytime` leaves out that
+project in Someday or scheduled for later, and not shown by `today` or
+`upcoming`: `anytime` leaves out that
 project's tasks, as the app's Anytime does, and like the app's Logbook,
 `logbook` holds it back until the day is logged, so only its project listing
 has it. `logbook` is disjoint from the other three, but they
