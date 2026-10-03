@@ -577,11 +577,15 @@ an unconfirmed `add` does, and no `uuid`:
 - `ambiguous`: more new items with that title appeared than the payload
   created, or they cannot be paired (see above). `candidates` lists their
   uuids.
+- `creation-date`: the payload sets the item's `creation-date`. Things
+  saves the item with that date, so the read-back cannot tell it from older
+  items and does not look for it. The line says `not checked
+  (creation-date set)`.
 - `not-found`: no new item with that title appeared within the read-back
   wait, or fewer than the payload created. `candidates` lists the ones that
   did appear.
 
-The first three exit 0 with the list printed. Any `not-found` item makes
+The first four exit 0 with the list printed. Any `not-found` item makes
 the import exit non-zero with `import partially applied`, the same error a
 dropped status change gives. The error names the `not-found` items, and
 under `--json` they are in `items`. Search for each of them with `things

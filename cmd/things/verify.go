@@ -448,6 +448,9 @@ var unconfirmedMsg = map[string]string{
 	"no-verify":  "Sent to Things, not confirmed (--no-verify)",
 	"unreadable": "Sent to Things, not confirmed (database unreadable)",
 	"ambiguous":  "Sent to Things, not confirmed (more than one new item has this title)",
+	// Import only: an item the payload dates back cannot be found by when
+	// it was created.
+	"creation-date": "Sent to Things, not checked (creation-date set)",
 }
 
 // applyAdd sends write, which creates an item of typ titled title, then finds
