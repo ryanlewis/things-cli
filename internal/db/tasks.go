@@ -85,9 +85,10 @@ const repeatingPlaceholder = "{{repeating}}"
 
 // repeatingParentPlaceholder is the same for the `p` alias — the row's
 // resolved parent project — so a static filter can ask "is this the child of a
-// repeating project template?". ListTasks substitutes it the same way; unlike
-// repeatingPlaceholder it never reaches baseTaskQuery, which has no `p`
-// recurrence column in its select list.
+// repeating project template?". ListTasks substitutes it the same way, and
+// baseTaskQuery's select list carries it too: such a child has no rule of its
+// own, and is flagged repeating so the writes Things refuses on its project
+// are refused on it as well (issue #174).
 const repeatingParentPlaceholder = "{{repeating_parent}}"
 
 // baseTaskQuery selects a task with its project, heading, area and tags, and
@@ -126,7 +127,7 @@ SELECT
 	COALESCE(GROUP_CONCAT(tag.title, char(31)), ''),
 	COALESCE(t."index", 0),
 	COALESCE(t.todayIndex, 0),
-	CASE WHEN {{repeating}} IS NOT NULL THEN 1 ELSE 0 END,
+	CASE WHEN {{repeating}} IS NOT NULL OR {{repeating_parent}} IS NOT NULL THEN 1 ELSE 0 END,
 	t.userModificationDate,
 	(SELECT COUNT(*) FROM TMChecklistItem ci WHERE ci.task = t.uuid),
 	(SELECT COUNT(*) FROM TMChecklistItem ci WHERE ci.task = t.uuid AND COALESCE(ci.status, 0) = 0)

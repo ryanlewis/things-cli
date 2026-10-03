@@ -271,7 +271,9 @@ type Task struct {
 	Index        int         `json:"index"`
 	TodayIndex   int         `json:"todayIndex"`
 
-	// Repeating marks an item Things treats as a repeating to-do or project.
+	// Repeating marks an item Things treats as a repeating to-do or project,
+	// including a to-do inside a repeating project template, which carries no
+	// rule of its own.
 	// Things refuses status, when, deadline and duplicate updates on these,
 	// silently, so callers need to know before they try.
 	Repeating bool `json:"repeating,omitempty"`

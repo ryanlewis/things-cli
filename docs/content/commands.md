@@ -148,6 +148,11 @@ the note stays on stderr, so stdout is still an empty array. On `trash`,
 `logbook` and `repeating`, which keep templates, there is no note: an empty
 listing there means nothing has been trashed or closed yet.
 
+A task inside a project template counts as repeating: it carries
+`"repeating": true`, and `edit`, `complete`, `cancel` and `import` refuse
+`when`, `deadline` and status changes on it as on the template. The tasks
+inside a project Things generated from the template are ordinary.
+
 `things search` is a lookup rather than a view, so it returns templates too.
 Results carry `"repeating": true`.
 
