@@ -77,16 +77,22 @@ func (c *EditCmd) Run(d *Deps) error {
 	token := authToken(d, database)
 	update := func() error {
 		return things.UpdateTask(things.UpdateParams{
-			ID:               task.UUID,
-			AuthToken:        token,
-			Title:            c.Title,
-			Notes:            c.Notes,
-			PrependNotes:     c.PrependNotes,
-			AppendNotes:      c.AppendNotes,
-			When:             c.When,
-			Deadline:         c.Deadline,
-			Tags:             c.Tags,
-			AddTags:          c.AddTags,
+			UpdateCommon: things.UpdateCommon{
+				ID:           task.UUID,
+				AuthToken:    token,
+				Title:        c.Title,
+				Notes:        c.Notes,
+				PrependNotes: c.PrependNotes,
+				AppendNotes:  c.AppendNotes,
+				When:         c.When,
+				Deadline:     c.Deadline,
+				Tags:         c.Tags,
+				AddTags:      c.AddTags,
+				Completed:    c.Complete,
+				Canceled:     c.Cancel,
+				Duplicate:    c.Duplicate,
+				Reveal:       c.Reveal,
+			},
 			Checklist:        expandNewlinesPtr(c.Checklist),
 			PrependChecklist: expandNewlinesPtr(c.PrependChecklist),
 			AppendChecklist:  expandNewlinesPtr(c.AppendChecklist),
@@ -94,10 +100,6 @@ func (c *EditCmd) Run(d *Deps) error {
 			ListID:           c.ListID,
 			Heading:          c.Heading,
 			HeadingID:        c.HeadingID,
-			Completed:        c.Complete,
-			Canceled:         c.Cancel,
-			Duplicate:        c.Duplicate,
-			Reveal:           c.Reveal,
 		})
 	}
 	changed := c.changesFields() && !c.certainNoOp(task)

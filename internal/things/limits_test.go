@@ -157,7 +157,7 @@ func TestValidateAdd(t *testing.T) {
 
 func TestValidateUpdate(t *testing.T) {
 	big := repeat(MaxNotesLen + 1)
-	if err := validateUpdate(UpdateParams{ID: "x", AuthToken: "t", Notes: &big}); err == nil {
+	if err := validateUpdate(UpdateParams{UpdateCommon: UpdateCommon{ID: "x", AuthToken: "t", Notes: &big}}); err == nil {
 		t.Fatal("expected notes limit error")
 	}
 
@@ -167,14 +167,14 @@ func TestValidateUpdate(t *testing.T) {
 	}
 
 	// Nil optional fields must not trip validation.
-	if err := validateUpdate(UpdateParams{ID: "x", AuthToken: "t"}); err != nil {
+	if err := validateUpdate(UpdateParams{UpdateCommon: UpdateCommon{ID: "x", AuthToken: "t"}}); err != nil {
 		t.Fatalf("empty update should pass: %v", err)
 	}
 }
 
 func TestValidateUpdateProject(t *testing.T) {
 	big := repeat(MaxNotesLen + 1)
-	if err := validateUpdateProject(UpdateProjectParams{PrependNotes: &big}); err == nil {
+	if err := validateUpdateProject(UpdateProjectParams{UpdateCommon: UpdateCommon{PrependNotes: &big}}); err == nil {
 		t.Fatal("expected prepend-notes limit error")
 	}
 	if err := validateUpdateProject(UpdateProjectParams{}); err != nil {
@@ -205,10 +205,10 @@ func TestRejectsBeforeOpen(t *testing.T) {
 		{"AddTask", func() error { return AddTask(AddParams{Notes: bigNotes}) }},
 		{"AddProject", func() error { return AddProject(AddProjectParams{Notes: bigNotes}) }},
 		{"UpdateTask", func() error {
-			return UpdateTask(UpdateParams{ID: "x", AuthToken: "t", Notes: &bigNotes})
+			return UpdateTask(UpdateParams{UpdateCommon: UpdateCommon{ID: "x", AuthToken: "t", Notes: &bigNotes}})
 		}},
 		{"UpdateProject", func() error {
-			return UpdateProject(UpdateProjectParams{ID: "x", AuthToken: "t", Notes: &bigNotes})
+			return UpdateProject(UpdateProjectParams{UpdateCommon: UpdateCommon{ID: "x", AuthToken: "t", Notes: &bigNotes}})
 		}},
 	}
 	for _, tc := range cases {

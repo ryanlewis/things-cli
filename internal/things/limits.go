@@ -135,14 +135,21 @@ func validateAddProject(p AddProjectParams) error {
 	)
 }
 
+// validate checks the fields shared by `update` and `update-project`.
+func (c UpdateCommon) validate() error {
+	return firstErr(
+		optString("title", c.Title),
+		optNotes("notes", c.Notes),
+		optNotes("prepend-notes", c.PrependNotes),
+		optNotes("append-notes", c.AppendNotes),
+		optTags("tags", c.Tags),
+		optTags("add-tags", c.AddTags),
+	)
+}
+
 func validateUpdate(p UpdateParams) error {
 	return firstErr(
-		optString("title", p.Title),
-		optNotes("notes", p.Notes),
-		optNotes("prepend-notes", p.PrependNotes),
-		optNotes("append-notes", p.AppendNotes),
-		optTags("tags", p.Tags),
-		optTags("add-tags", p.AddTags),
+		p.validate(),
 		optChecklist("checklist", p.Checklist),
 		optChecklist("prepend-checklist", p.PrependChecklist),
 		optChecklist("append-checklist", p.AppendChecklist),
@@ -153,12 +160,7 @@ func validateUpdate(p UpdateParams) error {
 
 func validateUpdateProject(p UpdateProjectParams) error {
 	return firstErr(
-		optString("title", p.Title),
-		optNotes("notes", p.Notes),
-		optNotes("prepend-notes", p.PrependNotes),
-		optNotes("append-notes", p.AppendNotes),
-		optTags("tags", p.Tags),
-		optTags("add-tags", p.AddTags),
+		p.validate(),
 		optString("area", p.Area),
 	)
 }

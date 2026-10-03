@@ -250,10 +250,12 @@ func TestUpdateTaskEmptyWhenClearsField(t *testing.T) {
 	captured := stubRunner(t, false)
 	empty := ""
 	if err := UpdateTask(UpdateParams{
-		ID:        "id-1",
-		AuthToken: "tok",
-		When:      &empty,
-		Deadline:  &empty,
+		UpdateCommon: UpdateCommon{
+			ID:        "id-1",
+			AuthToken: "tok",
+			When:      &empty,
+			Deadline:  &empty,
+		},
 	}); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
@@ -277,9 +279,11 @@ func TestUpdateTaskMinimal(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	err := UpdateTask(UpdateParams{
-		ID:        "abc-123",
-		AuthToken: "tok",
-		Title:     strPtr("New Title"),
+		UpdateCommon: UpdateCommon{
+			ID:        "abc-123",
+			AuthToken: "tok",
+			Title:     strPtr("New Title"),
+		},
 	})
 	if err != nil {
 		t.Fatalf("UpdateTask: %v", err)
@@ -311,16 +315,22 @@ func TestUpdateTaskAllFields(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	err := UpdateTask(UpdateParams{
-		ID:               "id-1",
-		AuthToken:        "tok",
-		Title:            strPtr("T"),
-		Notes:            strPtr("n"),
-		PrependNotes:     strPtr("pre"),
-		AppendNotes:      strPtr("post"),
-		When:             strPtr("today"),
-		Deadline:         strPtr("2026-05-01"),
-		Tags:             strPtr("a,b"),
-		AddTags:          strPtr("c"),
+		UpdateCommon: UpdateCommon{
+			ID:           "id-1",
+			AuthToken:    "tok",
+			Title:        strPtr("T"),
+			Notes:        strPtr("n"),
+			PrependNotes: strPtr("pre"),
+			AppendNotes:  strPtr("post"),
+			When:         strPtr("today"),
+			Deadline:     strPtr("2026-05-01"),
+			Tags:         strPtr("a,b"),
+			AddTags:      strPtr("c"),
+			Completed:    true,
+			Canceled:     true,
+			Duplicate:    true,
+			Reveal:       true,
+		},
 		Checklist:        strPtr("x\ny"),
 		PrependChecklist: strPtr("pc"),
 		AppendChecklist:  strPtr("ac"),
@@ -328,10 +338,6 @@ func TestUpdateTaskAllFields(t *testing.T) {
 		ListID:           strPtr("list-uuid"),
 		Heading:          strPtr("H"),
 		HeadingID:        strPtr("heading-uuid"),
-		Completed:        true,
-		Canceled:         true,
-		Duplicate:        true,
-		Reveal:           true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -377,9 +383,11 @@ func TestUpdateTaskOmitsUnsetFlags(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	if err := UpdateTask(UpdateParams{
-		ID:        "id",
-		AuthToken: "tok",
-		Title:     strPtr("only"),
+		UpdateCommon: UpdateCommon{
+			ID:        "id",
+			AuthToken: "tok",
+			Title:     strPtr("only"),
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -402,9 +410,11 @@ func TestUpdateTaskEmptyStringClearsField(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	if err := UpdateTask(UpdateParams{
-		ID:        "id",
-		AuthToken: "tok",
-		Notes:     strPtr(""),
+		UpdateCommon: UpdateCommon{
+			ID:        "id",
+			AuthToken: "tok",
+			Notes:     strPtr(""),
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +429,7 @@ func TestUpdateTaskEmptyStringClearsField(t *testing.T) {
 
 func TestUpdateTaskRequiresID(t *testing.T) {
 	stubRunner(t, false)
-	err := UpdateTask(UpdateParams{AuthToken: "tok", Title: strPtr("x")})
+	err := UpdateTask(UpdateParams{UpdateCommon: UpdateCommon{AuthToken: "tok", Title: strPtr("x")}})
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}
@@ -427,7 +437,7 @@ func TestUpdateTaskRequiresID(t *testing.T) {
 
 func TestUpdateTaskRequiresAuthToken(t *testing.T) {
 	stubRunner(t, false)
-	err := UpdateTask(UpdateParams{ID: "id", Title: strPtr("x")})
+	err := UpdateTask(UpdateParams{UpdateCommon: UpdateCommon{ID: "id", Title: strPtr("x")}})
 	if err == nil {
 		t.Fatal("expected error for missing auth token")
 	}
@@ -438,7 +448,7 @@ func TestUpdateTaskRequiresAuthToken(t *testing.T) {
 
 func TestUpdateTaskCommandFails(t *testing.T) {
 	stubRunner(t, true)
-	err := UpdateTask(UpdateParams{ID: "id", AuthToken: "tok", Title: strPtr("x")})
+	err := UpdateTask(UpdateParams{UpdateCommon: UpdateCommon{ID: "id", AuthToken: "tok", Title: strPtr("x")}})
 	if err == nil {
 		t.Fatal("expected error from failing command")
 	}
@@ -451,9 +461,11 @@ func TestUpdateProjectMinimal(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	err := UpdateProject(UpdateProjectParams{
-		ID:        "p-123",
-		AuthToken: "tok",
-		Title:     strPtr("New"),
+		UpdateCommon: UpdateCommon{
+			ID:        "p-123",
+			AuthToken: "tok",
+			Title:     strPtr("New"),
+		},
 	})
 	if err != nil {
 		t.Fatalf("UpdateProject: %v", err)
@@ -485,22 +497,24 @@ func TestUpdateProjectAllFields(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	err := UpdateProject(UpdateProjectParams{
-		ID:           "p-1",
-		AuthToken:    "tok",
-		Title:        strPtr("T"),
-		Notes:        strPtr("n"),
-		PrependNotes: strPtr("pre"),
-		AppendNotes:  strPtr("post"),
-		When:         strPtr("today"),
-		Deadline:     strPtr("2026-05-01"),
-		Tags:         strPtr("a,b"),
-		AddTags:      strPtr("c"),
-		Area:         strPtr("Work"),
-		AreaID:       strPtr("area-uuid"),
-		Completed:    true,
-		Canceled:     true,
-		Duplicate:    true,
-		Reveal:       true,
+		UpdateCommon: UpdateCommon{
+			ID:           "p-1",
+			AuthToken:    "tok",
+			Title:        strPtr("T"),
+			Notes:        strPtr("n"),
+			PrependNotes: strPtr("pre"),
+			AppendNotes:  strPtr("post"),
+			When:         strPtr("today"),
+			Deadline:     strPtr("2026-05-01"),
+			Tags:         strPtr("a,b"),
+			AddTags:      strPtr("c"),
+			Completed:    true,
+			Canceled:     true,
+			Duplicate:    true,
+			Reveal:       true,
+		},
+		Area:   strPtr("Work"),
+		AreaID: strPtr("area-uuid"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -541,9 +555,11 @@ func TestUpdateProjectOmitsUnsetFlags(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	if err := UpdateProject(UpdateProjectParams{
-		ID:        "id",
-		AuthToken: "tok",
-		Title:     strPtr("only"),
+		UpdateCommon: UpdateCommon{
+			ID:        "id",
+			AuthToken: "tok",
+			Title:     strPtr("only"),
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -565,9 +581,11 @@ func TestUpdateProjectEmptyStringClearsField(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	if err := UpdateProject(UpdateProjectParams{
-		ID:        "id",
-		AuthToken: "tok",
-		Notes:     strPtr(""),
+		UpdateCommon: UpdateCommon{
+			ID:        "id",
+			AuthToken: "tok",
+			Notes:     strPtr(""),
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -582,7 +600,7 @@ func TestUpdateProjectEmptyStringClearsField(t *testing.T) {
 
 func TestUpdateProjectRequiresID(t *testing.T) {
 	stubRunner(t, false)
-	err := UpdateProject(UpdateProjectParams{AuthToken: "tok", Title: strPtr("x")})
+	err := UpdateProject(UpdateProjectParams{UpdateCommon: UpdateCommon{AuthToken: "tok", Title: strPtr("x")}})
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}
@@ -590,7 +608,7 @@ func TestUpdateProjectRequiresID(t *testing.T) {
 
 func TestUpdateProjectRequiresAuthToken(t *testing.T) {
 	stubRunner(t, false)
-	err := UpdateProject(UpdateProjectParams{ID: "id", Title: strPtr("x")})
+	err := UpdateProject(UpdateProjectParams{UpdateCommon: UpdateCommon{ID: "id", Title: strPtr("x")}})
 	if err == nil {
 		t.Fatal("expected error for missing auth token")
 	}
@@ -601,7 +619,7 @@ func TestUpdateProjectRequiresAuthToken(t *testing.T) {
 
 func TestUpdateProjectCommandFails(t *testing.T) {
 	stubRunner(t, true)
-	err := UpdateProject(UpdateProjectParams{ID: "id", AuthToken: "tok", Title: strPtr("x")})
+	err := UpdateProject(UpdateProjectParams{UpdateCommon: UpdateCommon{ID: "id", AuthToken: "tok", Title: strPtr("x")}})
 	if err == nil {
 		t.Fatal("expected error from failing command")
 	}

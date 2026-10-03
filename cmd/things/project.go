@@ -98,22 +98,24 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 	token := authToken(d, database)
 	update := func() error {
 		return things.UpdateProject(things.UpdateProjectParams{
-			ID:           project.UUID,
-			AuthToken:    token,
-			Title:        c.Title,
-			Notes:        c.Notes,
-			PrependNotes: c.PrependNotes,
-			AppendNotes:  c.AppendNotes,
-			When:         c.When,
-			Deadline:     c.Deadline,
-			Tags:         c.Tags,
-			AddTags:      c.AddTags,
-			Area:         c.Area,
-			AreaID:       c.AreaID,
-			Completed:    c.Complete,
-			Canceled:     c.Cancel,
-			Duplicate:    c.Duplicate,
-			Reveal:       c.Reveal,
+			UpdateCommon: things.UpdateCommon{
+				ID:           project.UUID,
+				AuthToken:    token,
+				Title:        c.Title,
+				Notes:        c.Notes,
+				PrependNotes: c.PrependNotes,
+				AppendNotes:  c.AppendNotes,
+				When:         c.When,
+				Deadline:     c.Deadline,
+				Tags:         c.Tags,
+				AddTags:      c.AddTags,
+				Completed:    c.Complete,
+				Canceled:     c.Cancel,
+				Duplicate:    c.Duplicate,
+				Reveal:       c.Reveal,
+			},
+			Area:   c.Area,
+			AreaID: c.AreaID,
 		})
 	}
 	changed := c.changesFields() && !c.certainNoOp(project)
