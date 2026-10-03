@@ -233,6 +233,65 @@ func TestVerifyStatusTaskDisappeared(t *testing.T) {
 	}
 }
 
+// Things writes the database while we read it, so a row can be missing for a
+// moment. A row gone on round one must be retried, not reported as deleted.
+func TestVerifyStatusRowMissingThenReturns(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	task, err := database.GetTaskByUUID("one-1")
+	if err != nil {
+		t.Fatalf("GetTaskByUUID: %v", err)
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM TMTask WHERE uuid = 'one-1'`); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	sleeps := 0
+	verifySleep = func(time.Duration) {
+		sleeps++
+		if sleeps == 1 {
+			if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('one-1', 'Post letter', 0, 3, 0, 0)`); err != nil {
+				t.Errorf("simulating the row coming back: %v", err)
+			}
+		}
+	}
+
+	// A generous budget: success returns as soon as the row is back, so it
+	// only matters if the clock runs ahead of the test under -race.
+	if err := verifyStatus(database, task, 3, 5*time.Second); err != nil {
+		t.Fatalf("verifyStatus with the row back after one pause = %v, want nil", err)
+	}
+	if sleeps != 1 {
+		t.Errorf("verifySleep called %d times, want 1", sleeps)
+	}
+}
+
+// A row that never comes back is retried until the deadline, so the error
+// follows at least one pause rather than the first read.
+func TestVerifyStatusRowNeverReturnsPausesBeforeError(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	task, err := database.GetTaskByUUID("one-1")
+	if err != nil {
+		t.Fatalf("GetTaskByUUID: %v", err)
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM TMTask WHERE uuid = 'one-1'`); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	sleeps := 0
+	verifySleep = func(time.Duration) {
+		sleeps++
+		time.Sleep(time.Millisecond)
+	}
+
+	err = verifyStatus(database, task, 3, 200*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "no longer exists") {
+		t.Fatalf("verifyStatus for a row that never returns = %v, want a not-found error", err)
+	}
+	if sleeps == 0 {
+		t.Error("verifySleep never called, want a retry before the not-found error")
+	}
+}
+
 // A read that keeps failing has to surface once the deadline passes rather
 // than loop forever — the retry only covers transient errors.
 func TestVerifyStatusPersistentReadErrorSurfaces(t *testing.T) {

@@ -147,7 +147,8 @@ type statusResult struct {
 // A failed read is retried rather than returned: Things is writing to the same
 // database while we poll, and a transient SQLITE_BUSY there must not turn a
 // write that landed into a reported failure. A read that keeps failing is
-// surfaced once the deadline passes.
+// surfaced once the deadline passes. A row that is missing is treated the same
+// way, since Things may not have finished writing it.
 func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) []statusResult {
 	results := make([]statusResult, len(wants))
 	pending := make([]int, len(wants))
@@ -180,8 +181,12 @@ func verifyStatuses(database *db.DB, wants []statusWant, budget time.Duration) [
 					continue
 				}
 			case current == nil:
-				results[i].err = fmt.Errorf("verifying status change: %s no longer exists in the Things database", w.uuid)
-				continue
+				// Things writes the database while we read it, so a row can
+				// be missing for a moment: retry like a failed read.
+				if expired {
+					results[i].err = fmt.Errorf("verifying status change: %s no longer exists in the Things database", w.uuid)
+					continue
+				}
 			case w.landed(current):
 				results[i].task = current
 				continue
