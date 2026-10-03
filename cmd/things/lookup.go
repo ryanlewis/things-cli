@@ -122,7 +122,9 @@ func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 // carries — an area called `R&D` pasted back unquoted runs two commands. An
 // embedded quote becomes the usual '\” dance.
 func shellQuote(s string) string {
-	if s != "" && !strings.ContainsFunc(s, needsShellQuoting) {
+	// A leading = is quoted too: zsh expands `=ls` to a command path, so = is
+	// only a bare character mid-value.
+	if s != "" && !strings.HasPrefix(s, "=") && !strings.ContainsFunc(s, needsShellQuoting) {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
