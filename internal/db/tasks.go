@@ -1077,6 +1077,24 @@ func projectNameMatch(alias, ref string) (string, []any) {
 	return clause, []any{ref, ref, nameLike(ref), int(model.TypeProject), ref}
 }
 
+// areaNameMatch is the --area clause for an area's uuid and title columns,
+// with its arguments, and tagNameMatch the --tag condition on a tag's title.
+// Both take names the way projectNameMatch does: an exact-case title wins,
+// and only when no area or tag carries one does the title match ignoring case
+// and surrounding space. Areas and tags are never trashed, so every row takes
+// the preference.
+func areaNameMatch(uuidCol, titleCol, ref string) (string, []any) {
+	clause := "(" + uuidCol + " = ? OR " + titleCol + " = ? OR (fold(" + titleCol + ") LIKE ?" + escapeClause +
+		" AND NOT EXISTS (SELECT 1 FROM TMArea ax WHERE ax.title = ?)))"
+	return clause, []any{ref, ref, nameLike(ref), ref}
+}
+
+func tagNameMatch(titleCol, ref string) (string, []any) {
+	clause := "(" + titleCol + " = ? OR (fold(" + titleCol + ") LIKE ?" + escapeClause +
+		" AND NOT EXISTS (SELECT 1 FROM TMTag gx WHERE gx.title = ?)))"
+	return clause, []any{ref, nameLike(ref), ref}
+}
+
 // containsLike is literalLike for the lookups that match a substring: the
 // value is escaped so nothing inside it is a wildcard, then wrapped in the two
 // the caller did not type. `%` and `_` in the value are characters to find,
@@ -1147,12 +1165,14 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 		args = append(args, clauseArgs...)
 	}
 	if opts.Area != "" {
-		where += " AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ?" + escapeClause + ")"
-		args = append(args, opts.Area, nameLike(opts.Area))
+		clause, clauseArgs := areaNameMatch("COALESCE(a.uuid, pa.uuid)", "COALESCE(a.title, pa.title)", opts.Area)
+		where += " AND " + clause
+		args = append(args, clauseArgs...)
 	}
 	if opts.Tag != "" {
-		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE fold(tg2.title) LIKE ?" + escapeClause + ")"
-		args = append(args, nameLike(opts.Tag))
+		clause, clauseArgs := tagNameMatch("tg2.title", opts.Tag)
+		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE " + clause + ")"
+		args = append(args, clauseArgs...)
 	}
 
 	if opts.On != nil || opts.From != nil || opts.To != nil {
