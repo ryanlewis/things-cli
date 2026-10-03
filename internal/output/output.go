@@ -13,27 +13,32 @@ import (
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
-func Print(w io.Writer, v any, asJSON bool) error {
+// Styled output renders full-fidelity ANSI; the printers below downsample or
+// strip it on the way out, through newWriter, according to the active color
+// profile. JSON carries no ANSI, so it is written to the raw writer.
+
+// PrintProjects renders a project listing.
+func PrintProjects(w io.Writer, projects []model.Project, asJSON bool) error {
 	if asJSON {
-		return printJSON(w, v)
+		return PrintJSON(w, projects)
 	}
-	// Styled output renders full-fidelity ANSI; downsample/strip it on the way
-	// out according to the active color profile. JSON carries no ANSI, so it is
-	// written to the raw writer.
-	switch val := v.(type) {
-	case []model.Task:
-		return printTasks(newWriter(w), val, currentLayout())
-	case *model.Task:
-		return printTaskDetail(newWriter(w), val, nil, currentLayout())
-	case []model.Project:
-		return printProjects(newWriter(w), val, currentLayout())
-	case []model.Area:
-		return printAreas(newWriter(w), val)
-	case []model.Tag:
-		return printTags(newWriter(w), val)
-	default:
-		return printJSON(w, v)
+	return printProjects(newWriter(w), projects, currentLayout())
+}
+
+// PrintAreas renders an area listing.
+func PrintAreas(w io.Writer, areas []model.Area, asJSON bool) error {
+	if asJSON {
+		return PrintJSON(w, areas)
 	}
+	return printAreas(newWriter(w), areas)
+}
+
+// PrintTags renders a tag listing.
+func PrintTags(w io.Writer, tags []model.Tag, asJSON bool) error {
+	if asJSON {
+		return PrintJSON(w, tags)
+	}
+	return printTags(newWriter(w), tags)
 }
 
 // PrintTaskList renders a task listing. When view is non-empty it prefixes a
@@ -42,7 +47,7 @@ func Print(w io.Writer, v any, asJSON bool) error {
 // JSON output is the plain task array either way.
 func PrintTaskList(w io.Writer, tasks []model.Task, asJSON bool, view string) error {
 	if asJSON {
-		return printJSON(w, tasks)
+		return PrintJSON(w, tasks)
 	}
 	tw := newWriter(w)
 	if view != "" {
@@ -57,12 +62,14 @@ func PrintTaskWithChecklist(w io.Writer, t *model.Task, items []model.ChecklistI
 			*model.Task
 			Checklist []model.ChecklistItem `json:"checklist,omitempty"`
 		}
-		return printJSON(w, taskWithChecklist{Task: t, Checklist: items})
+		return PrintJSON(w, taskWithChecklist{Task: t, Checklist: items})
 	}
 	return printTaskDetail(newWriter(w), t, items, currentLayout())
 }
 
-func printJSON(w io.Writer, v any) error {
+// PrintJSON writes v as indented JSON. Every --json payload goes through it,
+// so the encoder settings live in one place.
+func PrintJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	// The default encoder rewrites &, < and > as \u0026, \u003c and \u003e for

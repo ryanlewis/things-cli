@@ -192,40 +192,40 @@ func goldenCases(t *testing.T) []goldenCase {
 			return PrintTaskWithChecklist(w, repeating, nil, false)
 		}},
 		{name: "print/task-pointer", write: func(w io.Writer) error {
-			return Print(w, detail, false)
+			return PrintTaskWithChecklist(w, detail, nil, false)
 		}},
 		{name: "print/projects", write: func(w io.Writer) error {
-			return Print(w, projects, false)
+			return PrintProjects(w, projects, false)
 		}},
 		{name: "print/projects-json", write: func(w io.Writer) error {
-			return Print(w, projects, true)
+			return PrintProjects(w, projects, true)
 		}},
 		{name: "print/areas", write: func(w io.Writer) error {
-			return Print(w, areas, false)
+			return PrintAreas(w, areas, false)
 		}},
 		{name: "print/areas-json", write: func(w io.Writer) error {
-			return Print(w, areas, true)
+			return PrintAreas(w, areas, true)
 		}},
 		{name: "print/tags", write: func(w io.Writer) error {
-			return Print(w, tags, false)
+			return PrintTags(w, tags, false)
 		}},
 		{name: "print/tags-json", write: func(w io.Writer) error {
-			return Print(w, tags, true)
+			return PrintTags(w, tags, true)
 		}},
 		{name: "print/empty-tasks", write: func(w io.Writer) error {
-			return Print(w, []model.Task{}, false)
+			return PrintTaskList(w, []model.Task{}, false, "")
 		}},
 		{name: "print/empty-projects", write: func(w io.Writer) error {
-			return Print(w, []model.Project{}, false)
+			return PrintProjects(w, []model.Project{}, false)
 		}},
 		{name: "print/empty-areas", write: func(w io.Writer) error {
-			return Print(w, []model.Area{}, false)
+			return PrintAreas(w, []model.Area{}, false)
 		}},
 		{name: "print/empty-tags", write: func(w io.Writer) error {
-			return Print(w, []model.Tag{}, false)
+			return PrintTags(w, []model.Tag{}, false)
 		}},
 		{name: "print/tasks-json", write: func(w io.Writer) error {
-			return Print(w, tasks, true)
+			return PrintTaskList(w, tasks, true, "")
 		}},
 		{name: "task-list/json", write: func(w io.Writer) error {
 			return PrintTaskList(w, tasks, true, "today")
@@ -259,7 +259,7 @@ func goldenCases(t *testing.T) []goldenCase {
 	cases = append(cases, goldenCase{
 		name:  "print/tasks-compact-dates@62",
 		width: 62,
-		write: func(w io.Writer) error { return Print(w, tasks, false) },
+		write: func(w io.Writer) error { return PrintTaskList(w, tasks, false, "") },
 	})
 
 	// A list where some tasks carry a checklist, wide enough for its progress
@@ -298,7 +298,7 @@ func goldenCases(t *testing.T) []goldenCase {
 		cases = append(cases, goldenCase{
 			name:  fmt.Sprintf("print/tasks-compact-tags@%d", width),
 			width: width,
-			write: func(w io.Writer) error { return Print(w, tagged, false) },
+			write: func(w io.Writer) error { return PrintTaskList(w, tagged, false, "") },
 		})
 	}
 
@@ -319,13 +319,13 @@ func goldenCases(t *testing.T) []goldenCase {
 	cases = append(cases, goldenCase{
 		name:  "print/tasks-long-checklist@85",
 		width: 85,
-		write: func(w io.Writer) error { return Print(w, longChecklisted, false) },
+		write: func(w io.Writer) error { return PrintTaskList(w, longChecklisted, false, "") },
 	})
 	for _, width := range []int{120, 55, 40} {
 		cases = append(cases, goldenCase{
 			name:  fmt.Sprintf("print/tasks-checklist@%d", width),
 			width: width,
-			write: func(w io.Writer) error { return Print(w, checklisted, false) },
+			write: func(w io.Writer) error { return PrintTaskList(w, checklisted, false, "") },
 		})
 	}
 	// The task listing at three widths: wide enough for every column, narrow
@@ -335,7 +335,7 @@ func goldenCases(t *testing.T) []goldenCase {
 			goldenCase{
 				name:  fmt.Sprintf("print/tasks@%d", width),
 				width: width,
-				write: func(w io.Writer) error { return Print(w, tasks, false) },
+				write: func(w io.Writer) error { return PrintTaskList(w, tasks, false, "") },
 			},
 			goldenCase{
 				name:  fmt.Sprintf("task-list/labelled@%d", width),
@@ -350,7 +350,7 @@ func goldenCases(t *testing.T) []goldenCase {
 		cases = append(cases, goldenCase{
 			name:  fmt.Sprintf("print/projects@%d", width),
 			width: width,
-			write: func(w io.Writer) error { return Print(w, projects, false) },
+			write: func(w io.Writer) error { return PrintProjects(w, projects, false) },
 		})
 	}
 	// A long title and a long area are cut to their soft minimums at 60
@@ -363,7 +363,7 @@ func goldenCases(t *testing.T) []goldenCase {
 	cases = append(cases, goldenCase{
 		name:  "print/projects-long@60",
 		width: 60,
-		write: func(w io.Writer) error { return Print(w, longProjects, false) },
+		write: func(w io.Writer) error { return PrintProjects(w, longProjects, false) },
 	})
 	// A detail block long enough to wrap at 40 columns, and a hint at 30.
 	wrapped := &model.Task{
@@ -448,12 +448,12 @@ func goldenCases(t *testing.T) []goldenCase {
 			goldenCase{
 				name:  fmt.Sprintf("print/tasks-wide-runes@%d", width),
 				width: width,
-				write: func(w io.Writer) error { return Print(w, wide, false) },
+				write: func(w io.Writer) error { return PrintTaskList(w, wide, false, "") },
 			},
 			goldenCase{
 				name:  fmt.Sprintf("print/tasks-dim-cut@%d", width),
 				width: width,
-				write: func(w io.Writer) error { return Print(w, dimCut, false) },
+				write: func(w io.Writer) error { return PrintTaskList(w, dimCut, false, "") },
 			},
 		)
 	}
@@ -479,16 +479,16 @@ func goldenCases(t *testing.T) []goldenCase {
 		name  string
 		write func(w io.Writer) error
 	}{
-		{"print/tasks", func(w io.Writer) error { return Print(w, tasks, false) }},
+		{"print/tasks", func(w io.Writer) error { return PrintTaskList(w, tasks, false, "") }},
 		{"task-list/labelled", func(w io.Writer) error { return PrintTaskList(w, tasks, false, "today") }},
 		{"task-list/long", func(w io.Writer) error { return PrintTaskList(w, long, false, "") }},
-		{"print/tasks-checklist", func(w io.Writer) error { return Print(w, checklisted, false) }},
-		{"print/tasks-compact-tags", func(w io.Writer) error { return Print(w, tagged, false) }},
-		{"print/tasks-overlong", func(w io.Writer) error { return Print(w, overlong, false) }},
-		{"print/tasks-wide-runes", func(w io.Writer) error { return Print(w, wide, false) }},
-		{"print/tasks-dim-cut", func(w io.Writer) error { return Print(w, dimCut, false) }},
-		{"print/projects", func(w io.Writer) error { return Print(w, projects, false) }},
-		{"print/projects-long", func(w io.Writer) error { return Print(w, longProjects, false) }},
+		{"print/tasks-checklist", func(w io.Writer) error { return PrintTaskList(w, checklisted, false, "") }},
+		{"print/tasks-compact-tags", func(w io.Writer) error { return PrintTaskList(w, tagged, false, "") }},
+		{"print/tasks-overlong", func(w io.Writer) error { return PrintTaskList(w, overlong, false, "") }},
+		{"print/tasks-wide-runes", func(w io.Writer) error { return PrintTaskList(w, wide, false, "") }},
+		{"print/tasks-dim-cut", func(w io.Writer) error { return PrintTaskList(w, dimCut, false, "") }},
+		{"print/projects", func(w io.Writer) error { return PrintProjects(w, projects, false) }},
+		{"print/projects-long", func(w io.Writer) error { return PrintProjects(w, longProjects, false) }},
 		{"task-detail/wrapped", func(w io.Writer) error { return PrintTaskWithChecklist(w, wrapped, wrappedItems, false) }},
 	}
 	for _, p := range piped {
@@ -532,33 +532,34 @@ func goldenCases(t *testing.T) []goldenCase {
 		goldenCase{
 			name:  "print/tasks-tab-newline-titles@80",
 			width: 80,
-			write: func(w io.Writer) error { return Print(w, controlChars, false) },
+			write: func(w io.Writer) error { return PrintTaskList(w, controlChars, false, "") },
 		},
 		goldenCase{
 			name:  "print/tasks-tab-newline-titles@piped",
 			piped: true,
-			write: func(w io.Writer) error { return Print(w, controlChars, false) },
+			write: func(w io.Writer) error { return PrintTaskList(w, controlChars, false, "") },
 		},
 		goldenCase{
 			name:  "print/tasks-more-control-chars@40",
 			width: 40,
-			write: func(w io.Writer) error { return Print(w, moreControlChars, false) },
+			write: func(w io.Writer) error { return PrintTaskList(w, moreControlChars, false, "") },
 		},
 		goldenCase{
 			name:  "print/tasks-more-control-chars@piped",
 			piped: true,
-			write: func(w io.Writer) error { return Print(w, moreControlChars, false) },
+			write: func(w io.Writer) error { return PrintTaskList(w, moreControlChars, false, "") },
 		},
 		goldenCase{
 			name:  "print/collections-control-chars@piped",
 			piped: true,
 			write: func(w io.Writer) error {
-				for _, v := range []any{controlProjects, controlAreas, controlTags} {
-					if err := Print(w, v, false); err != nil {
-						return err
-					}
+				if err := PrintProjects(w, controlProjects, false); err != nil {
+					return err
 				}
-				return nil
+				if err := PrintAreas(w, controlAreas, false); err != nil {
+					return err
+				}
+				return PrintTags(w, controlTags, false)
 			},
 		},
 	)
@@ -580,7 +581,7 @@ func goldenCases(t *testing.T) []goldenCase {
 		cases = append(cases, goldenCase{
 			name:  fmt.Sprintf("print/tasks-wide-runes-dated@%d", width),
 			width: width,
-			write: func(w io.Writer) error { return Print(w, wideDated, false) },
+			write: func(w io.Writer) error { return PrintTaskList(w, wideDated, false, "") },
 		})
 	}
 	return cases

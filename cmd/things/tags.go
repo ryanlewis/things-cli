@@ -276,7 +276,7 @@ func (c *TagAddCmd) Run(d *Deps) error {
 	}
 
 	if d.JSON {
-		return output.Print(d.Stdout, tagAddResult{Created: created, Skipped: skipped}, true)
+		return output.PrintJSON(d.Stdout, tagAddResult{Created: created, Skipped: skipped})
 	}
 	if len(created) > 0 {
 		fmt.Fprintf(d.Stdout, "created: %s\n", strings.Join(created, ", "))

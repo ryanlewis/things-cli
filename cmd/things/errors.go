@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"github.com/ryanlewis/things-cli/internal/cache"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/output"
 )
 
 // jsonErrorPayload is the machine-readable form of a command failure. Under
@@ -289,14 +289,9 @@ func renderError(stdout, stderr io.Writer, asJSON bool, err error) {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return
 	}
-	enc := json.NewEncoder(stdout)
-	enc.SetIndent("", "  ")
-	// Message is meant to read as the plain-text error does. The default
-	// encoder escapes the three HTML-significant characters into \u00xx
-	// sequences, which turns a message like `expected "<task>"` into line
-	// noise for anyone reading the JSON.
-	enc.SetEscapeHTML(false)
-	if encErr := enc.Encode(errorPayload(err)); encErr != nil {
+	// PrintJSON leaves &, < and > unescaped, so Message reads as the plain-text
+	// error does: `expected "<task>"` stays as written.
+	if encErr := output.PrintJSON(stdout, errorPayload(err)); encErr != nil {
 		// Encoding a struct of strings can't realistically fail, but a broken
 		// stdout can — fall back to the plain line so the failure isn't silent.
 		fmt.Fprintf(stderr, "Error: %v\n", err)

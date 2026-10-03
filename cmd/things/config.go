@@ -140,12 +140,12 @@ func (c *ConfigPathCmd) Run(d *Deps) error {
 		if cfg.Err != nil {
 			problem = cfg.Err.Error()
 		}
-		return output.Print(d.Stdout, struct {
+		return output.PrintJSON(d.Stdout, struct {
 			Path   string `json:"path"`
 			Exists bool   `json:"exists"`
 			Source string `json:"source"`
 			Error  string `json:"error,omitempty"`
-		}{cfg.Path, cfg.Exists, cfg.Source, problem}, true)
+		}{cfg.Path, cfg.Exists, cfg.Source, problem})
 	}
 	fmt.Fprintf(d.Stdout, "%s (%s)\n", cfg.Path, existence(cfg))
 	// Which file is in use is a fact about the path, so it is still worth
@@ -176,12 +176,12 @@ func (c *ConfigShowCmd) Run(d *Deps) error {
 	settings := cfg.Settings()
 
 	if d.JSON {
-		return output.Print(d.Stdout, struct {
+		return output.PrintJSON(d.Stdout, struct {
 			Path     string           `json:"path"`
 			Exists   bool             `json:"exists"`
 			Source   string           `json:"source"`
 			Settings []config.Setting `json:"settings"`
-		}{cfg.Path, cfg.Exists, cfg.Source, settings}, true)
+		}{cfg.Path, cfg.Exists, cfg.Source, settings})
 	}
 
 	fmt.Fprintf(d.Stdout, "config: %s (%s)\n", cfg.Path, existence(cfg))

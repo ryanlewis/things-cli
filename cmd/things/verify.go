@@ -283,7 +283,7 @@ type unconfirmedEdit struct {
 // 0 with nothing printed is never the answer for a write nobody checked.
 func printUnconfirmedEdit(d *Deps, task *model.Task, reason, msg string) error {
 	if d.JSON {
-		return output.Print(d.Stdout, unconfirmedEdit{UUID: task.UUID, Title: task.Title, Reason: reason}, true)
+		return output.PrintJSON(d.Stdout, unconfirmedEdit{UUID: task.UUID, Title: task.Title, Reason: reason})
 	}
 	_, err := fmt.Fprintf(d.Stdout, "%s: %q (%s)\n", msg, task.Title, task.UUID)
 	return err

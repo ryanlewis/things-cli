@@ -33,7 +33,7 @@ func TestPrintTasksPlain(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	if err := Print(&buf, tasks, false); err != nil {
+	if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	out := buf.String()
@@ -51,7 +51,7 @@ func TestPrintTasksJSON(t *testing.T) {
 		Deadline:  mustDate(2026, 5, 20),
 	}}
 	var buf bytes.Buffer
-	if err := Print(&buf, tasks, true); err != nil {
+	if err := PrintTaskList(&buf, tasks, true, ""); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	out := buf.String()
@@ -74,7 +74,7 @@ func TestPrintTasksJSON(t *testing.T) {
 
 func TestPrintEmptyTasks(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Print(&buf, []model.Task{}, false); err != nil {
+	if err := PrintTaskList(&buf, []model.Task{}, false, ""); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	if buf.Len() != 0 {
@@ -85,7 +85,7 @@ func TestPrintEmptyTasks(t *testing.T) {
 // Empty lists must encode as [], not null — jq '.[]' fails on null.
 func TestPrintEmptyTasksJSON(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Print(&buf, []model.Task{}, true); err != nil {
+	if err := PrintTaskList(&buf, []model.Task{}, true, ""); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	if got := strings.TrimSpace(buf.String()); got != "[]" {
@@ -102,7 +102,7 @@ func TestPrintProjectsPlain(t *testing.T) {
 		{UUID: "p5", Title: "Cancelled", Status: model.StatusCancelled, TaskCount: 1},
 	}
 	var buf bytes.Buffer
-	if err := Print(&buf, projects, false); err != nil {
+	if err := PrintProjects(&buf, projects, false); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	out := buf.String()
@@ -116,7 +116,7 @@ func TestPrintProjectsPlain(t *testing.T) {
 func TestPrintProjectsJSON(t *testing.T) {
 	projects := []model.Project{{UUID: "p1", Title: "P1"}}
 	var buf bytes.Buffer
-	if err := Print(&buf, projects, true); err != nil {
+	if err := PrintProjects(&buf, projects, true); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	var got []model.Project
@@ -134,7 +134,7 @@ func TestPrintAreas(t *testing.T) {
 		{UUID: "a2", Title: "Hidden", Visible: false},
 	}
 	var buf bytes.Buffer
-	if err := Print(&buf, areas, false); err != nil {
+	if err := PrintAreas(&buf, areas, false); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	out := buf.String()
@@ -149,7 +149,7 @@ func TestPrintTags(t *testing.T) {
 		{UUID: "t2", Title: "home"},
 	}
 	var buf bytes.Buffer
-	if err := Print(&buf, tags, false); err != nil {
+	if err := PrintTags(&buf, tags, false); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	out := buf.String()
@@ -272,17 +272,16 @@ func TestPrintTaskDetailJSON(t *testing.T) {
 	}
 }
 
-func TestPrintFallbackJSON(t *testing.T) {
-	// unknown type falls through to printJSON
+func TestPrintJSONAdHocStruct(t *testing.T) {
 	type foo struct {
 		X int `json:"x"`
 	}
 	var buf bytes.Buffer
-	if err := Print(&buf, foo{X: 42}, false); err != nil {
-		t.Fatalf("Print: %v", err)
+	if err := PrintJSON(&buf, foo{X: 42}); err != nil {
+		t.Fatalf("PrintJSON: %v", err)
 	}
-	if !strings.Contains(buf.String(), `"x": 42`) {
-		t.Errorf("expected json fallback, got: %s", buf.String())
+	if buf.String() != "{\n  \"x\": 42\n}\n" {
+		t.Errorf("unexpected JSON: %q", buf.String())
 	}
 }
 
@@ -391,7 +390,7 @@ func TestPrintTasksMarksProjects(t *testing.T) {
 		{UUID: "p1", Title: "Weekly review", Type: model.TypeProject, Status: model.StatusOpen},
 	}
 	var buf bytes.Buffer
-	if err := Print(&buf, tasks, false); err != nil {
+	if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	out := buf.String()
@@ -424,7 +423,7 @@ func TestPrintTasksPipedKeepsFullDates(t *testing.T) {
 		// for "due:2026-05-08", enough for "due:Fri".
 		pinLayout(t, 41, tty)
 		var buf bytes.Buffer
-		if err := Print(&buf, tasks, false); err != nil {
+		if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 			t.Fatalf("Print: %v", err)
 		}
 		if compact := strings.Contains(buf.String(), "due:Fri"); compact != tty {
@@ -441,7 +440,7 @@ func TestPrintTasksPipedKeepsTitlesWhole(t *testing.T) {
 	for _, tty := range []bool{false, true} {
 		pinLayout(t, 30, tty)
 		var buf bytes.Buffer
-		if err := Print(&buf, tasks, false); err != nil {
+		if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 			t.Fatalf("Print: %v", err)
 		}
 		if whole := strings.Contains(buf.String(), title); whole == tty {
@@ -466,7 +465,7 @@ func TestPrintTasksNoRepeatedProjectHeader(t *testing.T) {
 			ProjectUUID: "p2", ProjectTitle: "Q4 planning"},
 	}
 	var buf bytes.Buffer
-	if err := Print(&buf, tasks, false); err != nil {
+	if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 	out := buf.String()
@@ -517,7 +516,7 @@ func TestPrintProjectsJSONScheduling(t *testing.T) {
 		StartDate: &start, Deadline: &deadline,
 	}}
 	var buf bytes.Buffer
-	if err := Print(&buf, projects, true); err != nil {
+	if err := PrintProjects(&buf, projects, true); err != nil {
 		t.Fatalf("Print: %v", err)
 	}
 
@@ -550,7 +549,7 @@ func TestPrintJSONDoesNotEscapeHTMLCharacters(t *testing.T) {
 
 	cases := map[string]func(*bytes.Buffer) error{
 		"list":   func(b *bytes.Buffer) error { return PrintTaskList(b, []model.Task{task}, true, "") },
-		"print":  func(b *bytes.Buffer) error { return Print(b, []model.Task{task}, true) },
+		"json":   func(b *bytes.Buffer) error { return PrintJSON(b, []model.Task{task}) },
 		"detail": func(b *bytes.Buffer) error { return PrintTaskWithChecklist(b, &task, nil, true) },
 	}
 	for name, run := range cases {
