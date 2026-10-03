@@ -351,7 +351,9 @@ warning: --heading "Later" needs --list or --project; Things will ignore it and 
 ```
 
 `things project add` creates a new project with the same flag set
-(`--notes`, `--when`, `--deadline`, `--tags`, `--area`, `--todos`).
+(`--notes`, `--when`, `--deadline`, `--tags`, `--area`, `--todos`). `--area`
+takes an area name or UUID; a UUID goes to Things as `area-id`, since
+Things matches `area` by title only.
 
 `add` and `project add` then find the new item in the database and print it
 exactly as `things show` would, the same object under `--json`. Things
