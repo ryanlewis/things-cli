@@ -110,8 +110,9 @@ func TestImportChecksCreateNestedInUpdate(t *testing.T) {
 	}
 }
 
-// A created item that never appears fails the import, naming only the items
-// that did not land and leaving the confirmed ones out of the error.
+// A created item that never appears fails the import. The error names the
+// missing items to search for, and keeps the confirmed ones apart, with their
+// uuids.
 func TestImportCreatedNotFoundFails(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
@@ -122,7 +123,7 @@ func TestImportCreatedNotFoundFails(t *testing.T) {
 		t.Fatal("expected a non-zero exit")
 	}
 	for _, want := range []string{
-		"2 of 3 created items were not confirmed",
+		"2 of 3 created items did not appear",
 		`[1]: no new project titled "Launch" appeared`,
 		`[1].attributes.items[1]: no new task titled "Book venue" appeared`,
 		"things search",
@@ -131,8 +132,8 @@ func TestImportCreatedNotFoundFails(t *testing.T) {
 			t.Errorf("error missing %q:\n%v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), "Buy oat milk") {
-		t.Errorf("the confirmed item was reported:\n%v", err)
+	if !strings.Contains(err.Error(), "The other created items:\n  Created and confirmed: [0] \"Buy oat milk\" (new-1)") {
+		t.Errorf("the confirmed item is not reported apart:\n%v", err)
 	}
 	if out != "" {
 		t.Errorf("stdout = %q, want nothing beside the error", out)
@@ -161,6 +162,9 @@ func TestImportCreatedNotFoundJSONItems(t *testing.T) {
 	}
 	if !strings.Contains(raw, `"confirmed": false`) {
 		t.Errorf("items should say confirmed false: %s", raw)
+	}
+	if len(p.Created) != 3 || !p.Created[0].Confirmed || p.Created[0].UUID != "new-1" || p.Created[1].Reason != "not-found" {
+		t.Errorf("created = %+v, want all three verdicts with new-1 confirmed", p.Created)
 	}
 }
 
@@ -202,8 +206,8 @@ func TestImportCreatedDuplicateTitles(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
 	stubExecAdding(t, sqlDB,
-		createdRow{uuid: "new-1", title: "Buy oat milk"},
-		createdRow{uuid: "new-2", title: "Buy oat milk"})
+		createdRow{uuid: "new-2", title: "Buy oat milk", extra: `creationDate = creationDate + 0.001`},
+		createdRow{uuid: "new-1", title: "Buy oat milk"})
 
 	payload := `[{"type":"to-do","attributes":{"title":"Buy oat milk"}},{"type":"to-do","attributes":{"title":"Buy oat milk"}}]`
 	out, _, err := runImportOut(t, database, payload, "--json")
@@ -213,6 +217,56 @@ func TestImportCreatedDuplicateTitles(t *testing.T) {
 	got := decodeCreated(t, out)
 	if len(got) != 2 || !got[0].Confirmed || !got[1].Confirmed || got[0].UUID != "new-1" || got[1].UUID != "new-2" {
 		t.Errorf("got %+v, want both confirmed as new-1 and new-2", got)
+	}
+}
+
+// Two new items saved at the same instant cannot be paired with the payload's
+// items by order, so both are ambiguous rather than confirmed under a uuid
+// that may belong to the other.
+func TestImportCreatedDuplicateTitlesSameInstant(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB,
+		createdRow{uuid: "new-1", title: "Buy oat milk"},
+		createdRow{uuid: "new-2", title: "Buy oat milk"})
+
+	payload := `[{"type":"to-do","attributes":{"title":"Buy oat milk"}},{"type":"to-do","attributes":{"title":"Buy oat milk"}}]`
+	out, _, err := runImportOut(t, database, payload, "--json")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for _, c := range decodeCreated(t, out) {
+		if c.Confirmed || c.Reason != "ambiguous" || strings.Join(c.Candidates, ",") != "new-1,new-2" {
+			t.Errorf("item = %+v, want ambiguous with both candidates", c)
+		}
+	}
+}
+
+// A dropped status change fails the import, and the created items that were
+// confirmed keep their uuids in the error rather than vanishing with the
+// success list.
+func TestImportStatusFailureKeepsConfirmedCreates(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk"})
+
+	payload := `[
+	  {"type":"to-do","operation":"update","id":"one-1","attributes":{"completed":true}},
+	  {"type":"to-do","attributes":{"title":"Buy oat milk"}}
+	]`
+	_, _, err := runImportOut(t, database, payload)
+	if err == nil || !strings.Contains(err.Error(), "The other created items:\n  Created and confirmed: [1] \"Buy oat milk\" (new-1)") {
+		t.Fatalf("err = %v, want the confirmed item named", err)
+	}
+	if strings.Contains(err.Error(), "created items did not appear") {
+		t.Errorf("the confirmed item was reported missing:\n%v", err)
+	}
+	p, raw := decodePayload(t, err)
+	if len(p.Items) != 1 || p.Items[0].Path != "[0]" {
+		t.Errorf("items = %s, want only the status change", raw)
+	}
+	if len(p.Created) != 1 || !p.Created[0].Confirmed || p.Created[0].UUID != "new-1" {
+		t.Errorf("created = %+v, want new-1 confirmed", p.Created)
 	}
 }
 
@@ -339,7 +393,7 @@ func TestImportReportsCreatedAndStatusFailuresTogether(t *testing.T) {
 	if it := findItem(t, p.Items, "[1]"); it.Reason != "not-found" {
 		t.Errorf("created item = %+v", it)
 	}
-	for _, want := range []string{"1 of 1 requested status changes did not apply", "1 of 1 created items were not confirmed"} {
+	for _, want := range []string{"1 of 1 requested status changes did not apply", "1 of 1 created items did not appear"} {
 		if !strings.Contains(p.Message, want) {
 			t.Errorf("message missing %q: %s", want, p.Message)
 		}

@@ -566,7 +566,8 @@ Under `--json` it prints an array, one object per created item:
 `{"path", "kind": "task"|"project", "title", "uuid", "confirmed": true}`.
 When several created items share a kind and title, they are confirmed once
 that many new items appear, and paired with the new items in the order
-Things saved them.
+Things saved them. If two of those new items have the same creation time,
+the order says nothing, so they are all reported `ambiguous` instead.
 
 An item that is not confirmed has `"confirmed": false` and a `reason`, as
 an unconfirmed `add` does, and no `uuid`:
@@ -574,18 +575,22 @@ an unconfirmed `add` does, and no `uuid`:
 - `no-verify`: `--no-verify` (or `no_verify = true`) skipped the read-back.
 - `unreadable`: the database could not be read, so a warning is printed.
 - `ambiguous`: more new items with that title appeared than the payload
-  created. `candidates` lists their uuids.
+  created, or they cannot be paired (see above). `candidates` lists their
+  uuids.
 - `not-found`: no new item with that title appeared within the read-back
   wait, or fewer than the payload created. `candidates` lists the ones that
   did appear.
 
 The first three exit 0 with the list printed. Any `not-found` item makes
 the import exit non-zero with `import partially applied`, the same error a
-dropped status change gives. The error lists every unconfirmed item and
-leaves out the confirmed ones, and nothing is printed on stdout. Search for
-each listed title with `things search` before running the import again with
-only those items. Otherwise a retry can create duplicates. The created
-items and the status changes share one read-back wait.
+dropped status change gives. The error names the `not-found` items, and
+under `--json` they are in `items`. Search for each of them with `things
+search` before running the import again with only those items. Otherwise a
+retry can create duplicates. The verdict on every other created item
+follows under "The other created items", and under `--json` the error's
+`created` array carries every created item in the shape above, so the
+confirmed ones keep their uuids. The same happens when only a status change
+failed. The created items and the status changes share one read-back wait.
 
 ## Opening in the app
 
