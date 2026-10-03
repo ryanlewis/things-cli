@@ -145,3 +145,20 @@ func writeRaw(t *testing.T, content string) {
 		t.Fatal(err)
 	}
 }
+
+// The database a listing read round-trips through the file (issue #274).
+func TestLastListRecordsDatabase(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	want := LastList{WrittenAt: time.Now(), DB: "/x/main.sqlite", UUIDs: []string{"u1"}}
+	if err := WriteLastList(want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadLastList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DB != want.DB {
+		t.Errorf("DB = %q, want %q", got.DB, want.DB)
+	}
+}

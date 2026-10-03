@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -87,6 +88,43 @@ type Deps struct {
 	// reports on it; every other command has already had its defaults applied
 	// by the time it runs.
 	Config *config.File
+
+	// dbIdent caches dbIdentity's answer.
+	dbIdent string
+}
+
+// dbIdentity is the resolved path of the database this command reads, the
+// --db path or the discovered one. A listing records it, and a numeric ref
+// is refused when the listing read a different database (issue #274). Empty
+// when there is no path to resolve: no --db, and discovery failed.
+func (d *Deps) dbIdentity() string {
+	if d.dbIdent != "" {
+		return d.dbIdent
+	}
+	path := d.DBPath
+	if path == "" {
+		p, err := db.FindDBPath()
+		if err != nil {
+			return ""
+		}
+		path = p
+	}
+	d.dbIdent = resolvePath(path)
+	return d.dbIdent
+}
+
+// resolvePath makes path absolute and clean and follows its symlinks, so
+// every spelling of one file compares equal. A path that does not exist, or
+// cannot be followed, is kept as far as it got.
+func resolvePath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	path = filepath.Clean(path)
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		path = real
+	}
+	return path
 }
 
 // config returns the loaded config file. main always supplies one, so a nil
@@ -173,6 +211,7 @@ func (d *Deps) Database() (*db.DB, error) {
 		return nil, err
 	}
 	d.DB = database
+	d.dbIdent = resolvePath(path)
 	return database, nil
 }
 

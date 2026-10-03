@@ -25,6 +25,11 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 			if last.Stale(time.Now()) {
 				return nil, &staleCacheError{Query: ref, Row: n, Last: last}
 			}
+			// Nor is a listing of another database a guide to this one
+			// (issue #274).
+			if !cacheFromThisDB(d, last) {
+				return nil, &otherDBCacheError{Query: ref, Row: n, Last: last, Current: d.dbIdentity()}
+			}
 			t, err := database.GetTaskByUUID(last.UUIDs[n-1])
 			if err != nil {
 				return nil, err
@@ -109,10 +114,22 @@ func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 	for i, t := range tasks {
 		uuids[i] = t.UUID
 	}
-	entry := cache.LastList{WrittenAt: time.Now(), Command: command, UUIDs: uuids}
+	entry := cache.LastList{WrittenAt: time.Now(), Command: command, DB: d.dbIdentity(), UUIDs: uuids}
 	if err := cache.WriteLastList(entry); err != nil {
 		fmt.Fprintf(d.errOut(), "warning: failed to cache task list: %v\n", err)
 	}
+}
+
+// cacheFromThisDB reports whether the cached listing read the database this
+// command reads. A file that records no database was written before the field
+// existed. It counts as this database only when the database was discovered
+// rather than named, since that is the one such a listing almost always read.
+// Against a --db path it is refused, never guessed.
+func cacheFromThisDB(d *Deps, last cache.LastList) bool {
+	if last.DB == "" {
+		return d.DBPath == ""
+	}
+	return last.DB == d.dbIdentity()
 }
 
 // shellQuote renders one argument as the user would have to type it. Anything

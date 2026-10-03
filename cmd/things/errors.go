@@ -158,6 +158,36 @@ func (e *staleCacheError) Error() string {
 	return b.String()
 }
 
+// otherDBCacheError is a numeric reference to a listing that read a different
+// database from the one this command reads (issue #274). The listing may be
+// fresh, but its rows describe the other database, so they are refused.
+type otherDBCacheError struct {
+	Query   string // the reference as typed, e.g. "2"
+	Row     int
+	Last    cache.LastList
+	Current string // the resolved path of this command's database
+}
+
+func (e *otherDBCacheError) Error() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "task #%d comes from a listing of a different database", e.Row)
+	listing := "the listing"
+	if e.Last.Command != "" {
+		listing = fmt.Sprintf("`%s`", e.Last.Command)
+	}
+	if e.Last.DB == "" {
+		// Written before the database was recorded: nothing to name.
+		fmt.Fprintf(&b, ": %s was written by an older things-cli that did not record its database", listing)
+	} else {
+		fmt.Fprintf(&b, ": %s read %s", listing, e.Last.DB)
+	}
+	if e.Current != "" {
+		fmt.Fprintf(&b, ", and this command reads %s", e.Current)
+	}
+	b.WriteString(". Re-run the listing against this database and use the new row number, or pass the task's uuid.")
+	return b.String()
+}
+
 // humanDuration renders a span the way the error message needs to read it:
 // coarse, and never more precise than the reader can act on. Duration's own
 // String would print "4h0m0s".
@@ -260,6 +290,16 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Error = "stale list cache"
 		payload.Kind = "task"
 		payload.Query = stale.Query
+		return payload
+	}
+
+	// The same token as a stale cache: the remedy is the same, re-list and use
+	// the uuid.
+	var otherDB *otherDBCacheError
+	if errors.As(err, &otherDB) {
+		payload.Error = "stale list cache"
+		payload.Kind = "task"
+		payload.Query = otherDB.Query
 		return payload
 	}
 

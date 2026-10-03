@@ -335,6 +335,98 @@ func TestResolveTaskNumericPastEndOfOldCache(t *testing.T) {
 	}
 }
 
+// dbFiles creates two empty files to stand in for two databases. Only their
+// paths matter here: the database a listing read is identified by its
+// resolved path (issue #274).
+func dbFiles(t *testing.T) (live, backup string) {
+	t.Helper()
+	dir := t.TempDir()
+	live = filepath.Join(dir, "live.sqlite")
+	backup = filepath.Join(dir, "backup.sqlite")
+	for _, p := range []string{live, backup} {
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return live, backup
+}
+
+// A listing of one database does not back a row number used against another:
+// `things --db <backup> today` then `things complete 2` is refused inside the
+// freshness window too (issue #274).
+func TestResolveTaskNumericRefusedFromOtherDatabase(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	live, backup := dbFiles(t)
+	database := seedResolveTaskDB(t)
+
+	cacheTaskUUIDs(&Deps{DBPath: backup}, "things --db "+backup+" today", []model.Task{{UUID: "abc-123"}})
+
+	_, err := resolveTask(&Deps{DBPath: live}, "1", database)
+	var other *otherDBCacheError
+	if !errors.As(err, &other) {
+		t.Fatalf("resolveTask = %v, want a different-database cache error", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"different database", "things --db " + backup + " today", "uuid"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message %q does not mention %q", msg, want)
+		}
+	}
+	if payload := errorPayload(err); payload.Error != "stale list cache" || payload.Query != "1" {
+		t.Errorf("JSON payload = %+v", payload)
+	}
+}
+
+// The same database still resolves, however its path is spelled: through a
+// symlink, or relative to the working directory.
+func TestResolveTaskNumericSameDatabaseResolves(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	live, _ := dbFiles(t)
+	link := filepath.Join(t.TempDir(), "link.sqlite")
+	if err := os.Symlink(live, link); err != nil {
+		t.Fatal(err)
+	}
+	database := seedResolveTaskDB(t)
+
+	cacheTaskUUIDs(&Deps{DBPath: live}, "things today", []model.Task{{UUID: "abc-123"}})
+
+	t.Chdir(filepath.Dir(live))
+	for _, path := range []string{live, link, "live.sqlite", "./live.sqlite"} {
+		got, err := resolveTask(&Deps{DBPath: path}, "1", database)
+		if err != nil {
+			t.Errorf("--db %s: resolveTask: %v", path, err)
+			continue
+		}
+		if got.UUID != "abc-123" {
+			t.Errorf("--db %s: got %+v", path, got)
+		}
+	}
+}
+
+// A cache file written before the database was recorded backs a row number
+// only when this command uses the auto-discovered database, which is the one
+// such a listing almost always read. Against a --db path it is refused.
+func TestResolveTaskNumericCacheWithoutDatabase(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_, backup := dbFiles(t)
+	database := seedResolveTaskDB(t)
+
+	seedCache(t, time.Minute, "things today", "abc-123")
+
+	if _, err := resolveTask(&Deps{}, "1", database); err != nil {
+		t.Errorf("default database: resolveTask: %v", err)
+	}
+
+	_, err := resolveTask(&Deps{DBPath: backup}, "1", database)
+	var other *otherDBCacheError
+	if !errors.As(err, &other) {
+		t.Fatalf("--db: resolveTask = %v, want a different-database cache error", err)
+	}
+	if !strings.Contains(err.Error(), "uuid") {
+		t.Errorf("message = %q", err.Error())
+	}
+}
+
 func TestListCommandLine(t *testing.T) {
 	cases := []struct {
 		name    string

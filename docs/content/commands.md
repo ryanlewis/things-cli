@@ -594,6 +594,21 @@ after upgrading is refused until you list again. The named listing
 carries `--db` when the flag supplied one, so it re-reads the database
 the rows came from.
 
+The cache also records which database the listing read, by its resolved
+path. A numeric reference made against a different database is refused
+too, however recent the listing, since its rows describe the other one:
+
+```console
+$ things --db ~/backup/main.sqlite today
+$ things complete 2
+Error: task #2 comes from a listing of a different database: `things --db /Users/me/backup/main.sqlite today` read /Users/me/backup/main.sqlite, and this command reads /Users/me/Library/Group Containers/…/main.sqlite. Re-run the listing against this database and use the new row number, or pass the task's uuid.
+```
+
+A relative path or a symlink to the same file counts as the same
+database. A cache file written before the database was recorded backs a
+row number only when no `--db` is in play (from the flag or the config
+file); with one, the reference is refused until you list again.
+
 A `--json` listing never writes the cache. JSON output carries no row
 numbers, so it has nothing to record, and the file is one shared cache
 per machine rather than one per shell — writing it from a scripted run
