@@ -388,6 +388,10 @@ instead of assuming:
   created and print it as `things show` would, so the agent has its UUID
   without a `things search`. If it never appears they exit non-zero; search
   for the title before retrying, so a retry does not make a duplicate.
+  Exit 0 with `"confirmed": false` (two new items with the title,
+  `--no-verify`, or an unreadable database) is not a confirmation either.
+  If Things is often closed, the first add after it launches can take
+  longer than the five-second wait; raise `--verify-timeout`.
 - **Edits are read back.** `edit` and `project edit` wait for Things to
   record the change, then print the item as `things show` would. Exit 0
   with the item printed is the confirmation, so the agent does not need a

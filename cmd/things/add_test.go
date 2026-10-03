@@ -128,6 +128,9 @@ func TestAddNotFoundFails(t *testing.T) {
 		{"otherType", []createdRow{{uuid: "new-1", title: "Buy oat milk", typ: model.TypeProject}}},
 		{"template", []createdRow{{uuid: "tpl-1", title: "Buy oat milk", extra: `rt1_recurrenceRule = x'00'`}}},
 		{"instance", []createdRow{{uuid: "inst-1", title: "Buy oat milk", extra: `rt1_repeatingTemplate = 'tpl-0'`}}},
+		{"trashed", []createdRow{{uuid: "new-1", title: "Buy oat milk", extra: `trashed = 1`}}},
+		// Titles match exactly, bar surrounding whitespace.
+		{"otherCase", []createdRow{{uuid: "new-1", title: "buy oat milk"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,11 +141,120 @@ func TestAddNotFoundFails(t *testing.T) {
 			}
 			stubExecAdding(t, sqlDB, tc.rows...)
 
-			_, err := runOut(t, db.NewFromSQL(sqlDB), "add", "Buy oat milk")
+			out, err := runOut(t, db.NewFromSQL(sqlDB), "add", "Buy oat milk")
 			if err == nil || !strings.Contains(err.Error(), "add not confirmed") || !strings.Contains(err.Error(), "things search") {
 				t.Fatalf("err = %v, want add not confirmed with a search hint", err)
 			}
+			if out != "" {
+				t.Errorf("stdout = %q, want nothing beside the error", out)
+			}
 		})
+	}
+}
+
+// The search hint quotes the title for the shell, so a title with $ in it can
+// be pasted as it stands.
+func TestAddNotFoundQuotesSearchHint(t *testing.T) {
+	fastVerify(t)
+	database, _ := seedWritable(t)
+	stubExecDropping(t)
+
+	_, err := runOut(t, database, "add", " Pay $5 fee ")
+	if err == nil || !strings.Contains(err.Error(), "things search 'Pay $5 fee'") {
+		t.Fatalf("err = %v, want a shell-quoted search hint", err)
+	}
+}
+
+// Surrounding whitespace on either side does not stop a match.
+func TestAddMatchesTrimmedTitle(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk "})
+
+	out, err := runOut(t, database, "add", "  Buy oat milk")
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if !strings.Contains(out, "new-1") {
+		t.Errorf("output = %q, want the new item", out)
+	}
+}
+
+// project add --todos creates to-dos too; one titled like the project is not
+// a second candidate, since only projects are looked for.
+func TestProjectAddIgnoresSameTitledTodo(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB,
+		createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject},
+		createdRow{uuid: "new-t", title: "Launch", typ: model.TypeTask, extra: `project = 'new-p'`})
+
+	out, err := runOut(t, database, "--json", "project", "add", "Launch", "--todos", "Launch")
+	if err != nil {
+		t.Fatalf("project add: %v", err)
+	}
+	var got model.Task
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if got.UUID != "new-p" {
+		t.Errorf("printed %s, want the project new-p", got.UUID)
+	}
+}
+
+// The read-back polls on after the first match, so a second item with the
+// title saved one round later is seen and the add is ambiguous, not confirmed
+// against whichever came first.
+func TestAddSecondMatchOneRoundLaterIsAmbiguous(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk"})
+	sleeps := 0
+	verifySleep = func(time.Duration) {
+		sleeps++
+		if sleeps == 1 {
+			now := model.TimeToUnix(time.Now())
+			if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start, creationDate) VALUES ('new-2', 'Buy oat milk', 0, 0, 0, 0, ?)`, now); err != nil {
+				t.Errorf("simulating a second add: %v", err)
+			}
+		}
+	}
+
+	out, err := runOut(t, database, "add", "Buy oat milk")
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if !strings.Contains(out, "not confirmed") || !strings.Contains(out, "new-1, new-2") {
+		t.Errorf("output = %q, want an ambiguous line naming both", out)
+	}
+}
+
+// A database that stops answering during the read-back leaves the add sent
+// but unconfirmed: a warning and exit 0, not an error with no guidance.
+func TestAddReadFailingDuringReadBackIsUnconfirmed(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+		return exec.Command("true")
+	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+	out, stderr, err := runStreams(t, database, "--json", "add", "Buy oat milk")
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	var got unconfirmedAdd
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if got.Confirmed || got.Reason != "unreadable" {
+		t.Errorf("got %+v, want unconfirmed with reason unreadable", got)
+	}
+	if !strings.Contains(stderr, "warning:") {
+		t.Errorf("stderr = %q, want a warning", stderr)
 	}
 }
 
