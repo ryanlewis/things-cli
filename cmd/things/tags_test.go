@@ -310,6 +310,8 @@ func TestTagAddHint(t *testing.T) {
 		{"dollar", []string{"a$HOME"}, `things tag add 'a$HOME'`},
 		{"apostrophe", []string{"Ryan's"}, `things tag add 'Ryan'\''s'`},
 		{"non-ASCII stays bare", []string{"café"}, "things tag add café"},
+		{"no-break space", []string{"a\u00a0b"}, "things tag add 'a\u00a0b'"},
+		{"zero-width space", []string{"a\u200bb"}, "things tag add 'a\u200bb'"},
 		{"leading equals", []string{"=ls"}, `things tag add '=ls'`},
 		{"empty", []string{""}, `things tag add ''`},
 		// Quoting stops the shell splitting a leading-dash name, but the CLI

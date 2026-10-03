@@ -133,13 +133,17 @@ func shellQuote(s string) string {
 // needsShellQuoting reports whether r has any meaning to a shell. It is an
 // allow-list: anything outside it gets quoted, so a character the list forgot
 // is merely quoted unnecessarily rather than left live. Non-ASCII letters such
-// as the é in an area called café are not special to a shell.
+// as the é in an area called café are not special to a shell; non-ASCII
+// whitespace and non-printing runes are quoted.
 func needsShellQuoting(r rune) bool {
 	switch {
 	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
 		return false
 	case r > unicode.MaxASCII:
-		return false
+		// Letters like the é in café are plain word characters. Spaces
+		// (NBSP, U+2028) and non-printing runes (ZWSP, controls) are not:
+		// they split or hide in a pasted command, so they get quoted.
+		return unicode.IsSpace(r) || !unicode.IsPrint(r)
 	}
 	return !strings.ContainsRune("-_./:=@+,%", r)
 }
