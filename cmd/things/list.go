@@ -58,7 +58,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	// matching how --on/--from/--to reject views.
 	if c.IncludeCompleted && !db.CompletableView(view, project != "", c.Area != "") {
 		names := db.CompletableViewNames()
-		return fmt.Errorf("--include-completed is only supported on the %s and %s views and on a --project or --area listing with no view, not %q; name the view explicitly, e.g. `things today --tag NAME`",
+		return fmt.Errorf("--include-completed is only supported on the %s and %s views and on a --project or --area listing with no view, not %q; name the view explicitly, e.g. `things today` with the same filters",
 			strings.Join(names[:len(names)-1], ", "), names[len(names)-1], view)
 	}
 
