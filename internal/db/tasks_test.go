@@ -2139,6 +2139,25 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 	if !sameSet(uuidsOf(got), want) {
 		t.Errorf("today: got %v, want %v", uuidsOf(got), want)
 	}
+
+	// Such a to-do is listed under today, the day Today shows it, so a date
+	// filter matches it on today rather than on its deadline.
+	on := model.ThingsDate(today)
+	got, err = d.ListTasks("today", TaskFilter{On: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("today --on today: got %v, want %v", uuidsOf(got), want)
+	}
+	from := model.ThingsDate(int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1))))
+	got, err = d.ListTasks("today", TaskFilter{From: &from})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("today --from yesterday: got %v, want %v", uuidsOf(got), want)
+	}
 }
 
 // A project row has no parent project, so --project can never match it: the
