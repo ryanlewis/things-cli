@@ -233,8 +233,18 @@ const closedAfterManualLog = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualL
 
 // todayScheduled is the today view's scheduling test: the rows Things files
 // under Today by their start date. todayDue is the other way in, and
-// todayScope joins the two.
-const todayScheduled = "t.start = 1 AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL"
+// todayScope joins the two. A start = 2 row whose day has come counts too:
+// see scheduledArrived.
+const todayScheduled = "(t.start = 1 OR (" + scheduledArrived + ")) AND t.startBucket IN (0, 1) AND t.startDate IS NOT NULL"
+
+// scheduledArrived is a row scheduled for a later day whose day has come but
+// which Things has not yet moved. Just after midnight a to-do scheduled for
+// the new day is still start = 2 until Things runs its day-change
+// maintenance. Measured on 4 Oct 2026 at 00:31, one such to-do was in the
+// app's Today and Anytime and not in its Upcoming (issue #363). No project
+// was caught in this state; one is treated the same, as it shares the code
+// path.
+const scheduledArrived = "t.start = 2 AND t.startDate <= " + thingsToday
 
 // todayDue is the other way into Today: a to-do with no start date whose
 // deadline has arrived, from the Inbox or from Anytime, and for as long as it
@@ -378,12 +388,15 @@ const (
 	// joining it adds only the Inbox ones. Measured on 3 Oct 2026, the app's
 	// Anytime held an Inbox to-do due that day and one overdue, the same two
 	// its Today held, and no Inbox to-do due later or taken out of Today for
-	// its deadline.
-	anytimeScope = "(" + anytimeBucket + " OR (" + todayDue + "))"
+	// its deadline. A start = 2 to-do whose day has come is in Anytime too,
+	// as it is in Today (scheduledArrived).
+	anytimeScope = "(" + anytimeBucket + " OR (" + scheduledArrived + ") OR (" + todayDue + "))"
 	// upcomingScheduled and somedayDeferred split the one Things code between
 	// them. start = 2 is both lists: the app shows a deferred item in Upcoming
-	// once it carries a date and in Someday while it does not.
-	upcomingScheduled = "t.start = 2 AND t.startDate IS NOT NULL"
+	// once it carries a date and in Someday while it does not. A dated one
+	// whose day has come is Today's instead (scheduledArrived), so Upcoming
+	// takes only the days after today.
+	upcomingScheduled = "t.start = 2 AND t.startDate > " + thingsToday
 	somedayDeferred   = "t.start = 2 AND t.startDate IS NULL"
 	// upcomingDue is the other way into Upcoming: an Anytime to-do with no
 	// start date but a deadline after today, which the app lists under the
@@ -812,8 +825,8 @@ var views = map[string]viewSpec{
 // projectPageOrder is how the app arranges the to-dos of one project on the
 // project's page. The to-dos under no heading come first, then each heading's
 // in heading order. Within each of those the Anytime to-dos come first by
-// index, a to-do scheduled for today among them; then the scheduled ones by
-// start date and then todayIndex, the keys Upcoming orders by; then the
+// index, a to-do scheduled for today among them, even one Things has not yet
+// moved out of start = 2; then the scheduled ones by start date and then todayIndex, the keys Upcoming orders by; then the
 // Someday ones by index. The heading's uuid follows its index so that two
 // headings sharing an index still keep their to-dos apart.
 //
