@@ -96,12 +96,12 @@ An item you tick off in Today is not in `logbook` yet. Things keeps it under
 Today for the rest of the day and files it into the Logbook when the day rolls
 over, or sooner if you run `things log` — the app's "Log Completed Now", which
 files the day's closed items straight away. `things today --include-completed`
-shows the ones still waiting. `anytime` and `upcoming` behave the same way and
-take the same flag, because the app goes on showing a just-closed item there
-too. `upcoming` keeps only what was in it while open: a task closed ahead of
-its date, or an undated one with a deadline after today. Everything else
-closed goes to `logbook` at once, today's closes included: a task ticked off in
-the Inbox is under none of these lists, so nothing holds it back. A closed item
+shows the ones still waiting. `inbox`, `anytime` and `upcoming` behave the same
+way and take the same flag, because the app goes on showing a just-closed item
+there too. `upcoming` keeps only what was in it while open: a task closed ahead
+of its date, or an undated one with a deadline after today. Everything else
+closed goes to `logbook` at once, today's closes included, because no list
+holds it back. A closed item
 whose project is still open is therefore either in `logbook` or in a list
 still showing it, never both and never neither — but the lists overlap each
 other, since a task scheduled for today is in the Anytime bucket too and an
@@ -112,8 +112,8 @@ trashed is in none of the unfiltered lists — not `logbook`, not `today`, not
 that project brings it back. One closed today inside a project in Someday or
 scheduled for later, and not shown by `today` or `upcoming`, is in none of
 those lists either until Things logs it, as in the app, which shows it only on
-the project's page: `things --project <uuid> --include-completed` lists it. `--include-completed` works on `today`, `anytime`
-and `upcoming`; with a
+the project's page: `things --project <uuid> --include-completed` lists it. `--include-completed` works on `inbox`, `today`,
+`anytime` and `upcoming`; with a
 filter, name the view: `things today -p "Launch v2" --include-completed`
 returns the tasks of a closed "Launch v2" that closed today, rather than
 nothing.

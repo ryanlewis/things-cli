@@ -221,18 +221,19 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # Either one also comes back from anytime, as in the app; an inbox one
     # leaves inbox while today holds it. --on/--from/--to on today match it
     # on today, not on its deadline.
-    # --include-completed works on today, anytime and upcoming: items ticked
+    # --include-completed works on inbox, today, anytime and upcoming: items ticked
     # off in that list which Things hasn't logged out yet. upcoming keeps only
     # what was in it while open (a task closed ahead of its date, or an undated
-    # one due later). logbook holds every other closed item, including things
-    # closed today from the Inbox, so a closed item whose project is still open
+    # one due later). logbook holds every other closed item, so a closed item
+    # whose project is still open
     # is either logged or still listed, never both. One exception: a task
     # closed today inside a project in Someday or scheduled for later, which
     # no list shows, is held back from logbook until the day is logged, as in
-    # the app; only `--project <uuid> --include-completed` has it. The three lists overlap
-    # each other though — a task scheduled for today is in the Anytime bucket
-    # too, and an undated one due later is in anytime and upcoming — so for a
-    # whole day's closes sweep all four, filter logbook on stopDate, and merge
+    # the app; only `--project <uuid> --include-completed` has it. today, anytime
+    # and upcoming overlap each other though — a task scheduled for today is in
+    # the Anytime bucket too, and an undated one due later is in anytime and
+    # upcoming — so for a whole day's closes sweep all five lists (inbox too),
+    # filter logbook on stopDate, and merge
     # on uuid. One closed inside a project that is itself closed or trashed is
     # in none of those sweeps: it is folded into the project row,
     # per the note above. Name the project to reach it: `--project <uuid>`

@@ -17,7 +17,7 @@ type TaskFilter struct {
 
 	// IncludeCompleted keeps completed/cancelled items that Things has not yet
 	// logged out of the list they are in (UI-parity). It reaches the views
-	// CompletableView reports — today, anytime, upcoming, and the catch-all when Project
+	// CompletableView reports — inbox, today, anytime, upcoming, and the catch-all when Project
 	// names a project — and without it those return only open tasks. Ignored
 	// by every other view.
 	IncludeCompleted bool
@@ -250,12 +250,12 @@ const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16
 	`(CAST(strftime('%d', 'now', 'localtime') AS INTEGER) << 7))`
 
 // heldInPlace is the set the Logbook withholds: the closed rows some other
-// view is still showing where the app leaves them. Today, Anytime and Upcoming
-// are such views, so the test is the union of the three (issues #230, #238,
-// #293), and the Logbook takes anything none of them holds.
+// view is still showing where the app leaves them. The Inbox, Today, Anytime
+// and Upcoming are such views, so the test is the union of the four (issues
+// #230, #238, #293), and the Logbook takes anything none of them holds.
 //
-// The scheduling half matters as much as the day: a to-do closed straight out
-// of the Inbox is under none of those lists, so the Logbook takes it the
+// The scheduling half matters as much as the day: a closed row none of those
+// lists holds, such as one closed out of Someday, goes to the Logbook the
 // moment it closes. Withholding it on the day alone would leave it listed
 // nowhere at all (issue #230).
 //
@@ -284,12 +284,19 @@ const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16
 // keeps them (includesTemplates), so withholding such a row would take
 // it out of every list. Both halves are "IS NULL" tests, which are never NULL
 // themselves, so they cannot turn a true held-test into NULL.
-const heldInPlace = "(((" + heldByToday + ") OR (" + heldByAnytime + ") OR (" + heldByUpcoming + ")) AND " + notATemplate + ")"
+const heldInPlace = "(((" + heldByInbox + ") OR (" + heldByToday + ") OR (" + heldByAnytime + ") OR (" + heldByUpcoming + ")) AND " + notATemplate + ")"
 
 // notATemplate excludes the rows those views never carry: the template
 // row itself, and a to-do inside a repeating project template, which carries
 // no rule of its own — only its project does (issue #171).
 const notATemplate = repeatingPlaceholder + " IS NULL AND " + repeatingParentPlaceholder + " IS NULL"
+
+// heldByInbox is the Inbox half — the scope the view itself uses. #230 had
+// assumed the Inbox logged a closed to-do at once. Measured on 3 Oct 2026, the
+// app's Inbox held a to-do completed out of it that day, struck through, and
+// its Logbook did not. A closed todayDue row is Today's, as it was while open,
+// so notTodayDue keeps the two halves apart.
+const heldByInbox = inboxBucket + " AND " + notTodayDue + " AND t.type = 0 AND " + closedTodayUnlogged
 
 // heldByAnytime is the Anytime half — the bucket test the view itself uses.
 //
@@ -345,8 +352,8 @@ const parentNotClosed = "NOT (" + parentClosed + ")"
 // openOrJustClosed is the status test for the views that --include-completed
 // applies to. By default only open rows; with the flag, also the rows the app
 // is still showing in place because they were closed today, not yet logged,
-// and not folded into a closed project's row. Shared so today, anytime and
-// upcoming cannot answer the question differently.
+// and not folded into a closed project's row. Shared so inbox, today, anytime
+// and upcoming cannot answer the question differently.
 //
 // The fold sits inside the closed branch rather than beside it, so it can only
 // ever remove a row --include-completed just added. An open to-do under a
@@ -375,7 +382,7 @@ func openOrJustClosed(o whereOpts) string {
 // among them, so a change to one meant finding the rest by eye (issue #240).
 const (
 	// openRows is the default status test. Almost every view is the open set;
-	// today, anytime and upcoming widen past it under --include-completed, and only the
+	// inbox, today, anytime and upcoming widen past it under --include-completed, and only the
 	// logbook and trash are built on something else.
 	openRows = "t.status = 0"
 	// closedRows is the Logbook's status test: completed and cancelled both,
@@ -502,8 +509,8 @@ type viewSpec struct {
 
 	// supportsIncludeCompleted marks the views --include-completed applies to:
 	// the lists the app keeps a just-closed item visible in until the day
-	// rolls over. today, anytime and upcoming are all such lists (issues #106,
-	// #238, #293).
+	// rolls over. inbox, today, anytime and upcoming are all such lists
+	// (issues #106, #238, #293).
 	// someday would be too if it behaved the same way, but there was no item
 	// closed out of Someday in the data on 10 Sep 2026 to measure the app's
 	// answer against, and its list matched the CLI exactly, so it is left out
@@ -652,8 +659,12 @@ var views = map[string]viewSpec{
 	},
 	ViewInbox: {
 		scope: inboxBucket, status: openRows, trashed: untrashedRows,
-		extra:   []string{notTodayDue},
-		orderBy: indexOrderBy,
+		extra: []string{notTodayDue},
+		// --include-completed works here on the same rule as the other
+		// lists: the app's Inbox keeps a to-do closed out of it that day in
+		// place, struck through, until the day is logged.
+		supportsIncludeCompleted: true,
+		orderBy:                  indexOrderBy,
 	},
 	ViewUpcoming: {
 		scope: upcomingScope, status: openRows, trashed: untrashedRows,
@@ -732,7 +743,7 @@ var views = map[string]viewSpec{
 	// (issue #210). Callers tell the two apart by `status`, which reads
 	// "cancelled" or "completed" in JSON and prints [~] or [x] in plain output.
 	// Over the rows these views can carry, Logbook is the exact complement of
-	// what today, anytime and upcoming keep under --include-completed, so such
+	// what inbox, today, anytime and upcoming keep under --include-completed, so such
 	// a closed item is in the Logbook or in one of those lists and never in
 	// both: Things moves an item out of its list and into the Logbook at the
 	// same moment (issues #230, #238, #293). The complement is taken over heldInPlace,
