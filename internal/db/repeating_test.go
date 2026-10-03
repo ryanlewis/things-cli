@@ -368,6 +368,47 @@ func TestTemplateProjectChildrenExcludedThroughHeading(t *testing.T) {
 	}
 }
 
+// A to-do inside a repeating project template carries no rule of its own, so
+// the flag has to come from its project — directly or through a heading — or
+// writes Things drops silently go out (issue #174). The project Things
+// generates from the template points back at it through rt1_repeatingTemplate
+// and carries no rule; its to-dos are ordinary work and stay unflagged, as do
+// those of an ordinary project.
+func TestTemplateProjectChildrenReportRepeating(t *testing.T) {
+	d := newTestDB(t)
+	mustExec(t, d, `ALTER TABLE TMTask ADD COLUMN rt1_repeatingTemplate TEXT`)
+
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, "index", rt1_recurrenceRule, rt1_repeatingTemplate) VALUES
+		('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102', NULL),
+		('p-inst', 'Weekly review', 1, 0, 0, 2, NULL, 'p-tmpl'),
+		('p-real', 'Ship it',       1, 0, 0, 3, NULL, NULL)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, project, "index") VALUES
+		('head-1', 'A heading', 2, 0, 0, 'p-tmpl', 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, project, heading, "index") VALUES
+		('t-tmpl',  'In the template',     0, 0, 0, 1, 0, 'p-tmpl', NULL,     1),
+		('t-head',  'Under the heading',   0, 0, 0, 1, 0, NULL,     'head-1', 2),
+		('t-inst',  'In the instance',     0, 0, 0, 1, 0, 'p-inst', NULL,     3),
+		('t-plain', 'In an ordinary one',  0, 0, 0, 1, 0, 'p-real', NULL,     4)`)
+
+	for uuid, want := range map[string]bool{
+		"t-tmpl":  true,
+		"t-head":  true,
+		"t-inst":  false,
+		"t-plain": false,
+	} {
+		got, err := d.GetTaskByUUID(uuid)
+		if err != nil {
+			t.Fatalf("GetTaskByUUID(%s): %v", uuid, err)
+		}
+		if got.Repeating != want {
+			t.Errorf("%s: Repeating = %v, want %v", uuid, got.Repeating, want)
+		}
+	}
+}
+
 // trash and logbook report what the database holds, so a template's child
 // that has been trashed or completed still belongs in them. Without this the
 // guard would swallow rows those two views exist to show.

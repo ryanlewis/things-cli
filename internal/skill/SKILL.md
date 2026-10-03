@@ -106,6 +106,8 @@ A repeating task is a template plus the tasks it generates. Things refuses to ch
 on repeating tasks and drops the request silently (…). Change it in the Things app instead
 ```
 
+A task inside a repeating project template counts as repeating too, and is refused the same way; the tasks inside a project Things generated from the template are ordinary.
+
 There is no CLI workaround; the user must use the Things app. Every other attribute (`--title`, `--notes`, `--tags`, `--list`, …) edits normally.
 
 How they list:

@@ -407,6 +407,7 @@ instead of assuming:
   first and `--strict-tags` refuses to write instead.
 - **Repeating items refuse `when`, `deadline`, and status changes.** Things
   drops these silently, so the CLI refuses them before any write goes out.
+  A task inside a repeating project template counts as repeating too.
 - **A project takes its tasks with it.** `complete` and `cancel` on a
   project ask first, and refuse outright when they cannot prompt. `--yes`
   is the answer, not a formality.

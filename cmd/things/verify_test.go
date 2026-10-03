@@ -43,6 +43,7 @@ func seedWritable(t *testing.T) (*db.DB, *sql.DB) {
 	fx.Todo("rep-1", "Water plants", 0, dbtest.Someday(), dbtest.Repeats())
 	fx.Todo("one-1", "Post letter", 1, dbtest.Someday())
 	fx.Project("repproj-1", "Weekly review", 2, dbtest.Repeats())
+	fx.Todo("repchild-1", "Clear desk", 3, dbtest.Anytime(), dbtest.InProject("repproj-1"))
 	return db.NewFromSQL(sqlDB), sqlDB
 }
 
@@ -115,6 +116,11 @@ func TestRepeatingWritesAreRefusedUpFront(t *testing.T) {
 		{"editDeadline", []string{"edit", "rep-1", "--deadline", "2026-05-01"}, "deadline"},
 		{"editDuplicate", []string{"edit", "rep-1", "--duplicate"}, "duplicate"},
 		{"projectEditCancel", []string{"project", "edit", "repproj-1", "--cancel"}, "canceled"},
+		// A to-do inside a repeating project template carries no rule of
+		// its own; the refusal has to come from its project (issue #174).
+		{"childComplete", []string{"complete", "repchild-1"}, "completed"},
+		{"childEditWhen", []string{"edit", "repchild-1", "--when", "today"}, "when"},
+		{"childEditDeadline", []string{"edit", "repchild-1", "--deadline", "2026-05-01"}, "deadline"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
