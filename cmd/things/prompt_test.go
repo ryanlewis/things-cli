@@ -24,6 +24,45 @@ func TestPromptLineReadsFromDepsStdin(t *testing.T) {
 	}
 }
 
+// With one reader behind Deps.Stdin, a prompt must leave the rest of the
+// input for the next one: the ambiguity pick and the confirmation can both
+// fire in one command.
+func TestPromptLineLeavesRestOfInput(t *testing.T) {
+	d := &Deps{Stdin: strings.NewReader("2\ny\n"), Stderr: &bytes.Buffer{}}
+
+	for _, want := range []string{"2", "y"} {
+		line, ok := promptLine(d, "?")
+		if !ok || line != want {
+			t.Errorf("promptLine = %q, %v; want %q, true", line, ok, want)
+		}
+	}
+	if line, ok := promptLine(d, "?"); ok || line != "" {
+		t.Errorf("promptLine after the input ran out = %q, %v; want empty, false", line, ok)
+	}
+}
+
+func TestPromptLineUnterminatedLastLine(t *testing.T) {
+	d := &Deps{Stdin: strings.NewReader("1\ny"), Stderr: &bytes.Buffer{}}
+
+	for _, want := range []string{"1", "y"} {
+		line, ok := promptLine(d, "?")
+		if !ok || line != want {
+			t.Errorf("promptLine = %q, %v; want %q, true", line, ok, want)
+		}
+	}
+}
+
+func TestPromptLineTrimsCRLF(t *testing.T) {
+	d := &Deps{Stdin: strings.NewReader("2\r\ny\r\n"), Stderr: &bytes.Buffer{}}
+
+	for _, want := range []string{"2", "y"} {
+		line, ok := promptLine(d, "?")
+		if !ok || line != want {
+			t.Errorf("promptLine = %q, %v; want %q, true", line, ok, want)
+		}
+	}
+}
+
 // The cache-write warning has to go through Deps.Stderr, not os.Stderr.
 func TestCacheWarningGoesToDepsStderr(t *testing.T) {
 	// HOME under /dev/null makes creating the cache directory fail.
