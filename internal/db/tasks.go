@@ -417,6 +417,13 @@ const (
 	// heldInPlace. The Logbook's other extra is parentNotClosed, which it shares with the
 	// --include-completed views since #252, so it is defined with its pair.
 	notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
+	// notTodayDue is the Inbox's half of todayDue: an undated Inbox to-do
+	// whose deadline has come leaves the Inbox for Today, and goes back when
+	// it is taken out of Today for that deadline. Measured on 3 Oct 2026, the
+	// app's Inbox held neither a to-do due that day nor one overdue, and held
+	// the overdue one again once its deadlineSuppressionDate was set (issue
+	// #345). COALESCE keeps a to-do with no deadline, where todayDue is NULL.
+	notTodayDue = "COALESCE(" + todayDue + ", 0) = 0"
 )
 
 // viewSpec is one list view: what it selects, how it is arranged, and how it
@@ -604,6 +611,7 @@ var views = map[string]viewSpec{
 	},
 	ViewInbox: {
 		scope: inboxBucket, status: openRows, trashed: untrashedRows,
+		extra:   []string{notTodayDue},
 		orderBy: indexOrderBy,
 	},
 	ViewUpcoming: {

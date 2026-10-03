@@ -37,7 +37,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 
 - `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq '.[] | select(.status=="open")'`.
 - `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq '.[] | select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells it `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.
-- `start` is a string enum the same way — `"inbox"`, `"anytime"` or `"someday"` — not the raw Things integer. It is the list an item falls back to when it carries no date, so it does not on its own say which list the app shows the item in: a dated `"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and only an undated one is in Someday. An undated `"inbox"` or `"anytime"` task whose deadline is today or past is in Today too. It is on task and project rows. Filter with `jq '.[] | select(.start=="someday")'`. **This changed:** in v0.7.0 and earlier `start` was the integer `0`, `1` or `2`, so a filter matching on `.start==2` needs updating. `startBucket` beside it is still an integer — `1` is the app's This Evening section, `0` is everything else.
+- `start` is a string enum the same way — `"inbox"`, `"anytime"` or `"someday"` — not the raw Things integer. It is the list an item falls back to when it carries no date, so it does not on its own say which list the app shows the item in: a dated `"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and only an undated one is in Someday. An undated `"anytime"` task whose deadline is today or past is in Today too, and an undated `"inbox"` one is in Today instead of the Inbox. It is on task and project rows. Filter with `jq '.[] | select(.start=="someday")'`. **This changed:** in v0.7.0 and earlier `start` was the integer `0`, `1` or `2`, so a filter matching on `.start==2` needs updating. `startBucket` beside it is still an integer — `1` is the app's This Evening section, `0` is everything else.
 - **The CLI's word is `task`** — `type` on a row, `kind` in an error payload, and the prose throughout this skill. Things' own JSON URL scheme calls the same thing a `"to-do"`, and an `import` payload is the one place that word appears in anything the CLI emits, because the payload is passed to Things untouched. The `description` in this file's frontmatter is the exception that proves it: it lists the phrases a *user* might say, "to-do lists" among them, so the skill matches how people talk rather than how the CLI writes.
 - `"repeating": true` marks an item Things treats as repeating; the field is omitted otherwise. A project appearing as a row in a task listing carries `"type": "project"`.
 - A task row with a checklist carries `checklistProgress` — `{"total": 5, "open": 3}`, every item and the ones still open, so the rest are completed or cancelled. A row without a checklist leaves it out. `things show <uuid>` lists the items themselves.
@@ -215,9 +215,10 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # filtered) under its deadline, as the app's Upcoming does — so that task
     # comes back from both upcoming and anytime; dedupe a sweep on uuid.
     # today likewise lists an undated inbox or anytime task once its deadline
-    # is today or past (unless it was taken out of Today for that deadline),
-    # so it also comes back from inbox or anytime. --on/--from/--to match it
-    # on today, not on its deadline.
+    # is today or past (unless it was taken out of Today for that deadline).
+    # An anytime one also comes back from anytime; an inbox one leaves inbox
+    # while today holds it, as in the app. --on/--from/--to match it on
+    # today, not on its deadline.
     # --include-completed works on today, anytime and upcoming: items ticked
     # off in that list which Things hasn't logged out yet. upcoming keeps only
     # what was in it while open (a task closed ahead of its date, or an undated
