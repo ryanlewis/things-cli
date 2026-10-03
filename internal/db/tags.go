@@ -93,13 +93,13 @@ type uuidTitle struct{ uuid, title string }
 // under FoldTag, in the order given (callers pass Things' list order). A blank
 // ref never folds onto an untitled row.
 func matchRef(rows []uuidTitle, ref string) string {
-	key := FoldTag(ref)
+	key, name := FoldTag(ref), normName(ref)
 	var exact, folded string
 	for _, r := range rows {
 		switch {
 		case r.uuid == ref:
 			return r.uuid
-		case exact == "" && r.title == ref:
+		case exact == "" && normName(r.title) == name:
 			exact = r.uuid
 		case folded == "" && key != "" && FoldTag(r.title) == key:
 			folded = r.uuid

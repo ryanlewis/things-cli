@@ -1042,9 +1042,9 @@ func nameLike(value string) string {
 // the app no longer shows it, so it must not hide an open project that
 // differs from it only by case. Named exactly, it still matches.
 func projectNameMatch(alias, ref string) (string, []any) {
-	clause := "(" + alias + ".uuid = ? OR " + alias + ".title = ? OR (fold(" + alias + ".title) LIKE ?" + escapeClause +
-		" AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND px.title = ?)))"
-	return clause, []any{ref, ref, nameLike(ref), int(model.TypeProject), ref}
+	clause := "(" + alias + ".uuid = ? OR nfc(" + alias + ".title) = ? OR (fold(" + alias + ".title) LIKE ?" + escapeClause +
+		" AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND nfc(px.title) = ?)))"
+	return clause, []any{ref, normName(ref), nameLike(ref), int(model.TypeProject), normName(ref)}
 }
 
 // areaNameMatch is the --area clause for an area's uuid and title columns,
@@ -1054,15 +1054,15 @@ func projectNameMatch(alias, ref string) (string, []any) {
 // and surrounding space. Areas and tags are never trashed, so every row takes
 // the preference.
 func areaNameMatch(uuidCol, titleCol, ref string) (string, []any) {
-	clause := "(" + uuidCol + " = ? OR " + titleCol + " = ? OR (fold(" + titleCol + ") LIKE ?" + escapeClause +
-		" AND NOT EXISTS (SELECT 1 FROM TMArea ax WHERE ax.title = ?)))"
-	return clause, []any{ref, ref, nameLike(ref), ref}
+	clause := "(" + uuidCol + " = ? OR nfc(" + titleCol + ") = ? OR (fold(" + titleCol + ") LIKE ?" + escapeClause +
+		" AND NOT EXISTS (SELECT 1 FROM TMArea ax WHERE nfc(ax.title) = ?)))"
+	return clause, []any{ref, normName(ref), nameLike(ref), normName(ref)}
 }
 
 func tagNameMatch(titleCol, ref string) (string, []any) {
-	clause := "(" + titleCol + " = ? OR (fold(" + titleCol + ") LIKE ?" + escapeClause +
-		" AND NOT EXISTS (SELECT 1 FROM TMTag gx WHERE gx.title = ?)))"
-	return clause, []any{ref, nameLike(ref), ref}
+	clause := "(nfc(" + titleCol + ") = ? OR (fold(" + titleCol + ") LIKE ?" + escapeClause +
+		" AND NOT EXISTS (SELECT 1 FROM TMTag gx WHERE nfc(gx.title) = ?)))"
+	return clause, []any{normName(ref), nameLike(ref), normName(ref)}
 }
 
 // containsLike is literalLike for the lookups that match a substring: the
@@ -1313,9 +1313,9 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 // do take the first row read the rows in the order the rest of the package
 // uses.
 func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE t.title = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
-	return d.collectTasks(query, title)
+	return d.collectTasks(query, normName(title))
 }
 
 // preferInstances drops a repeating template from a set of same-titled matches
