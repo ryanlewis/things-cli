@@ -1470,6 +1470,49 @@ func TestListTasksProjectOrderMatchesProjectPage(t *testing.T) {
 	}
 }
 
+// Two projects, or two areas, that share an index still list as separate
+// blocks: without a key after each index their to-dos would interleave by
+// their own, and the plain output's group header would repeat.
+func TestListTasksCatchAllKeepsTiedProjectsAndAreasApart(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Area("ar-a", "Alpha", 1)
+	fx.Area("ar-b", "Beta", 1)
+	fx.Tag("tg", "urgent", 0)
+	fx.Project("proj-a", "Project A", 5, inArea("ar-a"))
+	fx.Project("proj-b", "Project B", 5, inArea("ar-a"))
+	fx.Todo("pb1", "PB1", 1, anytime(), inProject("proj-b"))
+	fx.Todo("pa1", "PA1", 2, anytime(), inProject("proj-a"))
+	fx.Todo("pb2", "PB2", 3, anytime(), inProject("proj-b"))
+	fx.Todo("pa2", "PA2", 4, anytime(), inProject("proj-a"))
+
+	got, err := d.ListTasks("project", TaskFilter{Area: "ar-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"proj-a", "proj-b", "pa1", "pa2", "pb1", "pb2"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("--area: got %v, want %v", got, want)
+	}
+
+	fx.Todo("b1", "B1", 1, anytime(), inArea("ar-b"))
+	fx.Todo("a1", "A1", 2, anytime(), inArea("ar-a"))
+	fx.Todo("b2", "B2", 3, anytime(), inArea("ar-b"))
+	fx.Todo("a2", "A2", 4, anytime(), inArea("ar-a"))
+	fx.Tagged("b1", "tg")
+	fx.Tagged("a1", "tg")
+	fx.Tagged("b2", "tg")
+	fx.Tagged("a2", "tg")
+
+	got, err = d.ListTasks("project", TaskFilter{Tag: "urgent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []string{"a1", "a2", "b1", "b2"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("--tag: got %v, want %v", got, want)
+	}
+}
+
 // Two headings that share an index still list as two blocks: without a key
 // after the heading's index, their to-dos would interleave by their own.
 func TestListTasksProjectOrderKeepsTiedHeadingsApart(t *testing.T) {

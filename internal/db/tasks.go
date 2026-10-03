@@ -820,8 +820,10 @@ var views = map[string]viewSpec{
 		// groups by area then project so the rendered group headers stay
 		// contiguous instead of repeating as rows interleave by index. Within a
 		// project, and so the whole of a single-project listing, the rows
-		// follow projectPageOrder.
-		orderBy: "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(p.\"index\", 0), " + projectPageOrder + uuidTiebreak,
+		// follow projectPageOrder. The uuid after each index keeps two areas,
+		// or two projects, that share an index from interleaving.
+		orderBy: "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(a.uuid, pa.uuid, ''), " +
+			"COALESCE(p.\"index\", 0), COALESCE(p.uuid, ''), " + projectPageOrder + uuidTiebreak,
 	},
 }
 
