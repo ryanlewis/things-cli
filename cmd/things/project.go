@@ -95,7 +95,7 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 		return err
 	}
 
-	token, _ := database.GetAuthToken()
+	token := authToken(d, database)
 	update := func() error {
 		return things.UpdateProject(things.UpdateProjectParams{
 			ID:           project.UUID,

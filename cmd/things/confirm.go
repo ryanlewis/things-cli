@@ -2,10 +2,28 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/ryanlewis/things-cli/internal/db"
 )
+
+// errCancelled is returned when the user declines a prompt or closes stdin
+// before answering.
+var errCancelled = errors.New("cancelled")
+
+// authToken reads the Things auth token for an update. A read error does not
+// fail the command — the edit may not need the token — but it is surfaced so
+// a later "auth token is required" is not left unexplained.
+func authToken(d *Deps, database *db.DB) string {
+	token, err := database.GetAuthToken()
+	if err != nil {
+		fmt.Fprintf(d.errOut(), "warning: could not read Things auth token: %v\n", err)
+	}
+	return token
+}
 
 // ConfirmFlags is embedded in the commands that ask before a project-wide
 // write. Kong resolves --yes from the config file's `assume_yes` key as well,
@@ -34,7 +52,7 @@ func confirmProjectStatusChange(d *Deps, assumeYes bool, verb, title string) err
 		return fmt.Errorf("cancelled: %s project %q needs confirmation, and this run cannot prompt — %s", action, title, reason)
 	}
 	if !confirmAction(d, fmt.Sprintf("%s project %q? This will also %s all its tasks.", verb, title, action)) {
-		return fmt.Errorf("cancelled")
+		return errCancelled
 	}
 	return nil
 }

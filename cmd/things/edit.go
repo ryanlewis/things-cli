@@ -74,7 +74,7 @@ func (c *EditCmd) Run(d *Deps) error {
 		return err
 	}
 
-	token, _ := database.GetAuthToken()
+	token := authToken(d, database)
 	update := func() error {
 		return things.UpdateTask(things.UpdateParams{
 			ID:               task.UUID,

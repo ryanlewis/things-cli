@@ -50,13 +50,8 @@ func (c *ImportCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	token, err := database.GetAuthToken()
-	if err != nil {
-		// Don't fail the import — the payload may be create-only and not need
-		// the token at all — but surface the read error so users debugging an
-		// `operation: update` failure aren't left guessing.
-		fmt.Fprintf(d.errOut(), "warning: could not read Things auth token: %v\n", err)
-	}
+	// A token read error is only a warning: the payload may be create-only.
+	token := authToken(d, database)
 	if err := things.ImportJSON(string(data), token, c.Reveal); err != nil {
 		return err
 	}
