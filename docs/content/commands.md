@@ -353,7 +353,9 @@ to `complete`, `cancel`, `tag add` and the status changes in an `import`.
 An edit that sets every field to the value
 it already has is detected before the wait when every flag is `--title`,
 `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a
-`--deadline` date. It then prints the item straight away. Any other
+`--deadline` date. Tags that do not exist in Things count as no change,
+since Things drops them, unless `--create-tags` creates them first. It
+then prints the item straight away. Any other
 re-set value, `--when` included, still waits and reports the same error,
 so on that error check the item with `things show` before retrying.
 An edit with nothing to change (no field flags, or `--complete` on a task
