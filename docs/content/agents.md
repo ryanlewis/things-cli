@@ -299,45 +299,50 @@ shows them. `status` separates them, `"completed"` or `"cancelled"`, so an
 agent asked what actually got done should filter on it rather than assume
 every logbook row is a success.
 
-An item you tick off in the Inbox, Today, Anytime or Upcoming is not in `logbook` yet —
-Things keeps it where it was until the day rolls over, or until `things log`
-files it early, and `--include-completed` is how to see those on any of the
-four views. That is the app's default "Move completed items to Logbook:
-Daily" setting, which the CLI reads: under Immediately nothing is held and
-every closed item is in `logbook`; under Manually items stay in place,
-whatever day they closed, until `things log`. Anything closed outside them goes straight to `logbook`,
-including today's closes. The exception is a task closed today inside a
-project in Someday or scheduled for later, and not shown by `today` or
-`upcoming`: `anytime` leaves out that
-project's tasks, as the app's Anytime does, and like the app's Logbook,
-`logbook` holds it back until Things logs it, so only its project listing
-has it. `logbook` is disjoint from the other four, but Today, Anytime and
-Upcoming are not disjoint from each other: a task scheduled for today sits in the
-Anytime bucket as well, and an undated one due later is in Anytime and
-Upcoming, so each comes back from two lists. None of the five is a whole day on
-its own, so an agent reporting on a day's work sweeps all five — `things inbox
---include-completed -j`, `things today --include-completed -j`, `things anytime
---include-completed -j` and `things upcoming --include-completed -j` plus
-`things logbook -j` filtered on
-`stopDate` — and merges them on `uuid` rather than concatenating, or it counts
-the overlapping ones twice. An agent reporting
-on history needs `logbook` alone. For one open project, `things --project
+An item you close is not in `logbook` yet, wherever it was — Things keeps it
+where it was until the day rolls over, or until `things log` files it early,
+and `logbook` holds none of those, as the app's Logbook does. That is the
+app's default "Move completed items to Logbook: Daily" setting, which the CLI
+reads: under Immediately nothing is held and every closed item is in
+`logbook`; under Manually items stay in place, whatever day they closed,
+until `things log`. `--include-completed` is how to see the items still in
+place: on `inbox`, `today`, `anytime`, `upcoming` and `someday`, on a
+project's listing (`things --project <uuid> --include-completed`), and on an
+area's (`things --area <uuid> --include-completed`). A task closed today inside
+a project in Someday or scheduled for later is in no list, as in the app, so
+only its project listing has it. A closed Anytime project with no area is in
+no list or area either; `things projects --completed -j` lists it. The tasks
+of a project closed today stay in place, struck through, in the lists until
+the project is logged.
+
+`logbook` is disjoint from all of those, but they are not disjoint from each
+other: a task scheduled for today sits in the Anytime bucket as well, an
+undated one due later is in Anytime and Upcoming, and a project's or area's
+listing repeats what the lists show. So an agent reporting on today's closes
+sweeps `things inbox|today|anytime|upcoming|someday --include-completed -j`,
+each area's `things --area <uuid> --include-completed -j`, and
+`things projects --completed -j` filtered on `stopDate`, and merges them on
+`uuid` rather than concatenating, or it counts the overlapping ones twice.
+Earlier days are in `things logbook -j`, filtered on `stopDate`. An agent
+reporting on history needs `logbook` alone. For one open project, `things --project
 <uuid> --include-completed -j` is the app's project page: its open tasks plus
 those closed today and not yet logged, from whichever list. `things --area
 <uuid> --include-completed -j` is the area's page the same way, with each of
 its open projects' pages added. Both are contents rather than lists, so their
-closed rows also come back from the sweep above. A day's sweep
-misses a task closed today inside a project in Someday or scheduled for
-later unless it adds that project's listing.
+closed rows also come back from the lists. A day's sweep misses a task closed
+today inside a project in Someday or scheduled for later, outside any area,
+unless it adds that project's listing.
 
 A closed project is one `logbook` row, not a row plus its contents, and a
 trashed project is one `trash` row the same way — the app folds their tasks
 into the project row and so does the CLI. An agent counting what got done from
 `logbook` counts projects once, not once plus every task inside them — which
 also means the day sweep above reports the project rather than the tasks
-`things complete <project> --yes` closed along with it: the fold applies to
-`today`, `anytime` and `upcoming` under `--include-completed` as well as to
-`logbook`, so those tasks are in none of the sweeps above. To read
+`things complete <project> --yes` closed along with it, once the project is
+logged. Until then those tasks stay in place under `--include-completed` in
+`today`, `anytime` and `upcoming`, struck through, as the app shows them; an
+area's listing folds them into the project row straight away, as the app's
+area page does. To read
 the contents, name the project: `things --project <uuid> -j` on a closed or
 trashed project returns its tasks whatever their status, and
 `things show <uuid> --agent` lists them under `## Tasks` with `[x]`, `[~]` or

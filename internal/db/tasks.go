@@ -17,7 +17,7 @@ type TaskFilter struct {
 
 	// IncludeCompleted keeps completed/cancelled items that Things has not yet
 	// logged out of the list they are in (UI-parity). It reaches the views
-	// CompletableView reports — inbox, today, anytime, upcoming, and the catch-all when Project
+	// CompletableView reports — inbox, today, anytime, upcoming, someday, and the catch-all when Project
 	// names a project — and without it those return only open tasks. Ignored
 	// by every other view.
 	IncludeCompleted bool
@@ -248,8 +248,7 @@ const todayDue = "t.start IN (0, 1) AND t.startDate IS NULL AND t.type = 0 AND t
 	" AND t.deadlineSuppressionDate IS NULL"
 
 // todayScope is Today's whole scope: the two ways in, either of which is
-// enough. The Logbook only withholds a closed item while Today is still
-// holding it, so heldByToday uses this same test.
+// enough.
 const todayScope = "((" + todayScheduled + ") OR (" + todayDue + "))"
 
 // todayDate is the day --on/--from/--to match a Today row on: its start date,
@@ -265,83 +264,29 @@ const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16
 	`(CAST(strftime('%m', 'now', 'localtime') AS INTEGER) << 12) | ` +
 	`(CAST(strftime('%d', 'now', 'localtime') AS INTEGER) << 7))`
 
-// heldInPlace is the set the Logbook withholds: the closed rows some other
-// view is still showing where the app leaves them. The Inbox, Today, Anytime
-// and Upcoming are such views, so the test is the union of the four (issues
-// #230, #238, #293), and the Logbook takes anything none of them holds.
+// heldInPlace is the set the Logbook withholds: every closed row Things has
+// not yet logged, wherever it sits. It used to be the union of what the Inbox,
+// Today, Anytime and Upcoming were still showing (issues #230, #238, #293),
+// on the view that a row no list held went to the Logbook at once. The app
+// does not do that. Measured on 4 Oct 2026 under the daily setting, its
+// Logbook held none of eight rows closed that day, among them a closed
+// project with no area that no list shows at all. The CLI reaches each such
+// row under --include-completed: a view (someday included), its project, or
+// its area. A closed Anytime project with no area is the one exception, and
+// `things projects --completed` lists it.
 //
-// The scheduling half matters as much as the day: a closed row none of those
-// lists holds, such as one closed out of Someday, goes to the Logbook the
-// moment it closes. Withholding it on the day alone would leave it listed
-// nowhere at all (issue #230).
-//
-// The fold issue #249 adds to those views needs no matching guard here,
-// unlike the template one. The test is left claiming those views still
-// hold a closed project's to-dos, which since #249 they do not, and that
-// over-claim is harmless: the Logbook rejects exactly those rows on its own
-// parentNotClosed clause, so the withhold can never be what strands one. They
-// are folded into the project row and reached by naming the project, exactly
-// as issue #229 settled.
-//
-// Anytime's half is not redundant with Today's. A to-do can sit in the Anytime
-// bucket with no start date and no deadline due, which Today rejects, and
-// Anytime is where the app goes on showing it for the rest of the day. Today's
-// half is not redundant either: it carries project rows, which Anytime does
-// not, and Inbox to-dos whose deadline has come (issue #294).
-//
-// Upcoming's half is not redundant either: a to-do closed ahead of its date
-// sits in the Someday bucket with a start date, which neither of the other two
-// holds. Measured on 3 Oct 2026, the app's Upcoming held three such to-dos
-// closed that day and its Logbook held none of them (issue #293).
-//
-// notATemplate is the last half of the test and the reason for it is the same
-// "listed nowhere at all" hazard: today, anytime and upcoming all drop repeating
-// templates and the contents of repeating project templates, while the Logbook
-// keeps them (includesTemplates), so withholding such a row would take
-// it out of every list. Both halves are "IS NULL" tests, which are never NULL
-// themselves, so they cannot turn a true held-test into NULL.
-const heldInPlace = "(((" + heldByInbox + ") OR (" + heldByToday + ") OR (" + heldByAnytime + ") OR (" + heldByUpcoming + ")) AND " + notATemplate + ")"
+// notATemplate is the other half of the test. today, anytime, upcoming and
+// someday all drop repeating templates and the contents of repeating project
+// templates, and the repeating view takes no --include-completed, so
+// withholding such a row would take it out of every list. The Logbook keeps
+// them (includesTemplates) at once. Both halves of notATemplate are "IS NULL"
+// tests, which are never NULL themselves.
+const heldInPlace = "(" + closedTodayUnlogged + " AND " + notATemplate + ")"
 
 // notATemplate excludes the rows those views never carry: the template
 // row itself, and a to-do inside a repeating project template, which carries
 // no rule of its own — only its project does (issue #171).
 const notATemplate = repeatingPlaceholder + " IS NULL AND " + repeatingParentPlaceholder + " IS NULL"
-
-// heldByInbox is the Inbox half — the scope the view itself uses. #230 had
-// assumed the Inbox logged a closed to-do at once. Measured on 3 Oct 2026, the
-// app's Inbox held a to-do completed out of it that day, struck through, and
-// its Logbook did not. A closed todayDue row is Today's, as it was while open,
-// so notTodayDue keeps the two halves apart.
-const heldByInbox = inboxBucket + " AND " + notTodayDue + " AND t.type = 0 AND " + closedTodayUnlogged
-
-// heldByAnytime is the Anytime half — the bucket test the view itself uses.
-//
-// It is wider than the view's scope since issue #346: the view leaves out a
-// to-do of a project in Someday or scheduled for later (parentNotDeferred),
-// and this test still holds that to-do back from the Logbook once it closes.
-// That is the app's answer, measured on 3 Oct 2026: such a to-do closed that
-// day was in neither the app's Anytime nor its Logbook, only on its project's
-// page, and the app's Logbook held none of the 23 rows closed that day. The
-// CLI's project listing is that page — `--project <uuid> --include-completed`
-// lists it (issue #295) — so the row is not stranded.
-const heldByAnytime = anytimeScope + " AND t.type = 0 AND " + closedTodayUnlogged
-
-// heldByUpcoming is the Upcoming half — the scope test the view itself uses.
-const heldByUpcoming = upcomingScope + " AND " + closedTodayUnlogged
-
-// heldByToday is the Today half.
-//
-// It used to carry a trashed-parent clause of its own, back when trash and
-// logbook were exempt from untrashedParent and the Logbook had to keep a
-// to-do under a trashed project. Issue #229 made untrashedParent
-// unconditional, so the Logbook — the only caller — already sees none of
-// those rows and the clause could never change the answer.
-//
-// COALESCE at the call site makes the negation null-safe. start and
-// startBucket are nullable columns, and a NULL there would leave the AND chain
-// NULL, which "NOT" leaves NULL too — dropping the row out of the Logbook by
-// accident.
-const heldByToday = todayScope + " AND " + closedTodayUnlogged
 
 // parentClosed is true for a row whose parent project has been completed or
 // cancelled. p is resolved through COALESCE(t.project, h.project), so a to-do
@@ -351,25 +296,31 @@ const heldByToday = todayScope + " AND " + closedTodayUnlogged
 const parentClosed = "COALESCE(p.status, 0) IN (2, 3)"
 
 // parentNotClosed is the fold issue #229 measured: a closed project is one row
-// and its to-dos are not listed beside it, because the app folds them into the
-// project's row. The Logbook applies it, and so must the two views that can
-// show a closed row, or the same to-do is folded in one place and listed in
-// another (issue #249). It keeps an unparented row in the view.
-//
-// Those two views apply it only while no --project names the project: naming
-// a closed project is asking for its contents, so the fold comes off there.
-// See openOrJustClosed (issue #253).
+// in the Logbook and its to-dos are not listed beside it, because the app
+// folds them into the project's row. It keeps an unparented row in the view.
+// The --include-completed views fold only once the project is logged; see
+// parentCloseLogged.
 //
 // Trash is the deliberate exception rather than a third caller: it folds a
 // trashed parent's children only, for the reason its own entry in the view
 // table gives.
 const parentNotClosed = "NOT (" + parentClosed + ")"
 
+// parentCloseUnlogged is closedTodayUnlogged asked of the parent project.
+var parentCloseUnlogged = strings.ReplaceAll(closedTodayUnlogged, "t.stopDate", "p.stopDate")
+
+// parentNotClosedOrUnlogged is the fold the --include-completed views apply:
+// a to-do of a closed project stays in place, struck through, until the
+// project itself is logged, and only then folds into it (issue #249). Measured
+// on 4 Oct 2026, the app's Anytime, Today and Upcoming each kept the to-dos
+// of a project closed that day where they were.
+var parentNotClosedOrUnlogged = "(" + parentNotClosed + " OR (" + parentCloseUnlogged + "))"
+
 // openOrJustClosed is the status test for the views that --include-completed
 // applies to. By default only open rows; with the flag, also the rows the app
-// is still showing in place because they were closed today, not yet logged,
-// and not folded into a closed project's row. Shared so inbox, today, anytime
-// and upcoming cannot answer the question differently.
+// is still showing in place because they were closed and not yet logged, and
+// not folded into a logged project's row. Shared so inbox, today, anytime,
+// upcoming and someday cannot answer the question differently.
 //
 // The fold sits inside the closed branch rather than beside it, so it can only
 // ever remove a row --include-completed just added. An open to-do under a
@@ -381,14 +332,18 @@ func openOrJustClosed(o whereOpts) string {
 		return openRows
 	}
 	justClosed := closedRows + " AND " + closedTodayUnlogged
-	// The fold exists so a closed project is one row rather than a row plus
+	// The fold exists so a logged project is one row rather than a row plus
 	// its contents. Naming that project is asking for the contents, so the
 	// fold comes off — the same answer `things --project <uuid>` and
 	// `show --agent` already give (issue #253). With p pinned to the named
 	// project the clause is a constant, true for an open project and false
 	// for a closed one, so dropping it can only ever affect the closed case.
 	if !o.projectNamed {
-		justClosed += " AND " + parentNotClosed
+		if o.foldsUnlogged {
+			justClosed += " AND " + parentNotClosed
+		} else {
+			justClosed += " AND " + parentNotClosedOrUnlogged
+		}
 	}
 	return "(" + openRows + " OR (" + justClosed + "))"
 }
@@ -398,7 +353,7 @@ func openOrJustClosed(o whereOpts) string {
 // among them, so a change to one meant finding the rest by eye (issue #240).
 const (
 	// openRows is the default status test. Almost every view is the open set;
-	// inbox, today, anytime and upcoming widen past it under --include-completed, and only the
+	// inbox, today, anytime, upcoming and someday widen past it under --include-completed, and only the
 	// logbook and trash are built on something else.
 	openRows = "t.status = 0"
 	// closedRows is the Logbook's status test: completed and cancelled both,
@@ -461,9 +416,8 @@ const (
 	// Measured on 3 Oct 2026 with test to-dos (issue #346). Both kinds of
 	// project are start = 2. COALESCE keeps an unparented to-do.
 	parentNotDeferred = "COALESCE(p.start, 1) != 2"
-	// notHeldInPlace is the Logbook's complement of what today, anytime and
-	// upcoming still show. COALESCE makes the negation null-safe — see
-	// heldInPlace. The Logbook's other extra is parentNotClosed, which it shares with the
+	// notHeldInPlace is the Logbook's complement of what Things has not yet
+	// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosed, which it shares with the
 	// --include-completed views since #252, so it is defined with its pair.
 	notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
 	// notTodayDue is the Inbox's half of todayDue: an undated Inbox to-do
@@ -525,12 +479,9 @@ type viewSpec struct {
 
 	// supportsIncludeCompleted marks the views --include-completed applies to:
 	// the lists the app keeps a just-closed item visible in until the day
-	// rolls over. inbox, today, anytime and upcoming are all such lists
-	// (issues #106, #238, #293).
-	// someday would be too if it behaved the same way, but there was no item
-	// closed out of Someday in the data on 10 Sep 2026 to measure the app's
-	// answer against, and its list matched the CLI exactly, so it is left out
-	// rather than guessed at.
+	// rolls over. inbox, today, anytime, upcoming and someday are all such
+	// lists (issues #106, #238, #293). Measured on 4 Oct 2026, the app's
+	// Someday kept a to-do and a project closed out of it, struck through.
 	supportsIncludeCompleted bool
 
 	// supportsDateFilter marks the views --on/--from/--to make sense in.
@@ -626,12 +577,19 @@ type whereOpts struct {
 	// areaNamed is set when --area names an area, which lets the flag reach
 	// the view that completesWithArea.
 	areaNamed bool
+
+	// foldsUnlogged keeps the fold for a project closed and not yet logged.
+	// An area's page does that: measured on 3 and 4 Oct 2026, it held a
+	// project closed that day as one row, and none of its to-dos, which the
+	// lists themselves went on showing in place.
+	foldsUnlogged bool
 }
 
 // where composes the view's WHERE clause.
 func (s viewSpec) where(o whereOpts) string {
 	status := s.status
 	if o.includeCompleted && (s.supportsIncludeCompleted || (o.areaNamed && s.completesWithArea)) {
+		o.foldsUnlogged = !s.supportsIncludeCompleted
 		status = openOrJustClosed(o)
 	}
 	parts := make([]string, 0, 4+len(s.extra))
@@ -734,9 +692,10 @@ var views = map[string]viewSpec{
 	// project, not left looking unparented.
 	ViewSomeday: {
 		scope: somedayDeferred, status: openRows, trashed: untrashedRows,
-		extra:                []string{unparented},
-		includesProjects:     true,
-		rejectsProjectFilter: true,
+		extra:                    []string{unparented},
+		includesProjects:         true,
+		rejectsProjectFilter:     true,
+		supportsIncludeCompleted: true,
 		// Someday is arranged like today and anytime. Its filter keeps only
 		// rows with no parent project, so the two project keys are constant
 		// across the listing and it reduces to unfiled items, then areas, then
@@ -758,18 +717,14 @@ var views = map[string]viewSpec{
 	// beside the completed ones, so the view carries status 2 as well as 3
 	// (issue #210). Callers tell the two apart by `status`, which reads
 	// "cancelled" or "completed" in JSON and prints [~] or [x] in plain output.
-	// Over the rows these views can carry, Logbook is the exact complement of
-	// what inbox, today, anytime and upcoming keep under --include-completed, so such
-	// a closed item is in the Logbook or in one of those lists and never in
-	// both: Things moves an item out of its list and into the Logbook at the
-	// same moment (issues #230, #238, #293). The complement is taken over heldInPlace,
-	// not over the day alone — a closed item no list held is logged straight
-	// away, whatever day it closed on. The three lists overlap each other,
-	// though: a to-do scheduled for today sits in the Anytime bucket too, and
-	// an undated one due later is in Anytime and Upcoming both, so a sweep
-	// across them dedupes by uuid. parentNotClosed narrows what "these
-	// views can carry" means: a closed to-do inside a closed or trashed
-	// project is in neither list, and is reached by naming the project.
+	// The Logbook is the complement of what Things has not yet logged
+	// (heldInPlace), so a closed item is in the Logbook or still in place,
+	// never both: Things moves an item out of its list and into the Logbook
+	// at the same moment (issues #230, #238, #293). An item still in place is
+	// listed under --include-completed by its view, its project or its area,
+	// and a closed Anytime project with no area by `things projects
+	// --completed`. Those listings overlap each other, so a sweep across them
+	// dedupes by uuid.
 	//
 	// A closed project is one row, not a row plus its contents: the app folds
 	// the to-dos of a closed project into the project's own Logbook row and
