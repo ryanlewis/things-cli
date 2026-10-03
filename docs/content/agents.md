@@ -221,9 +221,10 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   is in Upcoming, and only an undated one is in Someday. An undated
   `"anytime"` task with a deadline after today is in Upcoming too, under
   the deadline's day, as well as in Anytime, so a sweep across `upcoming`
-  and `anytime` merges on `uuid`. An undated `"inbox"` or `"anytime"` task
-  whose deadline is today or past is in Today, as well as in its own list,
-  unless it was taken out of Today for that deadline. In v0.7.0 and earlier this field was the
+  and `anytime` merges on `uuid`. An undated `"anytime"` task whose
+  deadline is today or past is in Today as well as in Anytime, and an
+  undated `"inbox"` one is in Today instead of the Inbox, unless it was
+  taken out of Today for that deadline. In v0.7.0 and earlier this field was the
   integer `0`, `1` or `2`, so a filter matching on `.start==2` has to
   become `.start=="someday"`. `startBucket` beside it
   is still an integer — `1` is the app's This Evening section, `0` is

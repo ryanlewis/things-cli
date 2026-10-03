@@ -393,6 +393,35 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 	}
 }
 
+// An overdue Inbox to-do taken out of Today for its deadline is back in the
+// Inbox (issue #345), and the Inbox keeps nothing once it is closed, so closing
+// it today logs it at once rather than leaving it under Today.
+func TestClosedSuppressedInboxToDoIsLogged(t *testing.T) {
+	d := newTestDB(t)
+	earlier := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -2)))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, deadline, deadlineSuppressionDate, stopDate, "index")
+		VALUES ('t-closed', 'Closed', 0, 3, 0, 0, 0, ?, ?, ?, 1)`,
+		earlier, earlier, model.TimeToUnix(time.Now()))
+
+	logged, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logged) != 1 {
+		t.Errorf("logbook = %v, want the row", uuidsOf(logged))
+	}
+	for _, view := range []string{"today", "anytime", "upcoming"} {
+		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("%s --include-completed = %v, want empty", view, uuidsOf(got))
+		}
+	}
+}
+
 // Trashing a project leaves its children at trashed = 0, and every view but
 // trash and logbook drops them, so the Logbook is the only list that can hold
 // a to-do closed today under a trashed project (issue #230).
@@ -2157,6 +2186,44 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 	}
 	if !sameSet(uuidsOf(got), want) {
 		t.Errorf("today --from yesterday: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// An undated Inbox to-do whose deadline has come leaves the Inbox for Today,
+// so the two lists never both hold it. Taking it out of Today for that
+// deadline puts it back in the Inbox. Measured against the app on 3 Oct 2026
+// (issue #345).
+func TestInboxLeavesOutToDosTodayHolds(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
+
+	fx.Todo("inbox-plain", "Inbox plain", 1, inbox())
+	fx.Todo("inbox-due-today", "Inbox due today", 2, inbox(), deadline(today))
+	fx.Todo("inbox-overdue", "Inbox overdue", 3, inbox(), deadline(earlier))
+	fx.Todo("inbox-due-tomorrow", "Inbox due tomorrow", 4, inbox(), deadline(tomorrow))
+	fx.Todo("inbox-suppressed", "Inbox suppressed", 5, inbox(), deadline(earlier), suppressed(earlier))
+
+	got, err := d.ListTasks("inbox", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"inbox-plain", "inbox-due-tomorrow", "inbox-suppressed"}
+	if !sameSet(uuidsOf(got), want) {
+		t.Errorf("inbox: got %v, want %v", uuidsOf(got), want)
+	}
+
+	inToday, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range uuidsOf(inToday) {
+		if slices.Contains(uuidsOf(got), u) {
+			t.Errorf("%s is in both inbox and today", u)
+		}
 	}
 }
 
