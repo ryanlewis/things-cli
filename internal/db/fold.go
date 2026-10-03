@@ -11,14 +11,40 @@ import (
 
 // FoldCase returns s in a form where two names that differ only by case are
 // equal, for every script rather than ASCII alone: Things matches "ärger" to
-// "Ärger", and SQLite's LIKE and NOCASE do not. Two strings fold to the same
-// value exactly when strings.EqualFold says they are equal, so final sigma
-// folds with "σ" and "Σ", while the Turkish "ı" and "İ" stay apart from "i" —
-// ToLower(ToUpper(s)) would have sent both to "i" and let a lookup resolve to
-// a title the user did not name. Every name and title comparison goes through
-// this, in Go directly and in SQL through fold(), so the two agree.
+// "Ärger", and SQLite's LIKE and NOCASE do not. The folding is full, as in
+// Things, so "Straße" equals "STRASSE" and "ﬁx" equals "FIX"; beyond those
+// multi-rune folds, two strings fold to the same value exactly when
+// strings.EqualFold says they are equal. So final sigma folds with "σ" and
+// "Σ", while the Turkish "ı" and "İ" stay apart from "i" — ToLower(ToUpper(s))
+// would have sent both to "i" and let a lookup resolve to a title the user did
+// not name. Every name and title comparison goes through this, in Go directly
+// and in SQL through fold(), so the two agree.
 func FoldCase(s string) string {
-	return strings.Map(foldRune, s)
+	if !strings.ContainsFunc(s, hasFullFold) {
+		return strings.Map(foldRune, s)
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if f, ok := fullFolds[r]; ok {
+			for _, fr := range f {
+				b.WriteRune(foldRune(fr))
+			}
+			continue
+		}
+		b.WriteRune(foldRune(r))
+	}
+	return b.String()
+}
+
+// hasFullFold reports whether r folds to more than one rune. The first such
+// rune is "ß", so ASCII never reaches the map.
+func hasFullFold(r rune) bool {
+	if r < 0xDF {
+		return false
+	}
+	_, ok := fullFolds[r]
+	return ok
 }
 
 // foldRune maps r to one member of its case-fold orbit (the runes
