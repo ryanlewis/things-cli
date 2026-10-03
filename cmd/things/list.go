@@ -28,7 +28,7 @@ func (c *ListCmd) Run(d *Deps) error {
 		return err
 	}
 
-	view := "today"
+	view := db.ViewToday
 	explicitView := false
 	project := c.Project
 	args := c.Args
@@ -48,7 +48,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	// is today within X, and says so in the output.
 	filtered := project != "" || c.Area != "" || c.Tag != ""
 	if filtered && !explicitView {
-		view = "project"
+		view = db.ViewProject
 	}
 
 	// --include-completed only changes the views the app keeps a just-closed
@@ -87,7 +87,7 @@ func (c *ListCmd) Run(d *Deps) error {
 	// project/area/tag — label it so the group header can't be read as the
 	// full set. The "project" view is that full set, so it needs no label.
 	viewLabel := ""
-	if filtered && view != "project" {
+	if filtered && view != db.ViewProject {
 		viewLabel = view
 	}
 	if err := output.PrintTaskList(d.Stdout, tasks, d.JSON, viewLabel); err != nil {
@@ -107,7 +107,7 @@ func (c *ListCmd) commandLine(d *Deps, view, project string) string {
 	parts := append([]string{"things"}, globalFlags(d)...)
 	// "project" is not a view name a user can type; it is what a bare filter
 	// resolves to, and the filter flags below say the same thing.
-	if view != "project" {
+	if view != db.ViewProject {
 		parts = append(parts, view)
 	}
 	for _, f := range []struct{ flag, value string }{

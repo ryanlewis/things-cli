@@ -54,7 +54,7 @@ func printAgentHint(d *Deps, listed int) error {
 func showAgentBrief(d *Deps, database *db.DB, task *model.Task, items []model.ChecklistItem) error {
 	brief := output.AgentBrief{Task: task, Checklist: items}
 	if task.Type == model.TypeProject {
-		todos, err := database.ListTasks("project", db.TaskFilter{Project: task.UUID})
+		todos, err := database.ListTasks(db.ViewProject, db.TaskFilter{Project: task.UUID})
 		if err != nil {
 			return err
 		}
