@@ -434,6 +434,13 @@ instead of assuming:
 - **Tags must already exist.** Things silently drops tags it does not know.
   The CLI warns before writing; `--create-tags` creates the missing ones
   first and `--strict-tags` refuses to write instead.
+- **Lists, headings and areas must match.** Things files or moves an item
+  only when `--list`, `--heading` or `--area` matches an open project, area
+  or heading, ignoring case but not surrounding space. Otherwise it drops
+  that part without a word: a new to-do goes to the Inbox, an edited item
+  stays where it is, and an unknown heading is left out. The CLI warns on
+  stderr and still writes, so a move-only edit can exit 0 with the item
+  unmoved: read the warning.
 - **Repeating items refuse `when`, `deadline`, and status changes.** Things
   drops these silently, so the CLI refuses them before any write goes out.
   A task inside a repeating project template counts as repeating too.
