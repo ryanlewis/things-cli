@@ -448,8 +448,8 @@ default; the global `--verify-timeout DURATION` flag changes it for one
 run (`--verify-timeout 2500ms`, `--verify-timeout 10s`), and
 `verify_timeout` in the config file changes it for every run. It must be
 above zero: `--no-verify` is how to skip the wait. The same wait applies
-to `add`, `project add`, `complete`, `cancel`, `tag add` and the status
-changes in an `import`.
+to `add`, `project add`, `complete`, `cancel`, `tag add` and the new
+items and status changes in an `import`.
 An edit that sets every field to the value
 it already has is detected before the wait when every flag is `--title`,
 `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a
@@ -547,6 +547,45 @@ is sent, and the error names every offending item. The status fields are
 two-way, so `false` is refused as readily as `true`. Update items that set
 `completed` or `canceled` are read back from the database afterwards, and any
 that Things dropped are reported one per line with a non-zero exit.
+
+Every to-do and project the payload creates is read back too, the way
+`add` finds its item: a new item of that kind with that title (surrounding
+whitespace trimmed) that was not there before the import. That includes
+to-dos inside a project the payload creates. A to-do inside the `items` of
+a project the payload updates is checked too: Things drops those without
+saying so, and the read-back reports it as `not-found`. Headings and
+checklist items are not read back, and nor is an item with no title. `import` prints one line per created item:
+
+```text
+Created and confirmed: [0] "Buy oat milk" (8QK2xgV1m3C9p7RfT4hLwe)
+Created and confirmed: [1] "Launch" (Hs5TqPz2aN8wYc1Lk3RmVd)
+Created and confirmed: [1].attributes.items[0] "Book venue" (Ft7…)
+```
+
+Under `--json` it prints an array, one object per created item:
+`{"path", "kind": "task"|"project", "title", "uuid", "confirmed": true}`.
+When several created items share a kind and title, they are confirmed once
+that many new items appear, and paired with the new items in the order
+Things saved them.
+
+An item that is not confirmed has `"confirmed": false` and a `reason`, as
+an unconfirmed `add` does, and no `uuid`:
+
+- `no-verify`: `--no-verify` (or `no_verify = true`) skipped the read-back.
+- `unreadable`: the database could not be read, so a warning is printed.
+- `ambiguous`: more new items with that title appeared than the payload
+  created. `candidates` lists their uuids.
+- `not-found`: no new item with that title appeared within the read-back
+  wait, or fewer than the payload created. `candidates` lists the ones that
+  did appear.
+
+The first three exit 0 with the list printed. Any `not-found` item makes
+the import exit non-zero with `import partially applied`, the same error a
+dropped status change gives. The error lists every unconfirmed item and
+leaves out the confirmed ones, and nothing is printed on stdout. Search for
+each listed title with `things search` before running the import again with
+only those items. Otherwise a retry can create duplicates. The created
+items and the status changes share one read-back wait.
 
 ## Opening in the app
 

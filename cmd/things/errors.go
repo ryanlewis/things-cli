@@ -18,7 +18,8 @@ import (
 // so a consumer reading stdout sees a JSON failure rather than English prose,
 // and can branch on the "error" token (issue #152). On success the read
 // commands print their result; add, project add, edit and project edit print
-// the item, and tag add what it created.
+// the item, tag add what it created, and import a verdict per item it
+// created.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
 // "not a project", "stale list cache", or "error" for a failure with no
@@ -46,18 +47,23 @@ type jsonErrorPayload struct {
 // at once, so a caller needs to know which of them failed and why rather than
 // reading it back out of the message (issue #161).
 //
-// Two failures share the shape, and each fills the half that applies:
+// Three failures share the shape, and each fills the part that applies:
 // a refusal sets Blocked, naming the attributes Things will not accept on that
-// item; a read-back failure sets Wanted and Got, naming the status the payload
-// asked for and the one the item is still in. Got is empty when there was
-// nothing to observe — the row could not be read, or no longer exists.
+// item; a status read-back failure sets Wanted and Got, naming the status the
+// payload asked for and the one the item is still in. Got is empty when there
+// was nothing to observe — the row could not be read, or no longer exists. A
+// created item that could not be confirmed sets Confirmed (always false),
+// Reason and Candidates, as an unconfirmed add does.
 type jsonErrorItem struct {
-	Path    string   `json:"path"`
-	ID      string   `json:"id,omitempty"`
-	Title   string   `json:"title,omitempty"`
-	Blocked []string `json:"blocked,omitempty"`
-	Wanted  string   `json:"wanted,omitempty"`
-	Got     string   `json:"got,omitempty"`
+	Path       string   `json:"path"`
+	ID         string   `json:"id,omitempty"`
+	Title      string   `json:"title,omitempty"`
+	Blocked    []string `json:"blocked,omitempty"`
+	Wanted     string   `json:"wanted,omitempty"`
+	Got        string   `json:"got,omitempty"`
+	Confirmed  *bool    `json:"confirmed,omitempty"`
+	Reason     string   `json:"reason,omitempty"`
+	Candidates []string `json:"candidates,omitempty"`
 }
 
 // jsonErrorMatch is one candidate of an ambiguous reference — enough for a

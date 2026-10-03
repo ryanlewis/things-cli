@@ -3,11 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/output"
 )
 
 // unresolvableItemTypes are the payload item types GetTaskByUUID will never
@@ -47,38 +50,97 @@ func (u importUpdate) resolvable() bool {
 type importPlan struct {
 	updates []importUpdate
 	tasks   map[string]*model.Task // by id; a nil value means "not in the database"
+	creates []importCreate
 }
 
 // importUpdates collects every `operation: update` item in a Things JSON
-// payload. Items nest — a project carries `items`, a to-do carries
-// `checklist-items` — so this walks the whole decoded tree the way
-// walkImportTags does. The payload has already been validated as JSON by the
-// caller; anything unparseable yields no updates and the import proceeds as
-// before, leaving Things to reject it.
+// payload, at any depth. The payload has already been validated as JSON by
+// the caller; anything unparseable yields no updates and the import proceeds
+// as before, leaving Things to reject it.
 func importUpdates(data []byte) []importUpdate {
-	var payload any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
 	var updates []importUpdate
-	walkImportUpdates(payload, "", &updates)
+	walkImportPayload(data, func(path string, v map[string]any) {
+		if op, _ := v["operation"].(string); op != "update" {
+			return
+		}
+		id, _ := v["id"].(string)
+		itemType, _ := v["type"].(string)
+		attrs, _ := v["attributes"].(map[string]any)
+		updates = append(updates, importUpdate{
+			path:     path,
+			itemType: strings.TrimSpace(itemType),
+			id:       strings.TrimSpace(id),
+			attrs:    attrs,
+		})
+	})
 	return updates
 }
 
-func walkImportUpdates(node any, path string, updates *[]importUpdate) {
+// importCreate is one to-do or project an import payload creates. Headings
+// and checklist items are created too, but are not read back: neither is
+// reachable through the task lookups (see unresolvableItemTypes), and a
+// checklist item is saved with its to-do.
+type importCreate struct {
+	path  string
+	typ   model.TaskType
+	title string // trimmed
+}
+
+func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
+
+// kind is the CLI's word for the item: "task" or "project".
+func (c importCreate) kind() string {
+	if c.typ == model.TypeProject {
+		return "project"
+	}
+	return "task"
+}
+
+// importCreates collects every to-do and project in a Things JSON payload
+// that is not an `operation: update`, at any depth: a project's `items`, and
+// the `items` of a project the payload updates, create to-dos too. An item
+// with no title is left out, since there is nothing to find it by.
+func importCreates(data []byte) []importCreate {
+	var creates []importCreate
+	walkImportPayload(data, func(path string, v map[string]any) {
+		if op, _ := v["operation"].(string); op != "" && op != "create" {
+			return
+		}
+		var typ model.TaskType
+		switch itemType, _ := v["type"].(string); strings.TrimSpace(itemType) {
+		case "to-do":
+			typ = model.TypeTask
+		case "project":
+			typ = model.TypeProject
+		default:
+			return
+		}
+		attrs, _ := v["attributes"].(map[string]any)
+		title, _ := attrs["title"].(string)
+		if title = strings.TrimSpace(title); title == "" {
+			return
+		}
+		creates = append(creates, importCreate{path: path, typ: typ, title: title})
+	})
+	return creates
+}
+
+// walkImportPayload calls visit for every object in a Things JSON payload
+// with the path that locates it. Items nest — a project carries `items`, a
+// to-do carries `checklist-items` — so this walks the whole decoded tree the
+// way walkImportTags does.
+func walkImportPayload(data []byte, visit func(path string, item map[string]any)) {
+	var payload any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return
+	}
+	walkImportNode(payload, "", visit)
+}
+
+func walkImportNode(node any, path string, visit func(path string, item map[string]any)) {
 	switch v := node.(type) {
 	case map[string]any:
-		if op, _ := v["operation"].(string); op == "update" {
-			id, _ := v["id"].(string)
-			itemType, _ := v["type"].(string)
-			attrs, _ := v["attributes"].(map[string]any)
-			*updates = append(*updates, importUpdate{
-				path:     path,
-				itemType: strings.TrimSpace(itemType),
-				id:       strings.TrimSpace(id),
-				attrs:    attrs,
-			})
-		}
+		visit(path, v)
 		// Walk keys in a fixed order: Go randomises map iteration, and the
 		// order items are discovered in decides the order they are reported.
 		keys := make([]string, 0, len(v))
@@ -87,11 +149,11 @@ func walkImportUpdates(node any, path string, updates *[]importUpdate) {
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			walkImportUpdates(v[key], path+"."+key, updates)
+			walkImportNode(v[key], path+"."+key, visit)
 		}
 	case []any:
 		for i, child := range v {
-			walkImportUpdates(child, fmt.Sprintf("%s[%d]", path, i), updates)
+			walkImportNode(child, fmt.Sprintf("%s[%d]", path, i), visit)
 		}
 	}
 }
@@ -209,19 +271,54 @@ type importVerifyItem struct {
 }
 
 // importVerifyError is a partially applied import: the payload reached Things,
-// and some of the status changes it asked for did not take.
+// and some of the status changes it asked for did not take, or some of the
+// items it created could not be confirmed.
 type importVerifyError struct {
 	items []importVerifyItem
 	total int // status changes the payload requested, landed or not
+
+	created      []importCreated // created items not confirmed
+	createdTotal int             // items the payload created, confirmed or not
+	search       string          // the `things search` command, with the flags this run needs
 }
 
 func (e *importVerifyError) Error() string {
-	lines := make([]string, len(e.items))
-	for i, it := range e.items {
-		lines[i] = fmt.Sprintf("  %s: %v", it.Path, it.err)
+	var parts []string
+	if len(e.items) > 0 {
+		lines := make([]string, len(e.items))
+		for i, it := range e.items {
+			lines[i] = fmt.Sprintf("  %s: %v", it.Path, it.err)
+		}
+		parts = append(parts, fmt.Sprintf("%d of %d requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n%s",
+			len(e.items), e.total, strings.Join(lines, "\n")))
 	}
-	return fmt.Sprintf("%d of %d requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n%s",
-		len(e.items), e.total, strings.Join(lines, "\n"))
+	if len(e.created) > 0 {
+		lines := make([]string, len(e.created))
+		for i, it := range e.created {
+			lines[i] = fmt.Sprintf("  %s: %s", it.Path, it.detail)
+		}
+		parts = append(parts, fmt.Sprintf("%d of %d created items were not confirmed. The rest of the import was still applied. Things may have dropped them (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
+			len(e.created), e.createdTotal, e.search, strings.Join(lines, "\n")))
+	}
+	return strings.Join(parts, "\n")
+}
+
+// importCreated is the read-back verdict on one item an import created, and
+// one entry of the array `import --json` prints. A confirmed item carries the
+// uuid it was found under; an unconfirmed one carries the reason, as an
+// unconfirmed add does: "no-verify", "unreadable", "ambiguous" (candidates
+// lists the new items with its title), or "not-found" (candidates lists the
+// ones that did appear when fewer than the payload asked for did).
+type importCreated struct {
+	Path       string   `json:"path"`
+	Kind       string   `json:"kind"`
+	Title      string   `json:"title"`
+	UUID       string   `json:"uuid,omitempty"`
+	Confirmed  bool     `json:"confirmed"`
+	Reason     string   `json:"reason,omitempty"`
+	Candidates []string `json:"candidates,omitempty"`
+
+	detail string // what went wrong, for the plain-text error
 }
 
 // prepareImport is the pre-write pass over an import payload. It refuses the
@@ -234,7 +331,7 @@ func (e *importVerifyError) Error() string {
 // what was skipped. Refusing before anything is sent leaves the user with a
 // payload they can fix and re-run.
 func prepareImport(d *Deps, database *db.DB, data []byte) (*importPlan, error) {
-	plan := &importPlan{updates: importUpdates(data), tasks: map[string]*model.Task{}}
+	plan := &importPlan{updates: importUpdates(data), tasks: map[string]*model.Task{}, creates: importCreates(data)}
 
 	// One query for the whole payload rather than one per item (issue #167).
 	var ids []string
@@ -290,19 +387,164 @@ func prepareImport(d *Deps, database *db.DB, data []byte) (*importPlan, error) {
 	return plan, nil
 }
 
+// applyImport sends write, the import, then reads it back: the items it
+// created (readBackCreates) and the status changes it asked for
+// (verifyImportStatuses). The whole import shares one timeout budget. Every
+// created item is reported on stdout, confirmed or not; a created item that
+// never appeared, or a status change that did not apply, makes the import
+// fail with all of them named. Under --no-verify nothing is read back and
+// every created item is reported unconfirmed.
+func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error) error {
+	if d.NoVerify {
+		if err := write(); err != nil {
+			return err
+		}
+		created := make([]importCreated, len(plan.creates))
+		for i, c := range plan.creates {
+			created[i] = importCreated{Path: c.path, Kind: c.kind(), Title: c.title, Reason: "no-verify"}
+		}
+		return printImportCreated(d, created)
+	}
+
+	var snap createdSnapshot
+	var snapErr error
+	if len(plan.creates) > 0 {
+		var types []model.TaskType
+		for _, c := range plan.creates {
+			if !slices.Contains(types, c.typ) {
+				types = append(types, c.typ)
+			}
+		}
+		snap, snapErr = snapshotCreated(database, types)
+	}
+	if err := write(); err != nil {
+		return err
+	}
+	budget := d.readBackTimeout()
+	deadline := time.Now().Add(budget)
+
+	created := readBackCreates(d, database, plan.creates, snap, snapErr, budget)
+	failures, total := verifyImportStatuses(database, plan, max(time.Until(deadline), 0), budget)
+
+	var unconfirmed []importCreated
+	for _, c := range created {
+		if !c.Confirmed {
+			unconfirmed = append(unconfirmed, c)
+		}
+	}
+	// The failures go in the error rather than straight to stderr: under
+	// --json the error is rendered as one object on stdout (issue #152) and
+	// anything written to stderr never reaches the reader, so a summary
+	// pointing at a list printed elsewhere would name detail the consumer
+	// cannot see. Unconfirmed created items go in with them, since the
+	// success list is not printed beside an error.
+	if len(failures) > 0 || slices.ContainsFunc(unconfirmed, func(c importCreated) bool { return c.Reason == "not-found" }) {
+		return &importVerifyError{
+			items: failures, total: total,
+			created: unconfirmed, createdTotal: len(created),
+			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
+		}
+	}
+	return printImportCreated(d, created)
+}
+
+// readBackCreates finds each item the import created, the way applyAdd finds
+// the one an add created (see findCreated), and returns a verdict per item in
+// payload order. Items with the same type and title are counted together:
+// when as many new items appear as the payload asked for, they are confirmed
+// and paired with the payload's items in the order Things saved them. More is
+// ambiguous and fewer is not found, both naming the new items that did
+// appear. A snapshot or read-back that could not read the database at all
+// leaves every item unconfirmed as unreadable, with a warning.
+func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, budget time.Duration) []importCreated {
+	if len(creates) == 0 {
+		return nil
+	}
+	want := map[createdKey]int{}
+	for _, c := range creates {
+		want[c.key()]++
+	}
+	var found map[createdKey][]model.Task
+	err := snapErr
+	if err == nil {
+		var readOK bool
+		found, readOK, err = findCreated(database, snap, want, budget)
+		if readOK {
+			err = nil
+		}
+	}
+
+	out := make([]importCreated, len(creates))
+	paired := map[createdKey]int{}
+	for i, c := range creates {
+		out[i] = importCreated{Path: c.path, Kind: c.kind(), Title: c.title}
+		key := c.key()
+		matches := found[key]
+		uuids := make([]string, len(matches))
+		for n, t := range matches {
+			uuids[n] = t.UUID
+		}
+		switch n := want[key]; {
+		case err != nil:
+			out[i].Reason = "unreadable"
+		case len(matches) == n:
+			out[i].Confirmed = true
+			out[i].UUID = uuids[paired[key]]
+			paired[key]++
+		case len(matches) > n:
+			out[i].Reason, out[i].Candidates = "ambiguous", uuids
+			out[i].detail = fmt.Sprintf("more than one new %s titled %q appeared (%s)", c.kind(), c.title, strings.Join(uuids, ", "))
+		case len(matches) == 0:
+			out[i].Reason = "not-found"
+			out[i].detail = fmt.Sprintf("no new %s titled %q appeared within %s", c.kind(), c.title, budget)
+		default:
+			out[i].Reason, out[i].Candidates = "not-found", uuids
+			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.kind(), c.title, budget, strings.Join(uuids, ", "))
+		}
+	}
+	if err != nil && !d.dbWarned {
+		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
+	}
+	return out
+}
+
+// printImportCreated reports each created item, a line per item or, under
+// --json, an array. An import that created nothing prints nothing.
+func printImportCreated(d *Deps, created []importCreated) error {
+	if len(created) == 0 {
+		return nil
+	}
+	if d.JSON {
+		return output.PrintJSON(d.Stdout, created)
+	}
+	for _, c := range created {
+		var err error
+		switch {
+		case c.Confirmed:
+			_, err = fmt.Fprintf(d.Stdout, "Created and confirmed: %s %q (%s)\n", c.Path, c.Title, c.UUID)
+		case len(c.Candidates) > 0:
+			_, err = fmt.Fprintf(d.Stdout, "%s: %s %q (%s)\n", unconfirmedMsg[c.Reason], c.Path, c.Title, strings.Join(c.Candidates, ", "))
+		default:
+			_, err = fmt.Fprintf(d.Stdout, "%s: %s %q\n", unconfirmedMsg[c.Reason], c.Path, c.Title)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // verifyImportStatuses re-reads every item the payload asked to complete or
-// cancel and reports the ones whose status never changed. Things gives the
-// import no per-item result, so this is the only way a silently dropped status
-// change in a batch becomes visible.
+// cancel and returns the ones whose status never changed, with the number of
+// status changes requested. Things gives the import no per-item result, so
+// this is the only way a silently dropped status change in a batch becomes
+// visible.
 //
 // Every item is checked before anything is reported: a payload's later items
 // are just as interesting as its first, so the read-back does not stop at the
-// first failure. The whole batch shares one timeout budget.
-func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
-	if d.NoVerify {
-		return nil
-	}
-
+// first failure. The batch polls for up to wait, what is left of the
+// import's budget, and reports budget in its messages.
+func verifyImportStatuses(database *db.DB, plan *importPlan, wait, budget time.Duration) ([]importVerifyItem, int) {
 	var wants []statusWant
 	var items []importVerifyItem
 	for _, u := range plan.updates {
@@ -323,16 +565,11 @@ func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
 		items = append(items, importVerifyItem{Path: u.path, ID: u.id, Title: task.Title, Wanted: want})
 	}
 	if len(wants) == 0 {
-		return nil
+		return nil, 0
 	}
 
-	// The failures go in the error rather than straight to stderr: under
-	// --json the error is rendered as one object on stdout (issue #152) and
-	// anything written to stderr never reaches the reader, so a summary
-	// pointing at a list printed elsewhere would name detail the consumer
-	// cannot see.
 	var failures []importVerifyItem
-	for i, res := range verifyStatuses(database, wants, d.readBackTimeout()) {
+	for i, res := range verifyStatusesWithin(database, wants, wait, budget) {
 		if res.err == nil {
 			continue
 		}
@@ -340,10 +577,7 @@ func verifyImportStatuses(d *Deps, database *db.DB, plan *importPlan) error {
 		failed.Got, failed.Observed, failed.err = res.got, res.observed, res.err
 		failures = append(failures, failed)
 	}
-	if len(failures) == 0 {
-		return nil
-	}
-	return &importVerifyError{items: failures, total: len(wants)}
+	return failures, len(wants)
 }
 
 // jsonItems renders the refused items for the --json error payload. Blocked is
@@ -362,9 +596,10 @@ func (e *importRefusalError) jsonItems() []jsonErrorItem {
 	return out
 }
 
-// jsonItems renders the unapplied status changes for the --json error payload.
+// jsonItems renders the unapplied status changes, then the unconfirmed
+// created items, for the --json error payload.
 func (e *importVerifyError) jsonItems() []jsonErrorItem {
-	out := make([]jsonErrorItem, len(e.items))
+	out := make([]jsonErrorItem, len(e.items), len(e.items)+len(e.created))
 	for i, it := range e.items {
 		out[i] = jsonErrorItem{
 			Path:   it.Path,
@@ -375,6 +610,15 @@ func (e *importVerifyError) jsonItems() []jsonErrorItem {
 		if it.Observed {
 			out[i].Got = it.Got.String()
 		}
+	}
+	for _, it := range e.created {
+		out = append(out, jsonErrorItem{
+			Path:       it.Path,
+			Title:      it.Title,
+			Confirmed:  new(bool),
+			Reason:     it.Reason,
+			Candidates: append([]string(nil), it.Candidates...),
+		})
 	}
 	return out
 }
