@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -420,6 +421,10 @@ func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 		{"knownProject", []string{"--list", "tools"}, ""},
 		{"knownProjectFlag", []string{"--project", "Tools"}, ""},
 		{"knownArea", []string{"--list", "Personal"}, ""},
+		{"projectUUID", []string{"--project", "proj-1"}, ""},
+		{"areaUUID", []string{"--list", "area-1"}, ""},
+		{"headingInProjectUUID", []string{"--project", "proj-1", "--heading", "Setup"}, ""},
+		{"completedProjectUUID", []string{"--project", "proj-done"}, `no open project or area called "proj-done"`},
 		{"knownHeading", []string{"--list", "Tools", "--heading", "setup"}, ""},
 		{"unknownList", []string{"--list", "Nowhere"}, `no open project or area called "Nowhere"`},
 		{"unknownProjectFlag", []string{"--project", "Nowhere"}, `no open project or area called "Nowhere"`},
@@ -454,6 +459,44 @@ func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 			}
 			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
 				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
+			}
+		})
+	}
+}
+
+// Things matches --list and --project by title only, so a uuid filed the
+// to-do in the Inbox. A uuid of an open project or area now goes to Things as
+// list-id; a title still goes as list.
+func TestAddSendsUUIDAsListID(t *testing.T) {
+	cases := []struct {
+		name, flag, value, want string
+	}{
+		{"projectUUID", "--project", "proj-1", "list-id=proj-1"},
+		{"areaUUID", "--list", "area-1", "list-id=area-1"},
+		{"title", "--project", "Tools", "list=Tools"},
+		{"unknown", "--list", "Nowhere", "list=Nowhere"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Project("proj-1", "Tools", 5)
+			var url string
+			prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+				url = args[len(args)-1]
+				return exec.Command("true")
+			})
+			t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+			_, _, _ = runStreams(t, database, "--no-verify", "add", "Buy oat milk", tc.flag, tc.value)
+			params := url[strings.Index(url, "?")+1:]
+			if !slices.Contains(strings.Split(params, "&"), tc.want) {
+				t.Errorf("url = %q, want %s", url, tc.want)
+			}
+			if strings.HasPrefix(tc.want, "list-id=") && strings.Contains("&"+params, "&list=") {
+				t.Errorf("url = %q, want no list title beside list-id", url)
 			}
 		})
 	}

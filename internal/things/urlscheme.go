@@ -16,6 +16,7 @@ type AddParams struct {
 	Checklist string
 	Heading   string
 	List      string
+	ListID    string
 }
 
 type AddProjectParams struct {
@@ -306,6 +307,7 @@ func AddTask(params AddParams) error {
 	setNonEmpty(v, "tags", params.Tags)
 	setNonEmpty(v, "checklist-items", params.Checklist)
 	setNonEmpty(v, "list", params.List)
+	setNonEmpty(v, "list-id", params.ListID)
 	setNonEmpty(v, "heading", params.Heading)
 	return openThingsURL("add", v)
 }
