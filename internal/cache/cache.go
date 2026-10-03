@@ -30,8 +30,12 @@ type LastList struct {
 	// Command is the listing to re-run for fresh numbers, rendered as the
 	// user could type it (`things today --project "Work"`). Empty when the
 	// file does not record one.
-	Command string   `json:"command,omitempty"`
-	UUIDs   []string `json:"uuids"`
+	Command string `json:"command,omitempty"`
+	// DB is the resolved path of the database the listing read (issue
+	// #274). Empty when the file does not record one: it was written by a
+	// things-cli older than this field.
+	DB    string   `json:"db,omitempty"`
+	UUIDs []string `json:"uuids"`
 }
 
 // Stale reports whether the listing is too old for its row numbers to be
