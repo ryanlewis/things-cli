@@ -6,6 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/unicode/norm"
 	"modernc.org/sqlite"
 )
 
@@ -17,9 +18,21 @@ import (
 // strings.EqualFold says they are equal. So final sigma folds with "σ" and
 // "Σ", while the Turkish "ı" and "İ" stay apart from "i" — ToLower(ToUpper(s))
 // would have sent both to "i" and let a lookup resolve to a title the user did
-// not name. Every name and title comparison goes through this, in Go directly
-// and in SQL through fold(), so the two agree.
+// not name. Names that differ only in Unicode normalisation are equal too, as
+// in Things: "Café" with a precomposed "é" (NFC) equals "Café" typed as "e"
+// plus a combining accent (NFD). Compatibility forms such as fullwidth "Ｃ"
+// stay apart, as they do for tags in Things. Every name and title comparison
+// goes through this, in Go directly and in SQL through fold(), so the two
+// agree.
 func FoldCase(s string) string {
+	// Decomposing first is Unicode's canonical caseless match (D145): a
+	// precomposed letter folds the same as its parts. Composing the result
+	// keeps "e" from matching inside "é" in a substring search.
+	return norm.NFC.String(foldRunes(norm.NFD.String(s)))
+}
+
+// foldRunes folds every rune of s, the multi-rune folds included.
+func foldRunes(s string) string {
 	if !strings.ContainsFunc(s, hasFullFold) {
 		return strings.Map(foldRune, s)
 	}
@@ -49,15 +62,21 @@ func hasFullFold(r rune) bool {
 
 // foldRune maps r to one member of its case-fold orbit (the runes
 // unicode.SimpleFold cycles through, which is what EqualFold compares): the
-// smallest, lower-cased when it is ASCII so patterns stay readable. ASCII has
-// a fast path, since its orbits only reach outside ASCII for runes that fold
-// onto it ("K" Kelvin, "ſ"), and those land on the same letter below.
+// smallest, lower-cased when it is ASCII so patterns stay readable, and never
+// a combining mark. ASCII has a fast path, since its orbits only reach outside
+// ASCII for runes that fold onto it ("K" Kelvin, "ſ"), and those land on the
+// same letter below.
 func foldRune(r rune) rune {
 	if r >= utf8.RuneSelf {
 		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
 			if f < r {
 				r = f
 			}
+		}
+		// Iota's orbit holds the combining ypogegrammeni, which would compose
+		// onto the letter before it; pick the letter instead.
+		if r == '\u0345' {
+			r = 'ι'
 		}
 	}
 	if 'A' <= r && r <= 'Z' {

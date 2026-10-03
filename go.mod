@@ -12,6 +12,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/willabides/kongplete v0.4.0
 	golang.org/x/term v0.45.0
+	golang.org/x/text v0.40.0
 	modernc.org/sqlite v1.57.0
 )
 
