@@ -699,14 +699,17 @@ func TestListTasksDateFilters(t *testing.T) {
 
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('a', 'Work', 1, 0)`)
 
-	d1 := int64(model.ThingsDateFromTime(time.Date(2026, 5, 9, 0, 0, 0, 0, time.Local)))
-	d2 := int64(model.ThingsDateFromTime(time.Date(2026, 5, 10, 0, 0, 0, 0, time.Local)))
-	d3 := int64(model.ThingsDateFromTime(time.Date(2026, 5, 11, 0, 0, 0, 0, time.Local)))
+	// Upcoming holds only the days after today (issue #363), so the dates
+	// are days to come rather than fixed ones.
+	now := time.Now()
+	d1 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 9)))
+	d2 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 10)))
+	d3 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 11)))
 
 	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, startDate, area, "index") VALUES
-		('u-09', 'Sat', 0, 0, 0, 2, 0, ?, 'a', 1),
-		('u-10', 'Sun', 0, 0, 0, 2, 0, ?, 'a', 2),
-		('u-11', 'Mon', 0, 0, 0, 2, 0, ?, 'a', 3)`,
+		('u-09', 'Day 9', 0, 0, 0, 2, 0, ?, 'a', 1),
+		('u-10', 'Day 10', 0, 0, 0, 2, 0, ?, 'a', 2),
+		('u-11', 'Day 11', 0, 0, 0, 2, 0, ?, 'a', 3)`,
 		d1, d2, d3)
 
 	on09 := model.ThingsDate(d1)
@@ -720,7 +723,7 @@ func TestListTasksDateFilters(t *testing.T) {
 		{"on exact", TaskFilter{On: &on09}, []string{"u-09"}},
 		{"from inclusive", TaskFilter{From: &on10}, []string{"u-10", "u-11"}},
 		{"to inclusive", TaskFilter{To: &on10}, []string{"u-09", "u-10"}},
-		{"range weekend", TaskFilter{From: &on09, To: &on10}, []string{"u-09", "u-10"}},
+		{"range", TaskFilter{From: &on09, To: &on10}, []string{"u-09", "u-10"}},
 	}
 
 	for _, tc := range cases {
@@ -2629,6 +2632,89 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 	}
 	if !sameSet(uuidsOf(got), want) {
 		t.Errorf("today --from yesterday: got %v, want %v", uuidsOf(got), want)
+	}
+}
+
+// Just after midnight, a to-do scheduled for the new day can still be
+// start = 2 until Things runs its day-change maintenance. Measured on 4 Oct
+// 2026 at 00:31, such a to-do was in the app's Today and Anytime and not in
+// its Upcoming, while the CLI listed it in Upcoming only (issue #363). A
+// start = 2 row dated today or earlier is Today's, and Upcoming keeps the
+// ones dated after today, so each row is in exactly one of the two.
+func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	yesterday := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1)))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+
+	fx.Todo("stuck-today", "Scheduled today, not yet moved", 1, somedayOn(today))
+	fx.Todo("stuck-yesterday", "Scheduled yesterday, not yet moved", 2, somedayOn(yesterday))
+	fx.Project("stuck-project", "Project scheduled today, not yet moved", 3, somedayOn(today))
+	fx.Todo("sched-tomorrow", "Scheduled tomorrow", 4, somedayOn(tomorrow))
+	fx.Todo("someday", "Someday", 5, someday())
+	fx.Todo("anytime-today", "Anytime today", 6, anytimeOn(today))
+
+	cases := []struct {
+		view string
+		want []string
+	}{
+		{"today", []string{"stuck-today", "stuck-yesterday", "stuck-project", "anytime-today"}},
+		{"anytime", []string{"stuck-today", "stuck-yesterday", "anytime-today"}},
+		{"upcoming", []string{"sched-tomorrow"}},
+		{"someday", []string{"someday"}},
+	}
+	for _, c := range cases {
+		got, err := d.ListTasks(c.view, TaskFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sameSet(uuidsOf(got), c.want) {
+			t.Errorf("%s: got %v, want %v", c.view, uuidsOf(got), c.want)
+		}
+	}
+
+	// The date filters follow the view: today --on today finds the row,
+	// and upcoming --on today has nothing to find.
+	on := model.ThingsDate(today)
+	got, err := d.ListTasks("today", TaskFilter{On: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"stuck-today", "stuck-project", "anytime-today"}; !sameSet(uuidsOf(got), want) {
+		t.Errorf("today --on today: got %v, want %v", uuidsOf(got), want)
+	}
+	got, err = d.ListTasks("upcoming", TaskFilter{On: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("upcoming --on today: got %v, want none", uuidsOf(got))
+	}
+}
+
+// On a project's page the same row sorts with the to-dos for today, among
+// the Anytime ones by index, not with the scheduled ones (issue #363).
+func TestProjectPageOrdersNotYetMovedRowAsToday(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+
+	fx.Project("proj", "Project", 1, anytime())
+	fx.Todo("sched-tomorrow", "Scheduled tomorrow", 1, somedayOn(tomorrow), inProject("proj"))
+	fx.Todo("stuck-today", "Scheduled today, not yet moved", 2, somedayOn(today), inProject("proj"))
+	fx.Todo("anytime", "Anytime", 3, anytime(), inProject("proj"))
+
+	got, err := d.ListTasks("project", TaskFilter{Project: "proj"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"stuck-today", "anytime", "sched-tomorrow"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("project page: got %v, want %v", got, want)
 	}
 }
 

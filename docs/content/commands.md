@@ -20,8 +20,11 @@ third Things type never reaches the output.
 `start` is `"inbox"`, `"anytime"` or `"someday"`, and appears on task and
 project rows. It is the list an item falls back to when it carries no date,
 so it does not on its own say which list the app shows the item in: a dated
-`"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and
-only an undated one is in Someday. An undated `"anytime"` task whose
+`"anytime"` row is in Today, a `"someday"` row dated after today is in
+Upcoming, and only an undated one is in Someday. A `"someday"` row dated
+today or earlier is in Today and Anytime: just after midnight, Things can
+leave a task scheduled for the new day as `"someday"` until it next tidies
+up, and the app already shows it as today's. An undated `"anytime"` task whose
 deadline is today or past is in Today as well, and an undated `"inbox"` one
 is in Today and Anytime instead of the Inbox.
 
