@@ -13,6 +13,11 @@ import (
 // degrades to "nothing repeats" instead of breaking every task query.
 var recurrenceColumns = []string{"rt1_recurrenceRule", "recurrenceRule"}
 
+// templateColumn is the TMTask column that points a to-do Things generated
+// from a repeating template back at that template. Probed like the
+// recurrence column; a schema without it makes no row an instance.
+const templateColumn = "rt1_repeatingTemplate"
+
 // recurrenceCol returns the recurrence column reference, aliased against the
 // `t` TMTask row, for callers to test with IS NULL / IS NOT NULL. On a schema
 // carrying no such column it is the literal NULL, which makes "IS NOT NULL"
@@ -59,6 +64,9 @@ func (d *DB) probeRepeating() {
 		cols, err := d.tableColumns("TMTask")
 		if err != nil {
 			return
+		}
+		if cols[templateColumn] {
+			d.templateColumn = templateColumn
 		}
 		for _, c := range recurrenceColumns {
 			if cols[c] {

@@ -296,3 +296,108 @@ func printUnconfirmedEdit(d *Deps, task *model.Task, reason, msg string) error {
 	_, err := fmt.Fprintf(d.Stdout, "%s: %q (%s)\n", msg, task.Title, task.UUID)
 	return err
 }
+
+// createdSlack widens the window applyAdd looks for the new item in, so a
+// creationDate stored a fraction before the moment the write started is
+// still inside it.
+const createdSlack = time.Second
+
+// applyAdd sends write, which creates an item of typ titled title, then finds
+// that item in the database and prints it as `things show` does.
+// things:///add returns no uuid (issue #19), so the item is found by what it
+// must be: an item of typ with that title, created after the write started,
+// that was not there before it. More than one such item — the same title
+// added elsewhere at the same moment — is reported unconfirmed with the
+// candidates rather than guessed. Under --no-verify, or when the database
+// cannot be read, the write still goes out and the output says it is
+// unconfirmed.
+func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) error {
+	if d.NoVerify {
+		if err := write(); err != nil {
+			return err
+		}
+		return printUnconfirmedAdd(d, title, "no-verify", "Sent to Things, not confirmed (--no-verify)", nil)
+	}
+
+	since := time.Now().Add(-createdSlack)
+	database, err := d.Database()
+	var existing []model.Task
+	if err == nil {
+		existing, err = database.TasksCreatedSince(typ, since)
+	}
+	if err != nil {
+		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the add: %v\n", err)
+		if err := write(); err != nil {
+			return err
+		}
+		return printUnconfirmedAdd(d, title, "unreadable", "Sent to Things, not confirmed (database unreadable)", nil)
+	}
+	before := make(map[string]struct{}, len(existing))
+	for _, t := range existing {
+		before[t.UUID] = struct{}{}
+	}
+
+	if err := write(); err != nil {
+		return err
+	}
+	budget := d.readBackTimeout()
+	var found []model.Task
+	err = pollUntil(budget, func(expired bool) (bool, error) {
+		created, err := database.TasksCreatedSince(typ, since)
+		if err != nil {
+			// Things is writing while we poll; a busy read is retried.
+			if expired {
+				return false, fmt.Errorf("verifying add: %w", err)
+			}
+			return false, nil
+		}
+		found = found[:0]
+		for _, t := range created {
+			if _, old := before[t.UUID]; !old && strings.TrimSpace(t.Title) == strings.TrimSpace(title) {
+				found = append(found, t)
+			}
+		}
+		return len(found) > 0, nil
+	})
+	switch {
+	case err != nil:
+		return err
+	case len(found) == 0:
+		kind := "to-do"
+		if typ == model.TypeProject {
+			kind = "project"
+		}
+		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `things search %q` before retrying; do not retry blindly",
+			kind, title, budget, title)
+	case len(found) > 1:
+		uuids := make([]string, len(found))
+		for i, t := range found {
+			uuids[i] = t.UUID
+		}
+		return printUnconfirmedAdd(d, title, "ambiguous", "Sent to Things, not confirmed (more than one new item has this title)", uuids)
+	}
+	return printItem(d, database, &found[0])
+}
+
+// unconfirmedAdd is the --json output for an add that was sent but not read
+// back. There is no uuid: the add returns none, and finding it is the
+// read-back. candidates lists the new items an ambiguous read-back found.
+type unconfirmedAdd struct {
+	Title      string   `json:"title"`
+	Confirmed  bool     `json:"confirmed"`
+	Reason     string   `json:"reason"`
+	Candidates []string `json:"candidates,omitempty"`
+}
+
+// printUnconfirmedAdd is printUnconfirmedEdit for an add.
+func printUnconfirmedAdd(d *Deps, title, reason, msg string, candidates []string) error {
+	if d.JSON {
+		return output.PrintJSON(d.Stdout, unconfirmedAdd{Title: title, Reason: reason, Candidates: candidates})
+	}
+	if len(candidates) > 0 {
+		_, err := fmt.Fprintf(d.Stdout, "%s: %q (%s)\n", msg, title, strings.Join(candidates, ", "))
+		return err
+	}
+	_, err := fmt.Fprintf(d.Stdout, "%s: %q\n", msg, title)
+	return err
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -26,14 +27,16 @@ func (c *AddCmd) Run(d *Deps) error {
 	if list == "" {
 		list = c.Project
 	}
-	return things.AddTask(things.AddParams{
-		Title:     c.Title,
-		Notes:     c.Notes,
-		When:      c.When,
-		Deadline:  c.Deadline,
-		Tags:      c.Tags,
-		Checklist: expandNewlines(c.Checklist),
-		Heading:   c.Heading,
-		List:      list,
+	return applyAdd(d, model.TypeTask, c.Title, func() error {
+		return things.AddTask(things.AddParams{
+			Title:     c.Title,
+			Notes:     c.Notes,
+			When:      c.When,
+			Deadline:  c.Deadline,
+			Tags:      c.Tags,
+			Checklist: expandNewlines(c.Checklist),
+			Heading:   c.Heading,
+			List:      list,
+		})
 	})
 }

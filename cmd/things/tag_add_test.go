@@ -245,7 +245,7 @@ func TestCreateTagsRunsBeforeTheWrite(t *testing.T) {
 	database, sqlDB := seedTagDB(t)
 	calls := stubExecCreatingTags(t, sqlDB)
 
-	stderr, err := runCapturingStderr(t, database, "add", "Buy milk", "--tags", "focus,Work", "--create-tags")
+	stderr, err := runCapturingStderr(t, database, "--no-verify", "add", "Buy milk", "--tags", "focus,Work", "--create-tags")
 	if err != nil {
 		t.Fatalf("add --create-tags: %v", err)
 	}
@@ -273,8 +273,9 @@ func TestCreateTagsOnEveryTagWrite(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"add", []string{"add", "Buy milk", "--tags", "focus", "--create-tags"}},
-		{"projectAdd", []string{"project", "add", "Launch", "--tags", "focus", "--create-tags"}},
+		// --no-verify: the stub creates tags, not the item an add reads back.
+		{"add", []string{"--no-verify", "add", "Buy milk", "--tags", "focus", "--create-tags"}},
+		{"projectAdd", []string{"--no-verify", "project", "add", "Launch", "--tags", "focus", "--create-tags"}},
 		{"edit", []string{"edit", "one-1", "--add-tags", "focus", "--create-tags"}},
 		{"projectEdit", []string{"project", "edit", "proj-1", "--add-tags", "focus", "--create-tags"}},
 	}

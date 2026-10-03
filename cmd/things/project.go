@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -25,14 +26,16 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	if err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
 		return err
 	}
-	return things.AddProject(things.AddProjectParams{
-		Title:    c.Title,
-		Notes:    c.Notes,
-		When:     c.When,
-		Deadline: c.Deadline,
-		Tags:     c.Tags,
-		Area:     c.Area,
-		Todos:    expandNewlines(c.Todos),
+	return applyAdd(d, model.TypeProject, c.Title, func() error {
+		return things.AddProject(things.AddProjectParams{
+			Title:    c.Title,
+			Notes:    c.Notes,
+			When:     c.When,
+			Deadline: c.Deadline,
+			Tags:     c.Tags,
+			Area:     c.Area,
+			Todos:    expandNewlines(c.Todos),
+		})
 	})
 }
 

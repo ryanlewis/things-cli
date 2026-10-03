@@ -315,6 +315,31 @@ things add "Groceries" --checklist "Milk\nBread\nEggs"
 `things project add` creates a new project with the same flag set
 (`--notes`, `--when`, `--deadline`, `--tags`, `--area`, `--todos`).
 
+`add` and `project add` then find the new item in the database and print it
+exactly as `things show` would, the same object under `--json`. Things
+returns no UUID for a new item, so the CLI looks for an item of the right
+kind with that title, created after the write started, that was not there
+before it. It waits as long as an edit's read-back (five seconds by default;
+see `--verify-timeout` under Editing).
+
+- If no such item appears, the command exits non-zero with `add not
+  confirmed: …`. Things may have dropped it (check that Things3 is running)
+  or may be slow to save. Run `things search` for the title before retrying,
+  so a retry does not create a duplicate.
+- If more than one appears (the same title added elsewhere at the same
+  moment), the CLI does not guess. It prints `Sent to Things, not confirmed
+  (more than one new item has this title): "Buy oat milk" (uuid1, uuid2)`
+  and exits 0.
+- `--no-verify` (or `no_verify = true`) skips the read-back and prints
+  `Sent to Things, not confirmed (--no-verify): "Buy oat milk"`. If the
+  database cannot be read, the item is still sent, with a warning, and the
+  line says `(database unreadable)`.
+
+Under `--json` the unconfirmed cases print `{"title": …, "confirmed":
+false, "reason": "no-verify"|"unreadable"|"ambiguous"}`, with
+`"candidates": [uuids]` for `ambiguous`. There is no `uuid`, because the
+add did not return one.
+
 ## Editing
 
 ```sh
@@ -349,7 +374,8 @@ default; the global `--verify-timeout DURATION` flag changes it for one
 run (`--verify-timeout 2500ms`, `--verify-timeout 10s`), and
 `verify_timeout` in the config file changes it for every run. It must be
 above zero: `--no-verify` is how to skip the wait. The same wait applies
-to `complete`, `cancel`, `tag add` and the status changes in an `import`.
+to `add`, `project add`, `complete`, `cancel`, `tag add` and the status
+changes in an `import`.
 An edit that sets every field to the value
 it already has is detected before the wait when every flag is `--title`,
 `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a
