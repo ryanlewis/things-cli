@@ -80,6 +80,11 @@ Such a task from Anytime also comes back from `anytime`, so merge a sweep on
 the app's Inbox. `--on`/`--from`/`--to` match it on today, the day Today
 shows it.
 
+A bare `--project` lists the project the way its page in the app does: the
+tasks under no heading first, then each heading's in heading order. Within
+each, Anytime tasks come first, then scheduled tasks by date, then Someday
+tasks. A bare `--area` or `--tag` arranges each project's tasks the same way.
+
 `logbook` is everything closed, not just everything finished. Cancelling a
 task or a project logs it under its stop date beside the completed ones, the
 way the app's Logbook shows both, so the view returns cancelled rows too.

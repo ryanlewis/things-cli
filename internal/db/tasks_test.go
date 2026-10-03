@@ -1363,11 +1363,10 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 	// The two project rows have no parent project of their own, so they sort
 	// on COALESCE(p."index", 0) = 0, into the same key group as the area's
 	// unparented rows and ahead of every project's to-dos; each project's
-	// to-dos then follow in a contiguous block. Within that leading group the
-	// next key is t.start, which these fixture projects leave NULL, so they
-	// come first — a project row with a start of its own would order against
-	// the area's loose to-dos by that key instead. Which primary key mixed
-	// rows should take is issue #217.
+	// to-dos then follow in a contiguous block. Within that leading group a
+	// project row orders against the area's loose to-dos by projectPageOrder,
+	// here by index alone. Which primary key mixed rows should take is issue
+	// #217.
 	want := []string{"proj-a", "proj-b", "a1", "a2", "b1", "b2"}
 	if len(order) != len(want) {
 		t.Fatalf("got %v, want %v", order, want)
@@ -1376,6 +1375,50 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 		if order[i] != want[i] {
 			t.Fatalf("got %v, want %v", order, want)
 		}
+	}
+}
+
+// A project's listing follows the app's project page: the to-dos under no
+// heading first, then each heading's in heading order, and within each of
+// those the Anytime to-dos by index, then the scheduled ones by start date
+// and todayIndex, then the Someday ones. The fixture copies a project built
+// in Things and read back over AppleScript on 3 Oct 2026, indexes included,
+// so neither t.start nor t."index" alone produces the order.
+func TestListTasksProjectOrderMatchesProjectPage(t *testing.T) {
+	d, fx := newFixture(t)
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	sooner := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
+	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 17)))
+
+	fx.Project("proj", "Ship v2", 1)
+	fx.Heading("head-1", "Phase one", -357, inProject("proj"))
+	fx.Heading("head-2", "Phase two", -232, inProject("proj"))
+	fx.Todo("l1-anytime", "L1", -427, anytime(), inProject("proj"))
+	fx.Todo("l2-later", "L2", 0, somedayOn(later), todayIndex(-430), inProject("proj"))
+	fx.Todo("l3-someday", "L3", 0, someday(), inProject("proj"))
+	fx.Todo("l4-sooner", "L4", 0, somedayOn(sooner), todayIndex(-633), inProject("proj"))
+	fx.Todo("l5-today", "L5", -198, anytimeOn(today), todayIndex(-2113), inProject("proj"))
+	fx.Todo("l6-anytime", "L6", 0, anytime(), inProject("proj"))
+	fx.Todo("h1a-later", "H1a", 0, somedayOn(later), underHeading("head-1"))
+	fx.Todo("h1b-anytime", "H1b", -442, anytime(), underHeading("head-1"))
+	fx.Todo("h1c-someday", "H1c", 0, someday(), underHeading("head-1"))
+	fx.Todo("h1d-anytime", "H1d", 0, anytime(), underHeading("head-1"))
+	fx.Todo("h2a-someday", "H2a", 0, someday(), underHeading("head-2"))
+	fx.Todo("h2b-sooner", "H2b", 0, somedayOn(sooner), underHeading("head-2"))
+	fx.Todo("h2c-anytime", "H2c", 0, anytime(), underHeading("head-2"))
+
+	got, err := d.ListTasks("project", TaskFilter{Project: "proj"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"l1-anytime", "l5-today", "l6-anytime", "l4-sooner", "l2-later", "l3-someday",
+		"h1b-anytime", "h1d-anytime", "h1a-later", "h1c-someday",
+		"h2c-anytime", "h2b-sooner", "h2a-someday",
+	}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("project order:\n got %v\nwant %v", got, want)
 	}
 }
 
