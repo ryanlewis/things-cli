@@ -23,7 +23,7 @@ so it does not on its own say which list the app shows the item in: a dated
 `"anytime"` row is in Today, a dated `"someday"` row is in Upcoming, and
 only an undated one is in Someday. An undated `"anytime"` task whose
 deadline is today or past is in Today as well, and an undated `"inbox"` one
-is in Today instead of the Inbox.
+is in Today and Anytime instead of the Inbox.
 
 In v0.7.0 and earlier `type` and `start` were both integers, so a caller
 matching on `.type==1` has to become `.type=="project"`, and one matching
@@ -75,9 +75,9 @@ Like the app, it also lists an undated Anytime task whose deadline is still to
 come, under the deadline's day, and `--on`/`--from`/`--to` match it on that
 day. `today` likewise lists an undated task in the Inbox or Anytime once its
 deadline is today or past, unless it was taken out of Today for that deadline.
-Such a task from Anytime also comes back from `anytime`, so merge a sweep on
-`uuid`. One from the Inbox leaves `inbox` while Today holds it, as it leaves
-the app's Inbox. `--on`/`--from`/`--to` match it on today, the day Today
+Such a task also comes back from `anytime`, from the Inbox as well as from
+Anytime, as in the app, so merge a sweep on `uuid`. One from the Inbox
+leaves `inbox` while Today holds it, as it leaves the app's Inbox. `--on`/`--from`/`--to` match it on today, the day Today
 shows it.
 
 A bare `--project` lists the project the way its page in the app does: the

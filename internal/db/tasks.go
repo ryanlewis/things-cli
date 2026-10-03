@@ -297,7 +297,7 @@ const notATemplate = repeatingPlaceholder + " IS NULL AND " + repeatingParentPla
 // page, and the app's Logbook held none of the 23 rows closed that day. The
 // CLI's project listing is that page — `--project <uuid> --include-completed`
 // lists it (issue #295) — so the row is not stranded.
-const heldByAnytime = "t.start = 1 AND t.type = 0 AND " + closedTodayUnlogged
+const heldByAnytime = anytimeScope + " AND t.type = 0 AND " + closedTodayUnlogged
 
 // heldByUpcoming is the Upcoming half — the scope test the view itself uses.
 const heldByUpcoming = upcomingScope + " AND " + closedTodayUnlogged
@@ -391,6 +391,13 @@ const (
 const (
 	inboxBucket   = "t.start = 0"
 	anytimeBucket = "t.start = 1"
+	// anytimeScope is Anytime's whole scope: its bucket, and the undated
+	// Inbox to-dos whose deadline has come. todayDue covers both buckets, so
+	// joining it adds only the Inbox ones. Measured on 3 Oct 2026, the app's
+	// Anytime held an Inbox to-do due that day and one overdue, the same two
+	// its Today held, and no Inbox to-do due later or taken out of Today for
+	// its deadline.
+	anytimeScope = "(" + anytimeBucket + " OR (" + todayDue + "))"
 	// upcomingScheduled and somedayDeferred split the one Things code between
 	// them. start = 2 is both lists: the app shows a deferred item in Upcoming
 	// once it carries a date and in Someday while it does not.
@@ -659,7 +666,7 @@ var views = map[string]viewSpec{
 	// an item closed today visible in whatever list it was in until the day
 	// rolls over, and Anytime is a list like Today (issue #238).
 	ViewAnytime: {
-		scope: anytimeBucket, status: openRows, trashed: untrashedRows,
+		scope: anytimeScope, status: openRows, trashed: untrashedRows,
 		extra:                    []string{parentNotDeferred},
 		supportsIncludeCompleted: true, supportsDateFilter: true,
 		// Anytime groups the way the app presents it: the project is the
