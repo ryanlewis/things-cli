@@ -942,6 +942,18 @@ func nameLike(value string) string {
 	return literalLike(strings.TrimSpace(value))
 }
 
+// projectNameMatch is the --project clause for the project row aliased alias,
+// with its arguments: the uuid, or the title. An exact-case title wins, and
+// only when no project carries one does the title match ignoring case and
+// surrounding space — the order `open --tag/--area` take names in. Things lets
+// two projects differ only by case, and without the preference naming one
+// listed both (issue #290).
+func projectNameMatch(alias, ref string) (string, []any) {
+	clause := "(" + alias + ".uuid = ? OR " + alias + ".title = ? OR (fold(" + alias + ".title) LIKE ?" + escapeClause +
+		" AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.title = ?)))"
+	return clause, []any{ref, ref, nameLike(ref), int(model.TypeProject), ref}
+}
+
 // containsLike is literalLike for the lookups that match a substring: the
 // value is escaped so nothing inside it is a wildcard, then wrapped in the two
 // the caller did not type. `%` and `_` in the value are characters to find,
@@ -1006,8 +1018,9 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 
 	var args []any
 	if opts.Project != "" {
-		where += " AND (p.uuid = ? OR fold(p.title) LIKE ?" + escapeClause + ")"
-		args = append(args, opts.Project, nameLike(opts.Project))
+		clause, clauseArgs := projectNameMatch("p", opts.Project)
+		where += " AND " + clause
+		args = append(args, clauseArgs...)
 	}
 	if opts.Area != "" {
 		where += " AND (COALESCE(a.uuid, pa.uuid) = ? OR fold(COALESCE(a.title, pa.title)) LIKE ?" + escapeClause + ")"

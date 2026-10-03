@@ -115,18 +115,19 @@ func (d *DB) taskQuery() string {
 }
 
 // NamesRepeatingProject reports whether ref resolves to a repeating project
-// template. It matches the reference the way a --project filter does: the uuid
-// exactly, or the title literally and case-insensitively, wildcards escaped.
+// template. It matches the reference the way a --project filter does (see
+// projectNameMatch), so it explains the listing that filter produced.
 //
 // It exists to answer why a project listing came back empty. Since issue #171
 // the to-dos inside a repeating project template are excluded from every open
 // view, so `things --project <template>` lists nothing at all and, without
 // this, says nothing about why.
 func (d *DB) NamesRepeatingProject(ref string) (bool, error) {
+	match, matchArgs := projectNameMatch("t", ref)
 	query := `SELECT EXISTS(SELECT 1 FROM TMTask t WHERE t.type = ? AND ` +
-		d.recurrenceCol() + ` IS NOT NULL AND (t.uuid = ? OR fold(t.title) LIKE ?` + escapeClause + `))`
+		d.recurrenceCol() + ` IS NOT NULL AND ` + match + `)`
 	var found int
-	if err := d.db.QueryRow(query, int(model.TypeProject), ref, nameLike(ref)).Scan(&found); err != nil {
+	if err := d.db.QueryRow(query, append([]any{int(model.TypeProject)}, matchArgs...)...).Scan(&found); err != nil {
 		return false, fmt.Errorf("checking for a repeating project: %w", err)
 	}
 	return found != 0, nil
