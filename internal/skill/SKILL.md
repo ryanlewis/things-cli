@@ -225,13 +225,15 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # leaves inbox while today holds it. --on/--from/--to on today match it
     # on today, not on its deadline.
     # --include-completed works on inbox, today, anytime and upcoming: items ticked
-    # off in that list which Things hasn't logged out yet. upcoming keeps only
+    # off in that list which Things hasn't logged out yet (by day, or until
+    # `things log`, following the app's "Move completed items to Logbook"
+    # setting; under Immediately nothing is held). upcoming keeps only
     # what was in it while open (a task closed ahead of its date, or an undated
     # one due later). logbook holds every other closed item, so a closed item
     # whose project is still open
     # is either logged or still listed, never both. One exception: a task
     # closed today inside a project in Someday or scheduled for later, which
-    # no list shows, is held back from logbook until the day is logged, as in
+    # no list shows, is held back from logbook until Things logs it, as in
     # the app; only `--project <uuid> --include-completed` has it. today, anytime
     # and upcoming overlap each other though — a task scheduled for today is in
     # the Anytime bucket too, and an undated one due later is in anytime and

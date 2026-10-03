@@ -213,7 +213,23 @@ const todoOrProject = "t.type IN (0, 1)"
 // COALESCE guards a NULL stopDate. Without it the comparison is NULL, and the
 // logbook's negation of this clause is NULL too, which would silently drop a
 // closed row carrying no stopDate out of both lists.
-const closedTodayUnlogged = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0) AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime')`
+//
+// That pair is the "daily" choice of the app's "Move completed items to
+// Logbook" setting, which the measurement ran under. Things keeps the setting
+// in TMSettings.logInterval, as the tag its preferences menu gives each
+// choice: 0 immediately, 1 daily, 4 manually. With "immediately" nothing is
+// held in place; with "manually" a row is held until the next "Log Completed
+// Now", whatever day it closed. Any other value, or no setting row, keeps the
+// daily rule. The other two were read from the app's preferences, not measured
+// in the live app, as that would mean changing the user's setting.
+const closedTodayUnlogged = `CASE COALESCE((SELECT logInterval FROM TMSettings LIMIT 1), 1)` +
+	` WHEN 0 THEN 0` +
+	` WHEN 4 THEN ` + closedAfterManualLog +
+	` ELSE ` + closedAfterManualLog + ` AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') END`
+
+// closedAfterManualLog is true for a row closed after the last "Log Completed
+// Now", the condition the daily and manual choices share.
+const closedAfterManualLog = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0)`
 
 // todayScheduled is the today view's scheduling test: the rows Things files
 // under Today by their start date. todayDue is the other way in, and

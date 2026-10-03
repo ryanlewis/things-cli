@@ -16,7 +16,7 @@ type ListCmd struct {
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
 
-	IncludeCompleted bool   `help:"On the inbox, today, anytime and upcoming views, and with --project or --area, also show items closed today that Things hasn't logged out of the list yet (UI-parity). Not supported on other views."`
+	IncludeCompleted bool   `help:"On the inbox, today, anytime and upcoming views, and with --project or --area, also show closed items Things hasn't logged out of the list yet, which under the app's default Daily logging means closed today (UI-parity). Not supported on other views."`
 	On               string `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline. Mutually exclusive with --from/--to."`
 	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
 	To               string `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
