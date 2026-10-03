@@ -295,12 +295,10 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	database := seedFullDB(t)
 
 	// A view the app does not keep just-closed items in: the flag is rejected
-	// rather than silently ignored. someday is the view the flag most
-	// plausibly ought to reach, and does not until the app's behaviour there
-	// has been measured (issue #238).
-	for _, view := range []string{"someday", "deadlines"} {
+	// rather than silently ignored.
+	for _, view := range []string{"repeating", "deadlines"} {
 		err := runWith(t, database, "list", view, "--include-completed")
-		if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, inbox, today and upcoming views") {
+		if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, inbox, someday, today and upcoming views") {
 			t.Fatalf("%s: expected view-rejection error, got: %v", view, err)
 		}
 	}
@@ -308,7 +306,7 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	// A bare --tag sweep lists through the catch-all view, which rejects the
 	// flag: tags are a filter in the app, not a list with a page of its own.
 	err := runWith(t, database, "list", "--tag", "urgent", "--include-completed")
-	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, inbox, today and upcoming views") {
+	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, inbox, someday, today and upcoming views") {
 		t.Fatalf("tag filter: expected view-rejection error, got: %v", err)
 	}
 
@@ -323,9 +321,9 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 
 	// --project on a view that rejects the flag is still rejected, and the
 	// message says --project helps only with no view named.
-	err = runWith(t, database, "list", "someday", "--project", "Chores", "--include-completed")
+	err = runWith(t, database, "list", "deadlines", "--project", "Chores", "--include-completed")
 	if err == nil || !strings.Contains(err.Error(), "on a --project or --area listing with no view") {
-		t.Fatalf("someday + --project: expected view-rejection error, got: %v", err)
+		t.Fatalf("deadlines + --project: expected view-rejection error, got: %v", err)
 	}
 
 	// A named project lists its contents, which the app keeps a to-do closed

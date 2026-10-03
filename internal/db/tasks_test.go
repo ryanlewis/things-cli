@@ -53,7 +53,7 @@ func seedTasks(t *testing.T, d *DB) {
 // now read the view table, so pin both against the answer spelled out rather
 // than against the table they are derived from (issue #240).
 func TestCompletableViews(t *testing.T) {
-	want := map[string]bool{"inbox": true, "today": true, "anytime": true, "upcoming": true}
+	want := map[string]bool{"inbox": true, "today": true, "anytime": true, "upcoming": true, "someday": true}
 	for view := range views {
 		if got := CompletableView(view, false, false); got != want[view] {
 			t.Errorf("CompletableView(%q, false, false) = %v, want %v", view, got, want[view])
@@ -71,8 +71,8 @@ func TestCompletableViews(t *testing.T) {
 	if CompletableView("bogus", true, true) {
 		t.Error("CompletableView(\"bogus\", true, true) = true, want false")
 	}
-	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "inbox", "today", "upcoming"}) {
-		t.Errorf("CompletableViewNames() = %v, want [anytime inbox today upcoming]", got)
+	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "inbox", "someday", "today", "upcoming"}) {
+		t.Errorf("CompletableViewNames() = %v, want [anytime inbox someday today upcoming]", got)
 	}
 }
 
@@ -379,6 +379,115 @@ func TestHeldInPlaceFollowsLogSetting(t *testing.T) {
 	}
 }
 
+// Under the daily setting the app's Logbook takes nothing closed today, not
+// only what a list is still showing. Measured on 4 Oct 2026, it held none of
+// eight rows closed that day: the Someday list kept a loose to-do, an area's
+// to-do and a project closed out of it; Anytime, Today and Upcoming kept the
+// to-dos of a project closed that day, in place; and an area's page kept its
+// closed project. Each case names where the row is still listed, and the
+// Logbook must not have it.
+func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
+	now := time.Now()
+	stop := model.TimeToUnix(now)
+	today := int64(model.ThingsDateFromTime(now))
+	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 4)))
+
+	cases := []struct {
+		name   string
+		build  func(fx *dbtest.Fixture)
+		heldBy []string // views listing it under --include-completed
+		inArea bool     // `--area area --include-completed` lists it
+		inProj bool     // `--project proj --include-completed` lists it
+		asProj bool     // `things projects --completed` lists it
+	}{
+		{"someday to-do", func(fx *dbtest.Fixture) {
+			fx.Todo("row", "Row", 1, someday(), completed(stop))
+		}, []string{"someday"}, false, false, false},
+		{"someday to-do in an area", func(fx *dbtest.Fixture) {
+			fx.Todo("row", "Row", 1, someday(), inArea("area"), completed(stop))
+		}, []string{"someday"}, true, false, false},
+		{"someday project", func(fx *dbtest.Fixture) {
+			fx.Project("row", "Row", 1, someday(), completed(stop))
+		}, []string{"someday"}, false, false, true},
+		{"anytime project in an area", func(fx *dbtest.Fixture) {
+			fx.Project("row", "Row", 1, anytime(), inArea("area"), completed(stop))
+		}, nil, true, false, true},
+		{"project scheduled for today", func(fx *dbtest.Fixture) {
+			fx.Project("row", "Row", 1, anytimeOn(today), completed(stop))
+		}, []string{"today"}, false, false, true},
+		// No list shows a closed Anytime project with no area: Anytime
+		// carries no project rows. The app keeps it out of its Logbook all
+		// the same, and `things projects --completed` is where it is found.
+		{"anytime project with no area", func(fx *dbtest.Fixture) {
+			fx.Project("row", "Row", 1, anytime(), completed(stop))
+		}, nil, false, false, true},
+		{"to-do of a project closed today", func(fx *dbtest.Fixture) {
+			fx.Project("proj", "Proj", 1, anytime(), completed(stop))
+			fx.Todo("row", "Row", 2, anytime(), inProject("proj"), completed(stop))
+		}, []string{"anytime"}, false, true, false},
+		{"today to-do of a project closed today", func(fx *dbtest.Fixture) {
+			fx.Project("proj", "Proj", 1, anytime(), completed(stop))
+			fx.Todo("row", "Row", 2, anytimeOn(today), inProject("proj"), completed(stop))
+		}, []string{"today", "anytime"}, false, true, false},
+		{"upcoming to-do of a project closed today", func(fx *dbtest.Fixture) {
+			fx.Project("proj", "Proj", 1, anytime(), completed(stop))
+			fx.Todo("row", "Row", 2, somedayOn(later), inProject("proj"), completed(stop))
+		}, []string{"upcoming"}, false, true, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d, fx := newFixture(t)
+			fx.Area("area", "Area", 1)
+			tc.build(fx)
+
+			logged, err := d.ListTasks("logbook", TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if slices.Contains(uuidsOf(logged), "row") {
+				t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
+			}
+			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
+				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if gotHeld, want := slices.Contains(uuidsOf(got), "row"), slices.Contains(tc.heldBy, view); gotHeld != want {
+					t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
+				}
+			}
+			byArea, err := d.ListTasks("project", TaskFilter{Area: "area", IncludeCompleted: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := slices.Contains(uuidsOf(byArea), "row"); got != tc.inArea {
+				t.Errorf("--area --include-completed = %v, want listed: %v", uuidsOf(byArea), tc.inArea)
+			}
+			if tc.inProj {
+				byProj, err := d.ListTasks("project", TaskFilter{Project: "proj", IncludeCompleted: true})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !slices.Contains(uuidsOf(byProj), "row") {
+					t.Errorf("--project --include-completed = %v, want it listed", uuidsOf(byProj))
+				}
+			}
+			projects, err := d.ListProjects("", true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			listed := false
+			for _, p := range projects {
+				listed = listed || p.UUID == "row"
+			}
+			if listed != tc.asProj {
+				t.Errorf("projects --completed lists it: %v, want %v", listed, tc.asProj)
+			}
+		})
+	}
+}
+
 // A closed item no list carries belongs in the Logbook the moment it is
 // closed, whatever calendar day that is, because no list is still showing it.
 // Excluding "closed today" from the Logbook outright would leave those rows in
@@ -439,7 +548,7 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 			}
 
 			held := 0
-			for _, view := range []string{"inbox", "today", "anytime", "upcoming"} {
+			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
 				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
 				if err != nil {
 					t.Fatal(err)
@@ -477,7 +586,7 @@ func TestClosedSuppressedInboxToDoStaysInInbox(t *testing.T) {
 	if len(logged) != 0 {
 		t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
 	}
-	for _, view := range []string{"inbox", "today", "anytime", "upcoming"} {
+	for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
 		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
 		if err != nil {
 			t.Fatal(err)
@@ -2331,7 +2440,7 @@ func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
 			}
 
 			held := 0
-			for _, view := range []string{"inbox", "today", "anytime", "upcoming"} {
+			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
 				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
 				if err != nil {
 					t.Fatal(err)
@@ -3028,10 +3137,12 @@ func TestLogbookKeepsRepeatingTemplatesClosedToday(t *testing.T) {
 // A closed project is one row and its to-dos are not listed beside it. The
 // Logbook and Trash have folded them since issue #229; the --include-completed
 // variants of today and anytime folded nothing, so the same to-do was folded
-// in one view and listed in another (issue #249).
+// in one view and listed in another (issue #249). The fold waits until the
+// project is logged, so the project here closed on an earlier day.
 func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	stopToday := model.TimeToUnix(time.Now())
+	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
 
 	for _, view := range []string{"today", "anytime"} {
 		t.Run(view, func(t *testing.T) {
@@ -3041,7 +3152,7 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 				('proj-done',  'Finished', 1, 3, 0, 1, 0, ?,    ?,    1),
 				('proj-open',  'Live',     1, 0, 0, 1, 0, ?,    NULL, 2),
 				('proj-binned','Binned',   1, 0, 1, 1, 0, ?,    NULL, 3)`,
-				today, stopToday, today, today)
+				today, stopLogged, today, today)
 			mustExec(t, d, `INSERT INTO TMTask
 				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
 				('under-done',   'Folded',    0, 3, 0, 1, 0, ?, ?, 'proj-done',   4),
@@ -3054,12 +3165,10 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// The closed project itself is a row in today, which carries
-			// project rows; anytime carries none (issue #217).
+			// The open project is a row in today, which carries project rows;
+			// anytime carries none (issue #217). The logged one is in neither.
 			want := []string{"under-open", "unparented", "proj-open"}
-			if view == "today" {
-				want = append(want, "proj-done")
-			} else {
+			if view != "today" {
 				want = want[:2]
 			}
 			if !sameSet(uuidsOf(got), want) {
@@ -3256,6 +3365,7 @@ func TestNamedTrashedProjectReachesItsClosedChildren(t *testing.T) {
 func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	stopToday := model.TimeToUnix(time.Now())
+	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
 
 	for _, view := range []string{"today", "anytime"} {
 		t.Run(view, func(t *testing.T) {
@@ -3264,7 +3374,7 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
 				('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?,    1),
 				('proj-open', 'Live',     1, 0, 0, 1, 0, ?, NULL, 2)`,
-				today, stopToday, today)
+				today, stopLogged, today)
 			mustExec(t, d, `INSERT INTO TMTask
 				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
 				('under-done', 'Folded', 0, 3, 0, 1, 0, ?, ?, 'proj-done', 3),
@@ -3407,10 +3517,11 @@ func TestAreaAndTagFiltersDoNotLiftTheFold(t *testing.T) {
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	stopToday := model.TimeToUnix(time.Now())
+	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('ar', 'Work', 1, 1)`)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, area, "index")
-		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 'ar', 1)`, today, stopToday)
+		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 'ar', 1)`, today, stopLogged)
 	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg', 'urgent', 1)`)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index")
@@ -3482,9 +3593,10 @@ func TestFoldedJustClosedRowIsReachableByProject(t *testing.T) {
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
 	stopToday := model.TimeToUnix(time.Now())
+	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
-		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 1)`, today, stopToday)
+		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 1)`, today, stopLogged)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index")
 		VALUES ('folded', 'Folded', 0, 3, 0, 1, 0, ?, ?, 'proj-done', 2)`, today, stopToday)

@@ -100,24 +100,28 @@ shows the ones still waiting. That is the app's default "Move completed items
 to Logbook: Daily" setting, and the CLI reads the setting: set to Immediately,
 nothing is held and every closed item is in `logbook` at once; set to Manually,
 closed items stay where they were, whatever day they closed, until
-`things log`. `inbox`, `anytime` and `upcoming` behave the same
+`things log`. `inbox`, `anytime`, `upcoming` and `someday` behave the same
 way and take the same flag, because the app goes on showing a just-closed item
 there too. `upcoming` keeps only what was in it while open: a task closed ahead
-of its date, or an undated one with a deadline after today. Everything else
-closed goes to `logbook` at once, today's closes included, because no list
-holds it back. A closed item
-whose project is still open is therefore either in `logbook` or in a list
-still showing it, never both and never neither — but the lists overlap each
+of its date, or an undated one with a deadline after today.
+
+`logbook` holds nothing Things has not logged yet, wherever it was closed, as
+the app's Logbook does. A closed item is therefore either in `logbook` or
+still in place, never both. Still in place, it is listed under
+`--include-completed` by its view, by its project (`things --project <uuid>
+--include-completed`), or by its area (`things --area <name>
+--include-completed`). The one exception is a closed Anytime project with no
+area: no list shows it, in the app or the CLI, and `things projects
+--completed` is where to find it until it is logged. The lists overlap each
 other, since a task scheduled for today is in the Anytime bucket too and an
 undated one due later is in both `anytime` and `upcoming`, so sweeping them
-means merging on `uuid`. One closed inside a project that is itself closed or
-trashed is in none of the unfiltered lists — not `logbook`, not `today`, not
-`anytime`, not `upcoming` — for the reason the next paragraph gives. Naming
-that project brings it back. One closed today inside a project in Someday or
-scheduled for later, and not shown by `today` or `upcoming`, is in none of
-those lists either until Things logs it, as in the app, which shows it only on
-the project's page: `things --project <uuid> --include-completed` lists it. `--include-completed` works on `inbox`, `today`,
-`anytime` and `upcoming`; with a
+means merging on `uuid`. The tasks of a project closed today stay in place in
+these lists, struck through, until the project is logged; then they fold into
+its row, as the next paragraphs say. A task closed today inside a project in
+Someday or scheduled for later is in no list, as in the app, which shows it
+only on the project's page: `things --project <uuid> --include-completed`
+lists it. `--include-completed` works on `inbox`, `today`, `anytime`,
+`upcoming` and `someday`; with a
 filter, name the view: `things today -p "Launch v2" --include-completed`
 returns the tasks of a closed "Launch v2" that closed today, rather than
 nothing.
@@ -138,7 +142,7 @@ urgent --include-completed`.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none
-of them separately, and `trash` does the same for a trashed project. To reach
+of them separately (and so do the other lists, once the project is logged), and `trash` does the same for a trashed project. To reach
 those tasks, name the project: `things --project <uuid>` on a closed or
 trashed project returns its contents whatever their status, which is what the
 app answers for the same question. Naming the project works inside a view as
