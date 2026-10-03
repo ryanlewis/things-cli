@@ -312,6 +312,13 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 		t.Fatalf("area filter: expected view-rejection error, got: %v", err)
 	}
 
+	// --project on a view that rejects the flag is still rejected, and the
+	// message says --project helps only with no view named.
+	err = runWith(t, database, "list", "inbox", "--project", "Chores", "--include-completed")
+	if err == nil || !strings.Contains(err.Error(), "on a --project listing with no view") {
+		t.Fatalf("inbox + --project: expected view-rejection error, got: %v", err)
+	}
+
 	// A named project lists its contents, which the app keeps a to-do closed
 	// today in (issue #295), by flag or by bare argument.
 	if err := runWith(t, database, "list", "--project", "Chores", "--include-completed"); err != nil {
