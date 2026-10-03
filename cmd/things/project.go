@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -68,11 +69,11 @@ func projectAreaID(d *Deps, area string) string {
 	}
 	// Not FindAreaUUID: it ignores surrounding space, and Things does not.
 	// Checked in Things 3 with " Personal " against an area called Personal,
-	// for project add's area and add's list alike: neither matched. AddTarget
-	// and the FoldTag comment still assume a trim.
+	// for project add's area and add's list alike: neither matched.
 	found := false
 	for _, a := range areas {
-		if a.UUID == area {
+		// A uuid goes as area-id, which is sent trimmed.
+		if a.UUID == strings.TrimSpace(area) {
 			return a.UUID
 		}
 		found = found || db.FoldCase(a.Title) == db.FoldCase(area)

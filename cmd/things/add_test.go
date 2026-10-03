@@ -432,6 +432,8 @@ func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 		{"unknownHeading", []string{"--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"`},
 		{"headingInArea", []string{"--list", "Personal", "--heading", "Setup"}, `"Personal" has no heading "Setup"`},
 		{"headingWithoutList", []string{"--heading", "Setup"}, `--heading "Setup" needs --list or --project`},
+		{"paddedList", []string{"--list", " Tools "}, `no open project or area called " Tools "`},
+		{"paddedHeading", []string{"--list", "Tools", "--heading", " Setup "}, `"Tools" has no heading " Setup "`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -472,6 +474,7 @@ func TestAddSendsUUIDAsListID(t *testing.T) {
 		name, flag, value, want string
 	}{
 		{"projectUUID", "--project", "proj-1", "list-id=proj-1"},
+		{"paddedUUID", "--project", " proj-1 ", "list-id=proj-1"},
 		{"areaUUID", "--list", "area-1", "list-id=area-1"},
 		{"title", "--project", "Tools", "list=Tools"},
 		{"unknown", "--list", "Nowhere", "list=Nowhere"},
@@ -510,6 +513,7 @@ func TestProjectAddSendsUUIDAsAreaID(t *testing.T) {
 		name, value, want string
 	}{
 		{"uuid", "area-1", "area-id=area-1"},
+		{"paddedUUID", " area-1 ", "area-id=area-1"},
 		{"title", "Personal", "area=Personal"},
 		{"unknown", "Nowhere", "area=Nowhere"},
 	}
@@ -548,6 +552,7 @@ func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
 		{"title", "Personal", ""},
 		{"otherCase", "personal", ""},
 		{"uuid", "area-1", ""},
+		{"paddedUUID", " area-1 ", ""},
 		{"unknown", "Nowhere", `no area called "Nowhere"`},
 		{"padded", " Personal ", `no area called " Personal "`},
 		{"paddedTitle", "Errands ", ""},
