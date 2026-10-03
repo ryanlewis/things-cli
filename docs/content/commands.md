@@ -186,7 +186,9 @@ inside a project Things generated from the template are ordinary.
 Results carry `"repeating": true`.
 
 Filter any list with `-p/--project`, `-a/--area`, or `-t/--tag`. Names
-ignore case and surrounding spaces. A project, area or tag name typed in
+ignore case and surrounding spaces. Case is ignored the way Things ignores it,
+so `-t STRASSE` finds a tag named
+`Straße`. A project, area or tag name typed in
 its exact case lists only that one, even when another title differs from it
 only by case. On their
 own the filters cover everything open in the project, area, or tag — so
@@ -341,7 +343,8 @@ things search "milk"
 things search "release" --json
 ```
 
-The query matches titles and notes literally and case-insensitively. There is
+The query matches titles and notes literally and case-insensitively, so
+`strasse` finds "Straße". There is
 no wildcard syntax: `%` and `_` are characters to find, so
 `things search "50%"` returns the items that say "50%".
 

@@ -176,7 +176,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # there too. Name a view to scope the filter to it
     # (`things today --project X`); plain output then prints a `view: <name>`
     # line so a slice isn't read as the whole project.
-    # Names ignore case and surrounding spaces, but a --project, --area or
+    # Names ignore case as Things does (-t STRASSE finds "Straße") and
+    # surrounding spaces, but a --project, --area or
     # --tag name typed in its exact case lists only that one, even when
     # another title differs from it only by case.
     # Tasks under a project heading belong to that project — they match
