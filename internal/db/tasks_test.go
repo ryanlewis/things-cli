@@ -319,11 +319,10 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 	}
 }
 
-// A closed item the today view never carries — completed out of the Inbox,
-// out of Upcoming — belongs in the Logbook the moment it is closed, whatever
-// calendar day that is, because no list is still showing it. Excluding "closed
-// today" from the Logbook outright would leave those rows in no list at all
-// (issue #230).
+// A closed item no list carries — completed out of the Inbox — belongs in the
+// Logbook the moment it is closed, whatever calendar day that is, because no
+// list is still showing it. Excluding "closed today" from the Logbook outright
+// would leave those rows in no list at all (issue #230).
 //
 // Anytime and Upcoming are not like the Inbox. Since issue #238 the app's
 // Anytime goes on showing a row closed out of it, and since issue #293 so does
