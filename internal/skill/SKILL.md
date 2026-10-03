@@ -99,6 +99,8 @@ Both routes create over AppleScript, so Things3 must be running, and both skip n
 
 `add` warns the same way when `--list`/`--project` names no open project or area by title or UUID (Things puts the to-do in the Inbox) or `--heading` names no heading of that project (Things drops the heading). The add still goes ahead; fix the name and move the to-do if it matters.
 
+`project add --area` takes an area name or UUID.
+
 ### 2. Repeating items refuse status, `when` and `deadline`
 
 A repeating task is a template plus the tasks it generates. Things refuses to change `when`, `deadline`, completed/canceled status, or duplication on a repeating item, and **drops the request silently**. The CLI checks first and exits non-zero:
