@@ -85,9 +85,25 @@ type importCreate struct {
 	typ   model.TaskType
 	title string // trimmed
 	// dated is set when the payload gives the item a `creation-date`.
-	// Things saves it with that date, so it never shows up among the items
-	// created since the write and is not read back.
+	// Things saves it with that date, so it is not read back: one in the
+	// past never shows up among the items created since the write.
 	dated bool
+	// datedAt is that creation-date, or zero when it is not an RFC 3339
+	// timestamp, which leaves when Things saves it unknown.
+	datedAt time.Time
+}
+
+// datedSlack widens the read-back window for a dated item's creation-date,
+// which the payload gives to the second (or coarser), so a date written as
+// "now" just before the import still counts as inside it.
+const datedSlack = time.Minute
+
+// landsInWindow reports whether c, a dated item, may be saved inside the
+// read-back window that starts at since, where its row could pass for a new
+// undated item with the same type and title. A creation-date the CLI cannot
+// read might be anything, so it may.
+func (c importCreate) landsInWindow(since time.Time) bool {
+	return c.datedAt.IsZero() || !c.datedAt.Before(since.Add(-datedSlack))
 }
 
 func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
@@ -124,8 +140,12 @@ func importCreates(data []byte) []importCreate {
 		if title = strings.TrimSpace(title); title == "" {
 			return
 		}
-		_, dated := attrs["creation-date"]
-		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: dated})
+		raw, dated := attrs["creation-date"]
+		var datedAt time.Time
+		if str, ok := raw.(string); ok {
+			datedAt, _ = time.Parse(time.RFC3339, strings.TrimSpace(str))
+		}
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: dated, datedAt: datedAt})
 	})
 	return creates
 }
@@ -323,7 +343,7 @@ func (e *importVerifyError) Error() string {
 		for i, it := range missing {
 			lines[i] = fmt.Sprintf("  %s: %s", it.Path, it.detail)
 		}
-		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed. The rest of the import was still applied. Things may have dropped them (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
+		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed (each line says why). The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
 			len(missing), len(e.created), e.search, strings.Join(lines, "\n")))
 	}
 	if len(e.created) > len(missing) {
@@ -345,8 +365,8 @@ func (e *importVerifyError) Error() string {
 // lists the new items with its title), or "not-found" (candidates lists the
 // ones that did appear when fewer than the payload asked for did). An item
 // with a `creation-date` is not checked at all: reason "creation-date". Nor
-// is one that shares its type and title with such an item: reason
-// "shares-dated-title".
+// is one that shares its type and title with such an item whose date falls
+// in the read-back window: reason "shares-dated-title".
 type importCreated struct {
 	Path       string   `json:"path"`
 	Kind       string   `json:"kind"`
@@ -356,7 +376,7 @@ type importCreated struct {
 	Reason     string   `json:"reason,omitempty"`
 	Candidates []string `json:"candidates,omitempty"`
 
-	detail string // why a not-found item is missing, for the plain-text error
+	detail string // why a failing item is missing or unconfirmed, for the plain-text error
 }
 
 // prepareImport is the pre-write pass over an import payload. It refuses the
@@ -488,17 +508,17 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 // appear. A snapshot or read-back that could not read the database at all
 // leaves every item unconfirmed as unreadable, with a warning. An item the
 // payload gives a creation-date is not looked for, and is reported as not
-// checked. Its row can still land among the new items, so an item without
-// one that shares its type and title is not looked for either: it is
-// reported unconfirmed and fails the import, rather than risk confirming it
-// with the dated item's row.
+// checked. When that date is inside the read-back window (or unreadable) its
+// row can land among the new items, so an item without one that shares its
+// type and title is not looked for either: it is reported unconfirmed and
+// fails the import, rather than risk confirming it with the dated item's row.
 func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, budget time.Duration) []importCreated {
 	if len(creates) == 0 {
 		return nil
 	}
 	dated := map[createdKey]bool{}
 	for _, c := range creates {
-		if c.dated {
+		if c.dated && c.landsInWindow(snap.since) {
 			dated[c.key()] = true
 		}
 	}
