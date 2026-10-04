@@ -67,6 +67,7 @@ type updatePlan struct {
 	dir    string   // install directory, for the install.sh and go install methods
 	args   []string // argv to run
 	shown  string   // args as the user would type them
+	pinned bool     // args install the release tag the check found, not whatever is latest
 	// current is the installed version in the form the release tag uses once
 	// the leading "v" is dropped.
 	current string
@@ -112,10 +113,12 @@ func (p *updatePlan) pinScript(tag string) {
 	if tag != "" {
 		ref, version = tag, " VERSION="+shellQuote(tag)
 	}
+	p.pinned = tag != ""
 	p.shown = "curl -fsSL " + fmt.Sprintf(updateScriptURL, ref) + " | INSTALL_DIR=" + shellQuote(p.dir) + version + " sh"
 	// Without pipefail a failed download feeds sh an empty script, which
 	// exits 0 and reports an update that never happened.
-	p.args = []string{"sh", "-c", "set -o pipefail; " + p.shown}
+	// bash, not sh: /bin/sh may be dash, which has no pipefail.
+	p.args = []string{"/bin/bash", "-c", "set -o pipefail; " + p.shown}
 }
 
 // pinGo points the go install command at a release tag, so what it installs
@@ -126,6 +129,7 @@ func (p *updatePlan) pinGo(tag string) {
 	if tag != "" {
 		query = tag
 	}
+	p.pinned = tag != ""
 	// GOBIN puts the new binary where the running one is; left to go env
 	// it may land elsewhere and leave this one stale.
 	p.args = []string{"env", "GOBIN=" + p.dir, "go", "install", updateModule + "@" + query}
@@ -215,14 +219,19 @@ func (c *UpdateCmd) Run(d *Deps) error {
 			case methodGo:
 				plan.pinGo(tag)
 			}
+		case plan.method != methodBrew:
+			// A tag that cannot be pinned would leave the script to run from
+			// main, or go install to take @latest: no better than no tag.
+			checkErr = fmt.Errorf("cannot pin the latest release tag %q", tag)
 		}
 	}
 
 	// install.sh and go install each pick the latest release themselves and
 	// never compare it with what is installed, so without the check they could
 	// replace a newer binary with an older one. brew upgrade makes its own
-	// comparison, so Homebrew carries on.
-	blind := checkErr != nil && plan.method != methodBrew
+	// comparison, so Homebrew carries on. A real run of either is only ever
+	// pinned to the tag the check found.
+	blind := plan.method != methodBrew && (checkErr != nil || !plan.pinned)
 
 	if c.DryRun {
 		if checkErr != nil {
