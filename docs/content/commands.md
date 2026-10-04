@@ -711,8 +711,8 @@ running binary lives and how it was built:
   it stops and prints the command for you to run, since the script asks
   for `sudo`.
 - Built by `go install ...@latest`: runs
-  `go install github.com/ryanlewis/things-cli/cmd/things@latest` with
-  `GOBIN` set to the binary's own directory.
+  `go install github.com/ryanlewis/things-cli/cmd/things@<tag>` for the
+  latest release tag, with `GOBIN` set to the binary's own directory.
 - A local build (`make install`, `go build`): refuses, because there is
   no release to update it from.
 
@@ -720,8 +720,10 @@ Before updating, it asks GitHub for the latest release, with or without
 `--dry-run`. It stops if you already have it, or if yours is newer. Only
 `MAJOR.MINOR.PATCH` is compared for "newer", so `1.0.0-rc1` is not newer
 than `1.0.0` and updates to it. The install script is then fetched from
-that release's tag and told to install that version. If GitHub can't be
-reached (offline, or rate limited), the install script and `go install`
+that release's tag and told to install that version, and `go install`
+is pinned to the same tag. If GitHub can't be
+reached (offline, or rate limited), or its latest tag isn't a version
+it can compare, the install script and `go install`
 methods stop with an error and print the command for you to run
 yourself: both pick the latest release on their own and could replace a
 newer binary with an older one. Homebrew carries on, since
