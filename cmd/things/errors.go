@@ -56,8 +56,9 @@ type jsonErrorPayload struct {
 // item; a status read-back failure sets Wanted and Got, naming the status the
 // payload asked for and the one the item is still in. Got is empty when there
 // was nothing to observe — the row could not be read, or no longer exists. A
-// created item that never appeared sets Confirmed (always false), Reason
-// ("not-found") and Candidates, as an unconfirmed add does.
+// created item that never appeared, or that a dated item's row could pass
+// for, sets Confirmed (always false), Reason ("not-found" or
+// "shares-dated-title") and Candidates, as an unconfirmed add does.
 type jsonErrorItem struct {
 	Path       string   `json:"path"`
 	ID         string   `json:"id,omitempty"`

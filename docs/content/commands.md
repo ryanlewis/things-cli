@@ -643,13 +643,18 @@ an unconfirmed `add` does, and no `uuid`:
   saves the item with that date, so the read-back cannot tell it from older
   items and does not look for it. The line says `not checked
   (creation-date set)`.
+- `shares-dated-title`: another item in the payload with the same kind and
+  title sets `creation-date`. A new item with that title could be either
+  one, so this item is not looked for either. The line says `not confirmed
+  (a dated item has the same title)`.
 - `not-found`: no new item with that title appeared within the read-back
   wait, or fewer than the payload created. `candidates` lists the ones that
   did appear.
 
-The first four exit 0 with the list printed. Any `not-found` item makes
-the import exit non-zero with `import partially applied`, the same error a
-dropped status change gives. The error names the `not-found` items, and
+The first four exit 0 with the list printed. Any `not-found` or
+`shares-dated-title` item makes the import exit non-zero with `import
+partially applied`, the same error a dropped status change gives. The error
+names those items, and
 under `--json` they are in `items`. Search for each of them with `things
 search` before running the import again with only those items. Otherwise a
 retry can create duplicates. The verdict on every other created item

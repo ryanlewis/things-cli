@@ -451,6 +451,9 @@ var unconfirmedMsg = map[string]string{
 	// Import only: an item the payload dates back cannot be found by when
 	// it was created.
 	"creation-date": "Sent to Things, not checked (creation-date set)",
+	// Import only: an item that shares its kind and title with one the
+	// payload dates back could be confused with that item's row.
+	"shares-dated-title": "Sent to Things, not confirmed (a dated item has the same title)",
 }
 
 // applyAdd sends write, which creates an item of typ titled title, then finds
