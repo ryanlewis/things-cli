@@ -126,7 +126,7 @@ func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bo
 		return id != task.AreaUUID
 	}
 	// Two areas whose titles fold together are not told apart here.
-	return known && (task.AreaTitle == "" || db.FoldCase(task.AreaTitle) != db.FoldCase(*c.Area))
+	return known && (task.AreaTitle == "" || db.FoldName(task.AreaTitle) != db.FoldName(*c.Area))
 }
 
 // checkAreaID warns when Things has no area with the uuid --area-id gives,
