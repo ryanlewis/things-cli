@@ -138,6 +138,15 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 		areasErr  error
 		areasRead bool
 	)
+	// Many to-dos in a payload share a list; each list and heading is
+	// looked up once.
+	type targetKey struct{ list, heading string }
+	type targetRes struct {
+		target       string
+		headingFound bool
+		err          error
+	}
+	targets := map[targetKey]targetRes{}
 	for i := range creates {
 		c := &creates[i]
 		to := c.to
@@ -159,32 +168,37 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 				case to.areaID != "" && a.UUID == strings.TrimSpace(to.areaID):
 					c.dest = createdDest{checked: true, list: a.UUID}
 				case to.areaID == "" && db.FoldName(a.Title) == db.FoldName(to.area):
-					c.dest = createdDest{checked: true, list: db.FoldName(to.area), byTitle: true}
+					c.dest = areaTitleDest(areas, to.area)
 				}
 			}
 		case to.parentID != "":
 			c.dest = createdDest{checked: true, list: strings.TrimSpace(to.parentID), anyHeading: true}
 		case to.nested:
-			c.dest = createdDest{checked: true, list: db.FoldName(to.parentTitle), byTitle: true, anyHeading: true}
+			// The project is not there before the import, so it can only
+			// be matched by title, trimmed as created titles are.
+			c.dest = createdDest{checked: true, list: db.FoldName(strings.TrimSpace(to.parentTitle)), byTitle: true, anyHeading: true}
 		case to.listID == "" && to.list == "":
-			c.dest = createdDest{checked: true}
+			// A heading-id alone may file the to-do in that heading's
+			// project; what Things does with one was not checked.
+			if to.headingID == "" {
+				c.dest = createdDest{checked: true}
+			}
 		default:
 			list := to.list
 			if to.listID != "" {
 				list = strings.TrimSpace(to.listID)
 			}
-			target, headingFound, err := database.AddTarget(list, to.heading)
-			if err != nil || target == "" || (to.listID != "" && target != list) {
+			tk := targetKey{list, to.heading}
+			res, ok := targets[tk]
+			if !ok {
+				res.target, res.headingFound, res.err = database.AddTarget(list, to.heading)
+				targets[tk] = res
+			}
+			if res.err != nil || res.target == "" || (to.listID != "" && res.target != list) {
 				continue
 			}
-			c.dest = createdDest{checked: true, list: target}
-			if to.listID == "" {
-				c.dest.list, c.dest.byTitle = db.FoldName(list), true
-			}
-			switch {
-			case headingFound && to.headingID == "":
-				c.dest.heading = db.FoldCase(to.heading)
-			case to.heading != "" || to.headingID != "":
+			c.dest = addDest(res.target, to.heading, res.headingFound && to.headingID == "")
+			if c.dest.heading == "" && (to.heading != "" || to.headingID != "") {
 				c.dest.anyHeading = true
 			}
 		}
@@ -685,27 +699,43 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.kind(), c.title, budget, strings.Join(uuids, ", "))
 		}
 	}
-	unconfirmShared(out, found)
+	unconfirmShared(out, creates, found)
 	if err != nil && len(want) > 0 && !d.dbWarned {
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
 	return out
 }
 
-// unconfirmShared turns back every confirmation that gives a new item to more
-// than one created item. An item whose destination is unchecked fits a row
-// filed for another item with the same kind and title, so the two can claim
-// the same row; neither is confirmed, and both are reported ambiguous with
-// every new item either could be.
-func unconfirmShared(out []importCreated, found map[createdWant][]model.Task) {
-	claims := map[string]int{}
-	for _, c := range out {
-		if c.Confirmed {
-			claims[c.UUID]++
+// unconfirmShared turns back every confirmation whose new item another
+// created item can also claim. An item whose destination is unchecked fits a
+// row filed for another item with the same kind and title, so the two can
+// claim the same row: a row two items were both confirmed with, or a row an
+// unchecked item was confirmed with that fits another item's destination too,
+// confirms neither. They are reported ambiguous with every new item either
+// could be, or not-found when fewer new items appeared than the created items
+// that could claim them, since then at least one of those never appeared.
+func unconfirmShared(out []importCreated, creates []importCreate, found map[createdWant][]model.Task) {
+	holds := func(j int, uuid string) bool {
+		return !creates[j].dated && slices.ContainsFunc(found[creates[j].want()], func(t model.Task) bool { return t.UUID == uuid })
+	}
+	shared := make([]bool, len(out))
+	for i, c := range out {
+		if !c.Confirmed {
+			continue
+		}
+		for j := range out {
+			if j == i || creates[j].want() == creates[i].want() || !holds(j, c.UUID) {
+				continue
+			}
+			if !creates[i].dest.checked || (out[j].Confirmed && out[j].UUID == c.UUID) {
+				shared[i] = true
+				break
+			}
 		}
 	}
+	verdicts := map[int]importCreated{}
 	for i, c := range out {
-		if !c.Confirmed || claims[c.UUID] < 2 {
+		if !shared[i] {
 			continue
 		}
 		var rows []model.Task
@@ -732,7 +762,21 @@ func unconfirmShared(out []importCreated, found map[createdWant][]model.Task) {
 		for n, t := range rows {
 			candidates[n] = t.UUID
 		}
-		out[i] = importCreated{Path: c.Path, Kind: c.Kind, Title: c.Title, Reason: "ambiguous", Candidates: candidates}
+		claimants := 0
+		for j := range out {
+			if slices.ContainsFunc(candidates, func(uuid string) bool { return holds(j, uuid) }) {
+				claimants++
+			}
+		}
+		v := importCreated{Path: c.Path, Kind: c.Kind, Title: c.Title, Reason: "ambiguous", Candidates: candidates}
+		if len(rows) < claimants {
+			v.Reason = "not-found"
+			v.detail = fmt.Sprintf("only %d new %ss titled %q appeared for the %d created items that could be filed there (%s)", len(rows), c.Kind, c.Title, claimants, strings.Join(candidates, ", "))
+		}
+		verdicts[i] = v
+	}
+	for i, v := range verdicts {
+		out[i] = v
 	}
 }
 

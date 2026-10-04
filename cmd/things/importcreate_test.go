@@ -522,7 +522,8 @@ func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
 // as an add's is: a row with its title filed elsewhere, from another command
 // adding the same title at the same moment, does not confirm it. A list the
 // CLI cannot resolve is not checked, and when that leaves two items able to
-// claim the same row, neither is confirmed.
+// claim the same row, neither is confirmed; when fewer rows appeared than
+// the items that could claim them, they are not found.
 func TestImportCreatedChecksDestination(t *testing.T) {
 	cases := []struct {
 		name, payload string
@@ -542,7 +543,20 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 		{"unknownList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}}]`,
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"other"}},
 		{"sharedRow", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
-			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"ambiguous", "ambiguous"}},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found", "not-found"}},
+		{"sharedRowBothLand", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"ambiguous", "other"}},
+		{"uncheckedTakesShortRow", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found", "not-found", "not-found"}},
+		// A list-id and a title naming the same project are one
+		// destination, so the two rows pair with the items as usual.
+		{"listIDAndTitle", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
+			[]createdRow{{uuid: "first", title: "Buy oat milk", extra: inProj1}, {uuid: "second", title: "Buy oat milk", extra: inProj1 + `, creationDate = creationDate + 0.001`}}, []string{"first", "second"}},
+		// The project the payload creates is matched by its trimmed title.
+		{"nestedInCreatedPadded", `[{"type":"project","attributes":{"title":" Launch ","items":[{"type":"to-do","attributes":{"title":"Buy oat milk"}}]}}]`,
+			[]createdRow{{uuid: "new-p", title: "Launch", typ: model.TypeProject}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'new-p'`}}, []string{"new-p", "mine"}},
+		{"headingIDAlone", `[{"type":"to-do","attributes":{"title":"Buy oat milk","heading-id":"head-1"}}]`,
+			[]createdRow{{uuid: "mine", title: "Buy oat milk", extra: underHead1}}, []string{"mine"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -553,6 +567,7 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			fx.Area("area-2", "Errands", 2)
 			fx.Project("proj-1", "Tools", 5)
 			fx.Project("proj-2", "Garden", 6)
+			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
 			stubExecAdding(t, sqlDB, tc.rows...)
 
 			out, _, err := runImportOut(t, database, tc.payload, "--json")

@@ -408,10 +408,6 @@ func TestAddUnreadableWithTagsWarnsOnce(t *testing.T) {
 	}
 }
 
-// Things files an add whose --list or --project names no open project or
-// area in the Inbox, and drops a --heading it cannot find, all without a
-// word. The add warns on stderr when that will happen and still sends the
-// write.
 // Column assignments that file a stubbed add's row where Things would.
 const (
 	inProj1    = `project = 'proj-1'`
@@ -420,6 +416,10 @@ const (
 	underHead1 = `heading = 'head-1'`
 )
 
+// Things files an add whose --list or --project names no open project or
+// area in the Inbox, and drops a --heading it cannot find, all without a
+// word. The add warns on stderr when that will happen and still sends the
+// write.
 func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 	cases := []struct {
 		name  string

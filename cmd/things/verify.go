@@ -376,10 +376,12 @@ func newCreatedKey(typ model.TaskType, title string) createdKey {
 // value checks nothing, for a destination the CLI could not resolve.
 type createdDest struct {
 	checked bool
-	// list is the project or area the item is filed in: its uuid, or, when
-	// byTitle is set, FoldName of the title the write named it by, which is
-	// how Things matches it, so any list with that title fits. "" is none:
-	// the Inbox (or wherever --when puts it), or a project with no area.
+	// list is the project or area the item is filed in: its uuid whenever
+	// the CLI could resolve one, or, when byTitle is set, FoldName of the
+	// trimmed title, so any list with that title fits: a project the same
+	// import creates, or one of several areas that share a title. "" is
+	// none: the Inbox (or wherever --when puts it), or a project with no
+	// area.
 	list    string
 	byTitle bool
 	// heading is FoldCase of the title of the heading the item goes under,
@@ -406,7 +408,7 @@ func (dst createdDest) fits(t model.Task) bool {
 			return false
 		}
 	case dst.byTitle:
-		if id == "" || db.FoldName(title) != dst.list {
+		if id == "" || db.FoldName(strings.TrimSpace(title)) != dst.list {
 			return false
 		}
 	case id != dst.list:
@@ -471,6 +473,10 @@ func findCreated(database *db.DB, snap createdSnapshot, want map[createdWant]int
 		}
 	}
 	slices.Sort(types)
+	byKey := map[createdKey][]createdWant{}
+	for w := range want {
+		byKey[w.key] = append(byKey[w.key], w)
+	}
 
 	matched := 0
 	_ = pollUntil(budget, func(bool) (bool, error) {
@@ -488,8 +494,8 @@ func findCreated(database *db.DB, snap createdSnapshot, want map[createdWant]int
 					continue
 				}
 				key := newCreatedKey(typ, t.Title)
-				for w := range want {
-					if w.key == key && w.dest.fits(t) {
+				for _, w := range byKey[key] {
+					if w.dest.fits(t) {
 						round[w] = append(round[w], t)
 					}
 				}
