@@ -264,6 +264,15 @@ const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + notATemplat
 // "taken out of Today for this deadline"; the app cleared that column when a
 // deadline was changed. No project, and no Someday-bucket to-do, of this shape
 // was measured, so both are left out rather than guessed at (issue #294).
+//
+// The test is IS NULL rather than "differs from the deadline" because no write
+// measured leaves a stale suppression behind. On 4 Oct 2026, suppressed test
+// to-dos had their deadline moved by the URL scheme (things edit --deadline)
+// and by AppleScript (set due date), each to tomorrow and to an earlier,
+// overdue day. Every move cleared the column, and the overdue ones came back
+// into the app's Today. Setting the same deadline again left the column and
+// kept the to-do out of Today. Sync from another device was not measured
+// (issue #376).
 const todayDue = "t.start IN (0, 1) AND t.startDate IS NULL AND t.type = 0 AND t.deadline <= " + thingsToday +
 	" AND t.deadlineSuppressionDate IS NULL"
 

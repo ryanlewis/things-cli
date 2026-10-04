@@ -2602,6 +2602,10 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 	fx.Todo("inbox-overdue", "Inbox overdue", 5, inbox(), deadline(earlier))
 	// Taken out of Today for this deadline.
 	fx.Todo("suppressed", "Suppressed", 6, anytime(), deadline(earlier), suppressed(earlier))
+	// Suppressed for an older deadline. Every deadline move measured cleared
+	// the column, so this row should not arise; any suppression still counts
+	// (issue #376).
+	fx.Todo("suppressed-older", "Suppressed for an older deadline", 9, anytime(), deadline(today), suppressed(earlier))
 	// Due later is Upcoming's business, and no deadline is no reason at all.
 	fx.Todo("due-tomorrow", "Due tomorrow", 7, anytime(), deadline(tomorrow))
 	fx.Todo("no-deadline", "No deadline", 8, anytime())
