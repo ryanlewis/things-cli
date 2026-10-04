@@ -183,6 +183,39 @@ func TestAddMatchesTrimmedTitle(t *testing.T) {
 	}
 }
 
+// A title sent with decomposed accents is confirmed by a row stored composed,
+// and the other way round, but a title differing in case is not.
+func TestAddMatchesTitleInEitherNormalisationForm(t *testing.T) {
+	const composed, decomposed = "Caf\u00e9 run", "Cafe\u0301 run"
+	for name, c := range map[string]struct{ sent, stored string }{
+		"sent decomposed, stored composed": {decomposed, composed},
+		"sent composed, stored decomposed": {composed, decomposed},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: c.stored})
+
+			out, err := runOut(t, database, "add", c.sent)
+			if err != nil {
+				t.Fatalf("add: %v", err)
+			}
+			if !strings.Contains(out, "new-1") {
+				t.Errorf("output = %q, want the new item", out)
+			}
+		})
+	}
+}
+
+func TestNewCreatedKeyKeepsCase(t *testing.T) {
+	if newCreatedKey(model.TypeTask, "Cafe\u0301") != newCreatedKey(model.TypeTask, "Caf\u00e9 ") {
+		t.Error("NFD and NFC titles are different keys")
+	}
+	if newCreatedKey(model.TypeTask, "Buy milk") == newCreatedKey(model.TypeTask, "buy milk") {
+		t.Error("titles differing in case are the same key")
+	}
+}
+
 // project add --todos creates to-dos too; one titled like the project is not
 // a second candidate, since only projects are looked for.
 func TestProjectAddIgnoresSameTitledTodo(t *testing.T) {
