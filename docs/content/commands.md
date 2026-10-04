@@ -336,6 +336,12 @@ the same items the same way — but the numbers still move as items are
 added, closed or rescheduled, so re-read the list rather than reusing an
 index from an earlier one.
 
+A number that is not a row in the last list is refused, not searched for as
+part of a title: after a 10-row list, `things complete 12` does not complete
+"Chapter 12 notes". The same goes when there is no last list at all. The error
+says to re-run the list. A task whose title is exactly that number still
+resolves, as does a uuid.
+
 A `--json` listing is the exception: it prints no numbers and records
 none, so it leaves your indices pointing where they did. That keeps a
 script or an agent running `--json` in another window from renumbering

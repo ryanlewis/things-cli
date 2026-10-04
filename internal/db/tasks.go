@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -1288,6 +1289,32 @@ func (d *DB) GetTasksByUUIDs(uuids []string) (map[string]*model.Task, error) {
 // when the reference leaves more than one candidate standing, so the caller
 // picks by uuid rather than being handed a row this package chose for it.
 func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
+	t, err := d.GetTaskExact(uuidOrTitle)
+	var notFound *TaskNotFoundError
+	if !errors.As(err, &notFound) {
+		return t, err
+	}
+
+	// Try LIKE match — return all matches for disambiguation
+	matches, err := d.FindTasksByTitle(uuidOrTitle)
+	if err != nil {
+		return nil, err
+	}
+	switch len(matches) {
+	case 0:
+		return nil, &TaskNotFoundError{Query: uuidOrTitle}
+	case 1:
+		return &matches[0], nil
+	default:
+		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: matches}
+	}
+}
+
+// GetTaskExact is GetTask without the substring fallback: a UUID or a title
+// that is exactly the reference, and a *TaskNotFoundError otherwise. A
+// reference that must not be guessed at, such as an all-digit one that was not
+// a list row, resolves through this (issue #375).
+func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 	t, err := d.GetTaskByUUID(uuidOrTitle)
 	if err != nil {
 		return nil, err
@@ -1306,20 +1333,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 		}
 		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
 	}
-
-	// Try LIKE match — return all matches for disambiguation
-	matches, err := d.FindTasksByTitle(uuidOrTitle)
-	if err != nil {
-		return nil, err
-	}
-	switch len(matches) {
-	case 0:
-		return nil, &TaskNotFoundError{Query: uuidOrTitle}
-	case 1:
-		return &matches[0], nil
-	default:
-		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: matches}
-	}
+	return nil, &TaskNotFoundError{Query: uuidOrTitle}
 }
 
 // findTasksByExactTitle returns every open task carrying exactly this title.
