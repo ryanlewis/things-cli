@@ -102,7 +102,7 @@ Both routes create over AppleScript, so Things3 must be running, and both skip n
 
 `project add --area` takes an area name or UUID. It warns the same way when `--area` names no area (Things creates the project with no area), and still creates the project.
 
-`edit --list` and `--heading` warn the same way, then send the edit. An unknown `--list` leaves the to-do where it is; an unknown `--heading` in a known list moves the to-do there with no heading; `--heading` on its own looks in the to-do's current project and is ignored if the heading is not there. `--list` takes a UUID too. `project edit --area` warns when it names no area, and Things leaves the project where it is. A move Things will drop counts as no change, so a move-only edit prints the item unchanged rather than failing: check the warning, not just the exit code.
+`edit --list` and `--heading` warn the same way, then send the edit. An unknown `--list` is ignored: the to-do stays where it is, or with `--heading` the heading is looked up as if given alone; an unknown `--heading` in a known list moves the to-do there with no heading; `--heading` on its own looks in the to-do's current project and is ignored if the heading is not there. Heading titles match like list titles. `--list` takes a UUID too. An unknown `--list-id` or `--heading-id` is ignored and warned about the same way. `project edit --area` or `--area-id` warns when it names no area, and Things leaves the project where it is. A move Things will drop, or a move to where the item already is, counts as no change, so a move-only edit prints the item unchanged rather than failing: check the warning, not just the exit code.
 
 ### 2. Repeating items refuse status, `when` and `deadline`
 

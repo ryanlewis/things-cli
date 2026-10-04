@@ -21,6 +21,9 @@ func TestAddTarget(t *testing.T) {
 	fx.Project("proj-trash", "Binned", 3, dbtest.Trashed())
 	fx.Heading("head-1", "Ärger", 1, dbtest.InProject("proj-1"))
 	fx.Heading("head-trash", "Gone", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
+	fx.Heading("head-sharp", "Straße", 3, dbtest.InProject("proj-1"))
+	fx.Heading("head-nfd", "Noe\u0308l", 4, dbtest.InProject("proj-1"))
+	fx.Heading("head-wide", "\uff26ull", 5, dbtest.InProject("proj-1"))
 	d := &DB{db: sqlDB}
 
 	cases := []struct {
@@ -52,7 +55,12 @@ func TestAddTarget(t *testing.T) {
 		{"Ｔools", "", true, false}, // compatibility forms match, as in Things
 		{"Personal\u00a0", "", false, false},
 		{"Errands\u00a0", "", true, false},
-		{"Tools", "Ärgeｒ", true, false}, // but not in a heading: not checked in Things
+		// Checked in Things 3: headings fold fully and across NFC and NFD,
+		// but a compatibility form such as fullwidth does not match.
+		{"Tools", "Ärgeｒ", true, false},
+		{"Tools", "STRASSE", true, true},
+		{"Tools", "No\u00ebl", true, true},
+		{"Tools", "Full", true, false},
 	}
 	for _, tc := range cases {
 		target, headOK, err := d.AddTarget(tc.list, tc.heading)
@@ -90,6 +98,25 @@ func TestAddTargetPrefersExactCase(t *testing.T) {
 			if headOK != tc.headOK {
 				t.Errorf("insert order %v: AddTarget(%q, Setup) heading = %v, want %v", order, tc.list, headOK, tc.headOK)
 			}
+		}
+	}
+}
+
+// A heading-id counts only for an untrashed heading, never another item.
+func TestHeadingExists(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-1", "Tools", 1)
+	fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+	fx.Heading("head-trash", "Gone", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
+	d := &DB{db: sqlDB}
+	for uuid, want := range map[string]bool{"head-1": true, "head-trash": false, "proj-1": false, "nope": false} {
+		got, err := d.HeadingExists(uuid)
+		if err != nil {
+			t.Fatalf("HeadingExists(%q): %v", uuid, err)
+		}
+		if got != want {
+			t.Errorf("HeadingExists(%q) = %v, want %v", uuid, got, want)
 		}
 	}
 }

@@ -109,15 +109,47 @@ func (c *ProjectEditCmd) Run(d *Deps) error {
 
 // checkOwn reports whether any of this command's own field flags may change
 // the project. None of them is in coveredFields; runEdit adds the shared ones.
-// An --area Things cannot match is warned about and counts as no change, since
-// Things leaves the project where it is; an area uuid goes as area-id.
-func (c *ProjectEditCmd) checkOwn(d *Deps, _ *db.DB, _ *model.Task) bool {
-	if c.Area == nil || c.AreaID != nil {
+// An --area or --area-id Things cannot match is warned about and counts as no
+// change, since Things leaves the project where it is; so does the area the
+// project is already in, since Things records no change for it. An area uuid
+// goes as area-id.
+func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
+	switch {
+	case c.AreaID != nil && c.Area == nil:
+		return c.checkAreaID(d, database, task)
+	case c.Area == nil || c.AreaID != nil:
 		return anySet(c.Area, c.AreaID)
 	}
 	id, known := projectAreaID(d, *c.Area, "the project will stay where it is")
 	if id != "" {
 		c.Area, c.AreaID = nil, &id
+		return id != task.AreaUUID
 	}
-	return known
+	// Two areas whose titles fold together are not told apart here.
+	return known && (task.AreaTitle == "" || db.FoldCase(task.AreaTitle) != db.FoldCase(*c.Area))
+}
+
+// checkAreaID warns when Things has no area with the uuid --area-id gives,
+// and reports whether the project may move. Checked in Things 3: an unknown
+// area-id leaves the project where it is.
+func (c *ProjectEditCmd) checkAreaID(d *Deps, database *db.DB, task *model.Task) bool {
+	id := strings.TrimSpace(*c.AreaID)
+	switch id {
+	case "":
+		// What Things does with an empty area-id was not checked.
+		return true
+	case task.AreaUUID:
+		return false
+	}
+	areas, err := database.ListAreas()
+	if err != nil {
+		return true
+	}
+	for _, a := range areas {
+		if a.UUID == id {
+			return true
+		}
+	}
+	fmt.Fprintf(d.errOut(), "warning: Things has no area with id %q; the project will stay where it is\n", *c.AreaID)
+	return false
 }

@@ -454,17 +454,27 @@ open projects and areas. `--list` also takes a UUID of an open project or
 area, which the CLI sends to Things as `list-id`; `--list-id` and
 `--heading-id` take UUIDs directly. `--heading` on its own looks in the
 project the to-do is already in. When nothing matches, Things does not
-complain: an unknown list leaves the to-do where it is, an unknown heading
-in a known list moves the to-do to that list with no heading, and an
-unknown heading on its own is ignored. `edit` warns on stderr when that
-will happen, then sends the edit anyway:
+complain: an unknown list is ignored, so the to-do stays where it is or,
+with `--heading`, the heading is looked up as if given on its own; an
+unknown heading in a known list moves the to-do to that list with no
+heading; an unknown heading on its own is ignored; and an unknown
+`--list-id` or `--heading-id` is ignored too. `edit` warns on stderr when
+that will happen, then sends the edit anyway:
 
 ```
 warning: Things has no open project or area called "Nowhere"; the to-do will stay where it is
+warning: Things has no open project or area called "Nowhere"; it will look for --heading "Setup" in the to-do's own project
+warning: Things has no open project or area with id "abc123"; the to-do will stay where it is
+warning: Things has no heading with id "abc123"; the to-do will stay where it is
 warning: "Tools" has no heading "Later"; Things will move the to-do there without a heading
 warning: "Tools" has no heading "Later"; Things will leave the to-do where it is
 warning: --heading "Later" needs --list: the to-do is not in a project, so Things will leave it where it is
 ```
+
+A move Things will drop counts as no change, and so does a move to the
+list, area or heading the to-do is already in, since Things records no
+change for it. An edit made only of such moves prints the item at once
+instead of waiting for a change.
 
 Things reports nothing back from an edit, so the CLI waits for the item's
 modification date to change (and, with `--complete` or `--cancel`, for the
@@ -525,10 +535,13 @@ way, pointing back at `things edit`.
 `--area`/`--area-id` to move the project. It has no checklist or
 heading flags. `--area` takes an area name or UUID, matched as for
 `project add`; a UUID goes to Things as `area-id`. An area Things cannot
-match leaves the project where it is, and `project edit` warns:
+match, by name or by `--area-id`, leaves the project where it is, and
+`project edit` warns. A move to the area the project is already in counts
+as no change.
 
 ```
 warning: Things has no area called "Nowhere"; the project will stay where it is
+warning: Things has no area with id "abc123"; the project will stay where it is
 ```
 
 ## Tags must already exist
