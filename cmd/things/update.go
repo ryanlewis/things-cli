@@ -196,15 +196,27 @@ func (c *UpdateCmd) Run(d *Deps) error {
 		}
 	}
 
+	// install.sh and go install each pick the latest release themselves and
+	// never compare it with what is installed, so without the check they could
+	// replace a newer binary with an older one. brew upgrade makes its own
+	// comparison, so Homebrew carries on.
+	blind := checkErr != nil && plan.method != methodBrew
+
 	if c.DryRun {
 		if checkErr != nil {
 			fmt.Fprintf(d.errOut(), "Could not check the latest release (%v).\n", checkErr)
 		}
 		fmt.Fprintf(d.Stdout, "Would run: %s\n", plan.shown)
-		if plan.method == methodScript && !dirWritable(plan.dir) {
+		if blind {
+			fmt.Fprintf(d.errOut(), "Without the latest release to compare with, `things update` would stop here; run the command above yourself if you want it.\n")
+		} else if plan.method == methodScript && !dirWritable(plan.dir) {
 			fmt.Fprintf(d.errOut(), "%s is not writable, so `things update` would stop here; run the command above yourself.\n", plan.dir)
 		}
 		return nil
+	}
+
+	if blind {
+		return fmt.Errorf("could not check the latest release (%v), so things will not update itself: it cannot tell whether the update would replace things %s with an older release. Try again later, or run this yourself:\n  %s", checkErr, plan.current, plan.shown)
 	}
 
 	// install.sh reaches for sudo when it cannot write the directory. Leave
@@ -214,7 +226,7 @@ func (c *UpdateCmd) Run(d *Deps) error {
 	}
 
 	if checkErr != nil {
-		fmt.Fprintf(d.errOut(), "Could not check the latest release (%v); updating anyway.\n", checkErr)
+		fmt.Fprintf(d.errOut(), "Could not check the latest release (%v); updating anyway, as brew upgrade checks for itself.\n", checkErr)
 	} else {
 		fmt.Fprintf(d.Stdout, "Updating things %s to %s.\n", plan.current, latest)
 	}

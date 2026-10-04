@@ -91,7 +91,9 @@ things update
 
 Updates the CLI the same way you installed it: Homebrew, the install
 script, or `go install`. Add `--dry-run` to see the command without
-running it. See [`things update`](/commands/#update).
+running it. If it cannot reach GitHub to check the latest release, it
+stops rather than risk installing an older version (Homebrew excepted).
+See [`things update`](/commands/#update).
 
 ## Verifying the install
 
