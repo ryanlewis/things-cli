@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -359,14 +361,16 @@ const createdSlack = time.Second
 const addSettleRounds = 2
 
 // createdKey is what the read-back matches a created item on: its type and
-// its title with surrounding whitespace trimmed.
+// its title with surrounding whitespace trimmed and in NFC, since Things may
+// store a title with the accents composed or decomposed whichever way it was
+// sent. Case still counts.
 type createdKey struct {
 	typ   model.TaskType
 	title string
 }
 
 func newCreatedKey(typ model.TaskType, title string) createdKey {
-	return createdKey{typ: typ, title: strings.TrimSpace(title)}
+	return createdKey{typ: typ, title: norm.NFC.String(strings.TrimSpace(title))}
 }
 
 // createdSnapshot is what was there before a write that creates items: the
