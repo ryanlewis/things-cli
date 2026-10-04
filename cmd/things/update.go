@@ -263,7 +263,7 @@ func (c *UpdateCmd) Run(d *Deps) error {
 	}
 	fmt.Fprintf(d.Stdout, "Running: %s\n", plan.shown)
 	cmd := updateCommand(plan.args[0], plan.args[1:]...)
-	cmd.Stdin = os.Stdin
+	cmd.Stdin = d.in()
 	cmd.Stdout = d.Stdout
 	cmd.Stderr = d.errOut()
 	if err := cmd.Run(); err != nil {

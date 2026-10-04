@@ -24,7 +24,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	if rowRef {
 		last, cacheErr = cache.ReadLastList()
 	}
-	if n, err := strconv.Atoi(ref); err == nil && n >= 1 {
+	if n, err := strconv.Atoi(ref); rowRef && err == nil && n >= 1 {
 		if cacheErr == nil && n <= len(last.UUIDs) {
 			// The row exists in the cache, so this reference is a row number
 			// and nothing else. Refuse it when the listing behind it is old

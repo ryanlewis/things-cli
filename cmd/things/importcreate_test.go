@@ -557,6 +557,13 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			[]createdRow{{uuid: "new-p", title: "Launch", typ: model.TypeProject}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'new-p'`}}, []string{"new-p", "mine"}},
 		{"headingIDAlone", `[{"type":"to-do","attributes":{"title":"Buy oat milk","heading-id":"head-1"}}]`,
 			[]createdRow{{uuid: "mine", title: "Buy oat milk", extra: underHead1}}, []string{"mine"}},
+		// Things takes list by title only, so a uuid there is not checked
+		// against the project it names: the item may land in the Inbox.
+		{"uuidAsList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"proj-1"}}]`,
+			[]createdRow{{uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		// A title two areas share fits either of them.
+		{"sharedAreaTitle", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Personal"}}]`,
+			[]createdRow{{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-3'`}}, []string{"mine"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -565,6 +572,7 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			fx := dbtest.NewFixture(t, sqlDB)
 			fx.Area("area-1", "Personal", 1)
 			fx.Area("area-2", "Errands", 2)
+			fx.Area("area-3", "Personal", 3)
 			fx.Project("proj-1", "Tools", 5)
 			fx.Project("proj-2", "Garden", 6)
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
