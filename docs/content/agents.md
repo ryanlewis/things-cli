@@ -219,10 +219,10 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   carries no date, so it does not on its own say which list the app shows
   the item in: a dated `"anytime"` row is in Today, a `"someday"` row
   dated after today is in Upcoming, and only an undated one is in Someday.
-  A `"someday"` row dated today or earlier is in Today and Anytime: just
-  after midnight, Things can leave a task scheduled for the new day as
-  `"someday"` until it next tidies up, and the app already shows it as
-  today's. An undated
+  Just after midnight, Things can leave an open task scheduled for the new
+  day in Someday until it next tidies up; the app already shows it as
+  today's, so it reports `"anytime"`, as it will once Things moves it. An
+  undated
   `"anytime"` task with a deadline after today is in Upcoming too, under
   the deadline's day, as well as in Anytime, so a sweep across `upcoming`
   and `anytime` merges on `uuid`. An undated `"anytime"` task whose

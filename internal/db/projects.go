@@ -14,7 +14,7 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 			t.uuid,
 			COALESCE(t.title, ''),
 			COALESCE(t.status, 0),
-			COALESCE(t.start, 0),
+			` + shownStart + `,
 			COALESCE(t.startBucket, 0),
 			t.startDate,
 			t.deadline,

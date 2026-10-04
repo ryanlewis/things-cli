@@ -2694,6 +2694,65 @@ func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
 	}
 }
 
+// A row Things has not yet moved reports the start the app shows, Anytime,
+// so --json agrees with the listing that files it under today. A row dated
+// after today, an undated Someday row, and a closed or trashed one Things
+// will never move keep start = 2.
+func TestScheduledRowNotYetMovedReportsAnytime(t *testing.T) {
+	d, fx := newFixture(t)
+
+	now := time.Now()
+	today := int64(model.ThingsDateFromTime(now))
+	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	done := float64(now.Unix())
+
+	fx.Todo("stuck-today", "Scheduled today, not yet moved", 1, somedayOn(today))
+	fx.Project("stuck-project", "Project scheduled today, not yet moved", 2, somedayOn(today))
+	fx.Todo("sched-tomorrow", "Scheduled tomorrow", 3, somedayOn(tomorrow))
+	fx.Todo("someday", "Someday", 4, someday())
+	fx.Todo("closed-stuck", "Done before its day", 5, somedayOn(today), completed(done))
+	fx.Todo("trashed-stuck", "Trashed before its day", 6, somedayOn(today), trashed())
+
+	want := map[string]model.Start{
+		"stuck-today":    model.StartAnytime,
+		"stuck-project":  model.StartAnytime,
+		"sched-tomorrow": model.StartSomeday,
+		"someday":        model.StartSomeday,
+		"closed-stuck":   model.StartSomeday,
+		"trashed-stuck":  model.StartSomeday,
+	}
+	got, err := d.GetTasksByUUIDs(keysOfStart(want))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for uuid, w := range want {
+		task, ok := got[uuid]
+		if !ok {
+			t.Errorf("%s: not found", uuid)
+			continue
+		}
+		if task.Start != w {
+			t.Errorf("%s: start = %v, want %v", uuid, task.Start, w)
+		}
+	}
+
+	projects, err := d.ListProjects("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 || projects[0].Start != model.StartAnytime {
+		t.Errorf("projects: got %+v, want stuck-project with start anytime", projects)
+	}
+}
+
+func keysOfStart(m map[string]model.Start) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 // A project in the same state is no longer deferred either: Anytime keeps
 // its to-dos, in the project and under its headings, as it does for any
 // project whose day has come. A project scheduled after today still hides

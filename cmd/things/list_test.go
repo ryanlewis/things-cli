@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/model"
 )
 
 // seedRepeatingProjectDB seeds a repeating project template holding one to-do
@@ -88,5 +91,68 @@ func TestRepeatingProjectNoteMatchesByUUID(t *testing.T) {
 	}
 	if !strings.Contains(stderr, repeatingProjectNote) {
 		t.Errorf("stderr = %q, want the repeating-template note", stderr)
+	}
+}
+
+// seedStuckRowDB seeds a to-do scheduled for today that Things has not yet
+// moved out of start = 2 (issue #363), beside an ordinary Someday to-do.
+func seedStuckRowDB(t *testing.T) *db.DB {
+	t.Helper()
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	fx.Todo("t-stuck", "Scheduled today, not yet moved", 1, dbtest.SomedayOn(today))
+	fx.Todo("t-someday", "Some day", 2, dbtest.Someday())
+	return db.NewFromSQL(sqlDB)
+}
+
+// --json reports the start the listing and the app go by: a stuck row is
+// today's, so it says "anytime", while a Someday row still says "someday".
+func TestStuckRowJSONStartIsAnytime(t *testing.T) {
+	for _, args := range [][]string{
+		{"--json", "today"},
+		{"--json", "search", "Scheduled today"},
+	} {
+		stdout, _, err := runStreams(t, seedStuckRowDB(t), args...)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		var tasks []model.Task
+		if err := json.Unmarshal([]byte(stdout), &tasks); err != nil {
+			t.Fatalf("%v: unmarshal %q: %v", args, stdout, err)
+		}
+		if len(tasks) != 1 || tasks[0].UUID != "t-stuck" || tasks[0].Start != model.StartAnytime {
+			t.Errorf("%v: got %+v, want t-stuck with start anytime", args, tasks)
+		}
+	}
+
+	stdout, _, err := runStreams(t, seedStuckRowDB(t), "--json", "show", "t-stuck")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, `"start": "anytime"`) {
+		t.Errorf("show t-stuck --json = %q, want start anytime", stdout)
+	}
+	stdout, _, err = runStreams(t, seedStuckRowDB(t), "--json", "show", "t-someday")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, `"start": "someday"`) {
+		t.Errorf("show t-someday --json = %q, want start someday", stdout)
+	}
+}
+
+// The plain-text listing marks the stuck row with the star every to-do
+// scheduled for today carries.
+func TestStuckRowPlainTextIsToday(t *testing.T) {
+	stdout, _, err := runStreams(t, seedStuckRowDB(t), "--no-hints", "today")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "★ Scheduled today, not yet moved") {
+		t.Errorf("today = %q, want the stuck row starred", stdout)
+	}
+	if strings.Contains(stdout, "Some day") {
+		t.Errorf("today = %q, want no Someday row", stdout)
 	}
 }
