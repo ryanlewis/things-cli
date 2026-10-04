@@ -275,15 +275,16 @@ Filters:
 | `--on DATE` | Only tasks scheduled on `YYYY-MM-DD` (or RFC3339); on `deadlines`, filters by deadline, and on `upcoming` an undated task by its deadline |
 | `--from DATE` | Only tasks scheduled on or after the date |
 | `--to DATE` | Only tasks scheduled on or before the date |
-| `--include-completed` | On `today`, `anytime` and `upcoming`, and with `--project` or `--area`: also show items closed today that Things hasn't logged out of the list yet |
+| `--open-only` | Leave out the closed items Things hasn't logged out of the list yet, which `inbox`, `today`, `anytime`, `upcoming`, `someday` and a `--project` or `--area` listing show by default |
 
 `-p`/`-a`/`-t` name what to list, so on their own they cover every open
-task in the project, area, or tag — not just the ones scheduled for today.
+task in the project, area, or tag — not just the ones scheduled for today —
+and `-p`/`-a` also the ones closed today that Things still shows there.
 Name a view as well and the filter applies within that view, and the
 listing says which view it drew from:
 
 ```sh
-things -p "Launch v2"                # every open task in the project
+things -p "Launch v2"                # every open task in the project, plus those closed today
 things today -p "Launch v2"          # today's slice of it, labelled "view: today"
 things "Launch v2"                   # same as -p, project name as an argument
 ```
@@ -325,11 +326,12 @@ The date filters (`--on`, `--from`, `--to`) apply to date-filterable views —
 `today`, `upcoming`, `anytime`, `deadlines`, and project listings (`someday`
 items have no start date, so they can't be date-filtered, and neither can
 `repeating` templates) — and `--on` can't be combined with `--from`/`--to`.
-`--include-completed` applies to the `today`, `anytime` and `upcoming` views and to a bare
-`--project` or `--area` listing, so with a `--tag` filter it needs the view
-spelled out: `things today -t urgent --include-completed`. It shows the items you
-ticked off in that list which Things still keeps there; `logbook` holds every
-other closed item, today's closes outside those lists included, so a closed
+`inbox`, `today`, `anytime`, `upcoming` and `someday`, and a bare `--project`
+or `--area` listing, show the items you ticked off in that list which Things
+still keeps there, marked `[x]` or `[~]`, unless you pass `--open-only`; a
+bare `--tag` sweep lists open tasks only. `--include-completed`, which used to
+turn this on, is accepted and does nothing. `logbook` holds every other closed
+item, today's closes outside those lists included, so a closed
 item whose project is still open is either logged or still listed, never both.
 The lists do overlap each other — a task scheduled for today is in the Anytime
 bucket too, and an undated one due later is in Anytime and Upcoming — so

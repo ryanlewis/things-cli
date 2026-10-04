@@ -16,33 +16,35 @@ type TaskFilter struct {
 	Area    string
 	Tag     string
 
-	// IncludeCompleted keeps completed/cancelled items that Things has not yet
-	// logged out of the list they are in (UI-parity). It reaches the views
-	// CompletableView reports — inbox, today, anytime, upcoming, someday, and the catch-all when Project
-	// names a project — and without it those return only open tasks. Ignored
-	// by every other view.
-	IncludeCompleted bool
+	// OpenOnly drops the completed/cancelled items that Things has not yet
+	// logged out of the list they are in. By default the views CompletableView
+	// reports — inbox, today, anytime, upcoming, someday, and the catch-all
+	// when Project or Area names one — list those items, as the app does
+	// (UI-parity); with OpenOnly they return only open tasks. Every other view
+	// lists the same rows either way.
+	OpenOnly bool
 
 	On   *model.ThingsDate
 	From *model.ThingsDate
 	To   *model.ThingsDate
 }
 
-// CompletableView reports whether --include-completed applies to the view.
-// The answer comes off the view's own spec, and it is the same field that
-// widens the status test when the flag is set, so the question the CLI asks
-// and the SQL it then runs cannot disagree.
+// CompletableView reports whether the view lists closed rows Things has not
+// yet logged, unless OpenOnly is set. The CLI asks it to keep rejecting the
+// no-op --include-completed where it never applied. The answer comes off the
+// view's own spec, and it is the same field that widens the status test, so
+// the question the CLI asks and the SQL it then runs cannot disagree.
 //
 // projectNamed is whether --project names a project, and areaNamed whether
-// --area names an area. The catch-all view takes the flag only then. Naming a
+// --area names an area. The catch-all view widens only then. Naming a
 // project lists its contents (widensToProjectContents), and the app keeps a
 // to-do closed today on the project's page (issue #295). Naming an area lists
 // the area's page, which keeps one too (see completesWithArea). A bare --tag
-// sweep through the same view still rejects it: a tag is a filter in the app,
-// not a list with a page of its own, so there is no app answer to match.
+// sweep through the same view lists open rows only: a tag is a filter in the
+// app, not a list with a page of its own, so there is no app answer to match.
 func CompletableView(view string, projectNamed, areaNamed bool) bool {
 	spec := views[view]
-	return spec.supportsIncludeCompleted ||
+	return spec.showsUnlogged ||
 		(projectNamed && spec.widensToProjectContents) ||
 		(areaNamed && spec.completesWithArea)
 }
@@ -51,7 +53,7 @@ func CompletableView(view string, projectNamed, areaNamed bool) bool {
 func CompletableViewNames() []string {
 	names := make([]string, 0, len(views))
 	for name, spec := range views {
-		if spec.supportsIncludeCompleted {
+		if spec.showsUnlogged {
 			names = append(names, name)
 		}
 	}
@@ -300,14 +302,14 @@ const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16
 // on the view that a row no list held went to the Logbook at once. The app
 // does not do that. Measured on 4 Oct 2026 under the daily setting, its
 // Logbook held none of eight rows closed that day, among them a closed
-// project with no area that no list shows at all. The CLI reaches each such
-// row under --include-completed: a view (someday included), its project, or
-// its area. A closed Anytime project with no area is the one exception, and
-// `things projects --completed` lists it.
+// project with no area that no list shows at all. The CLI lists each such
+// row by default in a view (someday included), its project, or its area,
+// unless --open-only is passed. A closed Anytime project with no area is the
+// one exception, and `things projects --completed` lists it.
 //
 // notATemplate is the other half of the test. today, anytime, upcoming and
 // someday all drop repeating templates and the contents of repeating project
-// templates, and the repeating view takes no --include-completed, so
+// templates, and the repeating view lists only open rows, so
 // withholding such a row would take it out of every list. The Logbook keeps
 // them (includesTemplates) at once. Both halves of notATemplate are "IS NULL"
 // tests, which are never NULL themselves.
@@ -328,7 +330,7 @@ const parentClosed = "COALESCE(p.status, 0) IN (2, 3)"
 // parentNotClosed is the fold issue #229 measured: a closed project is one row
 // in the Logbook and its to-dos are not listed beside it, because the app
 // folds them into the project's row. It keeps an unparented row in the view.
-// The --include-completed views fold only once the project is logged; see
+// The views that show unlogged rows fold only once the project is logged; see
 // parentCloseLogged.
 //
 // Trash is the deliberate exception rather than a third caller: it folds a
@@ -339,21 +341,21 @@ const parentNotClosed = "NOT (" + parentClosed + ")"
 // parentCloseUnlogged is closedTodayUnlogged asked of the parent project.
 var parentCloseUnlogged = strings.ReplaceAll(closedTodayUnlogged, "t.stopDate", "p.stopDate")
 
-// parentNotClosedOrUnlogged is the fold the --include-completed views apply:
+// parentNotClosedOrUnlogged is the fold the views that show unlogged rows apply:
 // a to-do of a closed project stays in place, struck through, until the
 // project itself is logged, and only then folds into it (issue #249). Measured
 // on 4 Oct 2026, the app's Anytime, Today and Upcoming each kept the to-dos
 // of a project closed that day where they were.
 var parentNotClosedOrUnlogged = "(" + parentNotClosed + " OR (" + parentCloseUnlogged + "))"
 
-// openOrJustClosed is the status test for the views that --include-completed
-// applies to. By default only open rows; with the flag, also the rows the app
+// openOrJustClosed is the status test for the views that show unlogged rows.
+// Under OpenOnly only open rows; by default, also the rows the app
 // is still showing in place because they were closed and not yet logged, and
 // not folded into a logged project's row. Shared so inbox, today, anytime,
 // upcoming and someday cannot answer the question differently.
 //
 // The fold sits inside the closed branch rather than beside it, so it can only
-// ever remove a row --include-completed just added. An open to-do under a
+// ever remove a closed row the widening just added. An open to-do under a
 // closed project is a different question and a riskier one — dropping it would
 // take real work out of Today — and issue #249 does not ask it. There was no
 // such row in the data on 10 Sep 2026 to measure the app's answer against.
@@ -383,7 +385,7 @@ func openOrJustClosed(o whereOpts) string {
 // among them, so a change to one meant finding the rest by eye (issue #240).
 const (
 	// openRows is the default status test. Almost every view is the open set;
-	// inbox, today, anytime, upcoming and someday widen past it under --include-completed, and only the
+	// inbox, today, anytime, upcoming and someday widen past it unless OpenOnly is set, and only the
 	// logbook and trash are built on something else.
 	openRows = "t.status = 0"
 	// closedRows is the Logbook's status test: completed and cancelled both,
@@ -453,7 +455,7 @@ const (
 	parentNotDeferred = "NOT (COALESCE(p.start, 1) = 2 AND (p.startDate IS NULL OR p.startDate > " + thingsToday + "))"
 	// notHeldInPlace is the Logbook's complement of what Things has not yet
 	// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosed, which it shares with the
-	// --include-completed views since #252, so it is defined with its pair.
+	// views that show unlogged rows since #252, so it is defined with its pair.
 	notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
 	// notTodayDue is the Inbox's half of todayDue: an undated Inbox to-do
 	// whose deadline has come leaves the Inbox for Today, and goes back when
@@ -492,9 +494,9 @@ type viewSpec struct {
 	// status is the row-state test. Empty only for trash, which takes a row
 	// whatever state it is in.
 	//
-	// Where supportsIncludeCompleted is set this must hold openRows: the flag
-	// does not widen the field, it replaces it wholesale with
-	// openOrJustClosed, which starts from the open set. Setting the flag
+	// Where showsUnlogged is set this must hold openRows: the widening
+	// does not add to the field, it replaces it wholesale with
+	// openOrJustClosed, which starts from the open set. Setting showsUnlogged
 	// on a view built on any other status — the Logbook's closedRows, say —
 	// would silently swap that view's status test for the open one rather than
 	// add to it.
@@ -512,12 +514,13 @@ type viewSpec struct {
 	// rows alongside to-dos (todoOrProject) or to-dos alone (todoOnly).
 	includesProjects bool
 
-	// supportsIncludeCompleted marks the views --include-completed applies to:
-	// the lists the app keeps a just-closed item visible in until the day
+	// showsUnlogged marks the views that list a closed row Things has not
+	// yet logged, unless OpenOnly is set: the lists the app keeps a
+	// just-closed item visible in until the day
 	// rolls over. inbox, today, anytime, upcoming and someday are all such
 	// lists (issues #106, #238, #293). Measured on 4 Oct 2026, the app's
 	// Someday kept a to-do and a project closed out of it, struck through.
-	supportsIncludeCompleted bool
+	showsUnlogged bool
 
 	// supportsDateFilter marks the views --on/--from/--to make sense in.
 	// Excluded: inbox tasks have no startDate; trash is trashed-only; logbook
@@ -570,15 +573,15 @@ type viewSpec struct {
 	// its usual WHERE with a project filter. Only the catch-all has it.
 	widensToProjectContents bool
 
-	// completesWithArea marks the view that takes --include-completed when
-	// --area names an area, as it does when --project names a project. Only
+	// completesWithArea marks the view that shows unlogged rows when --area
+	// names an area, as it does when --project names a project. Only
 	// the catch-all has it. The app's area page keeps an item closed today in
 	// place until it is logged: measured on 3 Oct 2026, `to dos of area id X`
 	// held loose to-dos closed out of Anytime, Upcoming and Someday, and a
 	// project completed that day, but not that project's own to-dos, which
 	// its row stands for, so the closed-parent fold stays on. The listing
 	// also carries the area's projects' to-dos, and the project's page keeps
-	// one closed today (issue #295), so the flag reaches those too.
+	// one closed today (issue #295), so the widening reaches those too.
 	completesWithArea bool
 
 	// keepsTrashedParentGuard marks the view that keeps untrashedParent even
@@ -601,15 +604,16 @@ func (s viewSpec) rowKinds() string {
 // parameters so a third does not turn every call site into a row of bare
 // booleans.
 type whereOpts struct {
-	// includeCompleted widens the status test on the views that support it
-	// and is ignored on the rest, which is what ListTasks did with it before.
+	// includeCompleted is TaskFilter's !OpenOnly. It widens the status test on
+	// the views showsUnlogged or completesWithArea mark, and is ignored on the
+	// rest.
 	includeCompleted bool
 
 	// projectNamed is set when --project names one project, which lifts the
 	// closed-parent fold. See openOrJustClosed for why.
 	projectNamed bool
 
-	// areaNamed is set when --area names an area, which lets the flag reach
+	// areaNamed is set when --area names an area, which lets the widening reach
 	// the view that completesWithArea.
 	areaNamed bool
 
@@ -623,8 +627,8 @@ type whereOpts struct {
 // where composes the view's WHERE clause.
 func (s viewSpec) where(o whereOpts) string {
 	status := s.status
-	if o.includeCompleted && (s.supportsIncludeCompleted || (o.areaNamed && s.completesWithArea)) {
-		o.foldsUnlogged = !s.supportsIncludeCompleted
+	if o.includeCompleted && (s.showsUnlogged || (o.areaNamed && s.completesWithArea)) {
+		o.foldsUnlogged = !s.showsUnlogged
 		status = openOrJustClosed(o)
 	}
 	parts := make([]string, 0, 4+len(s.extra))
@@ -643,7 +647,7 @@ func (s viewSpec) where(o whereOpts) string {
 var views = map[string]viewSpec{
 	ViewToday: {
 		scope: todayScope, status: openRows, trashed: untrashedRows,
-		includesProjects: true, supportsIncludeCompleted: true, supportsDateFilter: true,
+		includesProjects: true, showsUnlogged: true, supportsDateFilter: true,
 		dateColumn: todayDate,
 		// Today takes the shared grouping and then todayIndex, which is the
 		// one signal the app orders within a group by. Measured against the
@@ -651,7 +655,7 @@ var views = map[string]viewSpec{
 		// order in every position (issue #237).
 		//
 		// Two keys came off to get there, and both were doing harm. t.status
-		// put the closed items --include-completed keeps at the end of their
+		// put the closed items the view keeps at the end of their
 		// group, where the app leaves them in place among the open ones,
 		// struck through: the app's Today interleaved six closed rows through
 		// three groups. t.todayIndexReferenceDate DESC reordered whole groups
@@ -669,22 +673,22 @@ var views = map[string]viewSpec{
 	ViewInbox: {
 		scope: inboxBucket, status: openRows, trashed: untrashedRows,
 		extra: []string{notTodayDue},
-		// --include-completed works here on the same rule as the other
+		// Closed rows are listed here on the same rule as the other
 		// lists: the app's Inbox keeps a to-do closed out of it that day in
 		// place, struck through, until the day is logged.
-		supportsIncludeCompleted: true,
-		orderBy:                  indexOrderBy,
+		showsUnlogged: true,
+		orderBy:       indexOrderBy,
 	},
 	ViewUpcoming: {
 		scope: upcomingScope, status: openRows, trashed: untrashedRows,
-		includesProjects: true, supportsIncludeCompleted: true, supportsDateFilter: true,
+		includesProjects: true, showsUnlogged: true, supportsDateFilter: true,
 		// Upcoming is a diary, so it reads by date and not by list position.
 		// The app orders it by start date and then by todayIndex, which is the
 		// within-day position it also keys Today on; the view listed in bare
 		// t."index" order before, which interleaved the dates (issue #217).
 		// A to-do there only by its deadline sorts by that day in the same way.
 		//
-		// --include-completed works here on the same rule as Today and
+		// Closed rows are listed here on the same rule as Today and
 		// Anytime, over the same scope: a to-do closed today stays in Upcoming,
 		// struck through, only if it was there while open (issue #293).
 		dateColumn: upcomingDate,
@@ -701,13 +705,13 @@ var views = map[string]viewSpec{
 	// project scheduled for a day is a row in the app's Today — and so do
 	// upcoming and someday, where a project has actually been put somewhere.
 	//
-	// --include-completed works here on the same rule as Today: the app keeps
+	// Closed rows are listed here on the same rule as Today: the app keeps
 	// an item closed today visible in whatever list it was in until the day
 	// rolls over, and Anytime is a list like Today (issue #238).
 	ViewAnytime: {
 		scope: anytimeScope, status: openRows, trashed: untrashedRows,
-		extra:                    []string{parentNotDeferred},
-		supportsIncludeCompleted: true, supportsDateFilter: true,
+		extra:         []string{parentNotDeferred},
+		showsUnlogged: true, supportsDateFilter: true,
 		// Anytime groups the way the app presents it: the project is the
 		// header above its own to-dos, not a row among them. The view listed
 		// in bare t."index" order before, so a project's to-dos interleaved
@@ -727,10 +731,10 @@ var views = map[string]viewSpec{
 	// project, not left looking unparented.
 	ViewSomeday: {
 		scope: somedayDeferred, status: openRows, trashed: untrashedRows,
-		extra:                    []string{unparented},
-		includesProjects:         true,
-		rejectsProjectFilter:     true,
-		supportsIncludeCompleted: true,
+		extra:                []string{unparented},
+		includesProjects:     true,
+		rejectsProjectFilter: true,
+		showsUnlogged:        true,
 		// Someday is arranged like today and anytime. Its filter keeps only
 		// rows with no parent project, so the two project keys are constant
 		// across the listing and it reduces to unfiled items, then areas, then
@@ -756,7 +760,7 @@ var views = map[string]viewSpec{
 	// (heldInPlace), so a closed item is in the Logbook or still in place,
 	// never both: Things moves an item out of its list and into the Logbook
 	// at the same moment (issues #230, #238, #293). An item still in place is
-	// listed under --include-completed by its view, its project or its area,
+	// listed by default by its view, its project or its area,
 	// and a closed Anytime project with no area by `things projects
 	// --completed`. Those listings overlap each other, so a sweep across them
 	// dedupes by uuid.
@@ -981,7 +985,7 @@ func ValidView(name string) bool {
 // constrains p to it. When that project is open the clause reduces to the
 // ordinary open set, so `things --project <open project>` is unchanged.
 //
-// Under --include-completed an open project also lists the to-dos closed today
+// Unless OpenOnly is set, an open project also lists the to-dos closed today
 // and not yet logged, through openOrJustClosed, so it cannot answer that
 // question differently from today and anytime. The app keeps such a to-do in
 // its project whatever list it was closed out of: measured on 3 Oct 2026,
@@ -1111,10 +1115,10 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	if !ok {
 		return "", nil, fmt.Errorf("unknown view: %s", view)
 	}
-	// The spec answers --include-completed itself, on the views that support
-	// it, so there is no per-view branch here to keep in step with the table.
+	// The spec answers OpenOnly itself, on the views that show unlogged rows,
+	// so there is no per-view branch here to keep in step with the table.
 	where := spec.where(whereOpts{
-		includeCompleted: opts.IncludeCompleted,
+		includeCompleted: !opts.OpenOnly,
 		projectNamed:     opts.Project != "",
 		areaNamed:        opts.Area != "",
 	})
@@ -1132,7 +1136,7 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	// Trash goes the other way and keeps the guard — see its case below.
 	switch {
 	case opts.Project != "" && spec.widensToProjectContents:
-		where = closedProjectContents(opts.IncludeCompleted)
+		where = closedProjectContents(!opts.OpenOnly)
 	case opts.Project == "" || spec.keepsTrashedParentGuard:
 		// Trash keeps the guard even under --project. Its rows are the ones
 		// thrown away on their own account, and a to-do thrown away out of a

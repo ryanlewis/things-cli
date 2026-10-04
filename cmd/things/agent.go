@@ -44,9 +44,10 @@ func printAgentHint(d *Deps, listed int) error {
 
 // showAgentBrief renders the Markdown brief `things show --agent` prints. A
 // project also lists the tasks filed under it, each with the UUID an agent
-// needs to act on it — the open ones while the project is open, and its whole
-// contents once the project is closed or trashed, which is what the catch-all
-// view answers for a named project since issue #229.
+// needs to act on it — while the project is open, its open ones and those
+// closed today and not yet logged, as the app's project page shows them; and
+// its whole contents once the project is closed or trashed, which is what the
+// catch-all view answers for a named project since issue #229.
 //
 // The task UUIDs are deliberately not written to the last-list cache:
 // the cache backs the numeric refs from the last listing, and a brief is not a

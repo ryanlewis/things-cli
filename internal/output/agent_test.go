@@ -214,6 +214,9 @@ func TestPrintAgentBriefClosedProjectMarksTodoStatus(t *testing.T) {
 		{"completed", &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusCompleted}},
 		{"cancelled", &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusCancelled}},
 		{"trashed", &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusOpen, Trashed: true}},
+		// An open project lists the tasks closed today that Things has not
+		// logged yet, as its page in the app does, so its rows are marked too.
+		{"open with closed tasks", &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusOpen}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			todos := []model.Task{

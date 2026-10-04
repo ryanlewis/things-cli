@@ -172,7 +172,7 @@ func TestListTasksViews(t *testing.T) {
 
 // By default the today view returns only open tasks (issue #106) — completed
 // and cancelled items never appear, even before Things logs them out of Today.
-// With IncludeCompleted, those items remain visible until "Log Completed Now"
+// By default (no OpenOnly), those items remain visible until "Log Completed Now"
 // bumps TMSettings.manualLogDate past their stopDate, matching the Things app
 // (which keeps them on screen regardless of todayIndexReferenceDate until the
 // user explicitly logs).
@@ -212,19 +212,19 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 		VALUES ('t-cancelled-today', 'Cancelled today', 0, 2, 0, 1, 0, ?, ?, ?, 22)`,
 		today, today, stopToday)
 
-	// Default: completed/cancelled items are excluded outright.
-	got, err := d.ListTasks("today", TaskFilter{})
+	// OpenOnly: completed/cancelled items are excluded outright.
+	got, err := d.ListTasks("today", TaskFilter{OpenOnly: true})
 	if err != nil {
 		t.Fatalf("ListTasks today: %v", err)
 	}
 	if !sameSet([]string{"t-today", "t-evening"}, uuidsOf(got)) {
-		t.Fatalf("default: expected {t-today, t-evening}, got %v", uuidsOf(got))
+		t.Fatalf("OpenOnly: expected {t-today, t-evening}, got %v", uuidsOf(got))
 	}
 
-	// IncludeCompleted (pre-log): the items closed today reappear. The one
+	// Without OpenOnly (pre-log): the items closed today reappear. The one
 	// closed yesterday does not — Things filed it into the Logbook when the
 	// day rolled over, whatever manualLogDate says (issue #230).
-	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	got, err = d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatalf("ListTasks today --include-completed: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 
-	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	got, err = d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatalf("ListTasks today --include-completed: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 				mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 			}
 
-			inToday, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+			inToday, err := d.ListTasks("today", TaskFilter{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -361,7 +361,7 @@ func TestHeldInPlaceFollowsLogSetting(t *testing.T) {
 			mustExec(t, d, `INSERT INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
 				tc.logInterval, tc.manualLog)
 
-			held, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
+			held, err := d.ListTasks("anytime", TaskFilter{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -449,7 +449,7 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 				t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
 			}
 			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+				got, err := d.ListTasks(view, TaskFilter{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -457,7 +457,7 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 					t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
 				}
 			}
-			byArea, err := d.ListTasks("project", TaskFilter{Area: "area", IncludeCompleted: true})
+			byArea, err := d.ListTasks("project", TaskFilter{Area: "area"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -465,7 +465,7 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 				t.Errorf("--area --include-completed = %v, want listed: %v", uuidsOf(byArea), tc.inArea)
 			}
 			if tc.inProj {
-				byProj, err := d.ListTasks("project", TaskFilter{Project: "proj", IncludeCompleted: true})
+				byProj, err := d.ListTasks("project", TaskFilter{Project: "proj"})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -549,7 +549,7 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 
 			held := 0
 			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+				got, err := d.ListTasks(view, TaskFilter{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -587,7 +587,7 @@ func TestClosedSuppressedInboxToDoStaysInInbox(t *testing.T) {
 		t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
 	}
 	for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		got, err := d.ListTasks(view, TaskFilter{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -610,7 +610,7 @@ func TestClosedTodayUnderTrashedProjectIsReachable(t *testing.T) {
 		VALUES ('t-closed', 'Closed', 0, 3, 0, 1, 0, ?, ?, 'proj-binned', 2)`,
 		today, model.TimeToUnix(time.Now()))
 
-	inToday, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	inToday, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1448,7 +1448,7 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	fx.Todo("done-under-heading", "Done under heading", 7, anytime(), underHeading("head"), completed(stopToday))
 	fx.Todo("done-yesterday", "Done yesterday", 8, anytime(), inProject("proj-open"), completed(stopYesterday))
 
-	plain, err := d.ListTasks("project", TaskFilter{Project: "proj-open"})
+	plain, err := d.ListTasks("project", TaskFilter{Project: "proj-open", OpenOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1460,7 +1460,7 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	// rolled over.
 	want := []string{"open-todo", "done-today", "dropped-today", "done-ahead", "done-under-heading"}
 	for _, project := range []string{"proj-open", "Live"} {
-		got, err := d.ListTasks("project", TaskFilter{Project: project, IncludeCompleted: true})
+		got, err := d.ListTasks("project", TaskFilter{Project: project})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1473,7 +1473,7 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	// anytime.
 	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
-	afterLog, err := d.ListTasks("project", TaskFilter{Project: "proj-open", IncludeCompleted: true})
+	afterLog, err := d.ListTasks("project", TaskFilter{Project: "proj-open"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1506,7 +1506,7 @@ func TestAreaFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	fx.Todo("child-done", "Child done", 8, anytime(), inProject("proj-open"), completed(stopToday))
 	fx.Todo("child-of-done", "Child of done", 9, anytime(), inProject("proj-done"), completed(stopToday))
 
-	plain, err := d.ListTasks("project", TaskFilter{Area: "ar"})
+	plain, err := d.ListTasks("project", TaskFilter{Area: "ar", OpenOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1514,7 +1514,7 @@ func TestAreaFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 		t.Errorf("--area ar: got %v, want [proj-open open-todo]", uuidsOf(plain))
 	}
 
-	got, err := d.ListTasks("project", TaskFilter{Area: "ar", IncludeCompleted: true})
+	got, err := d.ListTasks("project", TaskFilter{Area: "ar"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2444,7 +2444,7 @@ func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
 
 			held := 0
 			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-				got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+				got, err := d.ListTasks(view, TaskFilter{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2459,7 +2459,7 @@ func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
 
 			// Its project lists it either way, as the app's project page does
 			// (issue #295), so the row is never stranded.
-			inProj, err := d.ListTasks("project", TaskFilter{Project: tc.project, IncludeCompleted: true})
+			inProj, err := d.ListTasks("project", TaskFilter{Project: tc.project})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3116,7 +3116,7 @@ func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 		('open-last',   'Three', 0, 0, 0, 1, 0, ?, ?, NULL, 3, -100)`,
 		today, today, today, today, stop, today, today)
 
-	got, err := d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3142,7 +3142,7 @@ func TestAnytimeIncludeCompleted(t *testing.T) {
 		('closed-earlier', 'Done yesterday', 0, 3, 0, 1, 0, NULL, ?,    4)`,
 		stopToday, stopToday, stopYesterday)
 
-	plain, err := d.ListTasks("anytime", TaskFilter{})
+	plain, err := d.ListTasks("anytime", TaskFilter{OpenOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3150,7 +3150,7 @@ func TestAnytimeIncludeCompleted(t *testing.T) {
 		t.Errorf("anytime: got %v, want [open-one]", uuidsOf(plain))
 	}
 
-	withClosed, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
+	withClosed, err := d.ListTasks("anytime", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3165,7 +3165,7 @@ func TestAnytimeIncludeCompleted(t *testing.T) {
 	// respects it here exactly as it does in today.
 	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
-	afterLog, err := d.ListTasks("anytime", TaskFilter{IncludeCompleted: true})
+	afterLog, err := d.ListTasks("anytime", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3194,7 +3194,7 @@ func TestUpcomingIncludeCompleted(t *testing.T) {
 	// Closed today, but never in Upcoming: no date and no deadline.
 	fx.Todo("done-anytime", "Done in Anytime", 6, anytime(), completed(stopToday))
 
-	plain, err := d.ListTasks("upcoming", TaskFilter{})
+	plain, err := d.ListTasks("upcoming", TaskFilter{OpenOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3202,7 +3202,7 @@ func TestUpcomingIncludeCompleted(t *testing.T) {
 		t.Errorf("upcoming: got %v, want [open-later]", uuidsOf(plain))
 	}
 
-	got, err := d.ListTasks("upcoming", TaskFilter{IncludeCompleted: true})
+	got, err := d.ListTasks("upcoming", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3224,7 +3224,7 @@ func TestUpcomingIncludeCompleted(t *testing.T) {
 	// today and anytime, and the Logbook takes them back.
 	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
-	afterLog, err := d.ListTasks("upcoming", TaskFilter{IncludeCompleted: true})
+	afterLog, err := d.ListTasks("upcoming", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3254,7 +3254,7 @@ func TestTodayAndAnytimeAgreeOnJustClosedRows(t *testing.T) {
 		today, model.TimeToUnix(time.Now()))
 
 	for _, view := range []string{"today", "anytime"} {
-		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		got, err := d.ListTasks(view, TaskFilter{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3307,7 +3307,7 @@ func TestLogbookKeepsRepeatingTemplatesClosedToday(t *testing.T) {
 
 	// Neither list is showing them, which is why the Logbook has to.
 	for _, view := range []string{"today", "anytime"} {
-		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		got, err := d.ListTasks(view, TaskFilter{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3344,7 +3344,7 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 				('unparented',   'Listed',    0, 3, 0, 1, 0, ?, ?, NULL,          7)`,
 				today, stopToday, today, stopToday, today, stopToday, today, stopToday)
 
-			got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+			got, err := d.ListTasks(view, TaskFilter{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3565,7 +3565,7 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 				today, stopToday, today, stopToday)
 
 			// Unfiltered, the fold still applies: under-done is folded away.
-			all, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+			all, err := d.ListTasks(view, TaskFilter{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3576,7 +3576,7 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 			}
 
 			// Naming the closed project returns its contents.
-			named, err := d.ListTasks(view, TaskFilter{Project: "proj-done", IncludeCompleted: true})
+			named, err := d.ListTasks(view, TaskFilter{Project: "proj-done"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3585,7 +3585,7 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 			}
 
 			// By title as well as by uuid, since --project takes either.
-			byTitle, err := d.ListTasks(view, TaskFilter{Project: "Finished", IncludeCompleted: true})
+			byTitle, err := d.ListTasks(view, TaskFilter{Project: "Finished"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3595,7 +3595,7 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 
 			// An open project is unaffected: the lifted clause was true for it
 			// either way.
-			openNamed, err := d.ListTasks(view, TaskFilter{Project: "proj-open", IncludeCompleted: true})
+			openNamed, err := d.ListTasks(view, TaskFilter{Project: "proj-open"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3603,14 +3603,14 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 				t.Errorf("%s --project proj-open: got %v, want [under-open]", view, uuidsOf(openNamed))
 			}
 
-			// And without the flag nothing changes: the fold lives inside the
+			// And with OpenOnly nothing changes: the fold lives inside the
 			// closed branch, so a closed child stays out whoever named it.
-			noFlag, err := d.ListTasks(view, TaskFilter{Project: "proj-done"})
+			noFlag, err := d.ListTasks(view, TaskFilter{Project: "proj-done", OpenOnly: true})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(noFlag) != 0 {
-				t.Errorf("%s --project proj-done (no flag): got %v, want none", view, uuidsOf(noFlag))
+				t.Errorf("%s --project proj-done (OpenOnly): got %v, want none", view, uuidsOf(noFlag))
 			}
 		})
 	}
@@ -3715,8 +3715,8 @@ func TestAreaAndTagFiltersDoNotLiftTheFold(t *testing.T) {
 		name   string
 		filter TaskFilter
 	}{
-		{"area", TaskFilter{Area: "ar", IncludeCompleted: true}},
-		{"tag", TaskFilter{Tag: "urgent", IncludeCompleted: true}},
+		{"area", TaskFilter{Area: "ar"}},
+		{"tag", TaskFilter{Tag: "urgent"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := d.ListTasks("today", tc.filter)
@@ -3753,7 +3753,7 @@ func TestIncludeCompletedKeepsOpenTodosUnderClosedProject(t *testing.T) {
 	}{
 		{"today", false}, {"today", true}, {"anytime", false}, {"anytime", true},
 	} {
-		got, err := d.ListTasks(tc.view, TaskFilter{IncludeCompleted: tc.includeCompleted})
+		got, err := d.ListTasks(tc.view, TaskFilter{OpenOnly: !tc.includeCompleted})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3785,7 +3785,7 @@ func TestFoldedJustClosedRowIsReachableByProject(t *testing.T) {
 		VALUES ('folded', 'Folded', 0, 3, 0, 1, 0, ?, ?, 'proj-done', 2)`, today, stopToday)
 
 	for _, view := range []string{"today", "anytime", "logbook"} {
-		got, err := d.ListTasks(view, TaskFilter{IncludeCompleted: true})
+		got, err := d.ListTasks(view, TaskFilter{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3849,17 +3849,17 @@ func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
 	fx.Project("proj-done", "Shipped", 20, anytimeOn(today), todayIndexRef(today), inArea("area-work"), completed(stopToday), todayIndex(9000))
 
-	got, err := d.ListTasks("today", TaskFilter{})
+	got, err := d.ListTasks("today", TaskFilter{OpenOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, task := range got {
 		if task.UUID == "proj-done" {
-			t.Fatal("completed project should be excluded by default")
+			t.Fatal("completed project should be excluded under OpenOnly")
 		}
 	}
 
-	got, err = d.ListTasks("today", TaskFilter{IncludeCompleted: true})
+	got, err = d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}

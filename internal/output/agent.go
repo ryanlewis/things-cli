@@ -77,9 +77,12 @@ func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 		// A closed or trashed project has no open tasks by definition, and
 		// since issue #229 the listing returns its contents whatever their
 		// status — so "Open tasks" would be a lie and a bare title would read
-		// as something still to do. Mark each row instead.
+		// as something still to do. Mark each row instead. An open project
+		// lists its tasks closed today and not yet logged too, as the app's
+		// project page does, so a closed row among them marks the rows the
+		// same way.
 		heading, empty, marked := "Open tasks", "no open tasks", false
-		if t.Status != model.StatusOpen || t.Trashed {
+		if t.Status != model.StatusOpen || t.Trashed || anyClosed(b.Todos) {
 			heading, empty, marked = "Tasks", "no tasks", true
 		}
 		fmt.Fprintf(&s, "\n## %s\n\n", heading)
@@ -99,6 +102,16 @@ func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 
 	_, err := io.WriteString(w, s.String())
 	return err
+}
+
+// anyClosed reports whether any of todos is completed or cancelled.
+func anyClosed(todos []model.Task) bool {
+	for _, todo := range todos {
+		if todo.Status != model.StatusOpen {
+			return true
+		}
+	}
+	return false
 }
 
 // fencedVerbatim wraps text in a code fence long enough that nothing inside it

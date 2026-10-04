@@ -69,7 +69,7 @@ func renderGoldenSQL(t *testing.T, d *DB) string {
 		for _, includeCompleted := range []bool{false, true} {
 			for _, fc := range filterCases {
 				opts := fc.opts
-				opts.IncludeCompleted = includeCompleted
+				opts.OpenOnly = !includeCompleted
 				query, args, err := d.buildListQuery(view, opts)
 				if err != nil {
 					t.Fatalf("buildListQuery(%s, %+v): %v", view, opts, err)

@@ -20,10 +20,10 @@ import (
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
-func parse(t *testing.T, args ...string) (*CLI, *kong.Context) {
+// newParser builds the kong parser main does, bound to cli.
+func newParser(t *testing.T, cli *CLI) *kong.Kong {
 	t.Helper()
-	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("things"),
+	parser, err := kong.New(cli, kong.Name("things"),
 		kong.Vars{
 			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
 			"skill_agents":  skill.AgentNames(),
@@ -32,7 +32,13 @@ func parse(t *testing.T, args ...string) (*CLI, *kong.Context) {
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}
-	ctx, err := parser.Parse(args)
+	return parser
+}
+
+func parse(t *testing.T, args ...string) (*CLI, *kong.Context) {
+	t.Helper()
+	var cli CLI
+	ctx, err := newParser(t, &cli).Parse(args)
 	if err != nil {
 		t.Fatalf("parse %v: %v", args, err)
 	}
@@ -63,8 +69,19 @@ func TestKongListIncludeCompleted(t *testing.T) {
 	}
 
 	cli, _ = parse(t, "list", "today")
-	if cli.List.IncludeCompleted {
-		t.Errorf("IncludeCompleted defaulted to %v, want false", cli.List.IncludeCompleted)
+	if cli.List.IncludeCompleted || cli.List.OpenOnly {
+		t.Errorf("IncludeCompleted, OpenOnly defaulted to %v, %v, want false", cli.List.IncludeCompleted, cli.List.OpenOnly)
+	}
+
+	cli, _ = parse(t, "list", "today", "--open-only")
+	if !cli.List.OpenOnly {
+		t.Errorf("OpenOnly = %v, want true", cli.List.OpenOnly)
+	}
+
+	// The two contradict each other, so kong refuses the pair.
+	var both CLI
+	if _, err := newParser(t, &both).Parse([]string{"list", "today", "--open-only", "--include-completed"}); err == nil || !strings.Contains(err.Error(), "can't be used together") {
+		t.Errorf("expected mutual-exclusion error, got: %v", err)
 	}
 }
 
@@ -555,7 +572,9 @@ func TestListCommandLine(t *testing.T) {
 		{"view and filter", ListCmd{Area: "Home"}, "today", "", "things today --area Home"},
 		{"tag", ListCmd{Tag: "errand"}, "anytime", "", "things anytime --tag errand"},
 		{"dates", ListCmd{From: "2026-09-01", To: "2026-09-30"}, "upcoming", "", "things upcoming --from 2026-09-01 --to 2026-09-30"},
-		{"include completed", ListCmd{IncludeCompleted: true}, "today", "", "things today --include-completed"},
+		{"open only", ListCmd{OpenOnly: true}, "today", "", "things today --open-only"},
+		// A no-op since closed rows list by default, so the re-run needs no flag.
+		{"include completed", ListCmd{IncludeCompleted: true}, "today", "", "things today"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -96,52 +96,56 @@ way the app's Logbook shows both, so the view returns cancelled rows too.
 closed: `things logbook -j | jq '.[] | select(.status=="completed")'`.
 
 An item you tick off in Today is not in `logbook` yet. Things keeps it under
-Today for the rest of the day and files it into the Logbook when the day rolls
-over, or sooner if you run `things log` — the app's "Log Completed Now", which
-files the day's closed items straight away. `things today --include-completed`
-shows the ones still waiting. That is the app's default "Move completed items
-to Logbook: Daily" setting, and the CLI reads the setting: set to Immediately,
-nothing is held and every closed item is in `logbook` at once; set to Manually,
-closed items stay where they were, whatever day they closed, until
-`things log`. `inbox`, `anytime`, `upcoming` and `someday` behave the same
-way and take the same flag, because the app goes on showing a just-closed item
-there too. `upcoming` keeps only what was in it while open: a task closed ahead
-of its date, or an undated one with a deadline after today.
+Today for the rest of the day, ticked, and files it into the Logbook when the
+day rolls over, or sooner if you run `things log` — the app's "Log Completed
+Now", which files the day's closed items straight away. `things today` lists
+it too, in place among the open tasks, marked `[x]` (or `[~]` if cancelled)
+in plain output and carrying `status` in JSON. That is the app's default "Move
+completed items to Logbook: Daily" setting, and the CLI reads the setting: set
+to Immediately, nothing is held and every closed item is in `logbook` at once;
+set to Manually, closed items stay where they were, whatever day they closed,
+until `things log`. `inbox`, `anytime`, `upcoming` and `someday` behave the
+same way, because the app goes on showing a just-closed item there too.
+`upcoming` keeps only what was in it while open: a task closed ahead of its
+date, or an undated one with a deadline after today.
+
+`--open-only` leaves those closed items out, for when you want only the work
+still to do: `things today --open-only`. It works on every listing, and changes
+nothing on the ones that list only open tasks anyway (`deadlines`, `repeating`,
+a bare `--tag` sweep); `logbook` and `trash` reject it.
+`--include-completed`, which used to be how to ask for the closed items, is
+still accepted and now has no effect.
 
 `logbook` holds nothing Things has not logged yet, wherever it was closed, as
 the app's Logbook does. A closed item is therefore either in `logbook` or
-still in place, never both. Still in place, it is listed under
-`--include-completed` by its view, by its project (`things --project <uuid>
---include-completed`), or by its area (`things --area <name>
---include-completed`). The one exception is a closed Anytime project with no
-area: no list shows it, in the app or the CLI, and `things projects
---completed` is where to find it until it is logged. The lists overlap each
-other, since a task scheduled for today is in the Anytime bucket too and an
-undated one due later is in both `anytime` and `upcoming`, so sweeping them
-means merging on `uuid`. The tasks of a project closed today stay in place in
-these lists, struck through, until the project is logged; then they fold into
-its row, as the next paragraphs say. A task closed today inside a project in
-Someday or scheduled for later is in no list, as in the app, which shows it
-only on the project's page: `things --project <uuid> --include-completed`
-lists it. `--include-completed` works on `inbox`, `today`, `anytime`,
-`upcoming` and `someday`; with a
-filter, name the view: `things today -p "Launch v2" --include-completed`
-returns the tasks of a closed "Launch v2" that closed today, rather than
+still in place, never both. Still in place, it is listed by its view, by its
+project (`things --project <uuid>`), or by its area (`things --area <name>`).
+The one exception is a closed Anytime project with no area: no list shows it,
+in the app or the CLI, and `things projects --completed` is where to find it
+until it is logged. The lists overlap each other, since a task scheduled for
+today is in the Anytime bucket too and an undated one due later is in both
+`anytime` and `upcoming`, so sweeping them means merging on `uuid`. The tasks
+of a project closed today stay in place in these lists, struck through, until
+the project is logged; then they fold into its row, as the next paragraphs say.
+A task closed today inside a project in Someday or scheduled for later is in no
+list, as in the app, which shows it only on the project's page: `things
+--project <uuid>` lists it. With a filter on a view, `things today -p "Launch
+v2"` returns the tasks of a closed "Launch v2" that closed today, rather than
 nothing.
 
-`--include-completed` also works on a bare `--project`, with no view:
-`things -p "Launch v2" --include-completed` lists an open project's tasks plus
-every one of them closed today and not yet logged, struck through in the app's
-project page until the day rolls over, whichever list it was closed out of. A
-project's contents are not one of the lists above, so they overlap them.
+A bare `--project`, with no view, is the app's project page: `things -p
+"Launch v2"` lists an open project's tasks plus every one of them closed today
+and not yet logged, struck through in the app's project page until the day
+rolls over, whichever list it was closed out of. A project's contents are not
+one of the lists above, so they overlap them.
 
-A bare `--area` takes it the same way: `things -a Work --include-completed`
-adds the area's tasks and projects closed today and not yet logged, as the
-app's area page shows them, and its projects' tasks closed today, as each
-project's page does. A project closed today is one row there, as in
-`logbook`. A bare `--tag` sweep rejects the flag: a tag is a filter in the
-app, not a list with a page of its own, so name the view: `things today -t
-urgent --include-completed`.
+A bare `--area` is the area's page the same way: `things -a Work` lists the
+area's tasks and projects, closed today and not yet logged among them, as the
+app's area page shows them, and its projects' tasks, closed today among them,
+as each project's page does. A project closed today is one row there, as in
+`logbook`. A bare `--tag` sweep lists open tasks only: a tag is a filter in the
+app, not a list with a page of its own, so name the view to see the closed
+ones too: `things today -t urgent`.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none
@@ -151,8 +155,8 @@ trashed project returns its contents whatever their status, which is what the
 app answers for the same question. Naming the project works inside a view as
 well as in that bare form: `things anytime --project <uuid>` on a trashed
 project lists its open tasks, and naming a closed project on `today` or
-`anytime` with `--include-completed` lifts the fold there too, so a slice of
-those contents is reachable without leaving the view. A task you threw away
+`anytime` lifts the fold there too, so a slice of those contents is reachable
+without leaving the view. A task you threw away
 out of a project is the exception — it keeps its own `trash` row, because it
 is in the Trash on its own account rather than through its project. A task
 thrown away out of a project that is itself in the Trash is reachable nowhere,
@@ -203,13 +207,14 @@ also match across Unicode compatibility forms, as in Things: `-a Ｗork`
 space. A project, area or tag name typed in
 its exact case lists only that one, even when another title differs from it
 only by case. On their
-own the filters cover everything open in the project, area, or tag — so
+own the filters cover everything open in the project, area, or tag, plus
+what a project or area closed today and Things still shows there — so
 `things -a Work` lists that area's own projects as well as its tasks, while
 `-p` still returns a project's contents rather than the project row. Add a
 view and the filter applies within it, with the view named in the output:
 
 ```sh
-things -p "Launch v2"                # every open task in the project
+things -p "Launch v2"                # every open task in the project, plus those closed today
 things today -p "Launch v2"          # today's slice of it, labelled "view: today"
 things upcoming -t urgent
 things anytime --area "Side projects"
@@ -603,6 +608,11 @@ in it, so it asks first. A run that cannot prompt — piped stdin, or
 question up front, which is how project completion works from a script.
 `assume_yes = true` in the config file sets it every time, and `--yes`
 still decides each run.
+
+Listings number the items closed today alongside the open ones, so a ref can
+land on one. Completing an item that is already completed, or cancelling one
+already cancelled, sends nothing and exits 0 with a note. Completing a
+cancelled item, or cancelling a completed one, is refused and sends nothing.
 
 Both go through AppleScript so Things3 records the change in its
 activity log. Task creation (`add`) and edits go through the
