@@ -644,9 +644,11 @@ an unconfirmed `add` does, and no `uuid`:
   items and does not look for it. The line says `not checked
   (creation-date set)`.
 - `shares-dated-title`: another item in the payload with the same kind and
-  title sets `creation-date`. A new item with that title could be either
+  title sets a `creation-date` within the last minute or later (or one that
+  is not an RFC 3339 timestamp). A new item with that title could be either
   one, so this item is not looked for either. The line says `not confirmed
-  (a dated item has the same title)`.
+  (a dated item has the same title)`. An older `creation-date` cannot be
+  mistaken for a new item, so it does not stop the read-back.
 - `not-found`: no new item with that title appeared within the read-back
   wait, or fewer than the payload created. `candidates` lists the ones that
   did appear.
@@ -654,11 +656,10 @@ an unconfirmed `add` does, and no `uuid`:
 The first four exit 0 with the list printed. Any `not-found` or
 `shares-dated-title` item makes the import exit non-zero with `import
 partially applied`, the same error a dropped status change gives. The error
-names those items, and
-under `--json` they are in `items`. Search for each of them with `things
-search` before running the import again with only those items. Otherwise a
-retry can create duplicates. The verdict on every other created item
-follows under "The other created items", and under `--json` the error's
+names those items, and under `--json` they are in `items`. Search for each
+of them with `things search` before running the import again with only
+those items. Otherwise a retry can create duplicates. The verdict on every
+other created item follows under "The other created items", and under `--json` the error's
 `created` array carries every created item in the shape above, so the
 confirmed ones keep their uuids. The same happens when only a status change
 failed. The created items and the status changes share one read-back wait.

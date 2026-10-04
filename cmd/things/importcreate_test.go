@@ -471,6 +471,30 @@ func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
 	}
 }
 
+// A dated item whose creation-date is well before the import can never land
+// in the read-back window, so an undated item with the same title is still
+// read back and confirmed, and the import exits 0.
+func TestImportUndatedSharingBackdatedTitleIsConfirmed(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"2020-01-01T09:00:00Z"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review"}}
+	]`
+	out, _, err := runImportOut(t, database, payload)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	want := `Sent to Things, not checked (creation-date set): [0] "Weekly review"
+Created and confirmed: [1] "Weekly review" (new-1)
+`
+	if out != want {
+		t.Errorf("output =\n%s\nwant\n%s", out, want)
+	}
+}
+
 // An unreadable created item beside a failed import says why it is not
 // confirmed, rather than leaving an empty line in the error.
 func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
