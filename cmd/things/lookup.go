@@ -18,8 +18,13 @@ import (
 
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// Try numeric index from last list
+	rowRef := isRowRef(ref)
+	var last cache.LastList
+	var cacheErr error
+	if rowRef {
+		last, cacheErr = cache.ReadLastList()
+	}
 	if n, err := strconv.Atoi(ref); err == nil && n >= 1 {
-		last, cacheErr := cache.ReadLastList()
 		if cacheErr == nil && n <= len(last.UUIDs) {
 			// The row exists in the cache, so this reference is a row number
 			// and nothing else. Refuse it when the listing behind it is old
@@ -47,9 +52,21 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		}
 	}
 
-	task, err := database.GetTask(ref)
+	// An all-digit ref that was not a row in the list is not a title
+	// fragment either: `12` past the end of a 10-row list must not complete
+	// "Chapter 12 notes" (issue #375). Only an exact title or uuid is taken.
+	lookup := database.GetTask
+	if rowRef {
+		lookup = database.GetTaskExact
+	}
+	task, err := lookup(ref)
 	if err == nil {
 		return task, nil
+	}
+
+	var notFound *db.TaskNotFoundError
+	if rowRef && errors.As(err, &notFound) {
+		return nil, notARowError(ref, last, cacheErr)
 	}
 
 	var ambig *db.AmbiguousTaskError
@@ -89,6 +106,38 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		return nil, fmt.Errorf("invalid choice")
 	}
 	return &ambig.Matches[choice-1], nil
+}
+
+// isRowRef reports whether ref is spelled like a row number: one or more ASCII
+// digits and nothing else.
+func isRowRef(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	for _, r := range ref {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// notARowError refuses an all-digit ref that is not a row in the last list and
+// is not the exact title of a task (issue #375). It reads as a not-found, and
+// says to re-run the list rather than leave the user to guess what was tried.
+func notARowError(ref string, last cache.LastList, cacheErr error) error {
+	msg := fmt.Sprintf("%q is not a row in the last list", ref)
+	if cacheErr != nil {
+		msg = fmt.Sprintf("no task is titled %q, and there is no last list for it to be a row of", ref)
+	} else if len(last.UUIDs) > 0 {
+		msg += fmt.Sprintf(" (it has %s)", plural(len(last.UUIDs), "row"))
+	}
+	if cacheErr == nil && last.Command != "" {
+		msg += fmt.Sprintf(". Re-run `%s` and use the new row number, or pass the task's uuid or full title.", last.Command)
+	} else {
+		msg += ". Re-run your listing and use the row number, or pass the task's uuid or full title."
+	}
+	return &notFoundError{Kind: "task", Query: ref, msg: msg}
 }
 
 // cacheTaskUUIDs records the listing's task UUIDs so a later numeric ref

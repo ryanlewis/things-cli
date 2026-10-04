@@ -318,8 +318,8 @@ func TestResolveTaskNumericRefusedWhenCacheHasNoTimestamp(t *testing.T) {
 	}
 }
 
-// A number past the end of the cache was never a row, so it keeps falling
-// through to the title lookup whatever the cache's age.
+// A number past the end of the cache was never a row, so it is not refused as
+// stale whatever the cache's age. It is refused as not a row (issue #375).
 func TestResolveTaskNumericPastEndOfOldCache(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -333,6 +333,111 @@ func TestResolveTaskNumericPastEndOfOldCache(t *testing.T) {
 	}
 	if err == nil {
 		t.Fatal("expected a not-found error for a title of \"9\"")
+	}
+}
+
+// seedNumericTitleDB holds a task whose title only contains "12" and one whose
+// title is exactly "2026".
+func seedNumericTitleDB(t *testing.T) *db.DB {
+	t.Helper()
+	sqlDB := dbtest.NewSQL(t)
+	f := dbtest.NewFixture(t, sqlDB)
+	f.Todo("abc-123", "Cached task", 0)
+	f.Todo("ch-12", "Chapter 12 notes", 0)
+	f.Todo("year-2026", "2026", 0)
+	return db.NewFromSQL(sqlDB)
+}
+
+// An all-digit ref past the end of the last list is not a row, and must not
+// fall through to a substring match: `complete 12` after a 1-row list would
+// otherwise complete "Chapter 12 notes" (issue #375).
+func TestResolveTaskNumericPastEndIsRefused(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	seedCache(t, time.Minute, "things today", "abc-123")
+	database := seedNumericTitleDB(t)
+
+	got, err := resolveTask(&Deps{}, "12", database)
+	var nf *notFoundError
+	if !errors.As(err, &nf) {
+		t.Fatalf("resolveTask = %+v, %v, want a not-found error", got, err)
+	}
+	msg := err.Error()
+	for _, want := range []string{`"12" is not a row`, "1 row", "things today", "uuid"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message %q does not mention %q", msg, want)
+		}
+	}
+}
+
+// With no listing at all there is no row to be, so the same refusal applies.
+func TestResolveTaskNumericWithNoCacheIsRefused(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	database := seedNumericTitleDB(t)
+
+	got, err := resolveTask(&Deps{}, "12", database)
+	var nf *notFoundError
+	if !errors.As(err, &nf) {
+		t.Fatalf("resolveTask = %+v, %v, want a not-found error", got, err)
+	}
+	if !strings.Contains(err.Error(), "no last list") {
+		t.Errorf("message = %q, want it to say there is no list", err.Error())
+	}
+}
+
+// A title that is exactly the digits still resolves, past the end of the list
+// and with no list at all.
+func TestResolveTaskNumericExactTitleStillResolves(t *testing.T) {
+	t.Run("past the end of the list", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		seedCache(t, time.Minute, "things today", "abc-123")
+		got, err := resolveTask(&Deps{}, "2026", seedNumericTitleDB(t))
+		if err != nil {
+			t.Fatalf("resolveTask: %v", err)
+		}
+		if got.UUID != "year-2026" {
+			t.Errorf("got %+v", got)
+		}
+	})
+	t.Run("no list", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		got, err := resolveTask(&Deps{}, "2026", seedNumericTitleDB(t))
+		if err != nil {
+			t.Fatalf("resolveTask: %v", err)
+		}
+		if got.UUID != "year-2026" {
+			t.Errorf("got %+v", got)
+		}
+	})
+}
+
+// A row that is in the list is still a row, even when another task is titled
+// with that number.
+func TestResolveTaskNumericRowBeatsExactTitle(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	seedCache(t, time.Minute, "things today", "abc-123", "ch-12", "year-2026")
+	got, err := resolveTask(&Deps{}, "2", seedNumericTitleDB(t))
+	if err != nil {
+		t.Fatalf("resolveTask: %v", err)
+	}
+	if got.UUID != "ch-12" {
+		t.Errorf("got %+v, want row 2", got)
+	}
+}
+
+// Only an all-digit ref is held to this. A word that happens to be part of a
+// title still resolves by substring.
+func TestResolveTaskNonNumericSubstringStillResolves(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	got, err := resolveTask(&Deps{}, "Chapter", seedNumericTitleDB(t))
+	if err != nil {
+		t.Fatalf("resolveTask: %v", err)
+	}
+	if got.UUID != "ch-12" {
+		t.Errorf("got %+v", got)
 	}
 }
 

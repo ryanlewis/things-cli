@@ -293,3 +293,27 @@ func TestAddTargetExactCaseIgnoresNormalisation(t *testing.T) {
 		t.Errorf("AddTarget(Café NFD, Setup) = %q, %v, want p-upper, true", target, headOK)
 	}
 }
+
+// GetTaskExact takes a uuid or an exact title and never falls back to a
+// substring, which is what GetTask does (issue #375).
+func TestGetTaskExactSkipsSubstringMatch(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Todo("t-chapter", "Chapter 12 notes", 1, anytime())
+	fx.Todo("t-year", "2026", 2, anytime())
+
+	if got, err := d.GetTaskExact("2026"); err != nil || got.UUID != "t-year" {
+		t.Errorf("GetTaskExact(2026) = %+v, %v, want t-year", got, err)
+	}
+	if got, err := d.GetTaskExact("t-chapter"); err != nil || got.UUID != "t-chapter" {
+		t.Errorf("GetTaskExact(uuid) = %+v, %v, want t-chapter", got, err)
+	}
+
+	_, err := d.GetTaskExact("12")
+	var nf *TaskNotFoundError
+	if !errors.As(err, &nf) {
+		t.Fatalf("GetTaskExact(12) = %v, want a TaskNotFoundError", err)
+	}
+	if got, err := d.GetTask("12"); err != nil || got.UUID != "t-chapter" {
+		t.Errorf("GetTask(12) = %+v, %v, want the substring match", got, err)
+	}
+}
