@@ -734,8 +734,8 @@ Before updating, it asks GitHub for the latest release, with or without
 than `1.0.0` and updates to it. The install script is then fetched from
 that release's tag and told to install that version, and `go install`
 is pinned to the same tag. If GitHub can't be
-reached (offline, or rate limited), or its latest tag isn't a version
-it can compare, the install script and `go install`
+reached (offline, or rate limited), or its latest tag isn't a `vMAJOR.MINOR.PATCH` version it can
+compare and pin, the install script and `go install`
 methods stop with an error and print the command for you to run
 yourself: both pick the latest release on their own and could replace a
 newer binary with an older one. Homebrew carries on, since
