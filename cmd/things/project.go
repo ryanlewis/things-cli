@@ -78,7 +78,7 @@ func projectAreaID(d *Deps, area, fallback string) (id string, known bool) {
 		if a.UUID == strings.TrimSpace(area) {
 			return a.UUID, true
 		}
-		found = found || db.FoldCase(a.Title) == db.FoldCase(area)
+		found = found || db.FoldName(a.Title) == db.FoldName(area)
 	}
 	if !found {
 		fmt.Fprintf(d.errOut(), "warning: Things has no area called %q; %s\n", area, fallback)

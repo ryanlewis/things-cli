@@ -1043,30 +1043,38 @@ func nameLike(value string) string {
 	return literalLike(strings.TrimSpace(value))
 }
 
+// listNameLike is nameLike for --area and --project, folded with FoldName to
+// match a column folded with fold_name(). It escapes after folding, since a
+// compatibility form such as fullwidth "％" folds to a wildcard.
+func listNameLike(value string) string {
+	return likeEscaper.Replace(FoldName(strings.TrimSpace(value)))
+}
+
 // projectNameMatch is the --project clause for the project row aliased alias,
 // with its arguments: the uuid, or the title. An exact-case title wins, and
-// only when no project carries one does the title match ignoring case and
-// surrounding space — the order `open --tag/--area` take names in. Things lets
+// only when no project carries one does the title match under FoldName,
+// ignoring surrounding space — the order `open --tag/--area` take names in. Things lets
 // two projects differ only by case, and without the preference naming one
 // listed both (issue #290). A trashed project does not take the preference:
 // the app no longer shows it, so it must not hide an open project that
 // differs from it only by case. Named exactly, it still matches.
 func projectNameMatch(alias, ref string) (string, []any) {
-	clause := "(" + alias + ".uuid = ? OR nfc(" + alias + ".title) = ? OR (fold(" + alias + ".title) LIKE ?" + escapeClause +
+	clause := "(" + alias + ".uuid = ? OR nfc(" + alias + ".title) = ? OR (fold_name(" + alias + ".title) LIKE ?" + escapeClause +
 		" AND NOT EXISTS (SELECT 1 FROM TMTask px WHERE px.type = ? AND px.trashed = 0 AND nfc(px.title) = ?)))"
-	return clause, []any{ref, normName(ref), nameLike(ref), int(model.TypeProject), normName(ref)}
+	return clause, []any{ref, normName(ref), listNameLike(ref), int(model.TypeProject), normName(ref)}
 }
 
 // areaNameMatch is the --area clause for an area's uuid and title columns,
 // with its arguments, and tagNameMatch the --tag condition on a tag's title.
 // Both take names the way projectNameMatch does: an exact-case title wins,
 // and only when no area or tag carries one does the title match ignoring case
-// and surrounding space. Areas and tags are never trashed, so every row takes
-// the preference.
+// and surrounding space. An area also matches across compatibility forms
+// (FoldName), as in Things; a tag does not. Areas and tags are never trashed,
+// so every row takes the preference.
 func areaNameMatch(uuidCol, titleCol, ref string) (string, []any) {
-	clause := "(" + uuidCol + " = ? OR nfc(" + titleCol + ") = ? OR (fold(" + titleCol + ") LIKE ?" + escapeClause +
+	clause := "(" + uuidCol + " = ? OR nfc(" + titleCol + ") = ? OR (fold_name(" + titleCol + ") LIKE ?" + escapeClause +
 		" AND NOT EXISTS (SELECT 1 FROM TMArea ax WHERE nfc(ax.title) = ?)))"
-	return clause, []any{ref, normName(ref), nameLike(ref), normName(ref)}
+	return clause, []any{ref, normName(ref), listNameLike(ref), normName(ref)}
 }
 
 func tagNameMatch(titleCol, ref string) (string, []any) {

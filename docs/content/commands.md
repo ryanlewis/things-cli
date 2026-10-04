@@ -197,7 +197,10 @@ ignore case and surrounding spaces. Case is ignored the way Things ignores it,
 so `-t STRASSE` finds a tag named
 `Straße`. An accented letter matches whether it was typed as one character or
 as a letter plus a combining accent, as in Things, but never the bare letter:
-`-t Cafe` does not find `Café`. A project, area or tag name typed in
+`-t Cafe` does not find `Café`. Project and area names, but not tag names,
+also match across Unicode compatibility forms, as in Things: `-a Ｗork`
+(fullwidth) or `-p "Q²"` finds `Work` or `Q2`, and a no-break space matches a
+space. A project, area or tag name typed in
 its exact case lists only that one, even when another title differs from it
 only by case. On their
 own the filters cover everything open in the project, area, or tag — so
@@ -391,8 +394,9 @@ warning: --heading "Later" needs --list or --project; Things will ignore it and 
 `things project add` creates a new project with the same flag set
 (`--notes`, `--when`, `--deadline`, `--tags`, `--area`, `--todos`). `--area`
 takes an area name or UUID; a UUID goes to Things as `area-id`, since
-Things matches `area` by title only. It matches the title ignoring case but
-not surrounding space, and when nothing matches it creates the project with
+Things matches `area` by title only. It matches the title ignoring case and
+compatibility forms (fullwidth letters, superscript digits) but not
+surrounding space, and when nothing matches it creates the project with
 no area. `project add` warns on stderr when that will happen, then sends the
 project anyway:
 
@@ -444,7 +448,8 @@ things edit 3 --list Tools --heading Setup
 ```
 
 `--list` and `--heading` move the to-do. Things matches them the way it
-does for `add`: ignoring case but not surrounding space, and only against
+does for `add`: ignoring case and compatibility forms but not surrounding
+space, and only against
 open projects and areas. `--list` also takes a UUID of an open project or
 area, which the CLI sends to Things as `list-id`; `--list-id` and
 `--heading-id` take UUIDs directly. `--heading` on its own looks in the

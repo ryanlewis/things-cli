@@ -557,6 +557,7 @@ func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
 		{"padded", " Personal ", `no area called " Personal "`},
 		{"paddedTitle", "Errands ", ""},
 		{"paddedTitleUnpadded", "Errands", `no area called "Errands"`},
+		{"fullwidth", "Ｐersonal", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
