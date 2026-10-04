@@ -115,7 +115,7 @@ SELECT
 	COALESCE(t.notes, ''),
 	COALESCE(t.type, 0),
 	COALESCE(t.status, 0),
-	COALESCE(t.start, 0),
+	` + shownStart + `,
 	COALESCE(t.startBucket, 0),
 	t.startDate,
 	t.deadline,
@@ -245,6 +245,15 @@ const todayScheduled = "(t.start = 1 OR (" + scheduledArrived + ")) AND t.startB
 // was caught in this state; one is treated the same, as it shares the code
 // path.
 const scheduledArrived = "t.start = 2 AND t.startDate <= " + thingsToday
+
+// shownStart is the start a row reports: the one the app shows. An open
+// scheduledArrived row reports Anytime, the code Things gives it when it moves
+// the row; without this, --json said "someday" for a row the listing filed
+// under today. Things moves only open, untrashed rows: on 4 Oct 2026 the
+// database held 22 closed and 17 trashed start = 2 rows dated days back, so
+// those keep the code they have.
+const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + scheduledArrived +
+	" THEN 1 ELSE COALESCE(t.start, 0) END"
 
 // todayDue is the other way into Today: a to-do with no start date whose
 // deadline has arrived, from the Inbox or from Anytime, and for as long as it
