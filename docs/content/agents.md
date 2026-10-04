@@ -419,10 +419,12 @@ instead of assuming:
   if the status never changed. A non-zero exit means "still open", not
   "done".
 - **New items are read back.** `add` and `project add` find the item they
-  created and print it as `things show` would, so the agent has its UUID
-  without a `things search`. If it never appears they exit non-zero; search
+  created, by kind, title and where it was sent, and print it as `things
+  show` would, so the agent has its UUID without a `things search`. Agents
+  adding the same title to different projects at once each get their own
+  item, or an error, never the other's. If it never appears they exit non-zero; search
   for the title before retrying, so a retry does not make a duplicate.
-  Exit 0 with `"confirmed": false` (two new items with the title,
+  Exit 0 with `"confirmed": false` (two new items with the title in the same place,
   `--no-verify`, or an unreadable database) is not a confirmation either.
   `import` does the same for every to-do and project it creates, and
   prints one verdict per item, with its `path` in the payload. It exits

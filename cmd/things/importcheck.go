@@ -91,6 +91,22 @@ type importCreate struct {
 	// datedAt is that creation-date, or zero when it is not an RFC 3339
 	// timestamp, which leaves when Things saves it unknown.
 	datedAt time.Time
+	// to is where the payload files the item, and dest is where the CLI
+	// resolved that to before the import was sent (see resolveImportDests).
+	to   importTo
+	dest createdDest
+}
+
+// importTo is the destination attributes of an item the payload creates: a
+// to-do's list-id, list, heading-id and heading, a project's area-id and
+// area. A to-do in the items of a project the payload updates carries that
+// project's id as parentID, and one in a project it creates carries that
+// project's title as parentTitle.
+type importTo struct {
+	listID, list, headingID, heading string
+	areaID, area                     string
+	parentID, parentTitle            string
+	nested                           bool
 }
 
 // datedSlack widens the read-back window for a dated item's creation-date,
@@ -108,6 +124,73 @@ func (c importCreate) landsInWindow(since time.Time) bool {
 
 func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
 
+func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest: c.dest} }
+
+// resolveImportDests sets each create's dest from its destination attributes,
+// as Things will resolve them, the way add and project add resolve theirs.
+// A to-do in a project's items is checked against that project only. A list,
+// heading or area the database does not have, or that cannot be read, is left
+// unchecked: what Things does with one in an import was not checked, and a
+// list may be a project the same payload creates.
+func resolveImportDests(database *db.DB, creates []importCreate) {
+	var (
+		areas     []model.Area
+		areasErr  error
+		areasRead bool
+	)
+	for i := range creates {
+		c := &creates[i]
+		to := c.to
+		switch {
+		case c.typ == model.TypeProject:
+			if to.areaID == "" && to.area == "" {
+				c.dest = createdDest{checked: true}
+				continue
+			}
+			if !areasRead {
+				areas, areasErr = database.ListAreas()
+				areasRead = true
+			}
+			if areasErr != nil {
+				continue
+			}
+			for _, a := range areas {
+				switch {
+				case to.areaID != "" && a.UUID == strings.TrimSpace(to.areaID):
+					c.dest = createdDest{checked: true, list: a.UUID}
+				case to.areaID == "" && db.FoldName(a.Title) == db.FoldName(to.area):
+					c.dest = createdDest{checked: true, list: db.FoldName(to.area), byTitle: true}
+				}
+			}
+		case to.parentID != "":
+			c.dest = createdDest{checked: true, list: strings.TrimSpace(to.parentID), anyHeading: true}
+		case to.nested:
+			c.dest = createdDest{checked: true, list: db.FoldName(to.parentTitle), byTitle: true, anyHeading: true}
+		case to.listID == "" && to.list == "":
+			c.dest = createdDest{checked: true}
+		default:
+			list := to.list
+			if to.listID != "" {
+				list = strings.TrimSpace(to.listID)
+			}
+			target, headingFound, err := database.AddTarget(list, to.heading)
+			if err != nil || target == "" || (to.listID != "" && target != list) {
+				continue
+			}
+			c.dest = createdDest{checked: true, list: target}
+			if to.listID == "" {
+				c.dest.list, c.dest.byTitle = db.FoldName(list), true
+			}
+			switch {
+			case headingFound && to.headingID == "":
+				c.dest.heading = db.FoldCase(to.heading)
+			case to.heading != "" || to.headingID != "":
+				c.dest.anyHeading = true
+			}
+		}
+	}
+}
+
 // kind is the CLI's word for the item: "task" or "project".
 func (c importCreate) kind() string {
 	if c.typ == model.TypeProject {
@@ -122,8 +205,25 @@ func (c importCreate) kind() string {
 // with no title is left out, since there is nothing to find it by.
 func importCreates(data []byte) []importCreate {
 	var creates []importCreate
+	// parents maps the path of each item in a project's items to that
+	// project. The walk visits a project before its items.
+	parents := map[string]importTo{}
 	walkImportPayload(data, func(path string, v map[string]any) {
-		if op, _ := v["operation"].(string); op != "" && op != "create" {
+		op, _ := v["operation"].(string)
+		attrs, _ := v["attributes"].(map[string]any)
+		if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
+			parent := importTo{nested: true}
+			if op == "update" {
+				parent.parentID, _ = v["id"].(string)
+			} else {
+				parent.parentTitle, _ = attrs["title"].(string)
+			}
+			items, _ := attrs["items"].([]any)
+			for i := range items {
+				parents[fmt.Sprintf("%s.attributes.items[%d]", path, i)] = parent
+			}
+		}
+		if op != "" && op != "create" {
 			return
 		}
 		var typ model.TaskType
@@ -135,17 +235,25 @@ func importCreates(data []byte) []importCreate {
 		default:
 			return
 		}
-		attrs, _ := v["attributes"].(map[string]any)
 		title, _ := attrs["title"].(string)
 		if title = strings.TrimSpace(title); title == "" {
 			return
+		}
+		to, nested := parents[path]
+		if !nested {
+			to.listID, _ = attrs["list-id"].(string)
+			to.list, _ = attrs["list"].(string)
+			to.headingID, _ = attrs["heading-id"].(string)
+			to.heading, _ = attrs["heading"].(string)
+			to.areaID, _ = attrs["area-id"].(string)
+			to.area, _ = attrs["area"].(string)
 		}
 		raw, dated := attrs["creation-date"]
 		var datedAt time.Time
 		if str, ok := raw.(string); ok {
 			datedAt, _ = time.Parse(time.RFC3339, strings.TrimSpace(str))
 		}
-		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: dated, datedAt: datedAt})
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: dated, datedAt: datedAt, to: to})
 	})
 	return creates
 }
@@ -473,6 +581,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 		}
 	}
 	if len(types) > 0 {
+		resolveImportDests(database, plan.creates)
 		snap, snapErr = snapshotCreated(database, types)
 	}
 	if err := write(); err != nil {
@@ -501,7 +610,9 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 
 // readBackCreates finds each item the import created, the way applyAdd finds
 // the one an add created (see findCreated), and returns a verdict per item in
-// payload order. Items with the same type and title are counted together:
+// payload order. Each item must also be filed where the payload puts it (see
+// resolveImportDests). Items with the same type, title and destination are
+// counted together:
 // when as many new items appear as the payload asked for, they are confirmed
 // and paired with the payload's items in the order Things saved them. More is
 // ambiguous and fewer is not found, both naming the new items that did
@@ -522,13 +633,13 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			dated[c.key()] = true
 		}
 	}
-	want := map[createdKey]int{}
+	want := map[createdWant]int{}
 	for _, c := range creates {
 		if !c.dated && !dated[c.key()] {
-			want[c.key()]++
+			want[c.want()]++
 		}
 	}
-	var found map[createdKey][]model.Task
+	var found map[createdWant][]model.Task
 	err := snapErr
 	if err == nil && len(want) > 0 {
 		var readOK bool
@@ -539,19 +650,19 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 	}
 
 	out := make([]importCreated, len(creates))
-	paired := map[createdKey]int{}
+	paired := map[createdWant]int{}
 	for i, c := range creates {
 		out[i] = importCreated{Path: c.path, Kind: c.kind(), Title: c.title}
-		key := c.key()
-		matches := found[key]
+		w := c.want()
+		matches := found[w]
 		uuids := make([]string, len(matches))
 		for n, t := range matches {
 			uuids[n] = t.UUID
 		}
-		switch n := want[key]; {
+		switch n := want[w]; {
 		case c.dated:
 			out[i].Reason = "creation-date"
-		case dated[key]:
+		case dated[c.key()]:
 			out[i].Reason = "shares-dated-title"
 			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, so a new item with that title may be either", c.kind(), c.title)
 		case err != nil:
@@ -562,8 +673,8 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			out[i].Reason, out[i].Candidates = "ambiguous", uuids
 		case len(matches) == n:
 			out[i].Confirmed = true
-			out[i].UUID = uuids[paired[key]]
-			paired[key]++
+			out[i].UUID = uuids[paired[w]]
+			paired[w]++
 		case len(matches) > n:
 			out[i].Reason, out[i].Candidates = "ambiguous", uuids
 		case len(matches) == 0:
@@ -574,10 +685,55 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.kind(), c.title, budget, strings.Join(uuids, ", "))
 		}
 	}
+	unconfirmShared(out, found)
 	if err != nil && len(want) > 0 && !d.dbWarned {
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
 	return out
+}
+
+// unconfirmShared turns back every confirmation that gives a new item to more
+// than one created item. An item whose destination is unchecked fits a row
+// filed for another item with the same kind and title, so the two can claim
+// the same row; neither is confirmed, and both are reported ambiguous with
+// every new item either could be.
+func unconfirmShared(out []importCreated, found map[createdWant][]model.Task) {
+	claims := map[string]int{}
+	for _, c := range out {
+		if c.Confirmed {
+			claims[c.UUID]++
+		}
+	}
+	for i, c := range out {
+		if !c.Confirmed || claims[c.UUID] < 2 {
+			continue
+		}
+		var rows []model.Task
+		for _, matches := range found {
+			if !slices.ContainsFunc(matches, func(t model.Task) bool { return t.UUID == c.UUID }) {
+				continue
+			}
+			for _, t := range matches {
+				if !slices.ContainsFunc(rows, func(r model.Task) bool { return r.UUID == t.UUID }) {
+					rows = append(rows, t)
+				}
+			}
+		}
+		// Oldest first, as the other candidate lists are.
+		slices.SortFunc(rows, func(a, b model.Task) int {
+			if a.CreationDate != nil && b.CreationDate != nil {
+				if n := a.CreationDate.Compare(*b.CreationDate); n != 0 {
+					return n
+				}
+			}
+			return strings.Compare(a.UUID, b.UUID)
+		})
+		candidates := make([]string, len(rows))
+		for n, t := range rows {
+			candidates[n] = t.UUID
+		}
+		out[i] = importCreated{Path: c.Path, Kind: c.Kind, Title: c.Title, Reason: "ambiguous", Candidates: candidates}
+	}
 }
 
 // distinctCreationDates reports whether no two of tasks, oldest first, share a

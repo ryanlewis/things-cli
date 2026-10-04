@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -32,10 +33,11 @@ func (c *AddCmd) Run(d *Deps) error {
 	}
 	// Things matches list by title only; a uuid has to go as list-id.
 	var listID string
-	if id := resolveAddTarget(d, list, c.Heading); id != "" && id == strings.TrimSpace(list) {
+	id, dest := resolveAddTarget(d, list, c.Heading)
+	if id != "" && id == strings.TrimSpace(list) {
 		list, listID = "", id
 	}
-	return applyAdd(d, model.TypeTask, c.Title, func() error {
+	return applyAdd(d, model.TypeTask, c.Title, dest, func() error {
 		return things.AddTask(things.AddParams{
 			Title:     c.Title,
 			Notes:     c.Notes,
@@ -54,26 +56,36 @@ func (c *AddCmd) Run(d *Deps) error {
 // warns when Things will not file the to-do where list and heading say.
 // Things matches them by title and, when nothing matches, puts the to-do in
 // the Inbox or leaves out the heading without reporting it. The add still
-// goes ahead. A database that cannot be read gives no warning here: the tag
-// check or the read-back reports that.
-func resolveAddTarget(d *Deps, list, heading string) string {
+// goes ahead. dest is where Things will file it, for the read-back; it checks
+// nothing when the database cannot be read. A database that cannot be read
+// gives no warning here: the tag check or the read-back reports that.
+func resolveAddTarget(d *Deps, list, heading string) (string, createdDest) {
 	if list == "" {
 		if heading != "" {
 			fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list or --project; Things will ignore it and put the to-do in the Inbox\n", heading)
 		}
-		return ""
+		return "", createdDest{checked: true}
 	}
 	database, err := d.Database()
 	if err != nil {
-		return ""
+		return "", createdDest{}
 	}
 	target, headingFound, err := database.AddTarget(list, heading)
 	switch {
 	case err != nil:
+		return "", createdDest{}
 	case target == "":
 		fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; it will put the to-do in the Inbox\n", list)
+		return "", createdDest{checked: true}
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
 	}
-	return target
+	dest := createdDest{checked: true, list: target}
+	if target != strings.TrimSpace(list) {
+		dest.list, dest.byTitle = db.FoldName(list), true
+	}
+	if headingFound {
+		dest.heading = db.FoldCase(heading)
+	}
+	return target, dest
 }

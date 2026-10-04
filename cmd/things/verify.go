@@ -373,6 +373,65 @@ func newCreatedKey(typ model.TaskType, title string) createdKey {
 	return createdKey{typ: typ, title: norm.NFC.String(strings.TrimSpace(title))}
 }
 
+// createdDest is where a write asked Things to file the item it creates, as
+// the CLI resolved it before sending the write. A new row with the item's
+// type and title filed anywhere else is not the write's: it can be the same
+// title added somewhere else at the same moment by another command. The zero
+// value checks nothing, for a destination the CLI could not resolve.
+type createdDest struct {
+	checked bool
+	// list is the project or area the item is filed in: its uuid, or, when
+	// byTitle is set, FoldName of the title the write named it by, which is
+	// how Things matches it, so any list with that title fits. "" is none:
+	// the Inbox (or wherever --when puts it), or a project with no area.
+	list    string
+	byTitle bool
+	// heading is FoldCase of the title of the heading the item goes under,
+	// "" for none. anyHeading leaves the heading unchecked.
+	heading    string
+	anyHeading bool
+}
+
+// fits reports whether t, a new row with the item's type and title, is filed
+// where dst says.
+func (dst createdDest) fits(t model.Task) bool {
+	if !dst.checked {
+		return true
+	}
+	// A to-do in a project carries the project's area too, so the project
+	// is the list it is filed in. A project has no project of its own.
+	id, title := t.ProjectUUID, t.ProjectTitle
+	if id == "" {
+		id, title = t.AreaUUID, t.AreaTitle
+	}
+	switch {
+	case dst.list == "":
+		if id != "" {
+			return false
+		}
+	case dst.byTitle:
+		if id == "" || db.FoldName(title) != dst.list {
+			return false
+		}
+	case id != dst.list:
+		return false
+	}
+	switch {
+	case dst.anyHeading:
+		return true
+	case dst.heading == "":
+		return t.HeadingUUID == ""
+	}
+	return t.HeadingUUID != "" && db.FoldCase(t.HeadingTitle) == dst.heading
+}
+
+// createdWant is one kind of item a write creates: what it is called and
+// where it goes.
+type createdWant struct {
+	key  createdKey
+	dest createdDest
+}
+
 // createdSnapshot is what was there before a write that creates items: the
 // start of the window the new items are looked for in, and the items already
 // created inside it, which are not the write's.
@@ -398,26 +457,28 @@ func snapshotCreated(database *db.DB, types []model.TaskType) (createdSnapshot, 
 }
 
 // findCreated polls for the items a write created, by what they must be: an
-// item of the key's type with the key's title, created after the write
-// started, that was not in snap. want says how many new items each key should
-// have. Once every key has that many, it polls addSettleRounds more rounds,
-// so a second item with the same title saved a moment later is seen too.
+// item of the key's type with the key's title, filed where its dest says,
+// created after the write started, that was not in snap. want says how many
+// new items each want should have. Once every want has that many, it polls
+// addSettleRounds more rounds, so a second item with the same title saved a
+// moment later is seen too. A new item that fits more than one want is
+// counted for each.
 //
-// found holds the new items for each key as the last read that worked saw
+// found holds the new items for each want as the last read that worked saw
 // them, oldest first. readOK says whether any read worked; readErr is the
 // last read error.
-func findCreated(database *db.DB, snap createdSnapshot, want map[createdKey]int, budget time.Duration) (found map[createdKey][]model.Task, readOK bool, readErr error) {
+func findCreated(database *db.DB, snap createdSnapshot, want map[createdWant]int, budget time.Duration) (found map[createdWant][]model.Task, readOK bool, readErr error) {
 	var types []model.TaskType
-	for k := range want {
-		if !slices.Contains(types, k.typ) {
-			types = append(types, k.typ)
+	for w := range want {
+		if !slices.Contains(types, w.key.typ) {
+			types = append(types, w.key.typ)
 		}
 	}
 	slices.Sort(types)
 
 	matched := 0
 	_ = pollUntil(budget, func(bool) (bool, error) {
-		round := map[createdKey][]model.Task{}
+		round := map[createdWant][]model.Task{}
 		for _, typ := range types {
 			created, err := database.TasksCreatedSince(typ, snap.since)
 			if err != nil {
@@ -427,16 +488,21 @@ func findCreated(database *db.DB, snap createdSnapshot, want map[createdKey]int,
 				return false, nil
 			}
 			for _, t := range created {
+				if _, old := snap.before[t.UUID]; old {
+					continue
+				}
 				key := newCreatedKey(typ, t.Title)
-				if _, old := snap.before[t.UUID]; !old && want[key] > 0 {
-					round[key] = append(round[key], t)
+				for w := range want {
+					if w.key == key && w.dest.fits(t) {
+						round[w] = append(round[w], t)
+					}
 				}
 			}
 		}
 		readOK = true
 		found = round
-		for key, n := range want {
-			if len(found[key]) < n {
+		for w, n := range want {
+			if len(found[w]) < n {
 				return false, nil
 			}
 		}
@@ -463,12 +529,13 @@ var unconfirmedMsg = map[string]string{
 // applyAdd sends write, which creates an item of typ titled title, then finds
 // that item in the database and prints it as `things show` does.
 // things:///add returns no uuid (issue #19), so the item is found by what it
-// must be (see findCreated). More than one such item visible together when
-// the read-back settles — the same title added elsewhere at the same moment —
-// is reported unconfirmed with the candidates rather than guessed. Under
+// must be (see findCreated), filed where dest says. More than one such item
+// visible together when the read-back settles — the same title added to the
+// same place at the same moment — is reported unconfirmed with the
+// candidates rather than guessed. Under
 // --no-verify, or when the database cannot be read, the write still goes out
 // and the output says it is unconfirmed.
-func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) error {
+func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, write func() error) error {
 	if d.NoVerify {
 		if err := write(); err != nil {
 			return err
@@ -500,9 +567,9 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		return err
 	}
 	budget := d.readBackTimeout()
-	key := newCreatedKey(typ, title)
-	results, readOK, readErr := findCreated(database, snap, map[createdKey]int{key: 1}, budget)
-	found := results[key]
+	want := createdWant{key: newCreatedKey(typ, title), dest: dest}
+	results, readOK, readErr := findCreated(database, snap, map[createdWant]int{want: 1}, budget)
+	found := results[want]
 	switch {
 	case len(found) == 0 && !readOK:
 		// Not one read-back read worked. A read that failed after others
@@ -513,8 +580,12 @@ func applyAdd(d *Deps, typ model.TaskType, title string, write func() error) err
 		if typ == model.TypeProject {
 			kind = "project"
 		}
-		return fmt.Errorf("add not confirmed: no new %s titled %q appeared within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `%s` before retrying; do not retry blindly",
-			kind, title, budget, searchCommand(d, title))
+		where := ""
+		if dest.checked {
+			where = " where it was sent"
+		}
+		return fmt.Errorf("add not confirmed: no new %s titled %q appeared%s within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `%s` before retrying; do not retry blindly",
+			kind, title, where, budget, searchCommand(d, title))
 	case len(found) > 1:
 		uuids := make([]string, len(found))
 		for i, t := range found {
