@@ -55,6 +55,13 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 	// come back in a different sequence between two runs (issue #221).
 	query += ` GROUP BY t.uuid ORDER BY CASE WHEN a.uuid IS NULL THEN 1 ELSE 0 END, a."index", t."index" ASC` + uuidTiebreak
 
+	// shownStart asks whether the row is a template or inside one. A project
+	// has no parent project, so that half is NULL.
+	query = strings.NewReplacer(
+		repeatingPlaceholder, d.recurrenceCol(),
+		repeatingParentPlaceholder, "NULL",
+	).Replace(query)
+
 	rows, err := d.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("querying projects: %w", err)

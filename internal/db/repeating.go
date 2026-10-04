@@ -59,8 +59,8 @@ func (d *DB) probeRepeating() {
 		// repeatColumn stays "" — the reference degrades to NULL — unless
 		// the probe finds a column below.
 		defer func() {
-			q := strings.Replace(baseTaskQuery, repeatingParentPlaceholder, recurrenceRef("p", d.repeatColumn), 1)
-			d.repeatQuery = strings.Replace(q, repeatingPlaceholder, recurrenceRef("t", d.repeatColumn), 1)
+			q := strings.ReplaceAll(baseTaskQuery, repeatingParentPlaceholder, recurrenceRef("p", d.repeatColumn))
+			d.repeatQuery = strings.ReplaceAll(q, repeatingPlaceholder, recurrenceRef("t", d.repeatColumn))
 		}()
 		cols, err := d.tableColumns("TMTask")
 		if err != nil {

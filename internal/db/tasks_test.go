@@ -2696,8 +2696,9 @@ func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
 
 // A row Things has not yet moved reports the start the app shows, Anytime,
 // so --json agrees with the listing that files it under today. A row dated
-// after today, an undated Someday row, and a closed or trashed one Things
-// will never move keep start = 2.
+// after today, an undated Someday row, and a closed or trashed one, a
+// repeating template or a to-do inside one, which Things will never move,
+// keep start = 2.
 func TestScheduledRowNotYetMovedReportsAnytime(t *testing.T) {
 	d, fx := newFixture(t)
 
@@ -2712,6 +2713,9 @@ func TestScheduledRowNotYetMovedReportsAnytime(t *testing.T) {
 	fx.Todo("someday", "Someday", 4, someday())
 	fx.Todo("closed-stuck", "Done before its day", 5, somedayOn(today), completed(done))
 	fx.Todo("trashed-stuck", "Trashed before its day", 6, somedayOn(today), trashed())
+	fx.Todo("template-stuck", "Repeating template", 7, somedayOn(today), repeats())
+	fx.Project("template-project", "Repeating project template", 8, somedayOn(today), repeats())
+	fx.Todo("in-template", "Inside the template", 9, somedayOn(today), inProject("template-project"))
 
 	want := map[string]model.Start{
 		"stuck-today":    model.StartAnytime,
@@ -2720,6 +2724,8 @@ func TestScheduledRowNotYetMovedReportsAnytime(t *testing.T) {
 		"someday":        model.StartSomeday,
 		"closed-stuck":   model.StartSomeday,
 		"trashed-stuck":  model.StartSomeday,
+		"template-stuck": model.StartSomeday,
+		"in-template":    model.StartSomeday,
 	}
 	got, err := d.GetTasksByUUIDs(keysOfStart(want))
 	if err != nil {

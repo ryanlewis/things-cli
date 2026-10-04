@@ -251,8 +251,9 @@ const scheduledArrived = "t.start = 2 AND t.startDate <= " + thingsToday
 // the row; without this, --json said "someday" for a row the listing filed
 // under today. Things moves only open, untrashed rows: on 4 Oct 2026 the
 // database held 22 closed and 17 trashed start = 2 rows dated days back, so
-// those keep the code they have.
-const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + scheduledArrived +
+// those keep the code they have. Nor does it move a repeating template or a
+// to-do inside one (notATemplate), which the views leave out of today too.
+const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + notATemplate + " AND " + scheduledArrived +
 	" THEN 1 ELSE COALESCE(t.start, 0) END"
 
 // todayDue is the other way into Today: a to-do with no start date whose
