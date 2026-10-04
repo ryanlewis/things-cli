@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -155,7 +156,7 @@ func TestUpdateScriptTargetsTheBinarysDirectory(t *testing.T) {
 	if _, _, err := f.run(t, false); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := "sh -c set -o pipefail; curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/v0.9.0/install.sh | INSTALL_DIR='/Users/me/my bin' VERSION=v0.9.0 sh"
+	want := "/bin/bash -c set -o pipefail; curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/v0.9.0/install.sh | INSTALL_DIR='/Users/me/my bin' VERSION=v0.9.0 sh"
 	if len(f.ran) != 1 || strings.Join(f.ran[0], " ") != want {
 		t.Errorf("ran %v, want %q", f.ran, want)
 	}
@@ -291,6 +292,41 @@ func TestUpdateStopsWhenTheLatestTagCannotBeCompared(t *testing.T) {
 	}
 	if len(f.ran) != 0 {
 		t.Errorf("ran %v, want nothing", f.ran)
+	}
+}
+
+func TestUpdateStopsWhenTheLatestTagCannotBePinned(t *testing.T) {
+	// A tag that compares fine but is not a plain vX.Y.Z release is not put
+	// into a URL or shell command, and without it the script would run from
+	// main and go install would take @latest.
+	for _, tag := range []string{"v0.10.0+build.1", "0.10.0"} {
+		cases := map[string]fakeUpdate{
+			"script": {exe: "/usr/local/bin/things", version: "0.9.0", writable: true, latest: tag},
+			"go":     {exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), latest: tag},
+		}
+		for name, f := range cases {
+			t.Run(name+" "+tag, func(t *testing.T) {
+				_, _, err := f.run(t, false)
+				if err == nil || !strings.Contains(err.Error(), "cannot pin the latest release tag "+strconv.Quote(tag)) {
+					t.Fatalf("err = %v, want a refusal naming the tag", err)
+				}
+				if len(f.ran) != 0 {
+					t.Errorf("ran %v, want nothing", f.ran)
+				}
+				g := f
+				g.ran = nil
+				_, stderr, err := g.run(t, true)
+				if err != nil {
+					t.Fatalf("dry run: %v", err)
+				}
+				if !strings.Contains(stderr, "cannot pin the latest release tag") || !strings.Contains(stderr, "`things update` would stop here") {
+					t.Errorf("dry run stderr = %q, want it to say it would stop", stderr)
+				}
+				if len(g.ran) != 0 {
+					t.Errorf("dry run ran %v", g.ran)
+				}
+			})
+		}
 	}
 }
 
