@@ -80,7 +80,8 @@ func TestUpdateDryRunPerMethod(t *testing.T) {
 		},
 		{
 			name: "install.sh, release check failed",
-			// No tag to pin to: the script on main finds the latest itself.
+			// No tag to pin to: the command shown uses the script on main,
+			// which a real run prints but does not run.
 			f:    fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.0", writable: true, fetchErr: errors.New("offline")},
 			want: "Would run: curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | INSTALL_DIR=/usr/local/bin sh\n",
 		},
@@ -93,7 +94,7 @@ func TestUpdateDryRunPerMethod(t *testing.T) {
 		{
 			name: "go install",
 			f:    fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), latest: "v0.9.1"},
-			want: "Would run: GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@latest\n",
+			want: "Would run: GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@v0.9.1\n",
 		},
 	}
 	for _, tc := range cases {
@@ -160,6 +161,17 @@ func TestUpdateScriptTargetsTheBinarysDirectory(t *testing.T) {
 	}
 }
 
+func TestUpdateGoInstallPinsTheCheckedTag(t *testing.T) {
+	f := fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), latest: "v0.9.1"}
+	if _, _, err := f.run(t, false); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	want := "env GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@v0.9.1"
+	if len(f.ran) != 1 || strings.Join(f.ran[0], " ") != want {
+		t.Errorf("ran %v, want %q", f.ran, want)
+	}
+}
+
 func TestUpdateGoInstallComparesTheModuleVersion(t *testing.T) {
 	f := fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), latest: "v0.9.0"}
 	out, _, err := f.run(t, false)
@@ -207,7 +219,8 @@ func TestUpdateNeverDowngrades(t *testing.T) {
 
 func TestUpdateProceedsWhenNotNewer(t *testing.T) {
 	// A prerelease orders as its core, so 1.0.0-rc1 moves on to 1.0.0. A
-	// version that does not parse keeps the old behaviour and updates.
+	// version that does not parse counts as a failed check, which Homebrew
+	// updates through (brew upgrade compares for itself).
 	cases := map[string]fakeUpdate{
 		"prerelease to its release": {exe: "/opt/homebrew/Caskroom/things/1.0.0-rc1/things", version: "1.0.0-rc1", latest: "v1.0.0"},
 		"latest does not parse":     {exe: "/opt/homebrew/Caskroom/things/0.9.0/things", version: "0.9.0", latest: "nightly"},
@@ -218,7 +231,7 @@ func TestUpdateProceedsWhenNotNewer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
-			if !strings.Contains(out, "Updating things") || len(f.ran) != 1 {
+			if !strings.Contains(out, "Running: brew upgrade") || len(f.ran) != 1 {
 				t.Errorf("stdout %q, ran %v; want an update", out, f.ran)
 			}
 		})
@@ -267,6 +280,17 @@ func TestUpdateStopsWhenTheCheckFails(t *testing.T) {
 				t.Errorf("stdout %q, ran %v; want nothing run", out, f.ran)
 			}
 		})
+	}
+}
+
+func TestUpdateStopsWhenTheLatestTagCannotBeCompared(t *testing.T) {
+	f := fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.98", writable: true, latest: "nightly"}
+	_, _, err := f.run(t, false)
+	if err == nil || !strings.Contains(err.Error(), `cannot compare things 0.9.98 with the latest release tag "nightly"`) {
+		t.Fatalf("err = %v, want a refusal naming the tag", err)
+	}
+	if len(f.ran) != 0 {
+		t.Errorf("ran %v, want nothing", f.ran)
 	}
 }
 

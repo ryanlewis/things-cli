@@ -64,7 +64,7 @@ const (
 type updatePlan struct {
 	method installMethod
 	how    string   // "with Homebrew", for the first line of output
-	dir    string   // install directory, for the install.sh method
+	dir    string   // install directory, for the install.sh and go install methods
 	args   []string // argv to run
 	shown  string   // args as the user would type them
 	// current is the installed version in the form the release tag uses once
@@ -95,12 +95,9 @@ func planUpdate(exe, ver string, info *debug.BuildInfo, haveInfo bool) (updatePl
 	// module version, and records no VCS revision — a build from a checkout
 	// always records one.
 	if ver == "dev" && haveInfo && isModuleRelease(info) {
-		// GOBIN puts the new binary where the running one is; left to go env
-		// it may land elsewhere and leave this one stale.
-		dir := filepath.Dir(exe)
-		args := []string{"env", "GOBIN=" + dir, "go", "install", updateModule + "@latest"}
-		shown := "GOBIN=" + shellQuote(dir) + " go install " + updateModule + "@latest"
-		return updatePlan{method: methodGo, how: "with go install", args: args, shown: shown, current: strings.TrimPrefix(info.Main.Version, "v")}, nil
+		plan := updatePlan{method: methodGo, how: "with go install", dir: filepath.Dir(exe), current: strings.TrimPrefix(info.Main.Version, "v")}
+		plan.pinGo("")
+		return plan, nil
 	}
 	return updatePlan{}, fmt.Errorf("%s is a local build (version %s), made with make install or go build, so there is nothing to update it from. Rebuild it from your checkout, or install a release: https://things.rlew.io/install/", exe, ver)
 }
@@ -108,7 +105,8 @@ func planUpdate(exe, ver string, info *debug.BuildInfo, haveInfo bool) (updatePl
 // pinScript points the install.sh command at a release tag: the script comes
 // from that tag and installs that version, so what runs is what the release
 // check found. With no tag it falls back to the script on main, which finds
-// the latest release itself.
+// the latest release itself; `things update` only prints that command for the
+// user to run, never runs it.
 func (p *updatePlan) pinScript(tag string) {
 	ref, version := "main", ""
 	if tag != "" {
@@ -118,6 +116,20 @@ func (p *updatePlan) pinScript(tag string) {
 	// Without pipefail a failed download feeds sh an empty script, which
 	// exits 0 and reports an update that never happened.
 	p.args = []string{"sh", "-c", "set -o pipefail; " + p.shown}
+}
+
+// pinGo points the go install command at a release tag, so what it installs
+// is what the release check found. With no tag it uses @latest, which `things
+// update` only prints for the user to run, never runs.
+func (p *updatePlan) pinGo(tag string) {
+	query := "latest"
+	if tag != "" {
+		query = tag
+	}
+	// GOBIN puts the new binary where the running one is; left to go env
+	// it may land elsewhere and leave this one stale.
+	p.args = []string{"env", "GOBIN=" + p.dir, "go", "install", updateModule + "@" + query}
+	p.shown = "GOBIN=" + shellQuote(p.dir) + " go install " + updateModule + "@" + query
 }
 
 // newerThan reports whether version a is ahead of b. Only MAJOR.MINOR.PATCH
@@ -185,14 +197,24 @@ func (c *UpdateCmd) Run(d *Deps) error {
 			fmt.Fprintf(d.Stdout, "things %s is the latest release.\n", plan.current)
 			return nil
 		}
-		if newer, _ := newerThan(plan.current, latest); newer {
+		newer, ok := newerThan(plan.current, latest)
+		switch {
+		case !ok:
+			// A tag that cannot be compared is no better than no tag: the
+			// update might still be a downgrade.
+			checkErr = fmt.Errorf("cannot compare things %s with the latest release tag %q", plan.current, tag)
+		case newer:
 			fmt.Fprintf(d.Stdout, "things %s is newer than the latest release %s; nothing to do.\n", plan.current, latest)
 			return nil
-		}
-		// The tag goes into a URL and a shell command, so only a well-formed
-		// release tag is pinned; anything else keeps the script on main.
-		if plan.method == methodScript && tag == "v"+latest && releaseVersion.MatchString(latest) {
-			plan.pinScript(tag)
+		case tag == "v"+latest && releaseVersion.MatchString(latest):
+			// The tag goes into a URL and a shell command, so only a
+			// well-formed release tag is pinned.
+			switch plan.method {
+			case methodScript:
+				plan.pinScript(tag)
+			case methodGo:
+				plan.pinGo(tag)
+			}
 		}
 	}
 
