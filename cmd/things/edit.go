@@ -74,8 +74,9 @@ func (c *EditCmd) Run(d *Deps) error {
 
 // checkOwn reports whether any of this command's own field flags may change
 // the task. None of them is in coveredFields; runEdit adds the shared ones.
-// Every field flag belongs either here or in commonEditFlags.covered, so a new one cannot be missed by changesFields and still pass
-// certainNoOp. A move Things will drop (checkMove) does not count.
+// Every field flag belongs either here or in commonEditFlags.covered, so a
+// new one cannot be missed by changesFields and still pass certainNoOp. A
+// move Things will drop (checkMove) does not count.
 func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 	return c.checkMove(d, database, task) || c.checklistSet()
 }
