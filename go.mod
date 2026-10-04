@@ -1,6 +1,6 @@
 module github.com/ryanlewis/things-cli
 
-go 1.26
+go 1.26.0
 
 toolchain go1.26.8
 
@@ -12,7 +12,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/willabides/kongplete v0.4.0
 	golang.org/x/term v0.45.0
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.42.0
 	modernc.org/sqlite v1.57.0
 )
 
@@ -37,7 +37,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/riywo/loginshell v0.0.0-20200815045211-7d26008be1ab // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
