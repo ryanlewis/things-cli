@@ -379,7 +379,7 @@ func TestAddNotFoundSearchHintKeepsGlobalFlags(t *testing.T) {
 		Stderr: io.Discard,
 	}
 
-	err := applyAdd(d, model.TypeTask, "Buy oat milk", func() error { return things.AddTask(things.AddParams{Title: "Buy oat milk"}) })
+	err := applyAdd(d, model.TypeTask, "Buy oat milk", createdDest{}, func() error { return things.AddTask(things.AddParams{Title: "Buy oat milk"}) })
 	want := "things --db '/tmp/my things.sqlite' --config /tmp/c.toml search 'Buy oat milk'"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("err = %v, want the hint %q", err, want)
@@ -412,28 +412,37 @@ func TestAddUnreadableWithTagsWarnsOnce(t *testing.T) {
 // area in the Inbox, and drops a --heading it cannot find, all without a
 // word. The add warns on stderr when that will happen and still sends the
 // write.
+// Column assignments that file a stubbed add's row where Things would.
+const (
+	inProj1    = `project = 'proj-1'`
+	inProj2    = `project = 'proj-2'`
+	inArea1    = `area = 'area-1'`
+	underHead1 = `heading = 'head-1'`
+)
+
 func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 	cases := []struct {
-		name string
-		args []string
-		want string // "" for no warning
+		name  string
+		args  []string
+		want  string // "" for no warning
+		filed string // where Things files the to-do, as a column assignment; "" for the Inbox
 	}{
-		{"knownProject", []string{"--list", "tools"}, ""},
-		{"knownProjectFlag", []string{"--project", "Tools"}, ""},
-		{"knownArea", []string{"--list", "Personal"}, ""},
-		{"projectUUID", []string{"--project", "proj-1"}, ""},
-		{"areaUUID", []string{"--list", "area-1"}, ""},
-		{"headingInProjectUUID", []string{"--project", "proj-1", "--heading", "Setup"}, ""},
-		{"completedProjectUUID", []string{"--project", "proj-done"}, `no open project or area called "proj-done"`},
-		{"knownHeading", []string{"--list", "Tools", "--heading", "setup"}, ""},
-		{"unknownList", []string{"--list", "Nowhere"}, `no open project or area called "Nowhere"`},
-		{"unknownProjectFlag", []string{"--project", "Nowhere"}, `no open project or area called "Nowhere"`},
-		{"completedProject", []string{"--list", "Old"}, `no open project or area called "Old"`},
-		{"unknownHeading", []string{"--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"`},
-		{"headingInArea", []string{"--list", "Personal", "--heading", "Setup"}, `"Personal" has no heading "Setup"`},
-		{"headingWithoutList", []string{"--heading", "Setup"}, `--heading "Setup" needs --list or --project`},
-		{"paddedList", []string{"--list", " Tools "}, `no open project or area called " Tools "`},
-		{"paddedHeading", []string{"--list", "Tools", "--heading", " Setup "}, `"Tools" has no heading " Setup "`},
+		{"knownProject", []string{"--list", "tools"}, "", inProj1},
+		{"knownProjectFlag", []string{"--project", "Tools"}, "", inProj1},
+		{"knownArea", []string{"--list", "Personal"}, "", inArea1},
+		{"projectUUID", []string{"--project", "proj-1"}, "", inProj1},
+		{"areaUUID", []string{"--list", "area-1"}, "", inArea1},
+		{"headingInProjectUUID", []string{"--project", "proj-1", "--heading", "Setup"}, "", underHead1},
+		{"completedProjectUUID", []string{"--project", "proj-done"}, `no open project or area called "proj-done"`, ""},
+		{"knownHeading", []string{"--list", "Tools", "--heading", "setup"}, "", underHead1},
+		{"unknownList", []string{"--list", "Nowhere"}, `no open project or area called "Nowhere"`, ""},
+		{"unknownProjectFlag", []string{"--project", "Nowhere"}, `no open project or area called "Nowhere"`, ""},
+		{"completedProject", []string{"--list", "Old"}, `no open project or area called "Old"`, ""},
+		{"unknownHeading", []string{"--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"`, inProj1},
+		{"headingInArea", []string{"--list", "Personal", "--heading", "Setup"}, `"Personal" has no heading "Setup"`, inArea1},
+		{"headingWithoutList", []string{"--heading", "Setup"}, `--heading "Setup" needs --list or --project`, ""},
+		{"paddedList", []string{"--list", " Tools "}, `no open project or area called " Tools "`, ""},
+		{"paddedHeading", []string{"--list", "Tools", "--heading", " Setup "}, `"Tools" has no heading " Setup "`, inProj1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -444,7 +453,7 @@ func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 			fx.Project("proj-1", "Tools", 5)
 			fx.Project("proj-done", "Old", 6, dbtest.Status(model.StatusCompleted))
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
-			calls := stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk"})
+			calls := stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", extra: tc.filed})
 
 			_, stderr, err := runStreams(t, database, append([]string{"add", "Buy oat milk"}, tc.args...)...)
 			if err != nil {
@@ -548,16 +557,17 @@ func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
 	cases := []struct {
 		name, area string
 		want       string // "" for no warning
+		filed      string // the area Things files the project in, as a column assignment
 	}{
-		{"title", "Personal", ""},
-		{"otherCase", "personal", ""},
-		{"uuid", "area-1", ""},
-		{"paddedUUID", " area-1 ", ""},
-		{"unknown", "Nowhere", `no area called "Nowhere"`},
-		{"padded", " Personal ", `no area called " Personal "`},
-		{"paddedTitle", "Errands ", ""},
-		{"paddedTitleUnpadded", "Errands", `no area called "Errands"`},
-		{"fullwidth", "Ｐersonal", ""},
+		{"title", "Personal", "", inArea1},
+		{"otherCase", "personal", "", inArea1},
+		{"uuid", "area-1", "", inArea1},
+		{"paddedUUID", " area-1 ", "", inArea1},
+		{"unknown", "Nowhere", `no area called "Nowhere"`, ""},
+		{"padded", " Personal ", `no area called " Personal "`, ""},
+		{"paddedTitle", "Errands ", "", `area = 'area-2'`},
+		{"paddedTitleUnpadded", "Errands", `no area called "Errands"`, ""},
+		{"fullwidth", "Ｐersonal", "", inArea1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -566,7 +576,7 @@ func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
 			fx := dbtest.NewFixture(t, sqlDB)
 			fx.Area("area-1", "Personal", 1)
 			fx.Area("area-2", "Errands ", 2)
-			calls := stubExecAdding(t, sqlDB, createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject})
+			calls := stubExecAdding(t, sqlDB, createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject, extra: tc.filed})
 
 			_, stderr, err := runStreams(t, database, "project", "add", "Launch", "--area", tc.area)
 			if err != nil {
@@ -583,6 +593,80 @@ func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
 			}
 			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
 				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
+			}
+		})
+	}
+}
+
+// Two commands that add the same title to different places can both
+// snapshot before either saves, so each sees the other's row among the new
+// ones. A row filed somewhere other than where this add sent its item is not
+// this add's: when its own save is dropped, or lands after the read-back
+// settles, the add is not confirmed rather than handed the other row's uuid.
+// A row filed where the add asked still confirms.
+func TestAddIgnoresSameTitleFiledElsewhere(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		rows []createdRow // what lands during the read-back
+		want string       // the uuid confirmed; "" for not confirmed
+	}{
+		{"otherProjectOwnDropped", []string{"add", "Buy oat milk", "--project", "Garden"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, ""},
+		{"otherProjectOwnLands", []string{"add", "Buy oat milk", "--project", "Garden"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inProj2}}, "mine"},
+		{"projectUUID", []string{"add", "Buy oat milk", "--list", "proj-2"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inProj2}}, "mine"},
+		{"inboxOwnDropped", []string{"add", "Buy oat milk"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, ""},
+		{"inboxOwnLands", []string{"add", "Buy oat milk"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, "mine"},
+		{"projectOwnDroppedOtherInbox", []string{"add", "Buy oat milk", "--project", "Tools"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk"}}, ""},
+		{"otherHeading", []string{"add", "Buy oat milk", "--project", "Tools", "--heading", "Setup"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, ""},
+		{"area", []string{"add", "Buy oat milk", "--list", "Personal"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inArea1}}, "mine"},
+		{"projectAddOtherArea", []string{"project", "add", "Launch", "--area", "Errands"},
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: inArea1}}, ""},
+		{"projectAddNoAreaOtherArea", []string{"project", "add", "Launch"},
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: inArea1}}, ""},
+		{"projectAddArea", []string{"project", "add", "Launch", "--area", "area-2"},
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: inArea1}, {uuid: "mine", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}}, "mine"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Area("area-2", "Errands", 2)
+			fx.Project("proj-1", "Tools", 5)
+			fx.Project("proj-2", "Garden", 6)
+			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+			// The other command's row lands after this add's snapshot,
+			// while it reads back, as an overlapping add's would.
+			stubExecAdding(t, sqlDB, tc.rows...)
+
+			out, err := runOut(t, database, append([]string{"--json"}, tc.args...)...)
+			if tc.want == "" {
+				if err == nil || !strings.Contains(err.Error(), "add not confirmed") || !strings.Contains(err.Error(), "where it was sent") {
+					t.Fatalf("err = %v, out = %q; want add not confirmed", err, out)
+				}
+				if strings.Contains(out, "other") {
+					t.Errorf("out = %q, want the other command's row not reported as this add's", out)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("%v: %v", tc.args, err)
+			}
+			var got model.Task
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("unmarshal %q: %v", out, err)
+			}
+			if got.UUID != tc.want {
+				t.Errorf("printed %s, want %s", got.UUID, tc.want)
 			}
 		})
 	}

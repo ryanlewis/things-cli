@@ -517,3 +517,66 @@ func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
 		t.Errorf("error has an empty line for the item:\n%v", err)
 	}
 }
+
+// An import's created item is checked against where the payload files it,
+// as an add's is: a row with its title filed elsewhere, from another command
+// adding the same title at the same moment, does not confirm it. A list the
+// CLI cannot resolve is not checked, and when that leaves two items able to
+// claim the same row, neither is confirmed.
+func TestImportCreatedChecksDestination(t *testing.T) {
+	cases := []struct {
+		name, payload string
+		rows          []createdRow
+		want          []string // per item: the uuid confirmed, or the reason
+	}{
+		{"otherProject", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Garden"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found"}},
+		{"listID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-2"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inProj2}}, []string{"mine"}},
+		{"inbox", `[{"type":"to-do","attributes":{"title":"Buy oat milk"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found"}},
+		{"projectArea", `[{"type":"project","attributes":{"title":"Launch","area":"errands"}}]`,
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: inArea1}, {uuid: "mine", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}}, []string{"mine"}},
+		{"nestedInUpdate", `[{"type":"project","operation":"update","id":"proj-2","attributes":{"items":[{"type":"to-do","attributes":{"title":"Buy oat milk"}}]}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found"}},
+		{"unknownList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"other"}},
+		{"sharedRow", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"ambiguous", "ambiguous"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Area("area-2", "Errands", 2)
+			fx.Project("proj-1", "Tools", 5)
+			fx.Project("proj-2", "Garden", 6)
+			stubExecAdding(t, sqlDB, tc.rows...)
+
+			out, _, err := runImportOut(t, database, tc.payload, "--json")
+			var got []importCreated
+			var verr *importVerifyError
+			switch {
+			case errors.As(err, &verr):
+				got = verr.created
+			case err != nil:
+				t.Fatalf("import: %v", err)
+			default:
+				got = decodeCreated(t, out)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %+v, want %d items", got, len(tc.want))
+			}
+			for i, want := range tc.want {
+				if got[i].UUID != want && got[i].Reason != want {
+					t.Errorf("item %d = %+v, want %s", i, got[i], want)
+				}
+				if got[i].Reason != "" && got[i].UUID != "" {
+					t.Errorf("item %d = %+v, want no uuid on an unconfirmed item", i, got[i])
+				}
+			}
+		})
+	}
+}

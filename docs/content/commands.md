@@ -414,16 +414,21 @@ warning: Things has no area called "Nowhere"; it will create the project with no
 exactly as `things show` would, the same object under `--json`. Things
 returns no UUID for a new item, so the CLI looks for an item of the right
 kind with that title, created after the write started, that was not there
-before it. It waits as long as an edit's read-back (five seconds by default;
-see `--verify-timeout` under Editing).
+before it, filed where the add sent it: the project or area `--list`,
+`--project` or `--area` resolved to (and the heading, if Things has it),
+or no project or area when none was given or Things will not match it. A
+new item with the same title somewhere else, from another command adding
+it at the same moment, is not this add's. It waits as long as an edit's
+read-back (five seconds by default; see `--verify-timeout` under Editing).
 
 - If no such item appears, the command exits non-zero with `add not
   confirmed: …`. Things may have dropped it (check that Things3 is running)
   or may be slow to save. Run the `things search` command the error prints
   before retrying, so a retry does not create a duplicate. It carries
   `--db` and `--config` when the add was given them.
-- If more than one new item with that title is visible together when the
-  add is read back (the same title added elsewhere at the same moment),
+- If more than one new item with that title is visible together where the
+  add sent it when it is read back (the same title added to the same place
+  at the same moment),
   the CLI does not guess. It prints `Sent to Things, not confirmed
   (more than one new item has this title): "Buy oat milk" (uuid1, uuid2)`
   and exits 0.
@@ -618,8 +623,14 @@ that Things dropped are reported one per line with a non-zero exit.
 
 Every to-do and project the payload creates is read back too, the way
 `add` finds its item: a new item of that kind with that title (surrounding
-whitespace trimmed) that was not there before the import. That includes
-to-dos inside a project the payload creates. A to-do inside the `items` of
+whitespace trimmed) that was not there before the import, filed where the
+payload puts it. A to-do with `list-id` or `list` must be in that project
+or area (and under its `heading`, when Things has it), one with neither in
+no project or area, a project with `area-id` or `area` in that area and one
+with neither in no area. A to-do in a project's `items` must be in that
+project. A `list`, `heading` or `area` the database does not have before
+the import is not checked, since it may name a project the same payload
+creates. To-dos inside a project the payload creates are read back too. A to-do inside the `items` of
 a project the payload updates is checked too: Things drops those without
 saying so, and the read-back reports it as `not-found`. Headings and
 checklist items are not read back, and nor is an item with no title. `import` prints one line per created item:
@@ -643,8 +654,9 @@ an unconfirmed `add` does, and no `uuid`:
 - `no-verify`: `--no-verify` (or `no_verify = true`) skipped the read-back.
 - `unreadable`: the database could not be read, so a warning is printed.
 - `ambiguous`: more new items with that title appeared than the payload
-  created, or they cannot be paired (see above). `candidates` lists their
-  uuids.
+  created, or they cannot be paired (see above), or a new item fits two
+  created items because one of them has a destination that is not checked.
+  `candidates` lists their uuids.
 - `creation-date`: the payload sets the item's `creation-date`. Things
   saves the item with that date, so the read-back cannot tell it from older
   items and does not look for it. The line says `not checked

@@ -32,10 +32,20 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	}
 	// Things matches area by title only; a uuid has to go as area-id.
 	area, areaID := c.Area, ""
-	if id, _ := projectAreaID(d, area, "it will create the project with no area"); id != "" {
+	id, known, read := projectAreaID(d, area, "it will create the project with no area")
+	// Where Things will file the project, for the read-back.
+	dest := createdDest{checked: true}
+	switch {
+	case id != "":
 		area, areaID = "", id
+		dest.list = id
+	case area == "" || !known:
+	case !read:
+		dest = createdDest{}
+	default:
+		dest.list, dest.byTitle = db.FoldName(area), true
 	}
-	return applyAdd(d, model.TypeProject, c.Title, func() error {
+	return applyAdd(d, model.TypeProject, c.Title, dest, func() error {
 		return things.AddProject(things.AddProjectParams{
 			Title:    c.Title,
 			Notes:    c.Notes,
@@ -55,19 +65,20 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 // and when nothing matches it goes ahead without the area and without
 // reporting it: add creates the project with no area, and update leaves it
 // where it is. fallback says which, for the warning. known is false only when
-// the warning was given. A database that cannot be read gives no warning here:
-// the read-back reports that.
-func projectAreaID(d *Deps, area, fallback string) (id string, known bool) {
+// the warning was given. read is false when the areas could not be read. A
+// database that cannot be read gives no warning here: the read-back reports
+// that.
+func projectAreaID(d *Deps, area, fallback string) (id string, known, read bool) {
 	if area == "" {
-		return "", true
+		return "", true, true
 	}
 	database, err := d.Database()
 	if err != nil {
-		return "", true
+		return "", true, false
 	}
 	areas, err := database.ListAreas()
 	if err != nil {
-		return "", true
+		return "", true, false
 	}
 	// Not FindAreaUUID: it ignores surrounding space, and Things does not.
 	// Checked in Things 3 with " Personal " against an area called Personal,
@@ -76,14 +87,14 @@ func projectAreaID(d *Deps, area, fallback string) (id string, known bool) {
 	for _, a := range areas {
 		// A uuid goes as area-id, which is sent trimmed.
 		if a.UUID == strings.TrimSpace(area) {
-			return a.UUID, true
+			return a.UUID, true, true
 		}
 		found = found || db.FoldName(a.Title) == db.FoldName(area)
 	}
 	if !found {
 		fmt.Fprintf(d.errOut(), "warning: Things has no area called %q; %s\n", area, fallback)
 	}
-	return "", found
+	return "", found, true
 }
 
 type ProjectEditCmd struct {
@@ -120,7 +131,7 @@ func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bo
 	case c.Area == nil || c.AreaID != nil:
 		return anySet(c.Area, c.AreaID)
 	}
-	id, known := projectAreaID(d, *c.Area, "the project will stay where it is")
+	id, known, _ := projectAreaID(d, *c.Area, "the project will stay where it is")
 	if id != "" {
 		c.Area, c.AreaID = nil, &id
 		return id != task.AreaUUID
