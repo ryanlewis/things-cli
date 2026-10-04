@@ -49,6 +49,10 @@ func TestAddTarget(t *testing.T) {
 		{"Tools", " Ärger ", true, false},
 		{"Errands ", "", true, false},
 		{"Errands", "", false, false},
+		{"Ｔools", "", true, false}, // compatibility forms match, as in Things
+		{"Personal\u00a0", "", false, false},
+		{"Errands\u00a0", "", true, false},
+		{"Tools", "Ärgeｒ", true, false}, // but not in a heading: not checked in Things
 	}
 	for _, tc := range cases {
 		target, headOK, err := d.AddTarget(tc.list, tc.heading)

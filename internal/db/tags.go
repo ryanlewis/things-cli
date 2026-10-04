@@ -19,7 +19,7 @@ func (d *DB) FindTagUUID(ref string) (string, error) {
 	for i, t := range tags {
 		rows[i] = uuidTitle{t.UUID, t.Title}
 	}
-	return matchRef(rows, ref), nil
+	return matchRef(rows, ref, FoldTag), nil
 }
 
 func (d *DB) ListTags() ([]model.Tag, error) {
@@ -90,10 +90,10 @@ type uuidTitle struct{ uuid, title string }
 
 // matchRef returns the UUID of the row that ref names, or "" when none does.
 // A UUID match wins, then an exact title, then the first title equal to ref
-// under FoldTag, in the order given (callers pass Things' list order). A blank
+// under fold, in the order given (callers pass Things' list order). A blank
 // ref never folds onto an untitled row.
-func matchRef(rows []uuidTitle, ref string) string {
-	key, name := FoldTag(ref), normName(ref)
+func matchRef(rows []uuidTitle, ref string, fold func(string) string) string {
+	key, name := fold(ref), normName(ref)
 	var exact, folded string
 	for _, r := range rows {
 		switch {
@@ -101,7 +101,7 @@ func matchRef(rows []uuidTitle, ref string) string {
 			return r.uuid
 		case exact == "" && normName(r.title) == name:
 			exact = r.uuid
-		case folded == "" && key != "" && FoldTag(r.title) == key:
+		case folded == "" && key != "" && fold(r.title) == key:
 			folded = r.uuid
 		}
 	}

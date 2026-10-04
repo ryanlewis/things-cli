@@ -228,6 +228,94 @@ func TestFoldCase(t *testing.T) {
 	}
 }
 
+// FoldName equates what Things equated in project and area titles: every
+// pair below matched there through list= or area=, except the accent pair.
+// FoldCase, the tag rule, keeps the compatibility forms apart, as Things did
+// for tags; the ligature folds under both.
+func TestFoldName(t *testing.T) {
+	for _, tc := range []struct {
+		a, b        string
+		equal, tags bool
+	}{
+		{"A", "Ａ", true, false}, {"A", "ａ", true, false}, {"2", "²", true, false},
+		{"B", "Ⓑ", true, false}, {"x y", "x\u00a0y", true, false},
+		{"IV", "Ⅳ", true, false}, {"kg", "㎏", true, false}, {"...", "…", true, false},
+		{"1⁄2", "½", true, false}, {"k", "K", true, true}, {"fi", "ﬁ", true, true},
+		{"Straße", "STRASSE", true, true}, {"Cafe\u0301", "Caf\u00e9", true, true},
+		{"Cafe", "Café", false, false}, {"ı", "i", false, false},
+	} {
+		if got := FoldName(tc.a) == FoldName(tc.b); got != tc.equal {
+			t.Errorf("FoldName(%q) == FoldName(%q) is %v, want %v", tc.a, tc.b, got, tc.equal)
+		}
+		if got := FoldCase(tc.a) == FoldCase(tc.b); got != tc.tags {
+			t.Errorf("FoldCase(%q) == FoldCase(%q) is %v, want %v", tc.a, tc.b, got, tc.tags)
+		}
+	}
+	for _, s := range []string{"Ｗork ² ﬁ", "MiXeD 50%_"} {
+		var got string
+		if err := dbtest.NewSQL(t).QueryRow(`SELECT fold_name(?)`, s).Scan(&got); err != nil {
+			t.Fatalf("fold_name(%q): %v", s, err)
+		}
+		if got != FoldName(s) {
+			t.Errorf("fold_name(%q) = %q, FoldName = %q", s, got, FoldName(s))
+		}
+	}
+}
+
+// The --project and --area filters and `open --area` match project and area
+// titles across compatibility forms, as Things does; --tag does not, as
+// Things does not. A fullwidth "％" folds to "%", which must still be matched
+// as itself, not as a wildcard.
+func TestListNamesMatchCompatibilityForms(t *testing.T) {
+	d := newTestDB(t)
+
+	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+		('ar-1', 'Area 2', 1, 1), ('ar-pct', '50％', 1, 2)`)
+	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
+		('proj-1', 'Ｗork', 1, 0, 0, 'ar-1', 1)`)
+	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg-1', 'Tag 2', 1)`)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, notes, type, status, trashed, start, startBucket, project, "index") VALUES
+		('in-1', 'Do it', '', 0, 0, 0, 1, 0, 'proj-1', 2)`)
+	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-1', 'tg-1')`)
+
+	for _, tc := range []struct {
+		name   string
+		filter TaskFilter
+		want   []string
+	}{
+		{"project", TaskFilter{Project: "work"}, []string{"in-1"}},
+		{"area", TaskFilter{Area: "AREA ²"}, []string{"proj-1", "in-1"}},
+		{"area no-break space", TaskFilter{Area: "Area\u00a02"}, []string{"proj-1", "in-1"}},
+		{"tag", TaskFilter{Tag: "Tag ²"}, nil},
+		{"tag exact", TaskFilter{Tag: "Tag 2"}, []string{"in-1"}},
+		{"area wildcard", TaskFilter{Area: "5％"}, nil},
+	} {
+		t.Run("list "+tc.name, func(t *testing.T) {
+			got, err := d.ListTasks("project", tc.filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameSet(uuidsOf(got), tc.want) {
+				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
+			}
+		})
+	}
+
+	for ref, want := range map[string]string{"area ²": "ar-1", "50%": "ar-pct", "5%": ""} {
+		got, err := d.FindAreaUUID(ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("FindAreaUUID(%q) = %q, want %q", ref, got, want)
+		}
+	}
+	if got, err := d.FindTagUUID("Tag ²"); err != nil || got != "" {
+		t.Errorf("FindTagUUID(Tag ²) = %q, %v, want no match", got, err)
+	}
+}
+
 // A folded name still contains every folded part of itself, so a substring
 // search keeps working once FoldCase composes its result. Iota folds with the
 // combining ypogegrammeni (U+0345), and composing that after an alpha would

@@ -10,10 +10,10 @@ import (
 
 // AddTarget reports where things:///add would file a to-do given list and
 // heading, as Things resolves them. list matches an open, untrashed project
-// or an area by title, ignoring case but not surrounding space, or by uuid; a completed or trashed
+// or an area by title, under FoldName but not ignoring surrounding space, or by uuid; a completed or trashed
 // project does not count, and Things puts the to-do in the Inbox instead.
 // target is the uuid of the row list matched, "" when none did. heading
-// matches an untrashed heading of that project the same way; a heading
+// matches an untrashed heading of that project under FoldCase; a heading
 // under an area, or one the project lacks, is dropped and the to-do goes to
 // the list without one. When open projects differ only in case, the CLI
 // checks the one whose title matches list exactly; which one Things picks
@@ -25,15 +25,15 @@ func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, 
 	var project string
 	err = d.db.QueryRow(`
 		SELECT uuid FROM TMTask
-		WHERE type = ? AND status = ? AND COALESCE(trashed, 0) = 0 AND (uuid = ? OR fold(title) = ?)
+		WHERE type = ? AND status = ? AND COALESCE(trashed, 0) = 0 AND (uuid = ? OR fold_name(title) = ?)
 		ORDER BY uuid = ? DESC, nfc(title) = ? DESC
-		LIMIT 1`, int(model.TypeProject), int(model.StatusOpen), id, FoldCase(list), id, normName(list)).Scan(&project)
+		LIMIT 1`, int(model.TypeProject), int(model.StatusOpen), id, FoldName(list), id, normName(list)).Scan(&project)
 	switch {
 	case err == sql.ErrNoRows:
 		var area string
 		err := d.db.QueryRow(`
-			SELECT uuid FROM TMArea WHERE uuid = ? OR fold(title) = ?
-			ORDER BY uuid = ? DESC LIMIT 1`, id, FoldCase(list), id).Scan(&area)
+			SELECT uuid FROM TMArea WHERE uuid = ? OR fold_name(title) = ?
+			ORDER BY uuid = ? DESC LIMIT 1`, id, FoldName(list), id).Scan(&area)
 		if err != nil && err != sql.ErrNoRows {
 			return "", false, fmt.Errorf("finding area: %w", err)
 		}
