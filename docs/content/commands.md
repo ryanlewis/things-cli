@@ -721,8 +721,12 @@ Before updating, it asks GitHub for the latest release, with or without
 `MAJOR.MINOR.PATCH` is compared for "newer", so `1.0.0-rc1` is not newer
 than `1.0.0` and updates to it. The install script is then fetched from
 that release's tag and told to install that version. If GitHub can't be
-reached, it says so and updates anyway, using the script on `main`. It
-prints the command before running it.
+reached (offline, or rate limited), the install script and `go install`
+methods stop with an error and print the command for you to run
+yourself: both pick the latest release on their own and could replace a
+newer binary with an older one. Homebrew carries on, since
+`brew upgrade` makes its own check. It prints the command before
+running it.
 
 ## Configuration
 

@@ -249,16 +249,37 @@ func TestNewerThan(t *testing.T) {
 	}
 }
 
-func TestUpdateCarriesOnWhenTheCheckFails(t *testing.T) {
-	f := fakeUpdate{exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.9.0"), fetchErr: errors.New("offline")}
+func TestUpdateStopsWhenTheCheckFails(t *testing.T) {
+	// install.sh and go install pick the latest stable release themselves, so
+	// without the check a binary ahead of it would be swapped for an older one.
+	cases := map[string]fakeUpdate{
+		"release binary ahead of the latest": {exe: "/usr/local/bin/things", version: "0.9.98", writable: true, fetchErr: errors.New("GitHub API returned 403 Forbidden")},
+		"go install ahead of the latest":     {exe: "/Users/me/go/bin/things", version: "dev", info: moduleInfo("v0.10.0"), fetchErr: errors.New("GitHub API returned 403 Forbidden")},
+	}
+	for name, f := range cases {
+		t.Run(name, func(t *testing.T) {
+			out, _, err := f.run(t, false)
+			if err == nil || !strings.Contains(err.Error(), "could not check the latest release (GitHub API returned 403 Forbidden)") ||
+				!strings.Contains(err.Error(), "older release") {
+				t.Fatalf("err = %v, want a refusal naming the failed check", err)
+			}
+			if len(f.ran) != 0 || strings.Contains(out, "Running:") {
+				t.Errorf("stdout %q, ran %v; want nothing run", out, f.ran)
+			}
+		})
+	}
+}
+
+func TestUpdateHomebrewCarriesOnWhenTheCheckFails(t *testing.T) {
+	f := fakeUpdate{exe: "/opt/homebrew/Caskroom/things/0.9.0/things", version: "0.9.0", fetchErr: errors.New("offline")}
 	_, stderr, err := f.run(t, false)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !strings.Contains(stderr, "Could not check the latest release (offline)") {
+	if !strings.Contains(stderr, "Could not check the latest release (offline); updating anyway") {
 		t.Errorf("stderr = %q", stderr)
 	}
-	want := "env GOBIN=/Users/me/go/bin go install github.com/ryanlewis/things-cli/cmd/things@latest"
+	want := "brew upgrade --cask ryanlewis/tap/things"
 	if len(f.ran) != 1 || strings.Join(f.ran[0], " ") != want {
 		t.Errorf("ran %v, want %q", f.ran, want)
 	}
@@ -270,8 +291,13 @@ func TestUpdateDryRunSaysWhenTheCheckFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !strings.Contains(stderr, "Could not check the latest release (offline).") {
-		t.Errorf("stderr = %q", stderr)
+	for _, want := range []string{"Could not check the latest release (offline).", "`things update` would stop here"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q: %q", want, stderr)
+		}
+	}
+	if len(f.ran) != 0 {
+		t.Errorf("dry run ran %v", f.ran)
 	}
 }
 
