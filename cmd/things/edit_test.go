@@ -523,7 +523,9 @@ func TestEditReadsTagListOnce(t *testing.T) {
 
 // Things matches an update's list, heading and area titles ignoring case but
 // not surrounding space. When nothing matches it leaves the item where it is,
-// and drops a heading it cannot find, all without a word. The edit warns on
+// and drops a heading it cannot find, all without a word; an unknown id is
+// dropped the same way, and a move to where the item already is records no
+// change. The edit warns on
 // stderr when that will happen and still sends the write. A move Things will
 // drop is no change, so an edit made only of one prints the item at once
 // rather than waiting for a change that never comes; anything else still
@@ -543,7 +545,24 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"paddedList", []string{"edit", "one-1", "--list", " Tools "}, `no open project or area called " Tools "`, true},
 		{"completedProject", []string{"edit", "one-1", "--list", "Old"}, `no open project or area called "Old"`, true},
 		{"unknownListAndTitle", []string{"edit", "one-1", "--list", "Nowhere", "--title", "Post the letter"}, `no open project or area called "Nowhere"`, false},
-		{"unknownListAndHeading", []string{"edit", "one-1", "--list", "Nowhere", "--heading", "Setup"}, `no open project or area called "Nowhere"`, false},
+		{"unknownListAndHeading", []string{"edit", "one-1", "--list", "Nowhere", "--heading", "Setup"}, `no open project or area called "Nowhere"; it will look for --heading "Setup" in the to-do's own project`, true},
+		{"unknownListAndHeadingInProject", []string{"edit", "tool-1", "--list", "Nowhere", "--heading", "Setup"}, `look for --heading "Setup"`, false},
+		{"unknownListAndOwnHeading", []string{"edit", "head-todo", "--list", "Nowhere", "--heading", "setup"}, `look for --heading "setup"`, true},
+		{"unknownListID", []string{"edit", "one-1", "--list-id", "nope"}, `no open project or area with id "nope"; the to-do will stay where it is`, true},
+		{"listIDIsTitle", []string{"edit", "one-1", "--list-id", "Tools"}, `no open project or area with id "Tools"`, true},
+		{"knownListID", []string{"edit", "one-1", "--list-id", "proj-1"}, "", false},
+		{"sameList", []string{"edit", "tool-1", "--list", "tools"}, "", true},
+		{"sameListUUID", []string{"edit", "tool-1", "--list", "proj-1"}, "", true},
+		{"sameListID", []string{"edit", "tool-1", "--list-id", "proj-1"}, "", true},
+		{"sameArea", []string{"edit", "area-todo", "--list", "personal"}, "", true},
+		{"sameListAndTitle", []string{"edit", "tool-1", "--list", "Tools", "--title", "Oil the hinges"}, "", false},
+		{"sameListFromHeading", []string{"edit", "head-todo", "--list", "Tools"}, "", false},
+		{"sameHeading", []string{"edit", "head-todo", "--heading", "SETUP"}, "", true},
+		{"sameListAndHeading", []string{"edit", "head-todo", "--list", "Tools", "--heading", "Setup"}, "", true},
+		{"sameHeadingID", []string{"edit", "head-todo", "--heading-id", "head-1"}, "", true},
+		{"headingIDElsewhere", []string{"edit", "one-1", "--heading-id", "head-1"}, "", false},
+		{"unknownHeadingID", []string{"edit", "tool-1", "--heading-id", "nope"}, `no heading with id "nope"; the to-do will stay where it is`, true},
+		{"unknownHeadingIDWithList", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "nope"}, `no heading with id "nope"; it will ignore --heading-id`, false},
 		{"unknownHeading", []string{"edit", "one-1", "--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will move the to-do there without a heading`, false},
 		{"paddedHeading", []string{"edit", "one-1", "--list", "Tools", "--heading", " Setup "}, `"Tools" has no heading " Setup "`, false},
 		{"unknownHeadingInListID", []string{"edit", "one-1", "--list-id", "proj-1", "--heading", "Later"}, `"proj-1" has no heading "Later"`, false},
@@ -558,6 +577,11 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"projectAreaUUID", []string{"project", "edit", "repproj-1", "--area", "area-1"}, "", false},
 		{"projectUnknownArea", []string{"project", "edit", "repproj-1", "--area", "Nowhere"}, `no area called "Nowhere"; the project will stay where it is`, true},
 		{"projectPaddedArea", []string{"project", "edit", "repproj-1", "--area", " Personal "}, `no area called " Personal "`, true},
+		{"projectSameArea", []string{"project", "edit", "areaproj-1", "--area", "PERSONAL"}, "", true},
+		{"projectSameAreaUUID", []string{"project", "edit", "areaproj-1", "--area", "area-1"}, "", true},
+		{"projectSameAreaID", []string{"project", "edit", "areaproj-1", "--area-id", "area-1"}, "", true},
+		{"projectKnownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "area-1"}, "", false},
+		{"projectUnknownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "nope"}, `no area with id "nope"; the project will stay where it is`, true},
 		{"projectUnknownAreaAndTitle", []string{"project", "edit", "repproj-1", "--area", "Nowhere", "--title", "Monthly review"}, `no area called "Nowhere"`, false},
 	}
 	for _, tc := range cases {
@@ -570,6 +594,9 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Project("proj-done", "Old", 6, dbtest.Status(model.StatusCompleted))
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
 			fx.Todo("tool-1", "Oil hinges", 7, dbtest.Anytime(), dbtest.InProject("proj-1"))
+			fx.Todo("head-todo", "Buy oil", 8, dbtest.Anytime(), dbtest.UnderHeading("head-1"))
+			fx.Todo("area-todo", "Sweep", 9, dbtest.Anytime(), dbtest.InArea("area-1"))
+			fx.Project("areaproj-1", "Garden", 10, dbtest.InArea("area-1"))
 			calls := stubExecDropping(t)
 
 			_, stderr, err := runStreams(t, database, tc.args...)

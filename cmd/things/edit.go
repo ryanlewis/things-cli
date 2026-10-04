@@ -81,59 +81,109 @@ func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 	return c.checkMove(d, database, task) || c.checklistSet()
 }
 
-// checkMove warns when Things will not move the task where --list and
-// --heading say, sends a uuid given to --list as list-id, and reports whether
-// the move flags may change the task. Checked in Things 3 with
-// things:///update: a list or heading title is matched ignoring case but not
-// surrounding space, and a uuid only as list-id. An unknown list leaves the
-// to-do where it is. An unknown heading in a known list moves it to the list
-// with no heading. A heading alone is looked up in the to-do's own project,
-// and left out when it is not there. Those are reported as no change; an
-// unknown list with a heading still counts as one, as that was not checked.
-// A database that cannot be read gives no warning here, and the move counts as
-// a change.
+// checkMove warns when Things will not move the task where the move flags
+// say, sends a uuid given to --list as list-id, and reports whether the move
+// flags may change the task. Checked in Things 3 with things:///update: a list
+// or heading title is matched ignoring case but not surrounding space, and a
+// uuid only as list-id. A list Things cannot find is ignored: the to-do stays
+// where it is, or with a heading the heading is looked up as if it came
+// alone. An unknown heading in a known list moves the to-do to the list with
+// no heading. A heading alone is looked up in the to-do's own project, and
+// left out when it is not there. A heading-id moves the to-do under that
+// heading, and one Things cannot find is ignored. A move to where the to-do
+// already is changes nothing, and Things does not record it. Each of those is
+// reported as no change. A database that cannot be read gives no warning
+// here, and the move counts as a change.
 func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
-	if c.HeadingID != nil || c.List == nil && c.ListID == nil && c.Heading == nil {
-		return anySet(c.List, c.ListID, c.HeadingID)
+	switch {
+	case !anySet(c.List, c.ListID, c.Heading, c.HeadingID):
+		return false
+	case c.List != nil && c.ListID != nil, emptyID(c.ListID), emptyID(c.HeadingID):
+		// Which list Things prefers, and what it does with an empty id,
+		// were not checked.
+		return true
 	}
 	heading := ""
 	if c.Heading != nil {
 		heading = *c.Heading
 	}
-	switch {
-	case c.List != nil:
-		list := *c.List
-		target, found, err := database.AddTarget(list, heading)
+	if c.HeadingID != nil {
+		id := strings.TrimSpace(*c.HeadingID)
+		ok, err := database.HeadingExists(id)
 		switch {
 		case err != nil:
-		case target == "":
-			fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; the to-do will stay where it is\n", list)
-			return c.ListID != nil || c.Heading != nil
-		case target == strings.TrimSpace(list) && c.ListID == nil:
-			c.List, c.ListID = nil, &target
+			return true
+		case ok:
+			return task.HeadingUUID != id
+		case !anySet(c.List, c.ListID, c.Heading):
+			fmt.Fprintf(d.errOut(), "warning: Things has no heading with id %q; the to-do will stay where it is\n", *c.HeadingID)
+			return false
 		}
-		if err == nil && c.Heading != nil && !found {
-			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
+		fmt.Fprintf(d.errOut(), "warning: Things has no heading with id %q; it will ignore --heading-id\n", *c.HeadingID)
+	}
+	// next is what Things does when it cannot find the list.
+	next := "the to-do will stay where it is"
+	if c.Heading != nil {
+		next = fmt.Sprintf("it will look for --heading %q in the to-do's own project", heading)
+	}
+	list, target, found := "", "", false
+	switch {
+	case c.List != nil:
+		list = *c.List
+		t, f, err := database.AddTarget(list, heading)
+		switch {
+		case err != nil:
+			return true
+		case t == "":
+			fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; %s\n", list, next)
+		case t == strings.TrimSpace(list):
+			c.List, c.ListID = nil, &t
+			fallthrough
+		default:
+			target, found = t, f
 		}
 	case c.ListID != nil:
-		if c.Heading == nil {
+		list = *c.ListID
+		t, f, err := database.AddTarget(list, heading)
+		switch {
+		case err != nil:
 			return true
+		case t != strings.TrimSpace(list):
+			// AddTarget also matches a title, which list-id does not.
+			fmt.Fprintf(d.errOut(), "warning: Things has no open project or area with id %q; %s\n", list, next)
+		default:
+			target, found = t, f
 		}
-		target, found, err := database.AddTarget(*c.ListID, heading)
-		if err == nil && target != "" && !found {
-			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", target, heading)
+	}
+	switch {
+	case target != "" && found:
+		return task.ProjectUUID != target || db.FoldCase(task.HeadingTitle) != db.FoldCase(heading)
+	case target != "":
+		if c.Heading != nil {
+			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
 		}
+		inList := task.ProjectUUID == target || task.ProjectUUID == "" && task.AreaUUID == target
+		return task.HeadingUUID != "" || !inList
+	case c.Heading == nil:
+		return false
 	case task.ProjectUUID == "":
 		fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list: the to-do is not in a project, so Things will leave it where it is\n", heading)
 		return false
-	default:
-		target, found, err := database.AddTarget(task.ProjectUUID, heading)
-		if err == nil && target != "" && !found {
-			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will leave the to-do where it is\n", task.ProjectTitle, heading)
-			return false
-		}
 	}
-	return true
+	t, f, err := database.AddTarget(task.ProjectUUID, heading)
+	switch {
+	case err != nil || t == "":
+		return true
+	case !f:
+		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will leave the to-do where it is\n", task.ProjectTitle, heading)
+		return false
+	}
+	return db.FoldCase(task.HeadingTitle) != db.FoldCase(heading)
+}
+
+// emptyID reports whether an id flag was given as blank.
+func emptyID(id *string) bool {
+	return id != nil && strings.TrimSpace(*id) == ""
 }
 
 // checklistSet reports whether any checklist flag is set.

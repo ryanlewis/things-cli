@@ -52,3 +52,17 @@ func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, 
 	}
 	return project, n > 0, nil
 }
+
+// HeadingExists reports whether uuid names an untrashed project heading,
+// which things:///update needs for heading-id to move a to-do. Things ignores
+// a heading-id it cannot find.
+func (d *DB) HeadingExists(uuid string) (bool, error) {
+	var n int
+	if err := d.db.QueryRow(`
+		SELECT COUNT(*) FROM TMTask
+		WHERE type = ? AND uuid = ? AND COALESCE(trashed, 0) = 0`,
+		int(model.TypeHeading), uuid).Scan(&n); err != nil {
+		return false, fmt.Errorf("finding heading: %w", err)
+	}
+	return n > 0, nil
+}
