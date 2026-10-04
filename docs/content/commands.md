@@ -466,6 +466,7 @@ warning: Things has no open project or area called "Nowhere"; the to-do will sta
 warning: Things has no open project or area called "Nowhere"; it will look for --heading "Setup" in the to-do's own project
 warning: Things has no open project or area with id "abc123"; the to-do will stay where it is
 warning: Things has no heading with id "abc123"; the to-do will stay where it is
+warning: Things has no heading with id "abc123"; it will ignore --heading-id
 warning: "Tools" has no heading "Later"; Things will move the to-do there without a heading
 warning: "Tools" has no heading "Later"; Things will leave the to-do where it is
 warning: --heading "Later" needs --list: the to-do is not in a project, so Things will leave it where it is

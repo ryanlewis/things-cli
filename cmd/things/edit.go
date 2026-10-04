@@ -90,10 +90,12 @@ func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 // alone. An unknown heading in a known list moves the to-do to the list with
 // no heading. A heading alone is looked up in the to-do's own project, and
 // left out when it is not there. A heading-id moves the to-do under that
-// heading, and one Things cannot find is ignored. A move to where the to-do
-// already is changes nothing, and Things does not record it. Each of those is
-// reported as no change. A database that cannot be read gives no warning
-// here, and the move counts as a change.
+// heading, whatever list or heading title comes with it, and one Things cannot
+// find is ignored. A move to where the to-do already is changes nothing, and
+// Things does not record it. Each of those is reported as no change. Headings
+// are compared by folded title, so two in one project whose titles fold
+// together are not told apart. A database that cannot be read gives no
+// warning here, and the move counts as a change.
 func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	switch {
 	case !anySet(c.List, c.ListID, c.Heading, c.HeadingID):
@@ -114,6 +116,8 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		case err != nil:
 			return true
 		case ok:
+			// Checked in Things 3: a known heading-id wins over a list or
+			// heading title sent with it.
 			return task.HeadingUUID != id
 		case !anySet(c.List, c.ListID, c.Heading):
 			fmt.Fprintf(d.errOut(), "warning: Things has no heading with id %q; the to-do will stay where it is\n", *c.HeadingID)
@@ -123,7 +127,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	// next is what Things does when it cannot find the list.
 	next := "the to-do will stay where it is"
-	if c.Heading != nil {
+	if c.Heading != nil && task.ProjectUUID != "" {
 		next = fmt.Sprintf("it will look for --heading %q in the to-do's own project", heading)
 	}
 	list, target, found := "", "", false
@@ -165,6 +169,9 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		inList := task.ProjectUUID == target || task.ProjectUUID == "" && task.AreaUUID == target
 		return task.HeadingUUID != "" || !inList
 	case c.Heading == nil:
+		return false
+	case task.ProjectUUID == "" && list != "":
+		// The unknown list's warning has said the to-do stays put.
 		return false
 	case task.ProjectUUID == "":
 		fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list: the to-do is not in a project, so Things will leave it where it is\n", heading)
