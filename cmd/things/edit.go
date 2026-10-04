@@ -503,6 +503,17 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 	if err != nil {
 		return err
 	}
+	// Listings show the items closed today by default, numbered like the
+	// rest, so a ref can land on one. Nothing is sent for it: closing it the
+	// same way again has nothing to do, and switching a completed item to
+	// cancelled, or back, is not what either command is for.
+	if task.Status == want {
+		fmt.Fprintf(d.errOut(), "note: %q is already %s; nothing sent\n", task.Title, want)
+		return nil
+	}
+	if task.Status != model.StatusOpen {
+		return fmt.Errorf("%q is already %s, so it was not %s; nothing sent", task.Title, task.Status, want)
+	}
 	if err := checkRepeating(task, []string{sc.blockedWord}); err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -294,8 +295,8 @@ func TestRunListSomedayRejectsProjectFilter(t *testing.T) {
 func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	database := seedFullDB(t)
 
-	// A view the app does not keep just-closed items in: the flag is rejected
-	// rather than silently ignored.
+	// A view the app does not keep just-closed items in: the flag, a no-op
+	// now, is still rejected there, as it was before it became one.
 	for _, view := range []string{"repeating", "deadlines"} {
 		err := runWith(t, database, "list", view, "--include-completed")
 		if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, inbox, someday, today and upcoming views") {
@@ -344,6 +345,82 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	}
 	if err := runWith(t, database, "list", "upcoming", "--include-completed"); err != nil {
 		t.Fatalf("upcoming: %v", err)
+	}
+}
+
+// The lists list a closed item the app still shows by default, in place, as
+// the app does: with the daily logging setting, a to-do ticked off in Today
+// stays in Today, struck through, until the day rolls over. --open-only drops
+// it, and --include-completed, which used to be how to ask for it, changes
+// nothing. A numeric ref counts the closed row like any other.
+func TestRunListShowsClosedUnloggedByDefault(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stop := model.TimeToUnix(time.Now())
+	fx.Todo("todo-brush", "Charge toothbrush", 0, dbtest.AnytimeOn(today), dbtest.TodayIndex(-2), dbtest.Completed(stop))
+	fx.Todo("todo-milk", "Buy milk", 1, dbtest.AnytimeOn(today), dbtest.TodayIndex(-1))
+	database := db.NewFromSQL(sqlDB)
+
+	uuids := func(args ...string) []string {
+		t.Helper()
+		out, err := runOut(t, database, append([]string{"--json", "list"}, args...)...)
+		if err != nil {
+			t.Fatalf("list %v: %v", args, err)
+		}
+		var tasks []model.Task
+		if err := json.Unmarshal([]byte(out), &tasks); err != nil {
+			t.Fatalf("unmarshal %q: %v", out, err)
+		}
+		got := make([]string, len(tasks))
+		for i, task := range tasks {
+			got[i] = task.UUID
+		}
+		return got
+	}
+
+	both := []string{"todo-brush", "todo-milk"}
+	for _, args := range [][]string{{"today"}, {}, {"today", "--include-completed"}} {
+		if got := uuids(args...); !slices.Equal(got, both) {
+			t.Errorf("list %v = %v, want %v", args, got, both)
+		}
+	}
+	if got := uuids("today", "--open-only"); !slices.Equal(got, []string{"todo-milk"}) {
+		t.Errorf("list today --open-only = %v, want [todo-milk]", got)
+	}
+
+	plain, err := runOut(t, database, "list", "today")
+	if err != nil {
+		t.Fatalf("list today: %v", err)
+	}
+	if !strings.Contains(plain, "[x]") || !strings.Contains(plain, "Charge toothbrush") {
+		t.Errorf("plain output does not mark the closed row:\n%s", plain)
+	}
+	shown, err := runOut(t, database, "show", "1")
+	if err != nil {
+		t.Fatalf("show 1: %v", err)
+	}
+	if !strings.Contains(shown, "Charge toothbrush") {
+		t.Errorf("show 1 after the listing = %q, want the closed row", shown)
+	}
+}
+
+// --open-only can go on any listing, as a no-op where only open rows are
+// listed anyway, except the two views whose rows are closed or trashed by
+// definition.
+func TestRunListOpenOnlyFlag(t *testing.T) {
+	database := seedFullDB(t)
+
+	for _, args := range [][]string{{"deadlines"}, {"repeating"}, {"--tag", "urgent"}, {"--project", "Chores"}, {"--area", "Home"}} {
+		if err := runWith(t, database, append([]string{"list", "--open-only"}, args...)...); err != nil {
+			t.Errorf("list --open-only %v: %v", args, err)
+		}
+	}
+	for _, view := range []string{"logbook", "trash"} {
+		err := runWith(t, database, "list", view, "--open-only")
+		if err == nil || !strings.Contains(err.Error(), "--open-only is not supported on the \""+view+"\" view") {
+			t.Errorf("%s: expected view-rejection error, got: %v", view, err)
+		}
 	}
 }
 

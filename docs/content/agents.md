@@ -60,7 +60,7 @@ source is
 
 An agent acts on the `uuid`: `things show <uuid>`, `things complete <uuid>`,
 `things edit <uuid>`. Get one from a `--json` listing
-(`things today -j | jq -r '.[0].uuid'`) or from the `--agent` brief, which
+(`things today --open-only -j | jq -r '.[0].uuid'`) or from the `--agent` brief, which
 prints it. Never act on a row number. The numbered list a plain listing prints
 is a convenience for a person reading a terminal, and its numbers come from a
 single cache file shared by everyone on the machine, so another agent or the
@@ -88,7 +88,7 @@ brief instead of the aligned detail view. It reads as a prompt: what the
 item is, what the user wrote in it, and the exact commands that act on it.
 
 ```sh
-uuid=$(things today -j | jq -r '.[0].uuid')
+uuid=$(things today --open-only -j | jq -r '.[0].uuid')
 things show "$uuid" --agent | claude -p "action this"
 claude "$(things show "$uuid" --agent)"
 things show "$uuid" --agent > brief.md
@@ -149,7 +149,9 @@ A few things about the brief are deliberate:
   instructions. A note carrying its own headings or a command block stays
   inert text rather than becoming structure the agent trusts.
 - **A project brief lists its open tasks** with their UUIDs, so the agent
-  can pick one up with another `show <uuid> --agent`. Its closing commands
+  can pick one up with another `show <uuid> --agent`. Tasks closed today and
+  not yet logged are listed too, marked `[x]` or `[~]`, as the app's project
+  page shows them. Its closing commands
   carry `--yes`, because completing or cancelling a project changes every
   task under it and an unattended command cannot answer a confirmation.
   The brief says so, and tells the agent not to pass `--yes` unless closing
@@ -186,7 +188,7 @@ turns it off for good.
 the CLI:
 
 ```sh
-uuid=$(things today -j | jq -r '.[0].uuid')
+uuid=$(things today --open-only -j | jq -r '.[0].uuid')
 things show "$uuid" --agent | claude -p "action this" --allowedTools "Bash(things:*)"
 ```
 
@@ -312,10 +314,14 @@ and `logbook` holds none of those, as the app's Logbook does. That is the
 app's default "Move completed items to Logbook: Daily" setting, which the CLI
 reads: under Immediately nothing is held and every closed item is in
 `logbook`; under Manually items stay in place, whatever day they closed,
-until `things log`. `--include-completed` is how to see the items still in
-place: on `inbox`, `today`, `anytime`, `upcoming` and `someday`, on a
-project's listing (`things --project <uuid> --include-completed`), and on an
-area's (`things --area <uuid> --include-completed`). A task closed today inside
+until `things log`. The items still in place are listed by default, as the
+app shows them: on `inbox`, `today`, `anytime`, `upcoming` and `someday`, on a
+project's listing (`things --project <uuid>`), and on an area's (`things
+--area <uuid>`). Each closed row carries `"status": "completed"` or
+`"cancelled"` in JSON and `[x]` or `[~]` in plain output, so an agent that
+wants only the work still to do passes `--open-only`, or filters on
+`status == "open"`. `--include-completed`, which used to be how to ask for
+the closed items, is still accepted and now has no effect. A task closed today inside
 a project in Someday or scheduled for later is in no list, as in the app, so
 only its project listing has it. A closed Anytime project with no area is in
 no list or area either; `things projects --completed -j` lists it. The tasks
@@ -326,15 +332,15 @@ the project is logged.
 other: a task scheduled for today sits in the Anytime bucket as well, an
 undated one due later is in Anytime and Upcoming, and a project's or area's
 listing repeats what the lists show. So an agent reporting on today's closes
-sweeps `things inbox|today|anytime|upcoming|someday --include-completed -j`,
-each area's `things --area <uuid> --include-completed -j`, and
+sweeps `things inbox|today|anytime|upcoming|someday -j`,
+each area's `things --area <uuid> -j`, and
 `things projects --completed -j` filtered on `stopDate`, and merges them on
 `uuid` rather than concatenating, or it counts the overlapping ones twice.
 Earlier days are in `things logbook -j`, filtered on `stopDate`. An agent
 reporting on history needs `logbook` alone. For one open project, `things --project
-<uuid> --include-completed -j` is the app's project page: its open tasks plus
+<uuid> -j` is the app's project page: its open tasks plus
 those closed today and not yet logged, from whichever list. `things --area
-<uuid> --include-completed -j` is the area's page the same way, with each of
+<uuid> -j` is the area's page the same way, with each of
 its open projects' pages added. Both are contents rather than lists, so their
 closed rows also come back from the lists. A day's sweep misses a task closed
 today inside a project in Someday or scheduled for later, outside any area,
@@ -346,7 +352,7 @@ into the project row and so does the CLI. An agent counting what got done from
 `logbook` counts projects once, not once plus every task inside them — which
 also means the day sweep above reports the project rather than the tasks
 `things complete <project> --yes` closed along with it, once the project is
-logged. Until then those tasks stay in place under `--include-completed` in
+logged. Until then those tasks stay in place in
 `today`, `anytime` and `upcoming`, struck through, as the app shows them; an
 area's listing folds them into the project row straight away, as the app's
 area page does. To read
@@ -355,7 +361,7 @@ trashed project returns its tasks whatever their status, and
 `things show <uuid> --agent` lists them under `## Tasks` with `[x]`, `[~]` or
 `[ ]` on each row. Naming the project reaches its tasks inside a view as well:
 `things anytime --project <uuid> -j` on a trashed project lists its open tasks,
-and `things today --project <uuid> --include-completed -j` on a closed project
+and `things today --project <uuid> -j` on a closed project
 returns the tasks it closed today rather than an empty list. A task thrown
 away out of a project that is itself in the Trash is reachable nowhere,
 matching the app.
@@ -363,16 +369,18 @@ matching the app.
 Some patterns that fall out of this:
 
 ```sh
-# Resolve to a UUID once, then act on it.
-uuid=$(things today -j | jq -r '.[0].uuid')
+# Resolve to a UUID once, then act on it. --open-only skips the tasks
+# closed today that Today still shows.
+uuid=$(things today --open-only -j | jq -r '.[0].uuid')
 things complete "$uuid"
 
 # Everything open with a deadline this month.
 things deadlines -j | jq '.[] | select(.deadline < "2026-10-01") | {title, deadline}'
 
 # Reschedule a whole area. Not transactional: partial failures stick.
-# select(.type=="task") keeps scheduled projects out of `things edit`.
-things upcoming --area Work -j | jq -r '.[] | select(.type=="task") | .uuid' |
+# select(.type=="task") keeps scheduled projects out of `things edit`, and
+# --open-only keeps out the tasks closed today that Upcoming still shows.
+things upcoming --area Work --open-only -j | jq -r '.[] | select(.type=="task") | .uuid' |
   while read -r uuid; do things edit "$uuid" --when monday; done
 
 # Bulk create or update in one call via the Things JSON URL scheme.

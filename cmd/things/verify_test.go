@@ -174,6 +174,52 @@ func TestCancelVerifiesStatusLanded(t *testing.T) {
 	}
 }
 
+// A listing numbers the items closed today alongside the open ones, so a ref
+// can land on a closed item. Closing it the same way again exits 0 with a
+// note; switching it to the other closed status is refused. Neither sends
+// anything to Things.
+func TestCompleteCancelOnClosedItemSendsNothing(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		args    []string
+		wantErr string
+		note    string
+	}{
+		{"complete completed", 3, []string{"complete", "one-1"}, "", "already completed"},
+		{"cancel cancelled", 2, []string{"cancel", "one-1"}, "", "already cancelled"},
+		{"complete cancelled", 2, []string{"complete", "one-1"}, "is already cancelled, so it was not completed", ""},
+		{"cancel completed", 3, []string{"cancel", "one-1"}, "is already completed, so it was not cancelled", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = 'one-1'`, tc.status); err != nil {
+				t.Fatal(err)
+			}
+			calls := stubExecDropping(t)
+
+			stderr, err := runCapturingStderr(t, database, tc.args...)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want it to say %q", err, tc.wantErr)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("run %v: %v", tc.args, err)
+				}
+				if !strings.Contains(stderr, tc.note) {
+					t.Errorf("stderr = %q, want a note saying %q", stderr, tc.note)
+				}
+			}
+			if *calls != 0 {
+				t.Errorf("issued %d write(s); a closed item must not reach Things", *calls)
+			}
+		})
+	}
+}
+
 // The core of issue #129: a write Things accepts and then ignores must not be
 // reported as success.
 func TestSilentlyDroppedWriteFails(t *testing.T) {
