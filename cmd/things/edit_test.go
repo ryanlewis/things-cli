@@ -329,6 +329,10 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 	now := time.Now()
 	today := int(model.ThingsDateFromTime(now))
 	deadline := int(model.ThingsDateFromTime(time.Date(2026, 10, 15, 0, 0, 0, 0, time.Local)))
+	day := func(offset int) string { return now.AddDate(0, 0, offset).Format("2006-01-02") }
+	dayInt := func(offset int) string {
+		return strconv.Itoa(int(model.ThingsDateFromTime(now.AddDate(0, 0, offset))))
+	}
 
 	cases := []struct {
 		name string
@@ -355,15 +359,40 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"newDeadline", []string{"edit", "one-1", "--deadline", "2026-10-16"}, false},
 		{"clearDeadline", []string{"edit", "one-1", "--deadline", ""}, false},
 		{"clearAbsentDeadline", []string{"edit", "two-1", "--deadline", ""}, true},
-		// --when always waits: even `today` on an item already in Today may
-		// touch its reminder, which the CLI does not read.
-		{"whenTodayOnToday", []string{"edit", "one-1", "--when", "today"}, false},
+		{"emptyAppendNotes", []string{"edit", "one-1", "--append-notes", ""}, true},
+		{"emptyPrependNotes", []string{"edit", "one-1", "--prepend-notes", ""}, true},
+		{"prependNotes", []string{"edit", "one-1", "--prepend-notes", "x"}, false},
+		{"whenTodayOnToday", []string{"edit", "one-1", "--when", "Today"}, true},
+		{"whenTodayDateOnToday", []string{"edit", "one-1", "--when", day(0)}, true},
+		{"whenEveningOnToday", []string{"edit", "one-1", "--when", "evening"}, false},
+		{"whenEveningOnEvening", []string{"edit", "eve-1", "--when", "evening"}, true},
+		{"whenTodayDateOnEvening", []string{"edit", "eve-1", "--when", day(0)}, true},
+		{"whenTodayOnEvening", []string{"edit", "eve-1", "--when", "today"}, false},
+		// Things clears a reminder on a --when for today without a time.
+		{"whenTodayClearsReminder", []string{"edit", "rem-1", "--when", "today"}, false},
+		{"whenTodayDateClearsReminder", []string{"edit", "rem-1", "--when", day(0)}, false},
+		{"whenTime", []string{"edit", "rem-1", "--when", "18:00"}, false},
+		{"whenDateTime", []string{"edit", "tom-1", "--when", day(1) + "@08:00"}, false},
+		{"whenTomorrowKeepsReminder", []string{"edit", "tom-1", "--when", "tomorrow"}, true},
+		{"whenTomorrowDate", []string{"edit", "tom-1", "--when", day(1)}, true},
+		{"whenOtherDate", []string{"edit", "tom-1", "--when", day(2)}, false},
+		{"whenPastDate", []string{"edit", "past-1", "--when", day(-1)}, false},
+		{"whenSomedayOnSomeday", []string{"edit", "some-1", "--when", "someday"}, true},
+		{"whenSomedayOnScheduled", []string{"edit", "tom-1", "--when", "someday"}, false},
+		{"whenAnytimeOnAnytime", []string{"edit", "two-1", "--when", "anytime"}, true},
+		{"whenClearOnAnytime", []string{"edit", "two-1", "--when", ""}, true},
+		{"whenClearOnSomeday", []string{"edit", "some-1", "--when", ""}, false},
+		{"whenClearOnInbox", []string{"edit", "inbox-1", "--when", ""}, false},
+		{"whenAnytimeOnToday", []string{"edit", "one-1", "--when", "anytime"}, false},
 		{"whenPhrase", []string{"edit", "one-1", "--when", "friday"}, false},
-		{"allNoOp", []string{"edit", "one-1", "--title", "Post letter", "--notes", "second class", "--add-tags", "errand", "--deadline", "2026-10-15"}, true},
-		{"noOpPlusWhen", []string{"edit", "one-1", "--title", "Post letter", "--when", "today"}, false},
+		{"allNoOp", []string{"edit", "one-1", "--title", "Post letter", "--notes", "second class", "--add-tags", "errand", "--deadline", "2026-10-15", "--when", "today", "--append-notes", ""}, true},
+		{"noOpPlusNewWhen", []string{"edit", "one-1", "--title", "Post letter", "--when", "someday"}, false},
+		{"sameWhenPlusNewTitle", []string{"edit", "one-1", "--title", "Post the letter", "--when", "today"}, false},
 		{"mixed", []string{"edit", "one-1", "--title", "Post letter", "--notes", "first class"}, false},
 		{"mixedUncoveredFlag", []string{"edit", "one-1", "--title", "Post letter", "--append-notes", "x"}, false},
 		{"projectSameTitle", []string{"project", "edit", "repproj-1", "--title", "Weekly review"}, true},
+		{"projectWhenSomeday", []string{"project", "edit", "proj-1", "--when", "someday", "--append-notes", ""}, true},
+		{"projectWhenToday", []string{"project", "edit", "proj-1", "--when", "today"}, false},
 		{"projectMoveArea", []string{"project", "edit", "repproj-1", "--title", "Weekly review", "--area", "Home"}, false},
 	}
 	for _, tc := range cases {
@@ -376,6 +405,13 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 				`INSERT INTO TMTag (uuid, title) VALUES ('tag-1', 'Errand'), ('tag-2', 'Urgent'), ('tag-3', 'Home')`,
 				`INSERT INTO TMTaskTag (tasks, tags) VALUES ('one-1', 'tag-1'), ('one-1', 'tag-2')`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('two-1', 'Undated', 0, 0, 0, 1)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('eve-1', 'Evening', 0, 0, 0, 1, ` + strconv.Itoa(today) + `, 1)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket, reminderTime) VALUES ('rem-1', 'Reminded', 0, 0, 0, 1, ` + strconv.Itoa(today) + `, 0, 1207959552)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket, reminderTime) VALUES ('tom-1', 'Tomorrow', 0, 0, 0, 2, ` + dayInt(1) + `, 0, 536870912)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('past-1', 'Overdue start', 0, 0, 0, 1, ` + dayInt(-1) + `, 0)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('some-1', 'Someday', 0, 0, 0, 2)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('inbox-1', 'Inbox', 0, 0, 0, 0)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('proj-1', 'Someday project', 1, 0, 0, 2)`,
 				`INSERT INTO TMArea (uuid, title, "index") VALUES ('area-1', 'Home', 1)`,
 			}
 			for _, s := range stmts {

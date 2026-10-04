@@ -4744,3 +4744,22 @@ func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
 		t.Errorf("anytime: sd-anytime-child should still list, got %v", uuidsOf(got))
 	}
 }
+
+// HasReminder reads reminderTime alone; a missing item has none.
+func TestHasReminder(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Todo("rem-1", "Reminded", 1)
+	fx.Todo("plain-1", "Plain", 2)
+	if _, err := d.db.Exec(`UPDATE TMTask SET reminderTime = 1207959552 WHERE uuid = 'rem-1'`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	for uuid, want := range map[string]bool{"rem-1": true, "plain-1": false, "nope": false} {
+		got, err := d.HasReminder(uuid)
+		if err != nil {
+			t.Fatalf("HasReminder(%q): %v", uuid, err)
+		}
+		if got != want {
+			t.Errorf("HasReminder(%q) = %v, want %v", uuid, got, want)
+		}
+	}
+}

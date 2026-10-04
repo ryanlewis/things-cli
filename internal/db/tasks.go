@@ -1220,6 +1220,17 @@ func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 	return &t, nil
 }
 
+// HasReminder reports whether the item has a reminder time set. Things clears
+// it when a --when for today arrives without a time, so the edit no-op check
+// needs it; nothing prints it.
+func (d *DB) HasReminder(uuid string) (bool, error) {
+	var n int
+	if err := d.db.QueryRow(`SELECT COUNT(*) FROM TMTask WHERE uuid = ? AND reminderTime IS NOT NULL`, uuid).Scan(&n); err != nil {
+		return false, fmt.Errorf("reading reminder: %w", err)
+	}
+	return n > 0, nil
+}
+
 // uuidChunkSize caps how many uuids go into one IN (...) clause, so a caller
 // passing an arbitrarily long list can never trip SQLITE_MAX_VARIABLE_NUMBER —
 // the bound parameter limit is a property of the SQLite build, not something
