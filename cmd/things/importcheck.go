@@ -288,12 +288,19 @@ type importVerifyError struct {
 	search  string // the `things search` command, with the flags this run needs
 }
 
-// missing is the created items that never appeared: the ones to search for
-// and re-run.
+// failsImport reports whether reason, a created item's verdict, makes the
+// import fail: the item never appeared, or a dated item's row could pass for
+// it.
+func failsImport(reason string) bool {
+	return reason == "not-found" || reason == "shares-dated-title"
+}
+
+// missing is the created items that are not known to be there: the ones to
+// search for and re-run.
 func (e *importVerifyError) missing() []importCreated {
 	var out []importCreated
 	for _, c := range e.created {
-		if c.Reason == "not-found" {
+		if failsImport(c.Reason) {
 			out = append(out, c)
 		}
 	}
@@ -316,13 +323,13 @@ func (e *importVerifyError) Error() string {
 		for i, it := range missing {
 			lines[i] = fmt.Sprintf("  %s: %s", it.Path, it.detail)
 		}
-		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear. The rest of the import was still applied. Things may have dropped them (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
+		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed. The rest of the import was still applied. Things may have dropped them (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
 			len(missing), len(e.created), e.search, strings.Join(lines, "\n")))
 	}
 	if len(e.created) > len(missing) {
 		lines := []string{"The other created items:"}
 		for _, it := range e.created {
-			if it.Reason != "not-found" {
+			if !failsImport(it.Reason) {
 				lines = append(lines, "  "+it.line())
 			}
 		}
@@ -337,7 +344,9 @@ func (e *importVerifyError) Error() string {
 // unconfirmed add does: "no-verify", "unreadable", "ambiguous" (candidates
 // lists the new items with its title), or "not-found" (candidates lists the
 // ones that did appear when fewer than the payload asked for did). An item
-// with a `creation-date` is not checked at all: reason "creation-date".
+// with a `creation-date` is not checked at all: reason "creation-date". Nor
+// is one that shares its type and title with such an item: reason
+// "shares-dated-title".
 type importCreated struct {
 	Path       string   `json:"path"`
 	Kind       string   `json:"kind"`
@@ -461,7 +470,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	// pointing at a list printed elsewhere would name detail the consumer
 	// cannot see. Every created item's verdict goes in with them, since the
 	// success list is not printed beside an error.
-	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return c.Reason == "not-found" }) {
+	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return failsImport(c.Reason) }) {
 		return &importVerifyError{
 			items: failures, total: total, created: created,
 			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
@@ -479,14 +488,23 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 // appear. A snapshot or read-back that could not read the database at all
 // leaves every item unconfirmed as unreadable, with a warning. An item the
 // payload gives a creation-date is not looked for, and is reported as not
-// checked.
+// checked. Its row can still land among the new items, so an item without
+// one that shares its type and title is not looked for either: it is
+// reported unconfirmed and fails the import, rather than risk confirming it
+// with the dated item's row.
 func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, budget time.Duration) []importCreated {
 	if len(creates) == 0 {
 		return nil
 	}
+	dated := map[createdKey]bool{}
+	for _, c := range creates {
+		if c.dated {
+			dated[c.key()] = true
+		}
+	}
 	want := map[createdKey]int{}
 	for _, c := range creates {
-		if !c.dated {
+		if !c.dated && !dated[c.key()] {
 			want[c.key()]++
 		}
 	}
@@ -513,6 +531,9 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		switch n := want[key]; {
 		case c.dated:
 			out[i].Reason = "creation-date"
+		case dated[key]:
+			out[i].Reason = "shares-dated-title"
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, so a new item with that title may be either", c.kind(), c.title)
 		case err != nil:
 			out[i].Reason = "unreadable"
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):

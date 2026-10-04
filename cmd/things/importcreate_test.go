@@ -436,6 +436,41 @@ Created and confirmed: [1] "Buy oat milk" (new-1)
 	}
 }
 
+// A dated item's row can land inside the read-back window, so an undated
+// item with the same kind and title cannot be told apart from it. Here
+// Things drops the undated to-do nested in a project update and saves only
+// the dated one: its row must not confirm the dropped item, and the import
+// fails naming it.
+func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "dated-1", title: "Weekly review"})
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + time.Now().UTC().Format(time.RFC3339) + `"}},
+	  {"type":"project","operation":"update","id":"repproj-1","attributes":{"items":[
+	    {"type":"to-do","attributes":{"title":"Weekly review"}}
+	  ]}}
+	]`
+	out, _, err := runImportOut(t, database, payload, "--json")
+	if err == nil {
+		t.Fatalf("expected a non-zero exit, got output %s", out)
+	}
+	var verr *importVerifyError
+	if !errors.As(err, &verr) {
+		t.Fatalf("err = %v, want an importVerifyError", err)
+	}
+	items := verr.jsonItems()
+	if len(items) != 1 || items[0].Path != "[1].attributes.items[0]" || items[0].Reason != "shares-dated-title" {
+		t.Errorf("items = %+v, want the nested to-do with reason shares-dated-title", items)
+	}
+	for _, c := range verr.created {
+		if c.Confirmed {
+			t.Errorf("%s confirmed as %s, want nothing confirmed", c.Path, c.UUID)
+		}
+	}
+}
+
 // An unreadable created item beside a failed import says why it is not
 // confirmed, rather than leaving an empty line in the error.
 func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
