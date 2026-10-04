@@ -515,13 +515,18 @@ to `add`, `project add`, `complete`, `cancel`, `tag add` and the new
 items and status changes in an `import`.
 An edit that sets every field to the value
 it already has is detected before the wait when every flag is `--title`,
-`--notes`, `--tags`, `--add-tags` (tags compared case-insensitively) or a
-`--deadline` date. Tags that do not exist in Things count as no change,
-since Things drops them, unless `--create-tags` creates them first. So
-does a move the warnings above say will leave the item where it is. It
-then prints the item straight away. Any other
-re-set value, `--when` included, still waits and reports the same error,
-so on that error check the item with `things show` before retrying.
+`--notes`, `--tags`, `--add-tags` (tags compared case-insensitively), a
+`--deadline` date, an empty `--append-notes` or `--prepend-notes`, or a
+`--when` of `anytime`, `someday`, `today`, `evening`, `tomorrow`, empty,
+or a date from today on. `--when today`, `evening` or today's date clears
+a reminder, so on an item with one it counts as a change and waits; a
+later day keeps the reminder. Tags that do not exist in Things count as
+no change, since Things drops them, unless `--create-tags` creates them
+first. So does a move the warnings above say will leave the item where it
+is. It then prints the item straight away. Any other re-set value, such as
+a `--when` with a time or an English phrase, still waits and reports the
+same error, so on that error check the item with `things show` before
+retrying.
 An edit with nothing to change (no field flags, or `--complete` on a task
 that is already complete) prints the item without waiting.
 

@@ -434,8 +434,11 @@ instead of assuming:
 - **Edits are read back.** `edit` and `project edit` wait for Things to
   record the change, then print the item as `things show` would. Exit 0
   with the item printed is the confirmation, so the agent does not need a
-  second `things show`. With `--no-verify` or `--duplicate` nothing is
-  read back and the output says the edit is unconfirmed.
+  second `things show`. An edit that re-sets values the item already has,
+  such as `--when someday` on a Someday item, prints the item at once, so
+  re-running a plan does not fail on work already done. With `--no-verify`
+  or `--duplicate` nothing is read back and the output says the edit is
+  unconfirmed.
 - **Tags must already exist.** Things silently drops tags it does not know.
   The CLI warns before writing; `--create-tags` creates the missing ones
   first and `--strict-tags` refuses to write instead.

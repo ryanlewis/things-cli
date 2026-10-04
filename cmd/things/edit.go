@@ -74,8 +74,7 @@ func (c *EditCmd) Run(d *Deps) error {
 
 // checkOwn reports whether any of this command's own field flags may change
 // the task. None of them is in coveredFields; runEdit adds the shared ones.
-// Every field flag belongs either here, in commonEditFlags.uncoveredSet, or in
-// covered, so a new one cannot be missed by changesFields and still pass
+// Every field flag belongs either here or in commonEditFlags.covered, so a new one cannot be missed by changesFields and still pass
 // certainNoOp. A move Things will drop (checkMove) does not count.
 func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 	return c.checkMove(d, database, task) || c.checklistSet()
@@ -258,7 +257,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	if err != nil {
 		return err
 	}
-	ownSet := checkOwn(d, database, task)
+	uncovered := checkOwn(d, database, task)
 
 	token := authToken(d, database)
 	update := func() error {
@@ -279,17 +278,22 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 			Reveal:       s.Reveal,
 		})
 	}
-	uncovered := ownSet || f.uncoveredSet()
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown))
+	// A reminder that cannot be read counts as one, so the edit waits.
+	hasReminder := func() bool {
+		ok, err := database.HasReminder(task.UUID)
+		return ok || err != nil
+	}
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), hasReminder)
 	return applyEdit(d, database, task, changed, checklist, s.Complete, s.Cancel, s.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
 // leaves the item as it is, so there is no modification to wait for.
-// uncovered says whether any field flag outside coveredFields is set, and
-// dropped holds the folded tag names Things will drop (foldTags).
-func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}) bool {
-	return !uncovered && f.covered().unchanged(task, dropped)
+// uncovered says whether any field flag outside coveredFields is set,
+// dropped holds the folded tag names Things will drop (foldTags), and
+// hasReminder reads whether the item has a reminder (whenUnchanged).
+func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, hasReminder func() bool) bool {
+	return !uncovered && f.covered().unchanged(task, dropped, hasReminder)
 }
 
 // foldTags folds the names verifyTags says Things will drop, so the no-op
@@ -312,13 +316,7 @@ func (f *commonEditFlags) changesFields(uncovered bool) bool {
 }
 
 func (f *commonEditFlags) covered() coveredFields {
-	return coveredFields{f.Title, f.Notes, f.Deadline, f.Tags, f.AddTags}
-}
-
-// uncoveredSet reports whether any shared field flag outside coveredFields is
-// set. runEdit adds the command's own flags (ownFieldsSet).
-func (f *commonEditFlags) uncoveredSet() bool {
-	return anySet(f.PrependNotes, f.AppendNotes, f.When)
+	return coveredFields{f.Title, f.Notes, f.PrependNotes, f.AppendNotes, f.When, f.Deadline, f.Tags, f.AddTags}
 }
 
 // coveredFields are the edit flags whose effect can be predicted exactly from
@@ -326,25 +324,32 @@ func (f *commonEditFlags) uncoveredSet() bool {
 // before the read-back. Things records no change for such an edit, and
 // waiting for one would end in a false "did not apply" after the full budget.
 type coveredFields struct {
-	title, notes, deadline, tags, addTags *string
+	title, notes, prependNotes, appendNotes, when, deadline, tags, addTags *string
 }
 
 // set reports whether any covered flag was given.
 func (f coveredFields) set() bool {
-	return anySet(f.title, f.notes, f.deadline, f.tags, f.addTags)
+	return anySet(f.title, f.notes, f.prependNotes, f.appendNotes, f.when, f.deadline, f.tags, f.addTags)
 }
 
 // unchanged reports whether each flag that is set already matches task. It is
 // deliberately narrow: a value whose outcome depends on how Things reads it
-// counts as a change, and the edit waits for its read-back as before. --when
-// is left out for that reason — even `today` on an item already in Today may
-// touch its reminder, which the CLI does not read. Tags named in dropped do
-// not exist in Things, which ignores them, so they count as no change.
-func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}) bool {
+// counts as a change, and the edit waits for its read-back as before. Tags
+// named in dropped do not exist in Things, which ignores them, so they count
+// as no change.
+func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, hasReminder func() bool) bool {
 	if f.title != nil && *f.title != task.Title {
 		return false
 	}
 	if f.notes != nil && *f.notes != task.Notes {
+		return false
+	}
+	// Checked in Things 3: an empty append or prepend leaves the notes as
+	// they are.
+	if f.prependNotes != nil && *f.prependNotes != "" || f.appendNotes != nil && *f.appendNotes != "" {
+		return false
+	}
+	if f.when != nil && !whenUnchanged(*f.when, task, time.Now(), hasReminder) {
 		return false
 	}
 	// Tags compare the way Things matches them: case-insensitively, after
@@ -395,6 +400,51 @@ func deadlineUnchanged(value string, current *model.ThingsDate) bool {
 	}
 	date, err := time.ParseInLocation("2006-01-02", v, time.Local)
 	return err == nil && current != nil && *current == model.ThingsDateFromTime(date)
+}
+
+// whenUnchanged covers a --when that leaves the item where it is, as checked
+// in Things 3 on to-dos and projects. anytime, and an empty value, match an
+// Anytime item with no start date; someday matches a Someday item with no
+// start date. today and evening match an item scheduled for today in that part
+// of the day, and a date of today matches either part. Each of those clears a
+// reminder, which counts as a change, so hasReminder is asked only then.
+// tomorrow, or a later date, matches an item scheduled that day, reminder or
+// not. A time, a phrase, or a date already past counts as a change.
+func whenUnchanged(value string, task *model.Task, now time.Time, hasReminder func() bool) bool {
+	v, err := things.NormalizeWhen(value)
+	if err != nil {
+		return false
+	}
+	switch v {
+	case "", "anytime":
+		return task.Start == model.StartAnytime && task.StartDate == nil
+	case "someday":
+		return task.Start == model.StartSomeday && task.StartDate == nil
+	case "tomorrow":
+		v = now.AddDate(0, 0, 1).Format("2006-01-02")
+	}
+	today := model.ThingsDateFromTime(now)
+	if task.StartDate == nil {
+		return false
+	}
+	switch v {
+	case "today":
+		return *task.StartDate == today && task.StartBucket == 0 && !hasReminder()
+	case "evening":
+		return *task.StartDate == today && task.StartBucket == 1 && !hasReminder()
+	}
+	date, err := time.ParseInLocation("2006-01-02", v, time.Local)
+	if err != nil {
+		return false
+	}
+	want := model.ThingsDateFromTime(date)
+	switch {
+	case want < today:
+		return false
+	case want == today:
+		return *task.StartDate == today && !hasReminder()
+	}
+	return *task.StartDate == want
 }
 
 // anySet reports whether any of the optional flags was given.
