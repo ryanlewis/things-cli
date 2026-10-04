@@ -626,7 +626,7 @@ Every to-do and project the payload creates is read back too, the way
 whitespace trimmed) that was not there before the import, filed where the
 payload puts it. A to-do with `list-id` or `list` must be in that project
 or area (and under its `heading`, when Things has it), one with neither in
-no project or area, a project with `area-id` or `area` in that area and one
+no project or area (unless it has a `heading-id`, which is not checked), a project with `area-id` or `area` in that area and one
 with neither in no area. A to-do in a project's `items` must be in that
 project. A `list`, `heading` or `area` the database does not have before
 the import is not checked, since it may name a project the same payload
@@ -668,8 +668,10 @@ an unconfirmed `add` does, and no `uuid`:
   (a dated item has the same title)`. An older `creation-date` cannot be
   mistaken for a new item, so it does not stop the read-back.
 - `not-found`: no new item with that title appeared within the read-back
-  wait, or fewer than the payload created. `candidates` lists the ones that
-  did appear.
+  wait, or fewer than the payload created, or fewer than the created items
+  that could each be filed where they appeared (when one of them has a
+  destination that is not checked). `candidates` lists the ones that did
+  appear.
 
 The first four exit 0 with the list printed. Any `not-found` or
 `shares-dated-title` item makes the import exit non-zero with `import

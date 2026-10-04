@@ -80,12 +80,17 @@ func resolveAddTarget(d *Deps, list, heading string) (string, createdDest) {
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
 	}
+	return target, addDest(target, heading, headingFound)
+}
+
+// addDest is where Things files a to-do sent to list, which AddTarget
+// resolved to target, under heading when headingFound. It goes by target's
+// uuid whether list named it by uuid or by title, so two writes that name
+// the same list both ways look for their items in the same place.
+func addDest(target, heading string, headingFound bool) createdDest {
 	dest := createdDest{checked: true, list: target}
-	if target != strings.TrimSpace(list) {
-		dest.list, dest.byTitle = db.FoldName(list), true
-	}
 	if headingFound {
 		dest.heading = db.FoldCase(heading)
 	}
-	return target, dest
+	return dest
 }

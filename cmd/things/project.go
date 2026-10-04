@@ -43,7 +43,12 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	case !read:
 		dest = createdDest{}
 	default:
-		dest.list, dest.byTitle = db.FoldName(area), true
+		dest = createdDest{}
+		if database, err := d.Database(); err == nil {
+			if areas, err := database.ListAreas(); err == nil {
+				dest = areaTitleDest(areas, area)
+			}
+		}
 	}
 	return applyAdd(d, model.TypeProject, c.Title, dest, func() error {
 		return things.AddProject(things.AddProjectParams{
@@ -57,6 +62,23 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 			Todos:    expandNewlines(c.Todos),
 		})
 	})
+}
+
+// areaTitleDest is where Things files a project sent with area, a title at
+// least one of areas has: that area, by uuid, when only one has it, or any
+// area with that title when several do, since which one Things picks is not
+// known.
+func areaTitleDest(areas []model.Area, area string) createdDest {
+	var match []string
+	for _, a := range areas {
+		if db.FoldName(a.Title) == db.FoldName(area) {
+			match = append(match, a.UUID)
+		}
+	}
+	if len(match) == 1 {
+		return createdDest{checked: true, list: match[0]}
+	}
+	return createdDest{checked: true, list: db.FoldName(area), byTitle: true}
 }
 
 // projectAreaID returns area when it is the uuid of an area, which has to go

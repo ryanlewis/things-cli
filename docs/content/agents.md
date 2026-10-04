@@ -422,7 +422,7 @@ instead of assuming:
   created, by kind, title and where it was sent, and print it as `things
   show` would, so the agent has its UUID without a `things search`. Agents
   adding the same title to different projects at once each get their own
-  item, or an error, never the other's. If it never appears they exit non-zero; search
+  item, or an error, not the other's (unless the database could not be read to resolve where the add was sent). If it never appears they exit non-zero; search
   for the title before retrying, so a retry does not make a duplicate.
   Exit 0 with `"confirmed": false` (two new items with the title in the same place,
   `--no-verify`, or an unreadable database) is not a confirmation either.
