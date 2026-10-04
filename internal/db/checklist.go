@@ -12,7 +12,10 @@ func (d *DB) GetChecklistItems(taskUUID string) ([]model.ChecklistItem, error) {
 		SELECT uuid, COALESCE(title, ''), COALESCE(status, 0), stopDate, COALESCE("index", 0)
 		FROM TMChecklistItem
 		WHERE task = ?
-		ORDER BY "index" ASC
+		-- uuid last so the order is total: an edit's read-back compares two
+		-- reads of the checklist row by row, and two items sharing an index
+		-- would otherwise come back in an order SQLite does not define.
+		ORDER BY "index" ASC, uuid ASC
 	`
 	rows, err := d.db.Query(query, taskUUID)
 	if err != nil {

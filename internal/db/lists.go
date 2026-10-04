@@ -53,6 +53,28 @@ func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, 
 	return project, n > 0, nil
 }
 
+// ListTitleShared reports whether list, a title, matches more than one row
+// the way AddTarget matches it: more than one open, untrashed project, or,
+// when no project matches, more than one area. AddTarget then picks one of
+// them, and which one Things files the to-do in is not known.
+func (d *DB) ListTitleShared(list string) (bool, error) {
+	var projects int
+	if err := d.db.QueryRow(`
+		SELECT COUNT(*) FROM TMTask
+		WHERE type = ? AND status = ? AND COALESCE(trashed, 0) = 0 AND fold_name(title) = ?`,
+		int(model.TypeProject), int(model.StatusOpen), FoldName(list)).Scan(&projects); err != nil {
+		return false, fmt.Errorf("finding project: %w", err)
+	}
+	if projects > 0 {
+		return projects > 1, nil
+	}
+	var areas int
+	if err := d.db.QueryRow(`SELECT COUNT(*) FROM TMArea WHERE fold_name(title) = ?`, FoldName(list)).Scan(&areas); err != nil {
+		return false, fmt.Errorf("finding area: %w", err)
+	}
+	return areas > 1, nil
+}
+
 // HeadingExists reports whether uuid names an untrashed project heading,
 // which things:///update needs for heading-id to move a to-do. Things ignores
 // a heading-id it cannot find.

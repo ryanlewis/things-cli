@@ -32,7 +32,7 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	}
 	// Things matches area by title only; a uuid has to go as area-id.
 	area, areaID := c.Area, ""
-	id, known, read := projectAreaID(d, area, "it will create the project with no area")
+	id, known, areas := projectAreaID(d, area, "it will create the project with no area")
 	// Where Things will file the project, for the read-back.
 	dest := createdDest{checked: true}
 	switch {
@@ -40,15 +40,10 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 		area, areaID = "", id
 		dest.list = id
 	case area == "" || !known:
-	case !read:
+	case areas == nil:
 		dest = createdDest{}
 	default:
-		dest = createdDest{}
-		if database, err := d.Database(); err == nil {
-			if areas, err := database.ListAreas(); err == nil {
-				dest = areaTitleDest(areas, area)
-			}
-		}
+		dest = areaTitleDest(areas, area)
 	}
 	return applyAdd(d, model.TypeProject, c.Title, dest, func() error {
 		return things.AddProject(things.AddProjectParams{
@@ -78,7 +73,8 @@ func areaTitleDest(areas []model.Area, area string) createdDest {
 	if len(match) == 1 {
 		return createdDest{checked: true, list: match[0]}
 	}
-	return createdDest{checked: true, list: db.FoldName(area), byTitle: true}
+	// fits compares the trimmed title of the list a row is filed in.
+	return createdDest{checked: true, list: db.FoldName(strings.TrimSpace(area)), byTitle: true}
 }
 
 // projectAreaID returns area when it is the uuid of an area, which has to go
@@ -87,20 +83,23 @@ func areaTitleDest(areas []model.Area, area string) createdDest {
 // and when nothing matches it goes ahead without the area and without
 // reporting it: add creates the project with no area, and update leaves it
 // where it is. fallback says which, for the warning. known is false only when
-// the warning was given. read is false when the areas could not be read. A
-// database that cannot be read gives no warning here: the read-back reports
-// that.
-func projectAreaID(d *Deps, area, fallback string) (id string, known, read bool) {
+// the warning was given. areas is every area, read for the check, and nil
+// when area is empty or the areas could not be read. A database that cannot
+// be read gives no warning here: the read-back reports that.
+func projectAreaID(d *Deps, area, fallback string) (id string, known bool, areas []model.Area) {
 	if area == "" {
-		return "", true, true
+		return "", true, nil
 	}
 	database, err := d.Database()
 	if err != nil {
-		return "", true, false
+		return "", true, nil
 	}
-	areas, err := database.ListAreas()
+	areas, err = database.ListAreas()
 	if err != nil {
-		return "", true, false
+		return "", true, nil
+	}
+	if areas == nil {
+		areas = []model.Area{}
 	}
 	// Not FindAreaUUID: it ignores surrounding space, and Things does not.
 	// Checked in Things 3 with " Personal " against an area called Personal,
@@ -109,14 +108,14 @@ func projectAreaID(d *Deps, area, fallback string) (id string, known, read bool)
 	for _, a := range areas {
 		// A uuid goes as area-id, which is sent trimmed.
 		if a.UUID == strings.TrimSpace(area) {
-			return a.UUID, true, true
+			return a.UUID, true, areas
 		}
 		found = found || db.FoldName(a.Title) == db.FoldName(area)
 	}
 	if !found {
 		fmt.Fprintf(d.errOut(), "warning: Things has no area called %q; %s\n", area, fallback)
 	}
-	return "", found, true
+	return "", found, areas
 }
 
 type ProjectEditCmd struct {

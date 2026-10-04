@@ -704,3 +704,59 @@ func TestAddIgnoresSameTitleFiledElsewhere(t *testing.T) {
 		})
 	}
 }
+
+// A list title more than one open project, or more than one area, carries
+// names no single list: which one Things files the to-do in is not known, so
+// an item that lands in any of them is confirmed, and one filed elsewhere
+// still is not.
+func TestAddSharedListTitleFitsEither(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		row  createdRow
+		ok   bool
+	}{
+		{"firstArea", []string{"add", "Buy oat milk", "--list", "Personal"},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-1'`}, true},
+		{"secondArea", []string{"add", "Buy oat milk", "--list", "personal"},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-3'`}, true},
+		{"firstProject", []string{"add", "Buy oat milk", "--project", "Tools", "--heading", "Setup"},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-1'`}, true},
+		{"secondProject", []string{"add", "Buy oat milk", "--project", "Tools"},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-3'`}, true},
+		{"elsewhere", []string{"add", "Buy oat milk", "--list", "Personal"},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-2'`}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Area("area-2", "Errands", 2)
+			fx.Area("area-3", "Personal", 3)
+			fx.Project("proj-1", "Tools", 5)
+			fx.Project("proj-3", "Tools", 7)
+			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+			stubExecAdding(t, sqlDB, tc.row)
+
+			out, err := runOut(t, database, append([]string{"--json"}, tc.args...)...)
+			if !tc.ok {
+				if err == nil || !strings.Contains(err.Error(), "add not confirmed") {
+					t.Fatalf("err = %v, out = %q; want add not confirmed", err, out)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("%v: %v", tc.args, err)
+			}
+			var got model.Task
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("unmarshal %q: %v", out, err)
+			}
+			if got.UUID != tc.row.uuid {
+				t.Errorf("printed %s, want %s", got.UUID, tc.row.uuid)
+			}
+		})
+	}
+}

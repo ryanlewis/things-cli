@@ -80,7 +80,32 @@ func resolveAddTarget(d *Deps, list, heading string) (string, createdDest) {
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
 	}
-	return target, addDest(target, heading, headingFound)
+	shared, err := listShared(database, list, target)
+	if err != nil {
+		return target, createdDest{}
+	}
+	return target, listDest(list, target, heading, headingFound, shared)
+}
+
+// listShared reports whether list is a title that more than one open project
+// or area carries (see db.ListTitleShared). A uuid, which AddTarget resolved
+// to itself, names one row.
+func listShared(database *db.DB, list, target string) (bool, error) {
+	if target == "" || target == strings.TrimSpace(list) {
+		return false, nil
+	}
+	return database.ListTitleShared(list)
+}
+
+// listDest is addDest for a list that may be a title several lists share.
+// AddTarget picks one of them, and which one Things files the to-do in is not
+// known, so then any list with that title fits, under any heading when one
+// was asked for, rather than failing an add that landed in the other one.
+func listDest(list, target, heading string, headingFound, shared bool) createdDest {
+	if !shared {
+		return addDest(target, heading, headingFound)
+	}
+	return createdDest{checked: true, list: db.FoldName(strings.TrimSpace(list)), byTitle: true, anyHeading: heading != ""}
 }
 
 // addDest is where Things files a to-do sent to list, which AddTarget
