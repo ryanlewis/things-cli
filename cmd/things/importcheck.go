@@ -116,6 +116,9 @@ type importTo struct {
 	// is the title of a heading it creates before this item: Things may file
 	// the to-do there, which the database does not have yet.
 	listInPayload, headingInPayload bool
+	// renamed is the ids of the projects the payload renames before this
+	// item: the database still has their old titles.
+	renamed []string
 }
 
 // datedSlack widens the read-back window for a dated item's creation-date,
@@ -329,6 +332,14 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			c.dest = createdDest{checked: true}
 			continue
 		}
+		if !byID && !res.target.Area && slices.Contains(to.renamed, res.target.UUID) {
+			// The title is the project's old one, which an earlier update
+			// item renames. Things may no longer find it by that title, so
+			// where the to-do goes was not measured (updates need the
+			// token) and is left unchecked.
+			c.dest = createdDest{}
+			continue
+		}
 		note(*c, list, "lists", res.target)
 		c.dest = addDest(res.target.UUID, heading, res.headingFound)
 		if heading != "" && !res.headingFound {
@@ -413,6 +424,7 @@ func importCreates(payload []any) []importCreate {
 	// renames a project to so far, and headings FoldCase of every heading
 	// title it creates so far, in payload order.
 	projects, headings := map[string]bool{}, map[string]bool{}
+	var renamed []string
 	walkImportNode(payload, "", func(path string, v map[string]any) {
 		op, _ := v["operation"].(string)
 		attrs, _ := v["attributes"].(map[string]any)
@@ -420,6 +432,9 @@ func importCreates(payload []any) []importCreate {
 		case "project":
 			if title, _ := attrs["title"].(string); strings.TrimSpace(title) != "" {
 				projects[db.FoldName(strings.TrimSpace(title))] = true
+				if id, _ := v["id"].(string); op == "update" && id != "" {
+					renamed = append(renamed, strings.TrimSpace(id))
+				}
 			}
 		case "heading":
 			if title, _ := attrs["title"].(string); op != "update" && strings.TrimSpace(title) != "" {
@@ -465,6 +480,7 @@ func importCreates(payload []any) []importCreate {
 			if typ == model.TypeTask {
 				to.listInPayload = to.list != "" && projects[db.FoldName(to.list)]
 				to.headingInPayload = to.heading != "" && headings[db.FoldCase(to.heading)]
+				to.renamed = slices.Clip(renamed)
 			}
 		}
 		// A null creation-date is no date at all, as it is to Things, which

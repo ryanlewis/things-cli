@@ -1024,3 +1024,33 @@ func TestImportNotesTargets(t *testing.T) {
 		t.Errorf("noted the same list twice:\n%s", stderr)
 	}
 }
+
+// A to-do sent to the old title of a project an earlier update item renames
+// is left unchecked: where Things files it was not measured, and failing it
+// when it lands in the Inbox would invite a duplicate on retry.
+func TestImportListOldTitleAfterRename(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-2", "Garden", 6)
+	prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
+		now := model.TimeToUnix(time.Now())
+		if _, err := sqlDB.Exec(`UPDATE TMTask SET title = 'Shed' WHERE uuid = 'proj-2'`); err != nil {
+			t.Errorf("simulating Things: %v", err)
+		}
+		if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start, creationDate, userModificationDate) VALUES ('mine', 'Buy oat milk', 0, 0, 0, 0, ?, ?)`, now, now); err != nil {
+			t.Errorf("simulating Things: %v", err)
+		}
+		return exec.Command("true")
+	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+	payload := `[{"type":"project","operation":"update","id":"proj-2","attributes":{"title":"Shed"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Garden"}}]`
+	out, stderr, err := runImportOut(t, database, payload, "--json")
+	if err != nil {
+		t.Fatalf("import: %v\n%s", err, stderr)
+	}
+	if got := decodeCreated(t, out); len(got) != 1 || got[0].UUID != "mine" {
+		t.Errorf("got %+v, want the to-do confirmed as mine", got)
+	}
+}

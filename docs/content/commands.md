@@ -742,7 +742,8 @@ payload puts it, as Things files it:
   earlier in the same payload, or renamed to that title by an earlier
   update item, has that title, the to-do may go to either, so any list with
   the title counts. A project created later in the payload is not there
-  yet. A `heading` the list does not have is left out, unless the payload
+  yet. A to-do sent to the old title of a project an earlier update item
+  renames is not checked. A `heading` the list does not have is left out, unless the payload
   creates a heading with that title earlier, which the to-do may go under.
 - A to-do with none of these goes to the Inbox.
 - A project goes to the area its `area-id` names, or else its `area`. An
