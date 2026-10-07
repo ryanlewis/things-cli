@@ -278,7 +278,7 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 					c.dest = createdDest{}
 					continue
 				case h.found:
-					c.dest = createdDest{checked: true, list: h.project, heading: db.FoldCase(h.title)}
+					c.dest = createdDest{checked: true, list: h.project, heading: id}
 					// The heading wins over the list and heading title the
 					// payload names, and over any list-id it can find.
 					switch {
@@ -346,7 +346,7 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			continue
 		}
 		note(*c, list, "lists", res.target)
-		c.dest = addDest(res.target.UUID, heading, res.headingFound)
+		c.dest = addDest(res.target)
 		if heading != "" && !res.headingFound {
 			if to.headingInPayload {
 				// It may be the heading the payload creates.

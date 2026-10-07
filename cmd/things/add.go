@@ -80,7 +80,7 @@ func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
 	}
 	noteTarget(d, list, "lists", target)
-	return target, addDest(target.UUID, heading, headingFound)
+	return target, addDest(target)
 }
 
 // noteTarget says on stderr when Things will file into a list the user may
@@ -125,14 +125,11 @@ func count(n int, one, many string) string {
 	return many
 }
 
-// addDest is where Things files a to-do sent to list, which AddTarget
-// resolved to target, under heading when headingFound. It goes by target's
-// uuid whether list named it by uuid or by title, so two writes that name
-// the same list both ways look for their items in the same place.
-func addDest(target, heading string, headingFound bool) createdDest {
-	dest := createdDest{checked: true, list: target}
-	if headingFound {
-		dest.heading = db.FoldCase(heading)
-	}
-	return dest
+// addDest is where Things files a to-do sent to target, as AddTarget found
+// it: its list by uuid whether it was named by uuid or by title, so two
+// writes that name the same list both ways look for their items in the same
+// place, and the heading HeadingTarget picks, if any, by uuid, so a to-do
+// filed under a heading's case-twin is not taken for one filed under it.
+func addDest(target db.Target) createdDest {
+	return createdDest{checked: true, list: target.UUID, heading: target.Heading}
 }
