@@ -57,7 +57,8 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// "Chapter 12 notes" (issue #375). Only an exact title or uuid is taken.
 	// Nor is `+12` or `#12`, which reads as a row number but is not one: as
 	// a fragment, `#12` would complete a task that mentions issue #12.
-	markedRow, markedDigits := isMarkedRowRef(ref)
+	markedDigits := markedRowDigits(ref)
+	markedRow := markedDigits != ""
 	lookup := database.GetTask
 	if rowRef || markedRow {
 		lookup = database.GetTaskExact
@@ -75,7 +76,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		return nil, &notFoundError{
 			Kind:  "task",
 			Query: ref,
-			msg:   fmt.Sprintf("%q is not a row reference; use %s for a row of the last list, or pass the task's uuid or full title", ref, markedDigits),
+			msg:   fmt.Sprintf("%q is not a row reference and no task has exactly that title; if you meant row %s of the last list, use %s, otherwise pass the task's uuid or full title", ref, markedDigits, markedDigits),
 		}
 	}
 
@@ -132,15 +133,16 @@ func isRowRef(ref string) bool {
 	return true
 }
 
-// isMarkedRowRef reports whether ref is spelled like a row number marked with
-// a leading + or #, after optional space, and returns the digits. Only bare
-// digits are row numbers; these are not, and do not match a title fragment.
-func isMarkedRowRef(ref string) (bool, string) {
-	s := strings.TrimLeftFunc(ref, unicode.IsSpace)
+// markedRowDigits returns the digits of ref when it is spelled like a row
+// number marked with a leading + or #, ignoring surrounding space, and ""
+// otherwise. Only bare digits are row numbers; these are not, and do not
+// match a title fragment.
+func markedRowDigits(ref string) string {
+	s := strings.TrimSpace(ref)
 	if s == "" || (s[0] != '+' && s[0] != '#') || !isRowRef(s[1:]) {
-		return false, ""
+		return ""
 	}
-	return true, s[1:]
+	return s[1:]
 }
 
 // notARowError refuses an all-digit ref that is not a row in the last list and
