@@ -96,6 +96,8 @@ type importCreate struct {
 	// Things 3: the item is saved with that stopDate, and an open item's
 	// completion-date is ignored.
 	closedAt time.Time
+	// closed is set when the payload completes or cancels the item.
+	closed bool
 	// to is where the payload files the item, and dest is where the CLI
 	// resolved that to before the import was sent (see resolveImportDests).
 	to   importTo
@@ -207,7 +209,9 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 	// list or area the payload names however many items go there.
 	noted := map[string]bool{}
 	note := func(c importCreate, ref, kind string, t db.Target) {
-		for _, n := range targetNotes(ref, kind, t) {
+		// Measured in Things 3: a to-do the payload itself completes,
+		// filed into a closed project, leaves the project closed.
+		for _, n := range targetNotes(ref, kind, t, !c.closed) {
 			if !noted[n] {
 				noted[n] = true
 				fmt.Fprintf(d.errOut(), "note: %s: %s\n", c.path, n)
@@ -288,6 +292,9 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 					continue
 				case h.found:
 					c.dest = createdDest{checked: true, list: h.project, heading: id}
+					if res := lookup(h.project, ""); res.err == nil && res.target.ByUUID {
+						note(*c, h.project, "lists", res.target)
+					}
 					// The heading wins over the list and heading title the
 					// payload names, and over any list-id it can find.
 					switch {
@@ -356,12 +363,12 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 		}
 		note(*c, list, "lists", res.target)
 		c.dest = addDest(res.target)
-		if heading != "" && !res.headingFound {
-			if to.headingInPayload {
-				// It may be the heading the payload creates.
-				c.dest.anyHeading = true
-				continue
-			}
+		switch {
+		case to.headingInPayload:
+			// It may be the heading the payload creates, which can be the
+			// lowest-uuid twin of one the list already has.
+			c.dest.anyHeading = true
+		case heading != "" && !res.headingFound:
 			warn(*c, "%q has no heading %q; Things will add the to-do there without a heading", list, heading)
 		}
 	}
@@ -485,9 +492,12 @@ func importCreates(payload []any) []importCreate {
 		}
 		to, nested := parents[path]
 		if nested {
-			for _, name := range importDestAttrs {
-				if v, ok := attrs[name]; ok && v != nil {
-					to.ignored = append(to.ignored, name)
+			// Measured for the items of a project the payload creates only.
+			if to.parentID == "" {
+				for _, name := range []string{"list", "list-id", "heading-id", "heading"} {
+					if v, ok := attrs[name]; ok && v != nil {
+						to.ignored = append(to.ignored, name)
+					}
 				}
 			}
 		} else {
@@ -514,7 +524,7 @@ func importCreates(payload []any) []importCreate {
 		if completed || canceled {
 			closedAt, _ = parseThingsDate(attrs["completion-date"])
 		}
-		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: raw != nil, datedAt: datedAt, closedAt: closedAt, to: to})
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: raw != nil, datedAt: datedAt, closedAt: closedAt, closed: completed || canceled, to: to})
 	})
 	return creates
 }
@@ -778,9 +788,16 @@ type importVerifyError struct {
 }
 
 // failsImport reports whether reason, a created item's verdict, makes the
-// import fail: the item never appeared, or a dated item's row could pass for
-// it.
+// import fail: the item may be missing (see missingReason), or it was saved
+// without its completion-date.
 func failsImport(reason string) bool {
+	return missingReason(reason) || reason == dateDropped
+}
+
+// missingReason reports whether reason says a created item may not be there:
+// it never appeared, or a dated item's row could pass for it. These are the
+// items to search for, and re-run if they are missing.
+func missingReason(reason string) bool {
 	return reason == "not-found" || reason == "shares-dated-title"
 }
 
@@ -794,7 +811,7 @@ const dateDropped = "completion-date-dropped"
 func (e *importVerifyError) missing() []importCreated {
 	var out []importCreated
 	for _, c := range e.created {
-		if failsImport(c.Reason) {
+		if missingReason(c.Reason) {
 			out = append(out, c)
 		}
 	}
@@ -833,7 +850,7 @@ func (e *importVerifyError) Error() string {
 	if len(e.created) > len(missing)+len(dropped) {
 		lines := []string{"The other created items:"}
 		for _, it := range e.created {
-			if !failsImport(it.Reason) && it.Reason != dateDropped {
+			if !failsImport(it.Reason) {
 				lines = append(lines, "  "+it.line())
 			}
 		}
@@ -1021,7 +1038,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	// pointing at a list printed elsewhere would name detail the consumer
 	// cannot see. Every created item's verdict goes in with them, since the
 	// success list is not printed beside an error.
-	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return failsImport(c.Reason) || c.Reason == dateDropped }) {
+	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return failsImport(c.Reason) }) {
 		return &importVerifyError{
 			items: failures, total: total, created: created,
 			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
@@ -1050,6 +1067,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 	if len(creates) == 0 {
 		return nil
 	}
+	start := time.Now()
 	// dated is where each dated item whose row may land among the new items
 	// is filed, by type and title.
 	dated := map[createdKey][]createdDest{}
@@ -1120,7 +1138,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		}
 	}
 	unconfirmShared(out, creates, found)
-	checkClosedAt(out, creates, found)
+	checkClosedAt(database, out, creates, found, max(budget-time.Since(start), 0))
 	if err != nil && len(want) > 0 && !d.dbWarned {
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
@@ -1203,8 +1221,13 @@ func unconfirmShared(out []importCreated, creates []importCreate, found map[crea
 
 // checkClosedAt turns back each confirmation of an item the payload closes
 // with a completion-date whose row was saved with another stopDate, keeping
-// its uuid: the item is there, without its date.
-func checkClosedAt(out []importCreated, creates []importCreate, found map[createdWant][]model.Task) {
+// its uuid: the item is there, without its date. A row with no stopDate yet
+// has not settled, so it is read again within budget, and one still without
+// it is left confirmed rather than judged. Things keeps the date to the
+// fraction of a second; a second's slack costs nothing.
+func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate, found map[createdWant][]model.Task, budget time.Duration) {
+	stops := map[string]*time.Time{}
+	var pending []string
 	for i, c := range creates {
 		if !out[i].Confirmed || c.closedAt.IsZero() {
 			continue
@@ -1213,16 +1236,35 @@ func checkClosedAt(out []importCreated, creates []importCreate, found map[create
 		if idx < 0 {
 			continue
 		}
-		stop := found[c.want()][idx].StopDate
-		if stop != nil && stop.Sub(c.closedAt).Abs() < time.Millisecond {
+		stops[out[i].UUID] = found[c.want()][idx].StopDate
+		if stops[out[i].UUID] == nil {
+			pending = append(pending, out[i].UUID)
+		}
+	}
+	if len(pending) > 0 {
+		_ = pollUntil(budget, func(bool) (bool, error) {
+			rows, err := database.GetTasksByUUIDs(pending)
+			if err != nil {
+				return false, nil
+			}
+			settled := true
+			for _, uuid := range pending {
+				if t := rows[uuid]; t != nil && t.StopDate != nil {
+					stops[uuid] = t.StopDate
+				} else {
+					settled = false
+				}
+			}
+			return settled, nil
+		})
+	}
+	for i, c := range creates {
+		stop, ok := stops[out[i].UUID]
+		if !ok || c.closedAt.IsZero() || stop == nil || stop.Sub(c.closedAt).Abs() < time.Second {
 			continue
 		}
-		got := "none"
-		if stop != nil {
-			got = stop.UTC().Format(time.RFC3339Nano)
-		}
 		out[i].Confirmed, out[i].Reason = false, dateDropped
-		out[i].detail = fmt.Sprintf("%s %q (%s) was saved with completion date %s, not %s", c.kind(), c.title, out[i].UUID, got, c.closedAt.UTC().Format(time.RFC3339Nano))
+		out[i].detail = fmt.Sprintf("%s %q (%s) was saved with completion date %s, not %s", c.kind(), c.title, out[i].UUID, stop.UTC().Format(time.RFC3339Nano), c.closedAt.UTC().Format(time.RFC3339Nano))
 	}
 }
 

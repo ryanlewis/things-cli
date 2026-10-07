@@ -60,7 +60,9 @@ type jsonErrorPayload struct {
 // was nothing to observe — the row could not be read, or no longer exists. A
 // created item that never appeared, or that a dated item's row could pass
 // for, sets Confirmed (always false), Reason ("not-found" or
-// "shares-dated-title") and Candidates, as an unconfirmed add does.
+// "shares-dated-title") and Candidates, as an unconfirmed add does; one saved
+// without the completion-date the payload gives it sets Confirmed (false),
+// Reason ("completion-date-dropped") and ID, its uuid, since it is there.
 type jsonErrorItem struct {
 	Path       string   `json:"path"`
 	ID         string   `json:"id,omitempty"`

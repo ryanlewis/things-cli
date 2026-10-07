@@ -98,14 +98,15 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 	return target, target.Heading != "", nil
 }
 
-// HeadingTarget returns the uuid of the heading things:///update files a
-// to-do under when sent heading for project, "" when the project has none
+// HeadingTarget returns the uuid of the heading things:///add and update file
+// a to-do under when sent heading for project, "" when the project has none
 // that matches. Things matches the title ignoring case, and among headings
 // whose titles are the same or differ only in case it takes the one with the
 // lowest uuid, whichever case was sent and whichever comes first in the
-// project: measured on 7 Oct 2026 in six projects with two to four such
-// headings. An archived heading counts the same, and Things reopens it when
-// it files a to-do there: measured the same day in three more projects.
+// project: measured with update on 7 Oct 2026 in six projects with two to
+// four such headings, and with add on 8 Oct 2026. An archived heading counts
+// the same, and Things reopens it when it files a to-do there: measured on 7
+// Oct 2026 in three more projects.
 func (d *DB) HeadingTarget(project, heading string) (string, error) {
 	var id string
 	err := d.db.QueryRow(`

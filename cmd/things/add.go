@@ -86,7 +86,7 @@ func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 // noteTarget says on stderr when Things will file into a list the user may
 // not expect, though it is where ref leads (see targetNotes).
 func noteTarget(d *Deps, ref, kind string, t db.Target) {
-	for _, note := range targetNotes(ref, kind, t) {
+	for _, note := range targetNotes(ref, kind, t, true) {
 		fmt.Fprintf(d.errOut(), "note: %s\n", note)
 	}
 }
@@ -96,8 +96,10 @@ func noteTarget(d *Deps, ref, kind string, t db.Target) {
 // gives, or a closed or trashed project. Callers give it only for a write
 // that files the item somewhere new. Measured in Things 3: add and update
 // file into a closed project, logged or not, and reopen it, and into a
-// trashed one, which stays in the Trash.
-func targetNotes(ref, kind string, t db.Target) []string {
+// trashed one, which stays in the Trash. reopens is false for an item the
+// write closes itself, which leaves the project closed, so that note is left
+// out.
+func targetNotes(ref, kind string, t db.Target, reopens bool) []string {
 	var notes []string
 	switch {
 	case t.Others == 0:
@@ -111,7 +113,7 @@ func targetNotes(ref, kind string, t db.Target) []string {
 	case t.Area:
 	case t.Trashed:
 		notes = append(notes, fmt.Sprintf("%q is in the Trash; Things will file into it there", t.Title))
-	case t.Status == model.StatusCompleted || t.Status == model.StatusCancelled:
+	case reopens && (t.Status == model.StatusCompleted || t.Status == model.StatusCancelled):
 		notes = append(notes, fmt.Sprintf("%q is %s; Things will file into it and reopen it", t.Title, t.Status))
 	}
 	return notes
