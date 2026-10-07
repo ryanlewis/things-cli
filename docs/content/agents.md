@@ -445,6 +445,9 @@ instead of assuming:
   `import` does the same for every to-do and project it creates, and
   prints one verdict per item, with its `path` in the payload. It exits
   non-zero with `import partially applied` if any of them never appeared.
+  An item listed there with reason `completion-date-dropped` did appear,
+  without its completion date: set the date in Things rather than import
+  it again.
   If Things is often closed, the first add after it launches can take
   longer than the five-second wait; raise `--verify-timeout`.
 - **Edits are read back.** `edit` and `project edit` wait for Things to

@@ -779,6 +779,10 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 		// its title; without one, the list's lack of it is checked.
 		{"headingInPayload", `[{"type":"project","operation":"update","id":"proj-1","attributes":{"items":[{"type":"heading","attributes":{"title":"Phase 2"}}]}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"phase 2"}}]`,
 			[]createdRow{{uuid: "head-new", title: "Phase 2", typ: model.TypeHeading, extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: `heading = 'head-new'`}}, []string{"mine"}},
+		// A heading the payload creates may be the twin Things picks over
+		// the one the list already has, so either fits.
+		{"headingInPayloadAndList", `[{"type":"project","operation":"update","id":"proj-1","attributes":{"items":[{"type":"heading","attributes":{"title":"SETUP"}}]}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"Setup"}}]`,
+			[]createdRow{{uuid: "head-new", title: "SETUP", typ: model.TypeHeading, extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: `heading = 'head-new'`}}, []string{"mine"}},
 		{"headingNotInPayload", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"Phase 2"}}]`,
 			[]createdRow{{uuid: "head-new", title: "Phase 2", typ: model.TypeHeading, extra: inProj1}, {uuid: "other", title: "Buy oat milk", extra: `heading = 'head-new'`}}, []string{"not-found"}},
 		// To-dos in a project the payload creates go by its title, so a
@@ -1075,6 +1079,8 @@ func TestImportChecksCompletionDate(t *testing.T) {
 		fail bool
 	}{
 		{"applied", "1791196200", false},
+		{"withinASecond", "1791196200.6", false},
+		{"notSettled", "NULL", false},
 		{"dropped", "1791200000", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1150,7 +1156,7 @@ func TestImportNestedIgnoresOwnDestination(t *testing.T) {
 		createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'new-p'`})
 
 	payload := `[{"type":"project","attributes":{"title":"Launch","items":[
-	  {"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1","heading":"Setup","list":null}}
+	  {"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1","heading":"Setup","list":null,"area":"Home"}}
 	]}}]`
 	out, stderr, err := runImportOut(t, database, payload, "--json")
 	if err != nil {
@@ -1159,7 +1165,62 @@ func TestImportNestedIgnoresOwnDestination(t *testing.T) {
 	if got := decodeCreated(t, out); len(got) != 2 || got[1].UUID != "mine" {
 		t.Errorf("got %+v, want the nested to-do confirmed in the new project", got)
 	}
-	if want := `[0].attributes.items[0]: Things files a to-do in a project's items in that project and ignores its list-id, heading`; !strings.Contains(stderr, want) {
+	if want := `[0].attributes.items[0]: Things files a to-do in a project's items in that project and ignores its list-id, heading`; !strings.Contains(stderr, want) || strings.Contains(stderr, "area") {
 		t.Errorf("stderr missing %q:\n%s", want, stderr)
+	}
+}
+
+// A heading-id gives the same notes as a list-id about its project, but a
+// to-do the payload closes itself leaves a closed project closed, so it gets
+// no note that the project reopens.
+func TestImportNotesHeadingIDAndClosedItems(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("proj-bin", "Bin", 8, dbtest.Trashed())
+	fx.Heading("head-done", "Setup", 1, dbtest.InProject("proj-done"))
+	fx.Heading("head-bin", "Shelf", 2, dbtest.InProject("proj-bin"))
+	stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"a","heading-id":"head-bin"}},
+	  {"type":"to-do","attributes":{"title":"b","list-id":"proj-done","completed":true}},
+	  {"type":"to-do","attributes":{"title":"c","heading-id":"head-done"}}
+	]`
+	_, stderr, err := runImportOut(t, database, payload, "--no-verify")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for _, want := range []string{
+		`note: [0]: "Bin" is in the Trash; Things will file into it there`,
+		`note: [2]: "Done" is completed; Things will file into it and reopen it`,
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stderr, "note: [1]") {
+		t.Errorf("noted a reopen for a to-do the payload completes:\n%s", stderr)
+	}
+}
+
+// Only the items of a project the payload creates were measured to ignore
+// their own destination, so a to-do in an updated project's items is not
+// warned about.
+func TestImportNestedInUpdateNotWarned(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-1", "Tools", 5)
+	stubExecDropping(t)
+
+	payload := `[{"type":"project","operation":"update","id":"proj-1","attributes":{"items":[
+	  {"type":"to-do","attributes":{"title":"a","list":"Garden","area":"Home"}}
+	]}}]`
+	_, stderr, err := runImportOut(t, database, payload, "--no-verify")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if strings.Contains(stderr, "ignores its") {
+		t.Errorf("warned about an updated project's item:\n%s", stderr)
 	}
 }

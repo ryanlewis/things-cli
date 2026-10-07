@@ -785,7 +785,8 @@ Things saved them. If two of those new items have the same creation time,
 the order says nothing, so they are all reported `ambiguous` instead.
 
 An item that is not confirmed has `"confirmed": false` and a `reason`, as
-an unconfirmed `add` does, and no `uuid`:
+an unconfirmed `add` does, and no `uuid` unless the reason is
+`completion-date-dropped`:
 
 - `no-verify`: `--no-verify` (or `no_verify = true`) skipped the read-back.
 - `unreadable`: the database could not be read, so a warning is printed.
