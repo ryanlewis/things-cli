@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ryanlewis/things-cli/internal/model"
+	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // placeWhen gives where Things 3 filed throwaway items for each --when form
@@ -105,7 +109,7 @@ func TestWhenCheckAcrossMidnight(t *testing.T) {
 	} {
 		day := tc.day
 		c := &whenCheck{value: tc.value, sent: yesterday}
-		if got := c.holds(&model.Task{Start: model.StartAnytime, StartDate: &day}); got != tc.want {
+		if got := c.holds(&model.Task{Start: model.StartAnytime, StartDate: &day}, time.Now()); got != tc.want {
 			t.Errorf("holds(%q on %s) = %v, want %v", tc.value, day, got, tc.want)
 		}
 	}
@@ -113,10 +117,10 @@ func TestWhenCheckAcrossMidnight(t *testing.T) {
 	// so a read-back long after cannot judge it and lets it hold.
 	sent := time.Now().Add(-2 * time.Hour)
 	c := &whenCheck{value: sent.Format("15:04"), sent: sent}
-	if !c.holds(&model.Task{Start: model.StartAnytime, StartDate: &today}) {
+	if !c.holds(&model.Task{Start: model.StartAnytime, StartDate: &today}, time.Now()) {
 		t.Error("a time ambiguous when sent must hold")
 	}
-	if !(*whenCheck)(nil).holds(&model.Task{}) {
+	if !(*whenCheck)(nil).holds(&model.Task{}, time.Now()) {
 		t.Error("a nil whenCheck must hold")
 	}
 }
@@ -171,31 +175,111 @@ func TestAddReadBackChecksWhen(t *testing.T) {
 			switch {
 			case tc.ok && err != nil:
 				t.Fatalf("add: %v", err)
-			case !tc.ok && (err == nil || !strings.Contains(err.Error(), `created "Buy oat milk" (new-1)`) || !strings.Contains(err.Error(), "Do not add it again")):
+			case !tc.ok && (err == nil || !strings.Contains(err.Error(), `"Buy oat milk" (new-1)`) || !strings.Contains(err.Error(), "before adding it again")):
 				t.Fatalf("add = %v, want a --when read-back failure naming new-1", err)
 			}
 		})
 	}
 }
 
-// Under --json a misfiled add prints a confirmed:false object with the item's
-// uuid and where it landed, besides the error, so an agent has the uuid on
-// stdout.
-func TestAddMisfiledJSON(t *testing.T) {
+// Under --json a misfiled add or edit fails with one JSON object on stdout:
+// the error, with the "misfiled" token, the item's uuid and where it landed.
+// The command prints nothing of its own before it.
+func TestMisfiledJSONIsOneObject(t *testing.T) {
+	today := strconv.Itoa(int(model.ThingsDateFromTime(time.Now())))
+	cases := []struct {
+		name string
+		args []string
+		kind string
+		uuid string
+		stub func(t *testing.T, sqlDB *sql.DB)
+	}{
+		{"add", []string{"--json", "add", "Buy oat milk", "--when", "someday"}, "task", "new-1", func(t *testing.T, sqlDB *sql.DB) {
+			stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask, extra: "start = 1"})
+		}},
+		{"projectAdd", []string{"--json", "project", "add", "Launch", "--when", "someday"}, "project", "new-p", func(t *testing.T, sqlDB *sql.DB) {
+			stubExecAdding(t, sqlDB, createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject, extra: "start = 1"})
+		}},
+		{"edit", []string{"--json", "edit", "one-1", "--when", "evening", "--title", "Post parcel"}, "task", "one-1", func(t *testing.T, sqlDB *sql.DB) {
+			stubExecEditing(t, sqlDB, `UPDATE TMTask SET title = 'Post parcel', start = 1, startDate = `+today+`, startBucket = 0 WHERE uuid = 'one-1'`)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			tc.stub(t, sqlDB)
+
+			out, err := runOut(t, database, tc.args...)
+			if err == nil {
+				t.Fatal("want a misfiled error")
+			}
+			var stdout, stderr bytes.Buffer
+			stdout.WriteString(out)
+			renderError(&stdout, &stderr, true, err)
+			var payload jsonErrorPayload
+			dec := json.NewDecoder(&stdout)
+			if jerr := dec.Decode(&payload); jerr != nil {
+				t.Fatalf("stdout is not JSON (%v): %q", jerr, out)
+			}
+			if dec.More() {
+				t.Fatalf("stdout holds more than one JSON value: %q", out+stdout.String())
+			}
+			if payload.Error != "misfiled" || payload.Kind != tc.kind || payload.UUID != tc.uuid || payload.Landed == "" {
+				t.Errorf("payload = %+v, want misfiled %s %s with where it landed", payload, tc.kind, tc.uuid)
+			}
+		})
+	}
+}
+
+// The misfiled add's advice searches before a retry, keeps the global flags,
+// and moves a project with `project edit`.
+func TestMisfiledAddHint(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask, extra: "start = 1"})
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject, extra: "start = 1"})
+	d := &Deps{DB: database, DBPath: "/tmp/x.sqlite", Stdout: io.Discard, Stderr: io.Discard}
 
-	out, err := runOut(t, database, "--json", "add", "Buy oat milk", "--when", "someday")
-	if err == nil || !strings.Contains(err.Error(), "add did not apply as sent") {
-		t.Fatalf("add = %v, want the --when read-back failure", err)
+	err := applyAdd(d, model.TypeProject, "Launch", createdDest{}, "someday", func() error {
+		return things.AddProject(things.AddProjectParams{Title: "Launch", When: "someday"})
+	})
+	if err == nil {
+		t.Fatal("want a misfiled error")
 	}
-	var got unconfirmedAdd
-	if jerr := json.Unmarshal([]byte(out), &got); jerr != nil {
-		t.Fatalf("unmarshal %q: %v", out, jerr)
+	for _, want := range []string{"things --db /tmp/x.sqlite search Launch", "things --db /tmp/x.sqlite project edit new-p --when", "before adding it again"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not say %q", err, want)
+		}
 	}
-	want := unconfirmedAdd{Title: "Buy oat milk", Reason: "misfiled", UUID: "new-1", Landed: "in anytime with no start date"}
-	if got.Title != want.Title || got.Confirmed || got.Reason != want.Reason || got.UUID != want.UUID || got.Landed != want.Landed {
-		t.Errorf("stdout = %+v, want %+v", got, want)
+}
+
+// Within an hour of a daylight-saving change a time is not placed: how
+// Things reads the wall clock then was not measured.
+func TestPlaceWhenNearOffsetChange(t *testing.T) {
+	london, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		t.Skipf("no zone data: %v", err)
+	}
+	prev := time.Local
+	time.Local = london
+	t.Cleanup(func() { time.Local = prev })
+
+	// British Summer Time ends at 01:00 UTC on 25 Oct 2026.
+	change := time.Date(2026, 10, 25, 1, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		now  time.Time
+		want bool
+	}{
+		{change.Add(-30 * time.Minute), false},
+		{change.Add(50 * time.Minute), false},
+		{change.Add(-3 * time.Hour), true},
+		{change.Add(3 * time.Hour), true},
+	} {
+		if _, ok := placeWhen("12:30", tc.now); ok != tc.want {
+			t.Errorf("placeWhen(12:30) at %s: ok = %v, want %v", tc.now, ok, tc.want)
+		}
+	}
+	if _, ok := placeWhen("today", change); !ok {
+		t.Error("a keyword is placed whatever the clock")
 	}
 }

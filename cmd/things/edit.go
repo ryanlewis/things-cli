@@ -180,7 +180,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	switch {
 	case target.UUID != "" && found:
-		return !inList || headingMoves(database, task, target.UUID, heading)
+		return !inList || task.HeadingUUID != target.Heading
 	case target.UUID != "":
 		if c.Heading != nil {
 			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
@@ -203,15 +203,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will leave the to-do where it is\n", task.ProjectTitle, heading)
 		return false
 	}
-	return headingMoves(database, task, t.UUID, heading)
-}
-
-// headingMoves reports whether sending heading for project files the to-do
-// under a heading other than its own (see db.HeadingTarget). A database that
-// cannot be read counts as a move.
-func headingMoves(database *db.DB, task *model.Task, project, heading string) bool {
-	id, err := database.HeadingTarget(project, heading)
-	return err != nil || task.HeadingUUID != id
+	return task.HeadingUUID != t.Heading
 }
 
 // emptyID reports whether an id flag was given as blank.

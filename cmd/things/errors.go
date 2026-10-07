@@ -35,10 +35,12 @@ type jsonErrorPayload struct {
 	// spells it "to-do", which is the `import` payload's word (issue #219).
 	// The prose follows the same vocabulary: Message and the agent brief say
 	// "task" too, so a reader meets one word for one thing (issue #245).
-	Kind    string           `json:"kind,omitempty"`
-	Query   string           `json:"query,omitempty"`
-	UUID    string           `json:"uuid,omitempty"`
-	Title   string           `json:"title,omitempty"`
+	Kind  string `json:"kind,omitempty"`
+	Query string `json:"query,omitempty"`
+	UUID  string `json:"uuid,omitempty"`
+	Title string `json:"title,omitempty"`
+	// Landed is where Things filed an item --when did not file as sent.
+	Landed  string           `json:"landed,omitempty"`
 	Matches []jsonErrorMatch `json:"matches,omitempty"`
 	Items   []jsonErrorItem  `json:"items,omitempty"`
 	// Created is the verdict on every item a partially applied import
@@ -294,6 +296,16 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Query = wrongKind.Query
 		payload.UUID = wrongKind.UUID
 		payload.Title = wrongKind.Title
+		return payload
+	}
+
+	var misfiled *misfiledError
+	if errors.As(err, &misfiled) {
+		payload.Error = "misfiled"
+		payload.Kind = misfiled.kind
+		payload.UUID = misfiled.uuid
+		payload.Title = misfiled.title
+		payload.Landed = misfiled.landed
 		return payload
 	}
 
