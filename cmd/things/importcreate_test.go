@@ -1107,3 +1107,32 @@ func TestImportChecksCompletionDate(t *testing.T) {
 		})
 	}
 }
+
+// Things rejects the whole payload over a bad date on a heading or a
+// checklist item too, so the import refuses it before sending anything.
+func TestImportRefusesBadDateOnHeadingOrChecklistItem(t *testing.T) {
+	database := seedFullDB(t)
+	captured := stubExec(t)
+
+	payload := `[{"type":"project","attributes":{"title":"P","items":[
+	  {"type":"heading","attributes":{"title":"H","creation-date":"2026-10-05"}},
+	  {"type":"to-do","attributes":{"title":"T","checklist-items":[
+	    {"type":"checklist-item","attributes":{"title":"C","completed":true,"completion-date":"2026-10-05"}}
+	  ]}}
+	]}}]`
+	_, _, err := runImportOut(t, database, payload, "--no-verify")
+	if err == nil {
+		t.Fatal("expected the payload to be refused")
+	}
+	for _, want := range []string{
+		`[0].attributes.items[0] creation-date: "2026-10-05"`,
+		`[0].attributes.items[1].attributes.checklist-items[0] completion-date: "2026-10-05"`,
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error missing %q:\n%v", want, err)
+		}
+	}
+	if len(*captured) != 0 {
+		t.Errorf("payload was sent: %v", *captured)
+	}
+}

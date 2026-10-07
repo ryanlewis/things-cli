@@ -511,10 +511,11 @@ var importDateAttrs = []string{"creation-date", "completion-date"}
 
 // badImportDates returns each date attribute of item, a payload object, that
 // Things rejects the whole payload over (see creationDateShape), as
-// `name: value` with the value in JSON, and the attribute names. Only to-dos
-// and projects carry these dates.
+// `name: value` with the value in JSON, and the attribute names. Measured in
+// Things 3: a bad date on a heading or a checklist item rejects the payload
+// as one on a to-do or project does.
 func badImportDates(item map[string]any) (lines, names []string) {
-	if itemType, _ := item["type"].(string); !importTaskTypes[strings.TrimSpace(itemType)] {
+	if itemType, _ := item["type"].(string); !importDatedTypes[strings.TrimSpace(itemType)] {
 		return nil, nil
 	}
 	attrs, _ := item["attributes"].(map[string]any)
@@ -555,6 +556,10 @@ func badImportTypes(item map[string]any) (lines, names []string) {
 	}
 	return lines, names
 }
+
+// importDatedTypes are the payload item types that carry a creation-date or
+// completion-date.
+var importDatedTypes = map[string]bool{"to-do": true, "project": true, "heading": true, "checklist-item": true}
 
 // importTaskTypes are the payload item types that are to-dos or projects,
 // by the format's word for them.
