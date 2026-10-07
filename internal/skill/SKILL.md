@@ -68,13 +68,13 @@ On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries 
 
 ```json
 {"error": "import refused", "message": "...",
- "items": [{"path": "[0]", "id": "rep-1", "title": "Water plants", "blocked": ["when", "deadline"]}]}
+ "items": [{"path": "[0]", "id": "rep-1", "title": "Water plants", "blocked": ["when", "deadline"], "reason": "repeating"}]}
 {"error": "import partially applied", "message": "...",
  "items": [{"path": "[0]", "id": "one-1", "title": "Post letter", "wanted": "completed", "got": "open"},
            {"path": "[1]", "title": "Buy oat milk", "confirmed": false, "reason": "not-found"}]}
 ```
 
-The tokens differ because the recovery does. `import refused` sent nothing: fix the named items and re-run the whole payload. `import partially applied` already wrote: re-run with **only** the listed items, or the ones that landed get re-applied. `path` locates the item in the payload you sent (`[0]`, or `[2].attributes.items[0]` when nested in a project), `blocked` names the attributes Things will not accept, `wanted`/`got` are the status asked for versus the one still there (`got` is absent when the row could not be read), and `confirmed: false` with a `reason` marks a created item that was not confirmed (rule 3).
+The tokens differ because the recovery does. `import refused` sent nothing: fix the named items and re-run the whole payload. `import partially applied` already wrote: re-run with **only** the listed items, or the ones that landed get re-applied. `path` locates the item in the payload you sent (`[0]`, or `[2].attributes.items[0]` when nested in a project), `blocked` names the attributes Things will not accept and `reason` why (`repeating`, `invalid-date`, or both space-separated), `wanted`/`got` are the status asked for versus the one still there (`got` is absent when the row could not be read), and `confirmed: false` with a `reason` marks a created item that was not confirmed (rule 3).
 
 ## Writes: what Things refuses or drops
 

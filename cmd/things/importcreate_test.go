@@ -515,7 +515,7 @@ func TestImportRefusesCreationDateThingsRejects(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected the payload to be refused")
 	}
-	for _, want := range []string{`[1] creation-date: "2026-10-05"`, `[2].attributes.items[0] creation-date: "2026-10-05T10:30:00"`, `[3] completion-date: "2026-10-05"`, "Nothing was sent"} {
+	for _, want := range []string{`[1] creation-date: "2026-10-05"`, `[2].attributes.items[0] creation-date: "2026-10-05T10:30:00"`, `[3] (id t1) completion-date: "2026-10-05"`, "Nothing was sent"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error missing %q:\n%v", want, err)
 		}
@@ -550,6 +550,65 @@ func TestImportCreationDateRefusalWritesNothing(t *testing.T) {
 	it := findItem(t, p.Items, "[0]")
 	if it.Title != "Day only" || strings.Join(it.Blocked, ",") != "creation-date" {
 		t.Errorf("item = %+v, want Day only blocked [creation-date]", it)
+	}
+}
+
+// The date and repeating refusals are one: an item refused for both is one
+// entry naming every blocked attribute and both reasons, an update item
+// carries its id and the title the database has, and the item type is read
+// trimmed, as the rest of the import reads it.
+func TestImportRefusesDatesAndRepeatingTogether(t *testing.T) {
+	database, _ := seedWritable(t)
+	calls := stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","operation":"update","id":"rep-1","attributes":{"when":"today","creation-date":"2026-10-05"}},
+	  {"type":"to-do","operation":"update","id":"one-1","attributes":{"completion-date":"2026-10-05"}},
+	  {"type":" to-do ","attributes":{"title":"Padded","creation-date":"2026-10-05"}}
+	]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	if *calls != 0 {
+		t.Errorf("payload was sent (%d calls)", *calls)
+	}
+	p, raw := decodePayload(t, err)
+	if p.Error != "import refused" || len(p.Items) != 3 {
+		t.Fatalf("got %s, want import refused with 3 items", raw)
+	}
+	want := []jsonErrorItem{
+		{Path: "[0]", ID: "rep-1", Title: "Water plants", Blocked: []string{"when", "creation-date"}, Reason: "repeating invalid-date"},
+		{Path: "[1]", ID: "one-1", Title: "Post letter", Blocked: []string{"completion-date"}, Reason: "invalid-date"},
+		{Path: "[2]", Title: "Padded", Blocked: []string{"creation-date"}, Reason: "invalid-date"},
+	}
+	for i, w := range want {
+		got := p.Items[i]
+		if got.Path != w.Path || got.ID != w.ID || got.Title != w.Title || strings.Join(got.Blocked, ",") != strings.Join(w.Blocked, ",") || got.Reason != w.Reason {
+			t.Errorf("item %d = %+v, want %+v", i, got, w)
+		}
+	}
+	for _, want := range []string{
+		`[0] (id rep-1): "Water plants" is a repeating task — when`,
+		`[0] (id rep-1) creation-date: "2026-10-05"`,
+		`[1] (id one-1) completion-date: "2026-10-05"`,
+	} {
+		if !strings.Contains(p.Message, want) {
+			t.Errorf("message missing %q:\n%s", want, p.Message)
+		}
+	}
+}
+
+// With no rows to read, an undated item sharing a recent dated item's title
+// still fails the import as shares-dated-title rather than passing as
+// unreadable.
+func TestImportSharesDatedTitleWhenUnreadable(t *testing.T) {
+	database, _ := seedWritable(t)
+	d := &Deps{DB: database, Stdout: io.Discard, Stderr: io.Discard}
+	creates := []importCreate{
+		{path: "[0]", typ: model.TypeTask, title: "Weekly review", dated: true, datedAt: time.Now()},
+		{path: "[1]", typ: model.TypeTask, title: "Weekly review"},
+	}
+	got := readBackCreates(d, database, creates, createdSnapshot{since: time.Now()}, errors.New("database is locked"), time.Millisecond)
+	if got[1].Reason != "shares-dated-title" || !failsImport(got[1].Reason) {
+		t.Errorf("[1] = %+v, want shares-dated-title", got[1])
 	}
 }
 

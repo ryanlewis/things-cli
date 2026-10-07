@@ -136,27 +136,15 @@ func splitTagValues(values ...*string) []string {
 // `items`), so this walks the whole decoded tree.
 func importTags(payload []any) []string {
 	var names []string
-	walkImportTags(payload, &names)
-	return names
-}
-
-func walkImportTags(node any, names *[]string) {
-	switch v := node.(type) {
-	case map[string]any:
-		if attrs, ok := v["attributes"].(map[string]any); ok {
+	walkImportNode(payload, "", func(_ string, item map[string]any) {
+		if attrs, ok := item["attributes"].(map[string]any); ok {
 			// `add-tags` is the additive form used by `operation: update`
 			// items; it carries tag names just like `tags` does.
-			*names = append(*names, jsonTagValues(attrs["tags"])...)
-			*names = append(*names, jsonTagValues(attrs["add-tags"])...)
+			names = append(names, jsonTagValues(attrs["tags"])...)
+			names = append(names, jsonTagValues(attrs["add-tags"])...)
 		}
-		for _, child := range v {
-			walkImportTags(child, names)
-		}
-	case []any:
-		for _, child := range v {
-			walkImportTags(child, names)
-		}
-	}
+	})
+	return names
 }
 
 // jsonTagValues reads a tag attribute, which Things documents as an array of
