@@ -62,6 +62,14 @@ sub mask {
             $i += 2;
             next;
         }
+        if ($c eq '#' && ($i == 0 || substr($s, $i - 1, 1) =~ /[\s;&|(]/)) {
+            # A comment runs to end of line; an apostrophe in it opens no quote.
+            my $e = index($s, "\n", $i);
+            $e = $n if $e < 0;
+            $out .= 'x' x ($e - $i);
+            $i = $e;
+            next;
+        }
         if ($c eq '"' || $c eq "'") {
             $q = $c;
             $out .= $c;
