@@ -661,7 +661,8 @@ and time with seconds and a UTC offset, such as `2026-10-05T10:30:00Z` or
 `2026-10-05T10:30:00+02:00` (`+0200` and `+02` work too). Things rejects
 the whole payload over any other form, a date on its own or a time with no
 offset included, so `import` refuses it before anything is sent and names
-each item. A `null` creation-date is no date: Things saves the item as
+each item; under `--json` it is `import refused`, with `blocked` naming
+`creation-date` on each item. A `null` creation-date is no date: Things saves the item as
 created now.
 
 Every to-do and project the payload creates is read back too, the way

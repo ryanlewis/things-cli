@@ -274,6 +274,13 @@ func errorPayload(err error) jsonErrorPayload {
 		return payload
 	}
 
+	var badDates *importDateError
+	if errors.As(err, &badDates) {
+		payload.Error = "import refused"
+		payload.Items = badDates.jsonItems()
+		return payload
+	}
+
 	var unapplied *importVerifyError
 	if errors.As(err, &unapplied) {
 		payload.Error = "import partially applied"
