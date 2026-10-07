@@ -8,6 +8,9 @@
 #   - `git -C <path> commit` uses <path> (several -C options chain, as in git)
 #   - otherwise a leading `cd <path> &&` (or `;`) sets the directory
 #   - otherwise the session's working directory (`cwd` in the hook input)
+#
+# Text inside quotes or a heredoc body is data, not a command, so `echo "git
+# commit"` is left alone. (A `bash -c "git commit"` is therefore not seen.)
 use strict;
 use warnings;
 use JSON::PP;
@@ -30,6 +33,73 @@ sub resolve {
     return $p =~ m{^/} ? $p : "$base/$p";
 }
 
+# Copy of a command with quoted text and heredoc bodies blanked to 'x', same
+# length, so offsets in the copy are offsets in the original. Quote characters
+# stay, so a quoted path still looks like a path.
+sub mask {
+    my ($s) = @_;
+    my ($out, $q, @heredocs) = ('', '');
+    my ($i, $n) = (0, length $s);
+    while ($i < $n) {
+        my $c = substr($s, $i, 1);
+        if ($q) {
+            if ($c eq '\\' && $q eq '"' && $i + 1 < $n) {
+                $out .= 'xx';
+                $i += 2;
+                next;
+            }
+            if ($c eq $q) {
+                $q = '';
+                $out .= $c;
+            } else {
+                $out .= $c eq "\n" ? $c : 'x';
+            }
+            $i++;
+            next;
+        }
+        if ($c eq '\\' && $i + 1 < $n) {
+            $out .= substr($s, $i, 2);
+            $i += 2;
+            next;
+        }
+        if ($c eq '"' || $c eq "'") {
+            $q = $c;
+            $out .= $c;
+            $i++;
+            next;
+        }
+        if (substr($s, $i, 3) eq '<<<') {
+            $out .= '<<<';
+            $i += 3;
+            next;
+        }
+        if (substr($s, $i) =~ /^<<(-?)\s*(?:'(\w+)'|"(\w+)"|(\w+))/) {
+            push @heredocs, [$1, $2 // $3 // $4];
+            $out .= substr($s, $i, length $&);
+            $i += length $&;
+            next;
+        }
+        $out .= $c;
+        $i++;
+        next unless $c eq "\n" && @heredocs;
+        for my $h (@heredocs) {
+            my ($dash, $delim) = @$h;
+            while ($i < $n) {
+                my $e    = index($s, "\n", $i);
+                my $len  = ($e < 0 ? $n : $e) - $i;
+                my $line = substr($s, $i, $len);
+                $out .= 'x' x $len;
+                $i += $len;
+                $out .= "\n", $i++ if $i < $n;
+                $line =~ s/^\t+// if $dash;
+                last if $line eq $delim;
+            }
+        }
+        @heredocs = ();
+    }
+    return $out;
+}
+
 my $base = $cwd;
 $base = resolve($1, $cwd) if $cmd =~ /^\s*cd\s+$path\s*(?:&&|;)/;
 
@@ -38,8 +108,9 @@ $base = resolve($1, $cwd) if $cmd =~ /^\s*cd\s+$path\s*(?:&&|;)/;
 my $opt = qr/\s+-C\s+$path|\s+-c\s+\S+|\s+--[\w-]+(?:=\S+)?|\s+-[A-Za-z]+/;
 
 my @dirs;
-while ($cmd =~ /(?:^|[\s;&|(])git((?:$opt)*)\s+(add|commit|merge)(?=$|[\s;&|)])/g) {
-    my $opts = $1;
+my $masked = mask($cmd);
+while ($masked =~ /(?:^|[\s;&|(])git((?:$opt)*)\s+(add|commit|merge)(?=$|[\s;&|)])/g) {
+    my $opts = substr($cmd, $-[1], $+[1] - $-[1]);
     my $dir  = $base;
     while ($opts =~ /-C\s+$path/g) {
         $dir = resolve($1, $dir);
