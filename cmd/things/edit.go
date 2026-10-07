@@ -310,7 +310,16 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 			Reveal:       s.Reveal,
 		})
 	}
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), readWhen(database, task.UUID))
+	reads := readWhen(database, task.UUID)
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), reads)
+	var when *whenCheck
+	if f.When != nil && changed {
+		when = &whenCheck{value: *f.When}
+		if !s.Duplicate && !d.NoVerify && unmoved(task, time.Now(), reads.stored) {
+			when.before = task
+			when.whenOnly = !uncovered && f.onlyWhen()
+		}
+	}
 	if already {
 		if !changed && !s.Reveal {
 			noteAlreadyClosed(d, task)
@@ -318,7 +327,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 		}
 		fmt.Fprintf(d.errOut(), "note: %q is already %s; the status is left out of the edit\n", task.Title, task.Status)
 	}
-	return applyEdit(d, database, task, changed, checklist, want, s.Duplicate, f.When, update)
+	return applyEdit(d, database, task, changed, checklist, want, s.Duplicate, when, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
@@ -359,6 +368,13 @@ func (f *commonEditFlags) covered() coveredFields {
 // waiting for one would end in a false "did not apply" after the full budget.
 type coveredFields struct {
 	title, notes, prependNotes, appendNotes, when, deadline, tags, addTags *string
+}
+
+// onlyWhen reports whether --when is the one covered flag given.
+func (f *commonEditFlags) onlyWhen() bool {
+	c := f.covered()
+	c.when = nil
+	return f.When != nil && !c.set()
 }
 
 // set reports whether any covered flag was given.

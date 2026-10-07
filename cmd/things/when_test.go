@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -284,29 +285,103 @@ func TestPlaceWhenNearOffsetChange(t *testing.T) {
 	}
 }
 
-// An edit with --when today on a row Things has not moved for days, which
-// Things is taken to leave on its date (see unmovedKeeps), passes the
-// read-back once the rest of the edit lands, rather than failing as
-// misfiled. A row Things has moved gets no such allowance.
-func TestEditReadBackKeepsUnmovedRow(t *testing.T) {
-	old := strconv.Itoa(int(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -3))))
-	for _, tc := range []struct {
-		name  string
-		start int
-		ok    bool
-	}{{"unmoved", 2, true}, {"moved", 1, false}} {
-		t.Run(tc.name, func(t *testing.T) {
-			fastVerify(t)
-			database, sqlDB := seedWritable(t)
-			if _, err := sqlDB.Exec(`UPDATE TMTask SET start = ?, startDate = `+old+`, startBucket = 0 WHERE uuid = 'one-1'`, tc.start); err != nil {
-				t.Fatal(err)
-			}
-			stubExecEditing(t, sqlDB, `UPDATE TMTask SET title = 'Post parcel' WHERE uuid = 'one-1'`)
+// On a row Things has not moved into today yet, the cases not measured
+// (unmovedKeeps) are sent and read back, and the read-back accepts either
+// outcome: Things moving the row where --when puts it, or leaving it with
+// nothing recorded, once the budget runs out. The edit never prints the row
+// before Things has had the write.
+func TestEditUnmovedRowAcceptsEitherOutcome(t *testing.T) {
+	now := time.Now()
+	today := int(model.ThingsDateFromTime(now))
+	old := int(model.ThingsDateFromTime(now.AddDate(0, 0, -3)))
+	past := now.AddDate(0, 0, -1).Format("2006-01-02")
+	type row struct {
+		typ      model.TaskType
+		date     int
+		bucket   int
+		reminder any
+	}
+	rows := map[string]row{
+		"reminder": {model.TypeTask, today, 0, 1207959552},
+		"old":      {model.TypeTask, old, 0, nil},
+		"evening":  {model.TypeTask, today, 1, nil},
+		"project":  {model.TypeProject, today, 0, nil},
+		"today":    {model.TypeTask, today, 0, nil},
+	}
+	cases := []struct {
+		row, value string
+		bucket     int // the part of the day the value moves the row to
+	}{
+		{"reminder", "today", 0},
+		{"reminder", now.Format("2006-01-02"), 0},
+		{"old", "today", 0},
+		{"old", past, 0},
+		{"evening", "today", 0},
+		{"evening", "evening", 1},
+		{"project", "today", 0},
+		{"today", past, 0},
+	}
+	for _, tc := range cases {
+		for _, moves := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s %s moves=%v", tc.row, tc.value, moves), func(t *testing.T) {
+				fastVerify(t)
+				database, sqlDB := seedWritable(t)
+				r := rows[tc.row]
+				if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket, reminderTime) VALUES ('un-1', 'Not moved', ?, 0, 0, 2, ?, ?, ?)`,
+					int(r.typ), r.date, r.bucket, r.reminder); err != nil {
+					t.Fatal(err)
+				}
+				var calls *int
+				if moves {
+					calls = stubExecEditing(t, sqlDB, fmt.Sprintf(`UPDATE TMTask SET start = 1, startDate = %d, startBucket = %d, reminderTime = NULL WHERE uuid = 'un-1'`, today, tc.bucket))
+				} else {
+					calls = stubExecDropping(t)
+				}
+				cmd := []string{"--json", "edit", "un-1", "--when", tc.value}
+				if r.typ == model.TypeProject {
+					cmd = []string{"--json", "project", "edit", "un-1", "--when", tc.value}
+				}
 
-			_, err := runOut(t, database, "edit", "one-1", "--when", "today", "--title", "Post parcel")
-			if tc.ok != (err == nil) {
-				t.Fatalf("edit = %v, want ok %v", err, tc.ok)
-			}
-		})
+				out, err := runOut(t, database, cmd...)
+				if err != nil {
+					t.Fatalf("%v: %v", cmd, err)
+				}
+				if *calls != 1 {
+					t.Errorf("issued %d writes, want one", *calls)
+				}
+				var got model.Task
+				if err := json.Unmarshal([]byte(out), &got); err != nil {
+					t.Fatalf("unmarshal %q: %v", out, err)
+				}
+				wantDate := model.ThingsDate(r.date)
+				if moves {
+					wantDate = model.ThingsDate(today)
+				}
+				if got.StartDate == nil || *got.StartDate != wantDate {
+					t.Errorf("printed start date %v, want %v", got.StartDate, wantDate)
+				}
+			})
+		}
+	}
+}
+
+// With another field in the edit, an unmoved row left where it was still
+// needs the rest of the edit recorded: nothing recorded at all is a dropped
+// edit.
+func TestEditUnmovedRowWithOtherFieldsNeedsAChange(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	old := int(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -3)))
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET start = 2, startDate = ?, startBucket = 0 WHERE uuid = 'one-1'`, old); err != nil {
+		t.Fatal(err)
+	}
+	stubExecDropping(t)
+	if _, err := runOut(t, database, "edit", "one-1", "--when", "today", "--title", "Post parcel"); err == nil || !strings.Contains(err.Error(), "did not apply") {
+		t.Fatalf("edit = %v, want a dropped-edit error", err)
+	}
+
+	stubExecEditing(t, sqlDB, `UPDATE TMTask SET title = 'Post parcel' WHERE uuid = 'one-1'`)
+	if _, err := runOut(t, database, "edit", "one-1", "--when", "today", "--title", "Post parcel"); err != nil {
+		t.Fatalf("edit with the title recorded and the row kept: %v", err)
 	}
 }

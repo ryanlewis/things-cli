@@ -255,6 +255,9 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 					observed: true,
 				}
 				continue
+			case expired && current.Status == w.want && !applied && w.when.keptQuietly(current, now):
+				results[i].task = current
+				continue
 			case expired && current.Status == w.want:
 				// Only an edit can get here: the status is right but the
 				// modification date never moved.
@@ -320,9 +323,9 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 // checklist says whether the edit changes the checklist. The checklist is
 // read before the write so the read-back can see it change; if that read
 // fails, the read-back waits for the modification date alone. when is the
-// --when value, nil for none; a read-back also waits for the item to be filed
-// where it says (whenCheck).
-func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bool, want model.Status, duplicate bool, when *string, update func() error) error {
+// --when check, nil for none; a read-back also waits for the item to be filed
+// where it says (whenCheck). Its send time is set here.
+func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bool, want model.Status, duplicate bool, when *whenCheck, update func() error) error {
 	var before []model.ChecklistItem
 	watchChecklist := false
 	if checklist && changed && !duplicate && !d.NoVerify {
@@ -330,12 +333,8 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 		before, err = database.GetChecklistItems(task.UUID)
 		watchChecklist = err == nil
 	}
-	var whenSent *whenCheck
-	if when != nil && changed {
-		whenSent = &whenCheck{value: *when, sent: time.Now()}
-		if !duplicate && !d.NoVerify && unmoved(task, whenSent.sent, func() (model.Start, error) { return database.StoredStart(task.UUID) }) {
-			whenSent.before = task
-		}
+	if when != nil {
+		when.sent = time.Now()
 	}
 	if err := update(); err != nil {
 		return err
@@ -350,7 +349,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 	current := task
 	if changed || want != task.Status {
 		res := verifyStatuses(database, []statusWant{{
-			uuid: task.UUID, title: task.Title, want: want, edit: changed, since: task.ModificationDate, when: whenSent,
+			uuid: task.UUID, title: task.Title, want: want, edit: changed, since: task.ModificationDate, when: when,
 			watchChecklist: watchChecklist, checklist: before,
 		}}, d.readBackTimeout())[0]
 		if res.err != nil {
