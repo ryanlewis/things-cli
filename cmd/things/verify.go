@@ -276,22 +276,22 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 // applyEdit runs an `edit` / `project edit` update, waits for it to land, and
 // prints the item as Things now holds it — the same output `things show`
 // gives, so a caller has its confirmation without a second command. changed
-// says whether the edit asked for anything beyond the status; complete and
-// cancel ask for a status transition.
+// says whether the edit asked for anything beyond the status; want is the
+// status it asks for, the item's own when it asks for none.
 //
 // The read-back is skipped, and the output says the edit is unconfirmed, in
 // two cases: --no-verify, and --duplicate, where Things applies the edit to a
 // new copy whose uuid the CLI never learns while the original is expected to
 // stay as it was. An edit that asks for nothing new (no field flags, or only
-// values the item certainly has already — see coveredFields — and no status;
-// runEdit drops a status the item already has) has nothing to wait for; the
-// item is printed as it stands. A status-only edit waits for the status
-// alone, the same check `complete` and `cancel` make.
+// values the item certainly has already — see coveredFields — and want the
+// item's own status) has nothing to wait for; the item is printed as it
+// stands. A status-only edit waits for the status alone, the same check
+// `complete` and `cancel` make.
 //
 // checklist says whether the edit changes the checklist. The checklist is
 // read before the write so the read-back can see it change; if that read
 // fails, the read-back waits for the modification date alone.
-func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist, complete, cancel, duplicate bool, update func() error) error {
+func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bool, want model.Status, duplicate bool, update func() error) error {
 	var before []model.ChecklistItem
 	watchChecklist := false
 	if checklist && changed && !duplicate && !d.NoVerify {
@@ -309,13 +309,6 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist, c
 		return printUnconfirmedEdit(d, task, "no-verify", "Sent to Things, not confirmed (--no-verify)")
 	}
 
-	want := task.Status
-	switch {
-	case complete:
-		want = model.StatusCompleted
-	case cancel:
-		want = model.StatusCancelled
-	}
 	current := task
 	if changed || want != task.Status {
 		res := verifyStatuses(database, []statusWant{{

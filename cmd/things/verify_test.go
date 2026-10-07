@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -274,7 +276,7 @@ func TestEditStatusOnClosedItemSendsNothing(t *testing.T) {
 func TestEditCompleteOnCompletedSendsOtherEdits(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	if _, err := sqlDB.Exec(`UPDATE TMTask SET status = 3 WHERE uuid = 'one-1'`); err != nil {
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = 'one-1'`, int(model.StatusCompleted)); err != nil {
 		t.Fatal(err)
 	}
 	var sent []string
@@ -320,6 +322,86 @@ func TestEditCompleteOnCompletedStillReveals(t *testing.T) {
 	}
 	if len(sent) != 1 || !strings.Contains(sent[0], "reveal=true") || strings.Contains(sent[0], "completed") {
 		t.Errorf("sent %q, want one write with reveal and no status", sent)
+	}
+}
+
+// On an item already completed, --complete with a title it already has
+// changes nothing, so nothing is sent and the item is printed once: one
+// object under --json.
+func TestEditCompleteOnCompletedWithSameTitleSendsNothing(t *testing.T) {
+	for _, asJSON := range []bool{false, true} {
+		t.Run(fmt.Sprintf("json=%v", asJSON), func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = 'one-1'`, int(model.StatusCompleted)); err != nil {
+				t.Fatal(err)
+			}
+			calls := stubExecDropping(t)
+
+			args := []string{"edit", "one-1", "--complete", "--title", "Post letter"}
+			if asJSON {
+				args = append([]string{"--json"}, args...)
+			}
+			stdout, stderr, err := runStreams(t, database, args...)
+			if err != nil {
+				t.Fatalf("edit: %v", err)
+			}
+			if *calls != 0 {
+				t.Errorf("issued %d write(s), want none", *calls)
+			}
+			if !strings.Contains(stderr, "nothing sent") {
+				t.Errorf("stderr = %q, want a note saying nothing was sent", stderr)
+			}
+			if !asJSON {
+				if n := strings.Count(stdout, "Post letter"); n != 1 {
+					t.Errorf("item printed %d times, want once:\n%s", n, stdout)
+				}
+				return
+			}
+			dec := json.NewDecoder(strings.NewReader(stdout))
+			var task model.Task
+			if err := dec.Decode(&task); err != nil || task.UUID != "one-1" {
+				t.Fatalf("decode %q: %v (uuid %q)", stdout, err, task.UUID)
+			}
+			if dec.More() {
+				t.Errorf("more than one JSON value in %q", stdout)
+			}
+		})
+	}
+}
+
+// --duplicate leaves the item as it is and edits a copy Things makes with the
+// item's status, so the guard does not apply: --cancel on a completed item
+// sends the status, for a cancelled copy.
+func TestEditDuplicateSkipsClosedGuard(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = 'one-1'`, int(model.StatusCompleted)); err != nil {
+		t.Fatal(err)
+	}
+	sent := stubExec(t)
+
+	if err := runWith(t, database, "edit", "one-1", "--duplicate", "--cancel"); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	got := strings.Join(*sent, " ")
+	if !strings.Contains(got, "duplicate=true") || !strings.Contains(got, "canceled=true") {
+		t.Errorf("sent %q, want duplicate and canceled", got)
+	}
+}
+
+// A status the CLI does not know is not treated as closed: the edit goes
+// ahead as it did before the guard.
+func TestEditUnknownStatusPassesClosedGuard(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET status = 1 WHERE uuid = 'one-1'`); err != nil {
+		t.Fatal(err)
+	}
+	stubExecApplying(t, sqlDB, "one-1", int(model.StatusCompleted))
+
+	if err := runWith(t, database, "edit", "one-1", "--complete"); err != nil {
+		t.Fatalf("edit: %v", err)
 	}
 }
 
