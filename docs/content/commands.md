@@ -532,15 +532,17 @@ is. It then prints the item straight away. Any other re-set value, such as
 a `--when` with a time or an English phrase, still waits and reports the
 same error, so on that error check the item with `things show` before
 retrying.
-An edit with nothing to change (no field flags) prints the item without
-waiting.
+An edit with no field flags and no status to change prints the item
+without waiting. `--complete` or `--cancel` on an open item waits for the
+status, as `things complete` and `things cancel` do.
 
 `--complete` and `--cancel` follow the same rule as `things complete` and
 `things cancel`. On an item already in that state, the status is left out
 and the rest of the edit is handled as above, with a note. When nothing
-else would change the item and there is no `--duplicate` or `--reveal`,
-nothing is sent and the item is printed. Completing a cancelled item, or
-cancelling a completed one, refuses the whole edit and sends nothing.
+else would change the item and there is no `--reveal`, nothing is sent and
+the item is printed. Completing a cancelled item, or cancelling a completed
+one, refuses the whole edit and sends nothing. With `--duplicate` the status
+is sent as asked, since it applies to the copy and the item stays as it is.
 
 Two cases are not read back, and say so instead of printing the item:
 
