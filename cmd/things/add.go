@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -33,9 +32,9 @@ func (c *AddCmd) Run(d *Deps) error {
 	}
 	// Things matches list by title only; a uuid has to go as list-id.
 	var listID string
-	id, dest := resolveAddTarget(d, list, c.Heading)
-	if id != "" && id == strings.TrimSpace(list) {
-		list, listID = "", id
+	target, dest := resolveAddTarget(d, list, c.Heading)
+	if target.ByUUID {
+		list, listID = "", target.UUID
 	}
 	return applyAdd(d, model.TypeTask, c.Title, dest, func() error {
 		return things.AddTask(things.AddParams{
@@ -59,46 +58,61 @@ func (c *AddCmd) Run(d *Deps) error {
 // goes ahead. dest is where Things will file it, for the read-back; it checks
 // nothing when the database cannot be read. A database that cannot be read
 // gives no warning here: the tag check or the read-back reports that.
-func resolveAddTarget(d *Deps, list, heading string) (string, createdDest) {
+func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 	if list == "" {
 		if heading != "" {
 			fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list or --project; Things will ignore it and put the to-do in the Inbox\n", heading)
 		}
-		return "", createdDest{checked: true}
+		return db.Target{}, createdDest{checked: true}
 	}
 	database, err := d.Database()
 	if err != nil {
-		return "", createdDest{}
+		return db.Target{}, createdDest{}
 	}
 	target, headingFound, err := database.AddTarget(list, heading)
 	switch {
 	case err != nil:
-		return "", createdDest{}
+		return db.Target{}, createdDest{}
 	case target.UUID == "":
 		fmt.Fprintf(d.errOut(), "warning: Things finds no project or area called %q; it will put the to-do in the Inbox\n", list)
-		return "", createdDest{checked: true}
+		return target, createdDest{checked: true}
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
 	}
-	noteTarget(d, list, "lists", target, true)
-	return target.UUID, addDest(target.UUID, heading, headingFound)
+	noteTarget(d, list, "lists", target)
+	return target, addDest(target.UUID, heading, headingFound)
 }
 
 // noteTarget says on stderr when Things will file into a list the user may
 // not expect, though it is where ref leads: one of several kind ("lists" or
 // "areas") that share the title ref gives, or a closed or trashed project.
-// filing is false when the item is already there, so nothing will reopen.
-func noteTarget(d *Deps, ref, kind string, t db.Target, filing bool) {
-	if t.Others > 0 {
+// Callers give it only for a write that files the item somewhere new.
+// Measured in Things 3: add and update file into a closed project, logged
+// or not, and reopen it, and into a trashed one, which stays in the Trash.
+func noteTarget(d *Deps, ref, kind string, t db.Target) {
+	switch {
+	case t.Others == 0:
+	case !t.Area && t.OtherAreas > 0:
+		fmt.Fprintf(d.errOut(), "note: several lists are called %q (%s and %s); Things will use the project %q (%s); pass a UUID to choose\n",
+			ref, count(t.Others-t.OtherAreas+1, "a project", "projects"), count(t.OtherAreas, "an area", "areas"), t.Title, t.UUID)
+	default:
 		fmt.Fprintf(d.errOut(), "note: several %s are called %q; Things will use %q (%s); pass a UUID to choose\n", kind, ref, t.Title, t.UUID)
 	}
 	switch {
-	case !filing || t.Area:
+	case t.Area:
 	case t.Trashed:
 		fmt.Fprintf(d.errOut(), "note: %q is in the Trash; Things will file into it there\n", t.Title)
 	case t.Status == model.StatusCompleted || t.Status == model.StatusCancelled:
 		fmt.Fprintf(d.errOut(), "note: %q is %s; Things will file into it and reopen it\n", t.Title, t.Status)
 	}
+}
+
+// count is one when n is 1 and many otherwise.
+func count(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // addDest is where Things files a to-do sent to list, which AddTarget

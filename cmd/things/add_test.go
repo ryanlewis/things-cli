@@ -813,6 +813,12 @@ func TestListTargetNotes(t *testing.T) {
 			`note: several areas are called "personal"; Things will use "Personal" (area-1)`},
 		{"projectEditShared", []string{"project", "edit", "repproj-1", "--area", "personal"},
 			`note: several areas are called "personal"; Things will use "Personal" (area-1)`},
+		{"addProjectAndArea", []string{"add", "Buy oat milk", "--list", "ERRANDS"},
+			`note: several lists are called "ERRANDS" (a project and an area); Things will use the project "Errands" (proj-errands); pass a UUID to choose`},
+		// A move to where the item already is files it nowhere new, so it
+		// gets no note.
+		{"editSharedInPlace", []string{"edit", "in-area-1", "--list", "personal"}, ""},
+		{"projectEditSharedInPlace", []string{"project", "edit", "proj-in-area-1", "--area", "personal"}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -822,9 +828,19 @@ func TestListTargetNotes(t *testing.T) {
 			fx.Area("area-3", "personal", 3)
 			fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(time.Now())))
 			fx.Project("proj-bin", "Binned", 6, dbtest.Trashed())
+			fx.Project("proj-errands", "Errands", 7)
+			fx.Area("0-errands", "errands", 4)
+			fx.Todo("in-area-1", "Sweep", 8, dbtest.Anytime(), dbtest.InArea("area-1"))
+			fx.Project("proj-in-area-1", "Garden", 9, dbtest.InArea("area-1"))
 			stubExecDropping(t)
 
 			_, stderr, _ := runStreams(t, database, append([]string{"--no-verify"}, tc.args...)...)
+			if tc.want == "" {
+				if strings.Contains(stderr, "note: ") {
+					t.Errorf("stderr = %q, want no note", stderr)
+				}
+				return
+			}
 			if !strings.Contains(stderr, tc.want) {
 				t.Errorf("stderr = %q, want %q", stderr, tc.want)
 			}

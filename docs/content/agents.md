@@ -458,8 +458,9 @@ instead of assuming:
 - **Lists, headings and areas must match.** Things files or moves an item
   only when `--list`, `--heading` or `--area` matches a project Things
   shows (open, or closed but not yet logged, which it reopens), an area or
-  a heading, ignoring case but not surrounding space. When several projects
-  or areas match, Things takes the one whose UUID sorts first, and the CLI
+  a heading, ignoring case but not surrounding space. A project wins over an
+  area of the same title; when several projects, or several areas, match,
+  Things takes the one whose UUID sorts first, and the CLI
   notes which on stderr; pass a UUID to choose. A project or area
   title also matches across compatibility forms (fullwidth `Ｗork` is
   `Work`). Otherwise it drops

@@ -696,6 +696,11 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inProj2}}, []string{"mine"}},
 		{"inbox", `[{"type":"to-do","attributes":{"title":"Buy oat milk"}}]`,
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found"}},
+		// Things takes area by title only and does not trim it, so a padded
+		// uuid there is no area Things matches; it is left unchecked, as a
+		// uuid given as list is.
+		{"paddedUUIDAsArea", `[{"type":"project","attributes":{"title":"Launch","area":" area-1 "}}]`,
+			[]createdRow{{uuid: "mine", title: "Launch", typ: model.TypeProject}}, []string{"mine"}},
 		{"projectArea", `[{"type":"project","attributes":{"title":"Launch","area":"errands"}}]`,
 			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: inArea1}, {uuid: "mine", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}}, []string{"mine"}},
 		{"nestedInUpdate", `[{"type":"project","operation":"update","id":"proj-2","attributes":{"items":[{"type":"to-do","attributes":{"title":"Buy oat milk"}}]}}]`,

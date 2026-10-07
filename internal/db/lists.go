@@ -20,9 +20,15 @@ type Target struct {
 	// project too, and reopens it, and into a trashed one by uuid.
 	Status  model.Status
 	Trashed bool
+	// ByUUID is true when the reference was the row's uuid, sent trimmed,
+	// rather than its title. Things takes list-id and area-id by uuid only,
+	// and list and area by title only.
+	ByUUID bool
 	// Others counts the other rows the title matched as well, which Things
-	// passed over. It is 0 for a uuid.
-	Others int
+	// passed over, and OtherAreas how many of them are areas: when a project
+	// and an area share a title, Things takes the project. Both are 0 for a
+	// uuid.
+	Others, OtherAreas int
 }
 
 // AddTarget reports where things:///add would file a to-do given list and
@@ -69,8 +75,16 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 		return Target{}, false, fmt.Errorf("finding project: %w", err)
 	}
 	target.Trashed = trashed != 0
-	if target.UUID == id {
+	if target.ByUUID = target.UUID == id; target.ByUUID {
 		target.Others = 0
+	} else {
+		// Measured in Things 3: a project wins over an area of the same
+		// title, whichever uuid sorts first.
+		if err := d.db.QueryRow(`SELECT COUNT(*) FROM TMArea WHERE fold_name(title) = ?`, FoldName(list)).
+			Scan(&target.OtherAreas); err != nil {
+			return Target{}, false, fmt.Errorf("finding area: %w", err)
+		}
+		target.Others += target.OtherAreas
 	}
 	if heading == "" {
 		return target, false, nil
@@ -102,9 +116,10 @@ func (d *DB) AreaTarget(area string) (Target, error) {
 	case err != nil:
 		return Target{}, fmt.Errorf("finding area: %w", err)
 	}
-	if t.UUID == id {
+	if t.ByUUID = t.UUID == id; t.ByUUID {
 		t.Others = 0
 	}
+	t.OtherAreas = t.Others
 	return t, nil
 }
 

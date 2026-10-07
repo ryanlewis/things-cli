@@ -141,8 +141,8 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	if c.Heading != nil && task.ProjectUUID != "" {
 		next = fmt.Sprintf("it will look for --heading %q in the to-do's own project", heading)
 	}
-	list, target, found := "", "", false
-	var resolved db.Target
+	list, found := "", false
+	var target db.Target
 	switch {
 	case c.List != nil:
 		list = *c.List
@@ -152,12 +152,12 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 			return true
 		case t.UUID == "":
 			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area called %q; %s\n", list, next)
-		case t.UUID == strings.TrimSpace(list):
+		case t.ByUUID:
 			id := t.UUID
 			c.List, c.ListID = nil, &id
 			fallthrough
 		default:
-			resolved, target, found = t, t.UUID, f
+			target, found = t, f
 		}
 	case c.ListID != nil:
 		list = *c.ListID
@@ -165,24 +165,26 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		switch {
 		case err != nil:
 			return true
-		case t.UUID != strings.TrimSpace(list):
+		case !t.ByUUID:
 			// AddTarget also matches a title, which list-id does not.
 			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area with id %q; %s\n", list, next)
 		default:
-			resolved, target, found = t, t.UUID, f
+			target, found = t, f
 		}
 	}
-	if target != "" {
-		noteTarget(d, list, "lists", resolved, task.ProjectUUID != target)
+	// inList is whether the to-do is in the target list already, so a move
+	// changes at most its heading, and Things files it nowhere new.
+	inList := task.ProjectUUID == target.UUID || task.ProjectUUID == "" && task.AreaUUID == target.UUID
+	if target.UUID != "" && !inList {
+		noteTarget(d, list, "lists", target)
 	}
 	switch {
-	case target != "" && found:
-		return task.ProjectUUID != target || db.FoldCase(task.HeadingTitle) != db.FoldCase(heading)
-	case target != "":
+	case target.UUID != "" && found:
+		return !inList || db.FoldCase(task.HeadingTitle) != db.FoldCase(heading)
+	case target.UUID != "":
 		if c.Heading != nil {
 			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
 		}
-		inList := task.ProjectUUID == target || task.ProjectUUID == "" && task.AreaUUID == target
 		return task.HeadingUUID != "" || !inList
 	case c.Heading == nil:
 		return false

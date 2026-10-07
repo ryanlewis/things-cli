@@ -173,6 +173,8 @@ func TestAddTargetReportsTarget(t *testing.T) {
 	fx.Project("D-bin", "Bin", 4, dbtest.Trashed())
 	fx.Area("A-home", "Home", 1)
 	fx.Area("B-home", "HOME", 2)
+	fx.Project("Z-errands", "errands", 5)
+	fx.Area("0-errands", "Errands", 3)
 	d := &DB{db: sqlDB}
 
 	for _, tc := range []struct {
@@ -180,10 +182,14 @@ func TestAddTargetReportsTarget(t *testing.T) {
 		want Target
 	}{
 		{"work", Target{UUID: "A-work", Title: "Work", Status: model.StatusCompleted, Others: 2}},
-		{"B-work", Target{UUID: "B-work", Title: "WORK"}},
-		{"D-bin", Target{UUID: "D-bin", Title: "Bin", Trashed: true}},
-		{"home", Target{UUID: "A-home", Title: "Home", Area: true, Others: 1}},
-		{"B-home", Target{UUID: "B-home", Title: "HOME", Area: true}},
+		{"B-work", Target{UUID: "B-work", Title: "WORK", ByUUID: true}},
+		{"D-bin", Target{UUID: "D-bin", Title: "Bin", Trashed: true, ByUUID: true}},
+		{" D-bin ", Target{UUID: "D-bin", Title: "Bin", Trashed: true, ByUUID: true}},
+		{"home", Target{UUID: "A-home", Title: "Home", Area: true, Others: 1, OtherAreas: 1}},
+		{"B-home", Target{UUID: "B-home", Title: "HOME", Area: true, ByUUID: true}},
+		// Measured in Things 3: a project wins over an area of the same
+		// title, even when the area's uuid sorts first.
+		{"ERRANDS", Target{UUID: "Z-errands", Title: "errands", Others: 1, OtherAreas: 1}},
 	} {
 		got, _, err := d.AddTarget(tc.list, "")
 		if err != nil {

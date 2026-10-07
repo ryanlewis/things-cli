@@ -35,12 +35,15 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	target, read := projectArea(d, area, "it will create the project with no area")
 	// Where Things will file the project, for the read-back: the area the
 	// title or uuid leads to, or none when it leads nowhere.
-	dest := createdDest{checked: true, list: target}
+	dest := createdDest{checked: true, list: target.UUID}
 	switch {
 	case !read:
 		dest = createdDest{}
-	case target != "" && target == strings.TrimSpace(area):
-		area, areaID = "", target
+	case target.ByUUID:
+		area, areaID = "", target.UUID
+	}
+	if target.UUID != "" {
+		noteTarget(d, area, "areas", target)
 	}
 	return applyAdd(d, model.TypeProject, c.Title, dest, func() error {
 		return things.AddProject(things.AddProjectParams{
@@ -63,16 +66,15 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 // but not surrounding space, and when nothing matches it goes ahead without
 // the area and without reporting it: add creates the project with no area,
 // and update leaves it where it is. fallback says which, for the warning. It
-// notes when several areas share the title. read is false when the database
-// cannot be read, which gives no warning here: the read-back reports that.
-// An empty area returns "", true.
-func projectArea(d *Deps, area, fallback string) (target string, read bool) {
+// read is false when the database cannot be read, which gives no warning
+// here: the read-back reports that. An empty area matches nothing.
+func projectArea(d *Deps, area, fallback string) (target db.Target, read bool) {
 	if area == "" {
-		return "", true
+		return db.Target{}, true
 	}
 	database, err := d.Database()
 	if err != nil {
-		return "", false
+		return db.Target{}, false
 	}
 	// Not FindAreaUUID: it ignores surrounding space, and Things does not.
 	// Checked in Things 3 with " Personal " against an area called Personal,
@@ -80,13 +82,11 @@ func projectArea(d *Deps, area, fallback string) (target string, read bool) {
 	t, err := database.AreaTarget(area)
 	switch {
 	case err != nil:
-		return "", false
+		return db.Target{}, false
 	case t.UUID == "":
 		fmt.Fprintf(d.errOut(), "warning: Things has no area called %q; %s\n", area, fallback)
-	default:
-		noteTarget(d, area, "areas", t, true)
 	}
-	return t.UUID, true
+	return t, true
 }
 
 type ProjectEditCmd struct {
@@ -123,11 +123,23 @@ func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bo
 	case c.Area == nil || c.AreaID != nil:
 		return anySet(c.Area, c.AreaID)
 	}
-	target, read := projectArea(d, *c.Area, "the project will stay where it is")
-	if target != "" && target == strings.TrimSpace(*c.Area) {
-		c.Area, c.AreaID = nil, &target
+	if *c.Area == "" {
+		// What Things does with an empty area was not checked.
+		return true
 	}
-	return !read || target != "" && target != task.AreaUUID
+	target, read := projectArea(d, *c.Area, "the project will stay where it is")
+	if !read {
+		return true
+	}
+	moves := target.UUID != "" && target.UUID != task.AreaUUID
+	if moves {
+		noteTarget(d, *c.Area, "areas", target)
+	}
+	if target.ByUUID {
+		id := target.UUID
+		c.Area, c.AreaID = nil, &id
+	}
+	return moves
 }
 
 // checkAreaID warns when Things has no area with the uuid --area-id gives,
@@ -142,14 +154,12 @@ func (c *ProjectEditCmd) checkAreaID(d *Deps, database *db.DB, task *model.Task)
 	case task.AreaUUID:
 		return false
 	}
-	areas, err := database.ListAreas()
-	if err != nil {
+	t, err := database.AreaTarget(id)
+	switch {
+	case err != nil:
 		return true
-	}
-	for _, a := range areas {
-		if a.UUID == id {
-			return true
-		}
+	case t.ByUUID:
+		return true
 	}
 	fmt.Fprintf(d.errOut(), "warning: Things has no area with id %q; the project will stay where it is\n", *c.AreaID)
 	return false
