@@ -111,6 +111,11 @@ type importTo struct {
 	// the payload gives each one at all matters. A null one counts as not
 	// given, as it does to Things.
 	hasListID, hasHeadingID, hasAreaID bool
+	// listInPayload is set when list is the title of a project the payload
+	// creates or renames before this item, and headingInPayload when heading
+	// is the title of a heading it creates before this item: Things may file
+	// the to-do there, which the database does not have yet.
+	listInPayload, headingInPayload bool
 }
 
 // datedSlack widens the read-back window for a dated item's creation-date,
@@ -175,13 +180,14 @@ func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest
 // one. Next a list-id wins over list, even an empty or unknown one, which
 // puts the to-do in the Inbox; a known one is filed into whatever its state
 // (see db.AddTarget). A list title goes to the list AddTarget finds; one a
-// project created earlier in the payload carries may be either, so any list
-// with that title fits. A title that matches nothing, a uuid given as list
-// among them, puts it in the Inbox, and a heading the list does not have is
-// left out. A project's area-id likewise wins over area, and an empty or
-// unknown area-id or area leaves it in no area. Things does not trim an id,
-// so one with surrounding space matches nothing. A list that cannot be read
-// is left unchecked.
+// project the payload creates or renames earlier carries may be either, so
+// any list with that title fits. A title that matches nothing, a uuid given
+// as list among them, puts it in the Inbox. A heading the list does not have
+// is left out, unless the payload creates a heading with that title earlier,
+// which it may be. A project's area-id likewise wins over area, and an empty
+// or unknown area-id or area leaves it in no area. Things does not trim an
+// id, so one with surrounding space matches nothing. A list that cannot be
+// read is left unchecked.
 func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 	warn := func(c importCreate, format string, args ...any) {
 		fmt.Fprintf(d.errOut(), "warning: %s: "+format+"\n", append([]any{c.path}, args...)...)
@@ -223,15 +229,11 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 		err            error
 	}
 	headings := map[string]headingRes{}
-	// created holds the folded titles of the projects the payload creates
-	// before the item being resolved, in payload order.
-	created := map[string]bool{}
 	for i := range creates {
 		c := &creates[i]
 		to := c.to
 		if c.typ == model.TypeProject {
 			c.dest = projectImportDest(*c, warn, areaLookup)
-			created[db.FoldName(c.title)] = true
 			continue
 		}
 		switch {
@@ -249,7 +251,7 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			if id := to.headingID; id != "" {
 				h, ok := headings[id]
 				if !ok {
-					h.project, h.title, h.found, h.err = database.HeadingProject(id)
+					h.project, h.title, h.found, _, h.err = database.HeadingProject(id)
 					headings[id] = h
 				}
 				switch {
@@ -258,16 +260,22 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 					continue
 				case h.found:
 					c.dest = createdDest{checked: true, list: h.project, heading: db.FoldCase(h.title)}
-					// The heading wins over the list the payload names.
+					// The heading wins over the list and heading title the
+					// payload names, and over any list-id it can find.
 					switch {
 					case to.hasListID:
-						if to.listID != h.project {
+						if res := lookup(to.listID, ""); res.err == nil && targetMatches(res.target, to.listID, true) && res.target.UUID != h.project {
 							warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list-id", id)
 						}
-					case to.list != "" && !created[db.FoldName(to.list)]:
-						if res := lookup(to.list, ""); res.err == nil && res.target.UUID != h.project {
+					case to.listInPayload:
+						warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list %q", id, to.list)
+					case to.list != "":
+						if res := lookup(to.list, ""); res.err == nil && targetMatches(res.target, to.list, false) && res.target.UUID != h.project {
 							warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list %q", id, to.list)
 						}
+					}
+					if heading != "" && db.FoldCase(heading) != db.FoldCase(h.title) {
+						warn(*c, "Things will file the to-do under the heading heading-id %q names and ignore heading %q", id, heading)
 					}
 					continue
 				}
@@ -292,10 +300,11 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			}
 			c.dest = createdDest{checked: true}
 			continue
-		case !byID && created[db.FoldName(list)]:
-			// Things may file it in the project the payload created or in
-			// a list it already had with that title. It does not trim a
-			// list title, so one with surrounding space matches neither.
+		case !byID && to.listInPayload:
+			// Things may file it in the project the payload created or
+			// renamed, or in a list it already had with that title. It does
+			// not trim a list title, so one with surrounding space matches
+			// neither.
 			c.dest = createdDest{checked: true, list: db.FoldName(list), byTitle: true, anyHeading: heading != ""}
 			continue
 		}
@@ -304,29 +313,42 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			c.dest = createdDest{}
 			continue
 		}
-		// AddTarget matches a uuid as well as a title, but Things takes
-		// list-id by uuid only and list by title only. AddTarget matches a
-		// uuid trimmed, so a list that is one with surrounding space is a
-		// uuid too, while a list-id with surrounding space is no uuid to
-		// Things.
-		matched := res.target.UUID != "" && res.target.ByUUID == byID && (!byID || list == res.target.UUID)
-		if !matched {
-			switch {
-			case byID:
-				warn(*c, "Things finds no project or area with id %q; it will put the to-do in the Inbox", list)
-			case res.target.ByUUID:
-				warn(*c, "list %q is an id, and Things matches list by title only; it will put the to-do in the Inbox (use list-id)", list)
-			default:
-				warn(*c, "Things finds no project or area called %q; it will put the to-do in the Inbox", list)
-			}
+		if !targetMatches(res.target, list, byID) {
+			warn(*c, "%s", missedTarget("list", "project or area", list, byID, res.target, "put the to-do in the Inbox"))
 			c.dest = createdDest{checked: true}
 			continue
 		}
+		c.dest = addDest(res.target.UUID, heading, res.headingFound)
 		if heading != "" && !res.headingFound {
+			if to.headingInPayload {
+				// It may be the heading the payload creates.
+				c.dest.anyHeading = true
+				continue
+			}
 			warn(*c, "%q has no heading %q; Things will add the to-do there without a heading", list, heading)
 		}
-		c.dest = addDest(res.target.UUID, heading, res.headingFound)
 	}
+}
+
+// targetMatches reports whether Things files an item sent ref into target,
+// what AddTarget or AreaTarget found for it. Things takes an id attribute by
+// uuid only, untrimmed, and a title attribute by title only, while the
+// lookups match a uuid trimmed as well as a title.
+func targetMatches(target db.Target, ref string, byID bool) bool {
+	return target.UUID != "" && target.ByUUID == byID && (!byID || ref == target.UUID)
+}
+
+// missedTarget is the warning for an item sent ref, as attr or attr-id
+// when byID, that Things will not file in any noun, so will fallback
+// instead. target is what the lookup found for ref.
+func missedTarget(attr, noun, ref string, byID bool, target db.Target, fallback string) string {
+	switch {
+	case byID:
+		return fmt.Sprintf("Things finds no %s with id %q; it will %s", noun, ref, fallback)
+	case target.ByUUID:
+		return fmt.Sprintf("%s %q is an id, and Things matches %s by title only; it will %s (use %s-id)", attr, ref, attr, fallback, attr)
+	}
+	return fmt.Sprintf("Things finds no %s called %q; it will %s", noun, ref, fallback)
 }
 
 // projectImportDest is resolveImportDests for a project the payload creates:
@@ -350,20 +372,11 @@ func projectImportDest(c importCreate, warn func(importCreate, string, ...any), 
 	if err != nil {
 		return createdDest{}
 	}
-	// As for a to-do's list: area-id is a uuid only, untrimmed, and area a
-	// title only.
-	if target.UUID != "" && target.ByUUID == byID && (!byID || area == target.UUID) {
-		return createdDest{checked: true, list: target.UUID}
+	if !targetMatches(target, area, byID) {
+		warn(c, "%s", missedTarget("area", "area", area, byID, target, "create the project in no area"))
+		return createdDest{checked: true}
 	}
-	switch {
-	case byID:
-		warn(c, "Things has no area with id %q; it will create the project in no area", area)
-	case target.ByUUID:
-		warn(c, "area %q is an id, and Things matches area by title only; it will create the project in no area (use area-id)", area)
-	default:
-		warn(c, "Things has no area called %q; it will create the project in no area", area)
-	}
-	return createdDest{checked: true}
+	return createdDest{checked: true, list: target.UUID}
 }
 
 // kind is the CLI's word for the item: "task" or "project".
@@ -383,9 +396,23 @@ func importCreates(payload []any) []importCreate {
 	// parents maps the path of each item in a project's items to that
 	// project. The walk visits a project before its items.
 	parents := map[string]importTo{}
+	// projects holds FoldName of every project title the payload creates or
+	// renames a project to so far, and headings FoldCase of every heading
+	// title it creates so far, in payload order.
+	projects, headings := map[string]bool{}, map[string]bool{}
 	walkImportNode(payload, "", func(path string, v map[string]any) {
 		op, _ := v["operation"].(string)
 		attrs, _ := v["attributes"].(map[string]any)
+		switch itemType, _ := v["type"].(string); strings.TrimSpace(itemType) {
+		case "project":
+			if title, _ := attrs["title"].(string); strings.TrimSpace(title) != "" {
+				projects[db.FoldName(strings.TrimSpace(title))] = true
+			}
+		case "heading":
+			if title, _ := attrs["title"].(string); op != "update" && strings.TrimSpace(title) != "" {
+				headings[db.FoldCase(strings.TrimSpace(title))] = true
+			}
+		}
 		if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
 			parent := importTo{nested: true}
 			if op == "update" {
@@ -422,6 +449,10 @@ func importCreates(payload []any) []importCreate {
 			to.heading, _ = attrs["heading"].(string)
 			to.areaID, to.hasAreaID = attrs["area-id"].(string)
 			to.area, _ = attrs["area"].(string)
+			if typ == model.TypeTask {
+				to.listInPayload = to.list != "" && projects[db.FoldName(to.list)]
+				to.headingInPayload = to.heading != "" && headings[db.FoldCase(to.heading)]
+			}
 		}
 		// A null creation-date is no date at all, as it is to Things, which
 		// saves the item as created now. prepareImport has refused any value
@@ -455,6 +486,32 @@ func badImportDates(item map[string]any) (lines, names []string) {
 		shown, _ := json.Marshal(raw)
 		lines = append(lines, fmt.Sprintf("%s: %s", name, shown))
 		names = append(names, name)
+	}
+	return lines, names
+}
+
+// importDestAttrs are the destination attributes of a to-do or project.
+var importDestAttrs = []string{"list", "list-id", "heading", "heading-id", "area", "area-id"}
+
+// badImportTypes returns each destination attribute of item, a payload object
+// that creates a to-do or project, that is neither a string nor null, as
+// `name: value` with the value in JSON, and the attribute names. Measured in
+// Things 3: a number, boolean or array there makes it reject the whole
+// payload. Update items were not measured, so they are not checked.
+func badImportTypes(item map[string]any) (lines, names []string) {
+	itemType, _ := item["type"].(string)
+	if op, _ := item["operation"].(string); !importTaskTypes[strings.TrimSpace(itemType)] || (op != "" && op != "create") {
+		return nil, nil
+	}
+	attrs, _ := item["attributes"].(map[string]any)
+	for _, name := range importDestAttrs {
+		switch raw := attrs[name]; raw.(type) {
+		case nil, string:
+		default:
+			shown, _ := json.Marshal(raw)
+			lines = append(lines, fmt.Sprintf("%s: %s", name, shown))
+			names = append(names, name)
+		}
 	}
 	return lines, names
 }
@@ -565,15 +622,17 @@ type importRefusalItem struct {
 	// CLI's.
 	Kind string
 	// Blocked is every attribute refused on the item: the ones Things does
-	// not allow on a repeating item, then the dates it rejects.
+	// not allow on a repeating item, then the dates it rejects, then the
+	// destinations that are not strings.
 	Blocked []string
 
 	restricted []string // the attributes a repeating item does not allow
 	dates      []string // each date Things rejects, as `name: value`
+	types      []string // each destination that is not a string, as `name: value`
 }
 
-// reason is why the item is refused: "repeating", "invalid-date", or both,
-// space-separated.
+// reason is why the item is refused: "repeating", "invalid-date",
+// "invalid-type", or several of them, space-separated.
 func (it importRefusalItem) reason() string {
 	var reasons []string
 	if len(it.restricted) > 0 {
@@ -581,6 +640,9 @@ func (it importRefusalItem) reason() string {
 	}
 	if len(it.dates) > 0 {
 		reasons = append(reasons, "invalid-date")
+	}
+	if len(it.types) > 0 {
+		reasons = append(reasons, "invalid-type")
 	}
 	return strings.Join(reasons, " ")
 }
@@ -594,18 +656,21 @@ type importRefusalError struct {
 }
 
 func (e *importRefusalError) Error() string {
-	var repeating, dates []string
+	var repeating, dates, types []string
 	for _, it := range e.items {
+		id := ""
+		if it.ID != "" {
+			id = " (id " + it.ID + ")"
+		}
 		if len(it.restricted) > 0 {
 			repeating = append(repeating, fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
 				it.Path, it.ID, it.Title, it.Kind, strings.Join(it.restricted, ", ")))
 		}
 		if len(it.dates) > 0 {
-			id := ""
-			if it.ID != "" {
-				id = " (id " + it.ID + ")"
-			}
 			dates = append(dates, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.dates, ", ")))
+		}
+		if len(it.types) > 0 {
+			types = append(types, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.types, ", ")))
 		}
 	}
 	var parts []string
@@ -616,6 +681,10 @@ func (e *importRefusalError) Error() string {
 	if len(dates) > 0 {
 		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over a creation-date or completion-date that is not a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00:\n%s",
 			strings.Join(dates, "\n")))
+	}
+	if len(types) > 0 {
+		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over a list, list-id, heading, heading-id, area or area-id that is not a string or null:\n%s",
+			strings.Join(types, "\n")))
 	}
 	parts = append(parts, "Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app.")
 	return strings.Join(parts, "\n")
@@ -725,7 +794,8 @@ type importCreated struct {
 // whole import when any `operation: update` item would change an attribute
 // Things drops silently on a repeating to-do or project — the same check
 // `edit`, `complete` and `cancel` make, applied per item — or when any to-do
-// or project gives a date Things rejects the whole payload over.
+// or project gives a date or destination Things rejects the whole payload
+// over.
 //
 // The refusal is all-or-nothing on purpose: the URL scheme takes one payload
 // and gives no per-item result, so there is no way to send the rest and report
@@ -752,8 +822,8 @@ func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
 	}
 
 	// An item is refused when it changes an attribute Things does not allow
-	// on a repeating item, or gives a date Things rejects: one entry per
-	// item, in payload order, so one run reports every reason.
+	// on a repeating item, or gives a date or destination Things rejects:
+	// one entry per item, in payload order, so one run reports every reason.
 	repeating := map[string]importRefusalItem{}
 	updates := map[string]importUpdate{}
 	for _, u := range plan.updates {
@@ -777,7 +847,9 @@ func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
 	var refusals []importRefusalItem
 	walkImportNode(payload, "", func(path string, v map[string]any) {
 		it, refused := repeating[path]
-		if lines, names := badImportDates(v); len(lines) > 0 {
+		dateLines, dateNames := badImportDates(v)
+		typeLines, typeNames := badImportTypes(v)
+		if len(dateLines) > 0 || len(typeLines) > 0 {
 			if !refused {
 				it = importRefusalItem{Path: path, Kind: "task"}
 				if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
@@ -795,8 +867,8 @@ func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
 					}
 				}
 			}
-			it.Blocked = append(slices.Clip(it.Blocked), names...)
-			it.dates = lines
+			it.Blocked = append(append(slices.Clip(it.Blocked), dateNames...), typeNames...)
+			it.dates, it.types = dateLines, typeLines
 			refused = true
 		}
 		if refused {

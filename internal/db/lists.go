@@ -143,38 +143,25 @@ func (d *DB) AreaTarget(area string) (Target, error) {
 	return t, nil
 }
 
-// HeadingExists reports whether uuid names an untrashed project heading,
-// which things:///update needs for heading-id to move a to-do. Things ignores
-// a heading-id it cannot find.
-func (d *DB) HeadingExists(uuid string) (bool, error) {
-	var n int
-	if err := d.db.QueryRow(`
-		SELECT COUNT(*) FROM TMTask
-		WHERE type = ? AND uuid = ? AND COALESCE(trashed, 0) = 0`,
-		int(model.TypeHeading), uuid).Scan(&n); err != nil {
-		return false, fmt.Errorf("finding heading: %w", err)
-	}
-	return n > 0, nil
-}
-
-// HeadingProject returns the project of the heading uuid names, and the
-// heading's title, for an import's heading-id. Things files the to-do under
-// that heading whatever list the item names, and whatever state the heading
-// and its project are in: measured in Things 3, a heading in a logged project
-// takes the to-do and is reopened with its project, and one in a trashed
-// project takes it into the Trash. found is false when no heading has that
-// uuid.
-func (d *DB) HeadingProject(uuid string) (project, title string, found bool, err error) {
+// HeadingProject returns the project of the heading uuid names, the heading's
+// title, whether there is one, and whether it is in the trash. An import's
+// heading-id files the to-do under that heading whatever list the item names,
+// and whatever state the heading and its project are in: measured in Things
+// 3, a heading in a logged project takes the to-do and is reopened with its
+// project, and one in a trashed project takes it into the Trash. Things
+// ignores a heading-id it cannot find.
+func (d *DB) HeadingProject(uuid string) (project, title string, found, trashed bool, err error) {
 	var proj sql.NullString
+	var trash int
 	err = d.db.QueryRow(`
-		SELECT project, COALESCE(title, '') FROM TMTask
+		SELECT project, COALESCE(title, ''), COALESCE(trashed, 0) FROM TMTask
 		WHERE type = ? AND uuid = ?`,
-		int(model.TypeHeading), uuid).Scan(&proj, &title)
+		int(model.TypeHeading), uuid).Scan(&proj, &title, &trash)
 	switch {
 	case err == sql.ErrNoRows:
-		return "", "", false, nil
+		return "", "", false, false, nil
 	case err != nil:
-		return "", "", false, fmt.Errorf("finding heading: %w", err)
+		return "", "", false, false, fmt.Errorf("finding heading: %w", err)
 	}
-	return proj.String, title, true, nil
+	return proj.String, title, true, trash != 0, nil
 }

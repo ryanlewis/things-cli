@@ -122,11 +122,11 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	if c.HeadingID != nil {
 		id := strings.TrimSpace(*c.HeadingID)
-		ok, err := database.HeadingExists(id)
+		_, _, found, trashed, err := database.HeadingProject(id)
 		switch {
 		case err != nil:
 			return true
-		case ok:
+		case found && !trashed:
 			// Checked in Things 3: a known heading-id wins over a list or
 			// heading title sent with it.
 			return task.HeadingUUID != id

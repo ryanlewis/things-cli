@@ -175,25 +175,6 @@ func TestHeadingTarget(t *testing.T) {
 	}
 }
 
-// A heading-id counts only for an untrashed heading, never another item.
-func TestHeadingExists(t *testing.T) {
-	sqlDB := dbtest.NewSQL(t)
-	fx := dbtest.NewFixture(t, sqlDB)
-	fx.Project("proj-1", "Tools", 1)
-	fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
-	fx.Heading("head-trash", "Gone", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
-	d := &DB{db: sqlDB}
-	for uuid, want := range map[string]bool{"head-1": true, "head-trash": false, "proj-1": false, "nope": false} {
-		got, err := d.HeadingExists(uuid)
-		if err != nil {
-			t.Fatalf("HeadingExists(%q): %v", uuid, err)
-		}
-		if got != want {
-			t.Errorf("HeadingExists(%q) = %v, want %v", uuid, got, want)
-		}
-	}
-}
-
 // AddTarget reports what the CLI notes about the row it picked: how many
 // other rows the title matched, and a project's status and trash state.
 func TestAddTargetReportsTarget(t *testing.T) {
@@ -285,24 +266,28 @@ func TestAddTargetLogInterval(t *testing.T) {
 	}
 }
 
-// HeadingProject finds a heading by uuid whatever its state, as Things files
-// a to-do under it.
+// HeadingProject finds a heading by uuid whatever its state, says whether it
+// is trashed, and finds nothing else.
 func TestHeadingProject(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
 	fx.Project("proj-1", "Tools", 1)
 	fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
-	fx.Heading("head-old", "Old", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
+	fx.Heading("head-trash", "Gone", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
 	d := &DB{db: sqlDB}
 
-	project, title, found, err := d.HeadingProject("head-1")
-	if err != nil || !found || project != "proj-1" || title != "Setup" {
-		t.Errorf("head-1 = %q %q %v %v, want proj-1 Setup found", project, title, found, err)
-	}
-	if project, _, found, err := d.HeadingProject("head-old"); err != nil || !found || project != "proj-1" {
-		t.Errorf("head-old = %q %v %v, want proj-1 found", project, found, err)
-	}
-	if _, _, found, err := d.HeadingProject("proj-1"); err != nil || found {
-		t.Errorf("proj-1 = %v %v, want not found: it is not a heading", found, err)
+	for _, tc := range []struct {
+		uuid, project, title string
+		found, trashed       bool
+	}{
+		{"head-1", "proj-1", "Setup", true, false},
+		{"head-trash", "proj-1", "Gone", true, true},
+		{"proj-1", "", "", false, false},
+		{"nope", "", "", false, false},
+	} {
+		project, title, found, trashed, err := d.HeadingProject(tc.uuid)
+		if err != nil || project != tc.project || title != tc.title || found != tc.found || trashed != tc.trashed {
+			t.Errorf("HeadingProject(%q) = %q %q %v %v %v, want %q %q %v %v", tc.uuid, project, title, found, trashed, err, tc.project, tc.title, tc.found, tc.trashed)
+		}
 	}
 }
