@@ -106,6 +106,11 @@ func restrictedEdits(when, deadline *string, complete, cancel, duplicate bool) [
 // since is nil when the item had no modification date before the write; any
 // date then counts.
 //
+// when, set for an edit with --when, also has to hold: Things records a
+// change for a --when it files somewhere else, or for the other fields of an
+// edit whose --when it ignores, so the modification date alone would confirm
+// either.
+//
 // The one exception is the checklist: Things leaves the to-do's modification
 // date alone when only its checklist rows change. When watchChecklist is set,
 // the edit also counts as landed once the item's checklist differs from
@@ -116,6 +121,7 @@ type statusWant struct {
 	want  model.Status
 	edit  bool
 	since *time.Time
+	when  *whenCheck
 
 	watchChecklist bool
 	checklist      []model.ChecklistItem
@@ -129,6 +135,11 @@ func (w statusWant) landed(current *model.Task) bool {
 	if !w.edit {
 		return true
 	}
+	return w.modified(current) && w.when.holds(current)
+}
+
+// modified reports whether current's modification date moved from w.since.
+func (w statusWant) modified(current *model.Task) bool {
 	return current.ModificationDate != nil && (w.since == nil || !current.ModificationDate.Equal(*w.since))
 }
 
@@ -207,7 +218,7 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			if !landed && readErr == nil && current != nil && w.watchChecklist && current.Status == w.want {
 				var items []model.ChecklistItem
 				if items, readErr = database.GetChecklistItems(w.uuid); readErr == nil {
-					landed = w.checklistChanged(items)
+					landed = w.checklistChanged(items) && w.when.holds(current)
 				}
 			}
 			switch {
@@ -225,6 +236,14 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 				}
 			case landed:
 				results[i].task = current
+				continue
+			case expired && current.Status == w.want && w.modified(current) && !w.when.holds(current):
+				results[i] = statusResult{
+					err: fmt.Errorf("edit did not apply as sent: %q (%s) was modified, but --when %q did not file it there: it is %s. Things may have ignored or reread the value. Run `things show %s` before retrying; do not retry blindly",
+						w.title, w.uuid, w.when.value, describeStart(current), w.uuid),
+					got:      current.Status,
+					observed: true,
+				}
 				continue
 			case expired && current.Status == w.want:
 				// Only an edit can get here: the status is right but the
@@ -290,14 +309,20 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 //
 // checklist says whether the edit changes the checklist. The checklist is
 // read before the write so the read-back can see it change; if that read
-// fails, the read-back waits for the modification date alone.
-func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bool, want model.Status, duplicate bool, update func() error) error {
+// fails, the read-back waits for the modification date alone. when is the
+// --when value, nil for none; a read-back also waits for the item to be filed
+// where it says (whenCheck).
+func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bool, want model.Status, duplicate bool, when *string, update func() error) error {
 	var before []model.ChecklistItem
 	watchChecklist := false
 	if checklist && changed && !duplicate && !d.NoVerify {
 		var err error
 		before, err = database.GetChecklistItems(task.UUID)
 		watchChecklist = err == nil
+	}
+	var whenSent *whenCheck
+	if when != nil && changed {
+		whenSent = &whenCheck{value: *when, sent: time.Now()}
 	}
 	if err := update(); err != nil {
 		return err
@@ -312,7 +337,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 	current := task
 	if changed || want != task.Status {
 		res := verifyStatuses(database, []statusWant{{
-			uuid: task.UUID, title: task.Title, want: want, edit: changed, since: task.ModificationDate,
+			uuid: task.UUID, title: task.Title, want: want, edit: changed, since: task.ModificationDate, when: whenSent,
 			watchChecklist: watchChecklist, checklist: before,
 		}}, d.readBackTimeout())[0]
 		if res.err != nil {
@@ -533,8 +558,11 @@ var unconfirmedMsg = map[string]string{
 // same place at the same moment — is reported unconfirmed with the
 // candidates rather than guessed. Under
 // --no-verify, or when the database cannot be read, the write still goes out
-// and the output says it is unconfirmed.
-func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, write func() error) error {
+// and the output says it is unconfirmed. when is the --when value, "" for
+// none: the item found must be filed where it says (whenCheck). Things
+// creates the item in one write, so a new item filed anywhere else is the
+// write's and is reported as such, not waited on.
+func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when string, write func() error) error {
 	if d.NoVerify {
 		if err := write(); err != nil {
 			return err
@@ -562,6 +590,10 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, write
 		return unreadable(err)
 	}
 
+	var whenSent *whenCheck
+	if strings.TrimSpace(when) != "" {
+		whenSent = &whenCheck{value: when, sent: time.Now()}
+	}
 	if err := write(); err != nil {
 		return err
 	}
@@ -591,6 +623,9 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, write
 			uuids[i] = t.UUID
 		}
 		return printUnconfirmedAdd(d, title, "ambiguous", uuids)
+	case !whenSent.holds(&found[0]):
+		return fmt.Errorf("add did not apply as sent: Things created %q (%s), but --when %q did not file it there: it is %s. Do not add it again; move it with `things edit %s --when ...` if it matters",
+			title, found[0].UUID, when, describeStart(&found[0]), found[0].UUID)
 	}
 	return printItem(d, database, &found[0])
 }

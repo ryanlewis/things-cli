@@ -449,9 +449,11 @@ instead of assuming:
   with the item printed is the confirmation, so the agent does not need a
   second `things show`. An edit that re-sets values the item already has,
   such as `--when someday` on a Someday item, prints the item at once, so
-  re-running a plan does not fail on work already done. With `--no-verify`
-  or `--duplicate` nothing is read back and the output says the edit is
-  unconfirmed.
+  re-running a plan does not fail on work already done. With `--when`, the
+  item must also land where the value puts it; `add` checks the same and,
+  when it does not, names the item it made so it is not added again. With
+  `--no-verify` or `--duplicate` nothing is read back and the output says
+  the edit is unconfirmed.
 - **Tags must already exist.** Things silently drops tags it does not know.
   The CLI warns before writing; `--create-tags` creates the missing ones
   first and `--strict-tags` refuses to write instead.

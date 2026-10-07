@@ -1224,15 +1224,20 @@ func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 	return &t, nil
 }
 
-// HasReminder reports whether the item has a reminder time set. Things clears
-// it when a --when for today arrives without a time, so the edit no-op check
-// needs it; nothing prints it.
-func (d *DB) HasReminder(uuid string) (bool, error) {
-	var n int
-	if err := d.db.QueryRow(`SELECT COUNT(*) FROM TMTask WHERE uuid = ? AND reminderTime IS NOT NULL`, uuid).Scan(&n); err != nil {
-		return false, fmt.Errorf("reading reminder: %w", err)
+// ReminderTime returns the item's raw reminder time (model.ReminderClock
+// decodes it), and whether it has one. Things sets it from a --when time and
+// clears it when a --when for today arrives without one, so the edit no-op
+// check needs it; nothing prints it. A missing item has none.
+func (d *DB) ReminderTime(uuid string) (int64, bool, error) {
+	var raw sql.NullInt64
+	err := d.db.QueryRow(`SELECT reminderTime FROM TMTask WHERE uuid = ?`, uuid).Scan(&raw)
+	switch {
+	case err == sql.ErrNoRows:
+		return 0, false, nil
+	case err != nil:
+		return 0, false, fmt.Errorf("reading reminder: %w", err)
 	}
-	return n > 0, nil
+	return raw.Int64, raw.Valid, nil
 }
 
 // uuidChunkSize caps how many uuids go into one IN (...) clause, so a caller

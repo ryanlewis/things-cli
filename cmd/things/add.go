@@ -36,7 +36,7 @@ func (c *AddCmd) Run(d *Deps) error {
 	if target.ByUUID {
 		list, listID = "", target.UUID
 	}
-	return applyAdd(d, model.TypeTask, c.Title, dest, func() error {
+	return applyAdd(d, model.TypeTask, c.Title, dest, c.When, func() error {
 		return things.AddTask(things.AddParams{
 			Title:     c.Title,
 			Notes:     c.Notes,

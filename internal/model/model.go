@@ -208,6 +208,12 @@ func (d ThingsDate) String() string {
 	return d.ToTime().Format("2006-01-02")
 }
 
+// ReminderClock decodes a reminderTime: hour<<26 | minute<<20, as Things 3
+// stored 07:00, 08:00, 10:00, 23:56 and 23:57 on 7 Oct 2026.
+func ReminderClock(raw int64) (hour, minute int) {
+	return int(raw>>26) & 0x1F, int(raw>>20) & 0x3F
+}
+
 // MarshalJSON renders the date as YYYY-MM-DD so jq/agents/scripts see a real
 // date rather than the bit-encoded int.
 func (d ThingsDate) MarshalJSON() ([]byte, error) {

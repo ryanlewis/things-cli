@@ -371,12 +371,20 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		// Things clears a reminder on a --when for today without a time.
 		{"whenTodayClearsReminder", []string{"edit", "rem-1", "--when", "today"}, false},
 		{"whenTodayDateClearsReminder", []string{"edit", "rem-1", "--when", day(0)}, false},
-		{"whenTime", []string{"edit", "rem-1", "--when", "18:00"}, false},
-		{"whenDateTime", []string{"edit", "tom-1", "--when", day(1) + "@08:00"}, false},
+		// 18:30 is never rem-1's reminder of 18:00, today or tomorrow.
+		{"whenTimeOtherClock", []string{"edit", "rem-1", "--when", "18:30"}, false},
+		// Things records no change for the reminder an item already has.
+		{"whenSameDateTime", []string{"edit", "tom-1", "--when", day(1) + "@08:00"}, true},
+		{"whenDateTimeOtherClock", []string{"edit", "tom-1", "--when", day(1) + "@09:00"}, false},
+		{"whenPastDateTimeOnReminder", []string{"edit", "rem-1", "--when", day(-2) + "@18:00"}, true},
 		{"whenTomorrowKeepsReminder", []string{"edit", "tom-1", "--when", "tomorrow"}, true},
 		{"whenTomorrowDate", []string{"edit", "tom-1", "--when", day(1)}, true},
 		{"whenOtherDate", []string{"edit", "tom-1", "--when", day(2)}, false},
 		{"whenPastDate", []string{"edit", "past-1", "--when", day(-1)}, false},
+		// A past date files the item under today, not the evening.
+		{"whenPastDateOnToday", []string{"edit", "one-1", "--when", day(-3)}, true},
+		{"whenPastDateOnEvening", []string{"edit", "eve-1", "--when", day(-3)}, false},
+		{"whenPastDateClearsReminder", []string{"edit", "rem-1", "--when", day(-3)}, false},
 		{"whenSomedayOnSomeday", []string{"edit", "some-1", "--when", "someday"}, true},
 		{"whenSomedayOnScheduled", []string{"edit", "tom-1", "--when", "someday"}, false},
 		{"whenAnytimeOnAnytime", []string{"edit", "two-1", "--when", "anytime"}, true},

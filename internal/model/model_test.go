@@ -502,3 +502,19 @@ func TestEnumCodecErrorsNameTheirOwnType(t *testing.T) {
 		})
 	}
 }
+
+// ReminderClock decodes the reminderTime values Things 3 stored for --when
+// times on 7 Oct 2026.
+func TestReminderClock(t *testing.T) {
+	for raw, want := range map[int64][2]int{
+		469762048:  {7, 0},
+		671088640:  {10, 0},
+		1207959552: {18, 0},
+		1602224128: {23, 56},
+		1603272704: {23, 57},
+	} {
+		if h, m := ReminderClock(raw); h != want[0] || m != want[1] {
+			t.Errorf("ReminderClock(%d) = %d:%02d, want %d:%02d", raw, h, m, want[0], want[1])
+		}
+	}
+}

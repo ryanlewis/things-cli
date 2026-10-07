@@ -563,15 +563,27 @@ it already has is detected before the wait when every flag is `--title`,
 `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively), a
 `--deadline` date, an empty `--append-notes` or `--prepend-notes`, or a
 `--when` of `anytime`, `someday`, `today`, `evening`, `tomorrow`, empty,
-or a date from today on. `--when today`, `evening` or today's date clears
-a reminder, so on an item with one it counts as a change and waits; a
-later day keeps the reminder. Tags that do not exist in Things count as
-no change, since Things drops them, unless `--create-tags` creates them
-first. So does a move the warnings above say will leave the item where it
-is. It then prints the item straight away. Any other re-set value, such as
-a `--when` with a time or an English phrase, still waits and reports the
-same error, so on that error check the item with `things show` before
-retrying.
+a date, an `HH:MM` time or a `YYYY-MM-DD@HH:MM` date and time. A past date
+files the item under today. `--when today`, `evening`, today's date or a
+past date clears a reminder, so on an item with one it counts as a change
+and waits; a later day keeps the reminder. A time sets the reminder, for
+today if the time is still to come and tomorrow if it has passed, so it
+is no change only on an item with that reminder on that day. Tags that do
+not exist in Things count as no change, since Things drops them, unless
+`--create-tags` creates them first. So does a move the warnings above say
+will leave the item where it is. It then prints the item straight away.
+Any other re-set value, such as an English phrase, still waits and
+reports the same error, so on that error check the item with `things
+show` before retrying.
+
+With `--when`, the read-back also checks that Things filed the item where
+the value puts it: Anytime, Someday, today, this evening or the date. If
+it was modified but filed somewhere else, `edit` exits non-zero with `edit
+did not apply as sent: …` and says where the item is. `add` and `project
+add` check the same, and exit non-zero with `add did not apply as sent: …`
+naming the item they made, so it is not added twice. An English phrase is
+not checked. A write sent just before midnight counts as filed for either
+day.
 An edit with no field flags and no status to change prints the item
 without waiting. `--complete` or `--cancel` on an open item waits for the
 status, as `things complete` and `things cancel` do.
