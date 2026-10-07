@@ -376,7 +376,7 @@ type createdDest struct {
 	// list is the project or area the item is filed in: its uuid whenever
 	// the CLI could resolve one, or, when byTitle is set, FoldName of the
 	// trimmed title, so any list with that title fits: a project the same
-	// import creates, or one of several areas that share a title. "" is
+	// import creates, which has no uuid before the import. "" is
 	// none: the Inbox (or wherever --when puts it), or a project with no
 	// area.
 	list    string
