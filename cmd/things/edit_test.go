@@ -366,6 +366,13 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"whenTodayDateOnToday", []string{"edit", "one-1", "--when", day(0)}, true},
 		{"whenEveningOnToday", []string{"edit", "one-1", "--when", "evening"}, false},
 		{"whenEveningOnEvening", []string{"edit", "eve-1", "--when", "evening"}, true},
+		// Just after midnight a row scheduled for the new day is still
+		// start = 2 until Things moves it. Measured on 8 Oct 2026 at
+		// 00:00: today and today's date left such a row as it was, start
+		// and modification date unchanged; evening moved it.
+		{"whenTodayOnUnmoved", []string{"edit", "unmoved-1", "--when", "today"}, true},
+		{"whenTodayDateOnUnmoved", []string{"edit", "unmoved-1", "--when", day(0)}, true},
+		{"whenEveningOnUnmoved", []string{"edit", "unmoved-1", "--when", "evening"}, false},
 		{"whenTodayDateOnEvening", []string{"edit", "eve-1", "--when", day(0)}, true},
 		{"whenTodayOnEvening", []string{"edit", "eve-1", "--when", "today"}, false},
 		// Things clears a reminder on a --when for today without a time.
@@ -418,6 +425,7 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket, reminderTime) VALUES ('tom-1', 'Tomorrow', 0, 0, 0, 2, ` + dayInt(1) + `, 0, 536870912)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('past-1', 'Overdue start', 0, 0, 0, 1, ` + dayInt(-1) + `, 0)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('some-1', 'Someday', 0, 0, 0, 2)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('unmoved-1', 'Not moved yet', 0, 0, 0, 2, ` + strconv.Itoa(today) + `, 0)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('inbox-1', 'Inbox', 0, 0, 0, 0)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('proj-1', 'Someday project', 1, 0, 0, 2)`,
 				`INSERT INTO TMArea (uuid, title, "index") VALUES ('area-1', 'Home', 1)`,
