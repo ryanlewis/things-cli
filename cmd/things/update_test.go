@@ -486,6 +486,45 @@ func TestFetchLatestReleaseTagKeepsTheTokenOnAPIGitHub(t *testing.T) {
 	}
 }
 
+func TestFetchLatestReleaseTagFollowsAPIRedirectsWithTheToken(t *testing.T) {
+	// A renamed repository's API URL answers 301 to /repositories/ID/...,
+	// which stays on api.github.com and so keeps the token.
+	g := &fakeGitHub{api: func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repositories/42/releases/latest" {
+			apiReturns(http.StatusOK, `{"tag_name":"v0.9.2"}`)(w, r)
+			return
+		}
+		w.Header().Set("Location", "https://api.github.com/repositories/42/releases/latest")
+		w.WriteHeader(http.StatusMovedPermanently)
+	}}
+	g.install(t)
+	t.Setenv("GITHUB_TOKEN", "ghp_secret")
+	if tag, err := fetchLatestReleaseTag(); err != nil || tag != "v0.9.2" {
+		t.Fatalf("got %q, %v; want v0.9.2", tag, err)
+	}
+	if len(g.reqs) != 2 || g.reqs[1].Header.Get("Authorization") != "Bearer ghp_secret" {
+		t.Errorf("requests %v, want the redirect followed with the token", g.reqs)
+	}
+}
+
+func TestFetchLatestReleaseTagAcceptsAnyRedirectStatus(t *testing.T) {
+	for _, status := range []int{http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			g := &fakeGitHub{
+				api: apiReturns(http.StatusForbidden, ""),
+				page: func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Location", "https://github.com/ryanlewis/things-cli/releases/tag/v0.9.1")
+					w.WriteHeader(status)
+				},
+			}
+			g.install(t)
+			if tag, err := fetchLatestReleaseTag(); err != nil || tag != "v0.9.1" {
+				t.Errorf("got %q, %v; want v0.9.1", tag, err)
+			}
+		})
+	}
+}
+
 func TestFetchLatestReleaseTagFallsBackToTheRedirect(t *testing.T) {
 	g := &fakeGitHub{
 		api:  apiReturns(http.StatusForbidden, `{"message":"rate limited"}`),
@@ -504,6 +543,7 @@ func TestFetchLatestReleaseTagRedirectMustNameATag(t *testing.T) {
 	cases := map[string]http.HandlerFunc{
 		"no releases yet": pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases"),
 		"other host":      pageRedirectsTo("https://elsewhere.example/ryanlewis/things-cli/releases/tag/v0.9.1"),
+		"plain http":      pageRedirectsTo("http://github.com/ryanlewis/things-cli/releases/tag/v0.9.1"),
 		"other repo":      pageRedirectsTo("https://github.com/someone/else/releases/tag/v0.9.1"),
 		"deeper path":     pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/v0.9.1/extra"),
 		"no redirect":     apiReturns(http.StatusOK, "<html>"),
