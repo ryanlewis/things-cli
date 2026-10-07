@@ -3128,13 +3128,16 @@ func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 // Within a group the app puts rows whose todayIndex was written today above
 // rows carried over from an earlier day, and only then orders by todayIndex.
 // Measured against the app on 7 Oct 2026, where todayIndexReferenceDate DESC
-// then todayIndex ASC reproduced a 26-row Today in every position. todayIndex
-// runs against the reference date here so ordering on it alone would fail.
+// then todayIndex ASC reproduced a 26-row Today in every position, and with
+// rows from three days it ruled out treating every carried-over row as one
+// set. todayIndex runs against the reference date here so ordering on it
+// alone, or on "today or not", would fail.
 func TestTodayOrdersByReferenceDateThenTodayIndex(t *testing.T) {
 	d := newTestDB(t)
 
 	today := int64(model.ThingsDateFromTime(time.Now()))
-	earlier := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -2)))
+	yesterday := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -1)))
+	earlier := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -3)))
 	stop := model.TimeToUnix(time.Now())
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate,
@@ -3142,14 +3145,15 @@ func TestTodayOrdersByReferenceDateThenTodayIndex(t *testing.T) {
 		('old-first',  'One',   0, 0, 0, 1, 0, ?, ?, NULL, 1, -900),
 		('new-second', 'Two',   0, 0, 0, 1, 0, ?, ?, NULL, 2, -100),
 		('new-closed', 'Three', 0, 3, 0, 1, 0, ?, ?, ?,    3, -200),
-		('old-second', 'Four',  0, 0, 0, 1, 0, ?, ?, NULL, 4, -800)`,
-		today, earlier, today, today, today, today, stop, today, earlier)
+		('old-second', 'Four',  0, 0, 0, 1, 0, ?, ?, NULL, 4, -800),
+		('yesterday',  'Five',  0, 0, 0, 1, 0, ?, ?, NULL, 5, -50)`,
+		today, earlier, today, today, today, today, stop, today, earlier, today, yesterday)
 
 	got, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"new-closed", "new-second", "old-first", "old-second"}
+	want := []string{"new-closed", "new-second", "yesterday", "old-first", "old-second"}
 	if got := uuidsOf(got); !slices.Equal(got, want) {
 		t.Errorf("today order: got %v, want %v", got, want)
 	}
