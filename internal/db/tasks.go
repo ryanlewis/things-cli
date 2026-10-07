@@ -1224,6 +1224,19 @@ func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 	return &t, nil
 }
 
+// StoredStart returns the start the item is stored with. The task queries
+// report shownStart instead, which reads a row Things has not moved into
+// today yet as Anytime; the edit checks need to tell the two apart. A missing
+// item reads as the Inbox.
+func (d *DB) StoredStart(uuid string) (model.Start, error) {
+	var start int
+	err := d.db.QueryRow(`SELECT COALESCE(start, 0) FROM TMTask WHERE uuid = ?`, uuid).Scan(&start)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, fmt.Errorf("reading start: %w", err)
+	}
+	return model.Start(start), nil
+}
+
 // ReminderTime returns the item's raw reminder time (model.ReminderClock
 // decodes it), and whether it has one. Things sets it from a --when time and
 // clears it when a --when for today arrives without one, so the edit no-op

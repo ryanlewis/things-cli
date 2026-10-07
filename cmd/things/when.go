@@ -126,11 +126,8 @@ func nearOffsetChange(now time.Time) bool {
 
 // holds reports whether t is filed where p says, by its start, start date and
 // part of the day. A row Things has not moved into today yet reads as Anytime
-// (db's shownStart), so a dated place is checked by its date alone. That also
-// makes today, or today's date, no change for such a row, which is what
-// Things does: on 8 Oct 2026 at 00:00, a to-do scheduled for that day and
-// still start = 2 kept its start and modification date through both, for
-// the quarter hour watched; evening moved it to start = 1.
+// (db's shownStart), so a dated place is checked by its date alone; what
+// Things does with such a row is unmovedKeeps.
 func (p whenPlace) holds(t *model.Task) bool {
 	if p.day == 0 {
 		return t.StartDate == nil && t.Start == p.start
@@ -141,39 +138,92 @@ func (p whenPlace) holds(t *model.Task) bool {
 	return p.bucket < 0 || t.StartBucket == p.bucket
 }
 
+// whenReads reads what whenUnchanged needs beyond the item as listed, each
+// only when asked. reminder reads the item's reminder in minutes after
+// midnight, reminderNone for none. stored reads the start the row is stored
+// with, which db's shownStart hides for a row not yet moved into today.
+type whenReads struct {
+	reminder func() (int, error)
+	stored   func() (model.Start, error)
+}
+
+// readWhen reads the item's reminder and stored start from the database.
+func readWhen(database *db.DB, uuid string) whenReads {
+	return whenReads{
+		reminder: func() (int, error) {
+			raw, ok, err := database.ReminderTime(uuid)
+			if err != nil || !ok {
+				return reminderNone, err
+			}
+			hour, minute := model.ReminderClock(raw)
+			return hour*60 + minute, nil
+		},
+		stored: func() (model.Start, error) { return database.StoredStart(uuid) },
+	}
+}
+
 // whenUnchanged reports whether value leaves the item where it is, so Things
-// records no change for it (see whenPlace). reminder reads the item's
-// reminder in minutes after midnight, reminderNone for none; it is asked only
-// when the value sets or clears one.
-func whenUnchanged(value string, task *model.Task, now time.Time, reminder func() (int, error)) bool {
+// records no change for it (see whenPlace). The reminder is read only when
+// the value sets or clears one.
+func whenUnchanged(value string, task *model.Task, now time.Time, reads whenReads) bool {
 	p, ok := placeWhen(value, now)
-	if !ok || !p.holds(task) {
+	if !ok {
+		return false
+	}
+	if unmovedKeeps(p, now, task) && unmoved(task, now, reads.stored) {
+		return true
+	}
+	if !p.holds(task) {
 		return false
 	}
 	if p.reminder == reminderKept {
 		return true
 	}
-	r, err := reminder()
+	r, err := reads.reminder()
 	return err == nil && r == p.reminder
 }
 
-// readReminder reads the item's reminder for whenUnchanged.
-func readReminder(database *db.DB, uuid string) func() (int, error) {
-	return func() (int, error) {
-		raw, ok, err := database.ReminderTime(uuid)
-		if err != nil || !ok {
-			return reminderNone, err
-		}
-		hour, minute := model.ReminderClock(raw)
-		return hour*60 + minute, nil
+// unmoved reports whether task is a row Things has not moved into today yet:
+// open, untrashed, stored as Someday and dated today or earlier, the rows
+// db's shownStart reports as Anytime. A start that cannot be read counts as
+// moved, which leaves the stricter check in place.
+func unmoved(task *model.Task, now time.Time, stored func() (model.Start, error)) bool {
+	if task.StartDate == nil || *task.StartDate > model.ThingsDateFromTime(now) || task.Status != model.StatusOpen || task.Trashed {
+		return false
 	}
+	s, err := stored()
+	return err == nil && s == model.StartSomeday
+}
+
+// unmovedKeeps reports whether p, a value read at now, leaves an unmoved row
+// (see unmoved) such as task where it is. Measured on 8 Oct 2026 at 00:00 on
+// to-dos dated that day, in the day part, with no reminder: today and today's
+// date changed nothing, and evening moved the row. The rest is unmeasured and
+// chosen so a correct write never reports failure:
+//
+//   - with a reminder, today and today's date are taken to leave it, rather
+//     than clear it as they do on a moved row;
+//   - a row dated before today, which Things has not moved for days, is
+//     taken to stay on its date for today, today's date or a past date;
+//   - a project is taken to behave as a to-do;
+//   - a row already in the evening part is taken to stay there for today and
+//     today's date, and for evening.
+//
+// A time sets a reminder, so it is not one of these.
+func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
+	if p.reminder != reminderNone || p.day != model.ThingsDateFromTime(now) {
+		return false
+	}
+	return p.bucket != 1 || task.StartBucket == 1
 }
 
 // whenCheck is the --when part of a read-back: the value sent and when it was
-// sent.
+// sent. before is the item as read before the write when it was a row Things
+// had not moved into today yet (unmoved), nil otherwise.
 type whenCheck struct {
-	value string
-	sent  time.Time
+	value  string
+	sent   time.Time
+	before *model.Task
 }
 
 // holds reports whether t, read at now, is filed where the value puts it. The
@@ -183,16 +233,29 @@ type whenCheck struct {
 // checks. A value whose place is not worked out when it was sent holds: a
 // time within a minute of the send lands by when Things read it, which a
 // later read-back cannot tell.
+//
+// For an unmoved row, a value unmovedKeeps says leaves it where it is also
+// holds when the row is still where it was before the write.
 func (c *whenCheck) holds(t *model.Task, now time.Time) bool {
 	if c == nil {
 		return true
 	}
 	p, ok := placeWhen(c.value, c.sent)
-	if !ok || p.holds(t) {
+	if !ok || c.landed(p, c.sent, t) {
 		return true
 	}
 	p, ok = placeWhen(c.value, now)
-	return ok && p.holds(t)
+	return ok && c.landed(p, now, t)
+}
+
+// landed reports whether t is where p, read at now, puts it.
+func (c *whenCheck) landed(p whenPlace, now time.Time, t *model.Task) bool {
+	if p.holds(t) {
+		return true
+	}
+	b := c.before
+	return b != nil && unmovedKeeps(p, now, b) && t.StartDate != nil && b.StartDate != nil &&
+		*t.StartDate == *b.StartDate && t.StartBucket == b.StartBucket
 }
 
 // misfiledError is an add or edit that Things applied but filed somewhere

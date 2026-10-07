@@ -333,6 +333,9 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 	var whenSent *whenCheck
 	if when != nil && changed {
 		whenSent = &whenCheck{value: *when, sent: time.Now()}
+		if unmoved(task, whenSent.sent, readWhen(database, task.UUID).stored) {
+			whenSent.before = task
+		}
 	}
 	if err := update(); err != nil {
 		return err
