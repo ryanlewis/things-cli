@@ -8,7 +8,7 @@ Use the `things` CLI whenever the user mentions Things3, tasks, todos, inbox, to
 - **Writes change the user's real data**: `add`, `project add`, `edit`, `project edit`, `complete`, `cancel`, `tag add`, `log`, `import`. Confirm before the destructive ones — `complete`, `cancel`, and any bulk `edit`.
 - `open` writes nothing; it reveals an item in the Things app and pulls focus. Use it when the user wants to *see* something rather than read data back.
 - `skill install` / `skill uninstall` write to the user's agent config directory. Do not run them unasked.
-- `update` replaces the `things` binary with the latest release. Do not run it unasked; `update --dry-run` checks GitHub for the latest release and prints the command without running it. If the GitHub check fails, `update` exits non-zero without updating (Homebrew installs excepted); `update --dry-run` still exits 0 and says on stderr that it would stop — report that rather than retrying in a loop.
+- `update` replaces the `things` binary with the latest release. Do not run it unasked; `update --dry-run` checks GitHub for the latest release and prints the command without running it. The check sends `GH_TOKEN` or `GITHUB_TOKEN` to the GitHub API when set, and falls back to the github.com releases/latest redirect if the API fails. If both fail, `update` exits non-zero without updating (Homebrew installs excepted); `update --dry-run` still exits 0 and says on stderr that it would stop — report that rather than retrying in a loop.
 - Things has no callback for writes, so success is never assumed — see [Writes](#writes-what-things-refuses-or-drops) for the four rules that decide whether a write is refused, dropped, or confirmed.
 
 ## Referring to an item

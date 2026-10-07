@@ -764,8 +764,12 @@ Before updating, it asks GitHub for the latest release, with or without
 `MAJOR.MINOR.PATCH` is compared for "newer", so `1.0.0-rc1` is not newer
 than `1.0.0` and updates to it. The install script is then fetched from
 that release's tag and told to install that version, and `go install`
-is pinned to the same tag. If GitHub can't be
-reached (offline, or rate limited), or its latest tag isn't a `vMAJOR.MINOR.PATCH` version it can
+is pinned to the same tag. The check uses the GitHub API, with a token
+from `GH_TOKEN` or `GITHUB_TOKEN` when one is set (sent to
+`api.github.com` only), which avoids the API's rate limit for
+unauthenticated calls. If the API call fails, it reads the tag from where
+`https://github.com/ryanlewis/things-cli/releases/latest` redirects. If
+neither works (offline, say), or the latest tag isn't a `vMAJOR.MINOR.PATCH` version it can
 compare and pin, the install script and `go install`
 methods stop with an error and print the command for you to run
 yourself: both pick the latest release on their own and could replace a
