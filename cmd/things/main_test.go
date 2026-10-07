@@ -600,6 +600,10 @@ func TestListCommandLineCarriesOpenOnlyOverride(t *testing.T) {
 	if got, want := (&ListCmd{OpenOnly: true}).commandLine(d, "today", ""), "things today --open-only"; got != want {
 		t.Errorf("commandLine = %q, want %q", got, want)
 	}
+	// logbook and trash ignore open_only, so there is nothing to override.
+	if got, want := (&ListCmd{}).commandLine(d, "logbook", ""), "things logbook"; got != want {
+		t.Errorf("commandLine = %q, want %q", got, want)
+	}
 }
 
 // A --db the flag supplied has to survive into the recorded command: re-running

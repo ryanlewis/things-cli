@@ -143,9 +143,10 @@ func (c *ListCmd) commandLine(d *Deps, view, project string) string {
 	}
 	// The re-run reads the same config file, so a --open-only=false that
 	// overrode it has to come along or the re-run would list fewer rows.
+	// logbook and trash ignore the setting, so there is nothing to override.
 	if c.OpenOnly {
 		parts = append(parts, "--open-only")
-	} else if configOpenOnly(d) {
+	} else if d.config().OpenOnly() && view != db.ViewLogbook && view != db.ViewTrash {
 		parts = append(parts, "--open-only=false")
 	}
 	return strings.Join(parts, " ")
@@ -160,16 +161,6 @@ func flagResolved(kctx *kong.Context, name string) bool {
 	for _, p := range kctx.Path {
 		if p.Resolved && p.Flag != nil && p.Flag.Name == name {
 			return true
-		}
-	}
-	return false
-}
-
-// configOpenOnly reports whether the config file sets open_only.
-func configOpenOnly(d *Deps) bool {
-	for _, s := range d.config().Settings() {
-		if s.Key == "open_only" {
-			return s.Value == true
 		}
 	}
 	return false

@@ -323,7 +323,8 @@ wants only the work still to do passes `--open-only`, or filters on
 `status == "open"`. `open_only = true` in the config file makes that the
 default, as it was before v0.10.0; `--open-only=false` overrides it for one
 call. `--include-completed`, which used to be how to ask for
-the closed items, is still accepted and now has no effect. A task closed today inside
+the closed items, is still accepted and now has no effect beyond overriding
+`open_only` the same way. A task closed today inside
 a project in Someday or scheduled for later is in no list, as in the app, so
 only its project listing has it. A closed Anytime project with no area is in
 no list or area either; `things projects --completed -j` lists it. The tasks
