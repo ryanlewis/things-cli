@@ -21,14 +21,13 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// Try numeric index from last list. Surrounding space does not stop a
 	// number from being one: ` 12` is row 12, or refused as not a row, and
 	// never a title fragment.
-	rowRef := isRowRef(strings.TrimSpace(ref))
-	markedDigits, markedRow := numberRefDigits(ref)
+	kind, digits := classifyRef(ref)
 	var last cache.LastList
 	var cacheErr error
-	if rowRef || markedRow {
+	if kind != refPlain {
 		last, cacheErr = cache.ReadLastList()
 	}
-	if n, err := strconv.Atoi(strings.TrimSpace(ref)); rowRef && err == nil && n >= 1 {
+	if n, err := strconv.Atoi(digits); kind == refRow && err == nil && n >= 1 {
 		if cacheErr == nil && n <= len(last.UUIDs) {
 			// The row exists in the cache, so this reference is a row number
 			// and nothing else. Refuse it when the listing behind it is old
@@ -59,16 +58,16 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// An all-digit ref that was not a row in the list is not a title
 	// fragment either: `12` past the end of a 10-row list must not complete
 	// "Chapter 12 notes" (issue #375). Only an exact title or uuid is taken.
-	// Nor is anything else spelled like a number, such as `+12`, `#12.`,
-	// `(12)` or `No. 12`, which reads as a row number but is not one: as a
-	// fragment, `#12` would complete a task that mentions issue #12.
+	// Nor is a ref shaped like a row number that is not one, such as `+12`,
+	// `#12.`, `(12)` or `No. 12`: as a fragment, `#12` would complete a task
+	// that mentions issue #12.
 	lookup := database.GetTask
-	if rowRef || markedRow {
+	if kind != refPlain {
 		lookup = database.GetTaskExact
 	}
 	task, err := lookup(ref)
 	var notFound *db.TaskNotFoundError
-	if (rowRef || markedRow) && errors.As(err, &notFound) && strings.TrimSpace(ref) != ref {
+	if kind != refPlain && errors.As(err, &notFound) && strings.TrimSpace(ref) != ref {
 		// The space around ` 2026 ` is not part of the title "2026".
 		task, err = lookup(strings.TrimSpace(ref))
 	}
@@ -77,10 +76,10 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	}
 
 	switch {
-	case rowRef && errors.As(err, &notFound):
+	case kind == refRow && errors.As(err, &notFound):
 		return nil, notARowError(ref, last, cacheErr)
-	case markedRow && errors.As(err, &notFound):
-		return nil, markedRowError(ref, markedDigits, last, cacheErr)
+	case kind == refRowLike && errors.As(err, &notFound):
+		return nil, markedRowError(ref, digits, last, cacheErr)
 	}
 
 	var ambig *db.AmbiguousTaskError
@@ -122,63 +121,74 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	return &ambig.Matches[choice-1], nil
 }
 
-// isRowRef reports whether ref is spelled like a row number: one or more ASCII
-// digits and nothing else.
-func isRowRef(ref string) bool {
-	if ref == "" {
-		return false
-	}
-	for _, r := range ref {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
+// refKind is how a task ref is read before any lookup.
+type refKind int
 
-// numberMarkers are the words that may lead a number-like ref, as in
-// `No. 12`, compared case-insensitively.
-var numberMarkers = []string{"no", "nr", "num"}
+const (
+	// refPlain is a title, a title fragment or a uuid.
+	refPlain refKind = iota
+	// refRow is bare digits: a row number in the last list.
+	refRow
+	// refRowLike is shaped like a row number without being one, such as
+	// `#12`, `(12)` or `No. 12`. It never matches a title fragment.
+	refRowLike
+)
 
-// numberRefDigits reports whether ref is spelled like a number without being
-// a bare row number: ASCII digits mixed only with punctuation, symbols and
-// space, such as `+12`, `#12.`, `(12)` or `-12`, optionally led by a marker
-// such as `No.`. Only bare digits are row numbers; these are not, and do not
-// match a title fragment. digits is the number when ref holds exactly one run
-// of digits, and "" when it holds several, as `1.5` does.
-func numberRefDigits(ref string) (digits string, ok bool) {
+// rowMarkers are the words that may lead a row-like ref, as in `No. 12`,
+// compared case-insensitively. Each may be followed by a dot.
+var rowMarkers = []string{"no", "nr", "num", "number", "n°", "nº", "№"}
+
+// classifyRef reads ref, ignoring surrounding space, and returns its kind and,
+// for a row or row-like ref, its digits as a slice of ref.
+//
+// A row-like ref is an optional `(`, then an optional marker (`#`, `+`, `-`
+// or one of rowMarkers), then one run of ASCII digits, then nothing but `.`,
+// `)` or space. Anything else stays plain, so a date, a time, an amount or a
+// version (`2026-10-07`, `12:30`, `$100`, `1.2.3`) is still a title fragment.
+func classifyRef(ref string) (refKind, string) {
 	s := strings.TrimSpace(ref)
-	if isRowRef(s) {
-		return "", false
+	start, end := digitRun(s)
+	if start == 0 && end == len(s) && end > 0 {
+		return refRow, s
 	}
-	lead := strings.IndexFunc(s, func(r rune) bool { return !unicode.IsLetter(r) })
-	if lead > 0 && slices.Contains(numberMarkers, strings.ToLower(s[:lead])) {
-		s = s[lead:]
+	if start < 0 || strings.TrimRight(s[end:], ". )") != "" {
+		return refPlain, ""
 	}
-	runs := 0
-	inRun := false
-	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9':
-			if !inRun {
-				runs++
-				digits = ""
-			}
-			inRun = true
-			digits += string(r)
-		case unicode.IsPunct(r) || unicode.IsSymbol(r) || unicode.IsSpace(r):
-			inRun = false
-		default:
-			return "", false
-		}
+	if !rowMarker(strings.TrimSpace(s[:start])) {
+		return refPlain, ""
 	}
-	if runs != 1 {
-		return "", runs > 1
-	}
-	return digits, true
+	return refRowLike, s[start:end]
 }
 
-// markedRowError refuses a number-like ref that is not the exact title of a
+// digitRun returns the bounds of the first run of ASCII digits in s, or -1, -1
+// when there is none.
+func digitRun(s string) (int, int) {
+	start := strings.IndexFunc(s, isASCIIDigit)
+	if start < 0 {
+		return -1, -1
+	}
+	end := strings.IndexFunc(s[start:], func(r rune) bool { return !isASCIIDigit(r) })
+	if end < 0 {
+		return start, len(s)
+	}
+	return start, start + end
+}
+
+func isASCIIDigit(r rune) bool { return r >= '0' && r <= '9' }
+
+// rowMarker reports whether prefix, the text before a row-like ref's digits
+// with the space around it trimmed, is an optional `(` and then at most one
+// marker.
+func rowMarker(prefix string) bool {
+	prefix = strings.TrimSpace(strings.TrimPrefix(prefix, "("))
+	switch prefix {
+	case "", "#", "+", "-":
+		return true
+	}
+	return slices.Contains(rowMarkers, strings.ToLower(strings.TrimSuffix(prefix, ".")))
+}
+
+// markedRowError refuses a row-like ref that is not the exact title of a
 // task. It suggests the bare number only when the last list has a row N.
 func markedRowError(ref, digits string, last cache.LastList, cacheErr error) error {
 	msg := fmt.Sprintf("%q is not a row reference and no task has exactly that title; ", ref)

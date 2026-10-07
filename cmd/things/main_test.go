@@ -657,18 +657,18 @@ func TestListCommandLineCarriesConfigFlag(t *testing.T) {
 	}
 }
 
-// A ref spelled like a number but not bare digits, such as `+N`, `#N.`,
+// A ref shaped like a row number but not bare digits, such as `+N`, `#N.`,
 // `(N)` or `No. N`, is not a row number, even when row N exists, and it does
 // not match a title fragment: `complete '#12'` must not close a task that
 // mentions issue #12. Only an exact title or a uuid resolves it; otherwise the
 // error says to pass the uuid, and to use the bare number when the last list
-// has that row (it has 1 here) and the ref holds only that one number.
+// has that row (it has 1 here).
 func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
 	refs := map[string]bool{
 		"+12": false, "#12": false, " #12": false, "#12 ": false, "#0": false,
 		"# 12": false, "#12.": false, "(#12)": false, "No. 12": false, "no 12": false,
-		"-12": false, "(12)": false, "12.": false, "№12": false, "1.5": false,
-		"+1": true, " #1 ": true, "1.": true, "No. 1": true, "(1)": true,
+		"-12": false, "(12)": false, "12.": false, "№12": false, "N° 12": false,
+		"Number 12": false, "+1": true, " #1 ": true, "1.": true, "No. 1": true, "(1)": true,
 	}
 	for ref, hint := range refs {
 		t.Run(ref, func(t *testing.T) {
@@ -678,7 +678,7 @@ func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
 			f := dbtest.NewFixture(t, sqlDB)
 			f.Todo("abc-123", "Cached task", 0)
 			f.Todo("issue-12", "Fix issue #12 and +12 more", 0)
-			f.Todo("variants-12", "See (#12), No. 12, -12 and (12) in 12. 1.5", 0)
+			f.Todo("variants-12", "See (#12), No. 12, N° 12, Number 12, -12 and (12) in 12.", 0)
 			f.Todo("plus-1", "Lift +10 kg (1) No. 1 1.", 0)
 
 			got, err := resolveTask(&Deps{}, ref, db.NewFromSQL(sqlDB))
@@ -699,8 +699,8 @@ func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
 }
 
 // A task titled exactly `#7` or `(12)` still resolves by that title, and a ref
-// with letters beyond a number marker, such as `v2` or `12a`, keeps matching
-// title fragments.
+// not shaped like a row, such as `v2`, `12a`, a date, a time, an amount or a
+// version, keeps matching title fragments.
 func TestResolveTaskMarkedRowRefExactTitle(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	sqlDB := dbtest.NewSQL(t)
@@ -710,12 +710,60 @@ func TestResolveTaskMarkedRowRefExactTitle(t *testing.T) {
 	f.Todo("no-3", "No. 3", 0)
 	f.Todo("ver-2", "Upgrade to v2.4", 0)
 	f.Todo("flat-12a", "Visit flat 12a", 0)
+	f.Todo("dated", "Dentist 2026-10-07 at 12:30", 0)
+	f.Todo("amount", "Pay $100 deposit, 50% now", 0)
+	f.Todo("release", "Ship 1.2.3 tonight", 0)
 	database := db.NewFromSQL(sqlDB)
 
-	for ref, want := range map[string]string{"#7": "hash-7", " #7 ": "hash-7", "(12)": "paren-12", "No. 3": "no-3", "v2": "ver-2", "12a": "flat-12a"} {
+	for ref, want := range map[string]string{
+		"#7": "hash-7", " #7 ": "hash-7", "(12)": "paren-12", "No. 3": "no-3",
+		"v2": "ver-2", "12a": "flat-12a", "2026-10-07": "dated", "12:30": "dated",
+		"$100": "amount", "50%": "amount", "1.2.3": "release",
+	} {
 		got, err := resolveTask(&Deps{}, ref, database)
 		if err != nil || got.UUID != want {
 			t.Errorf("resolveTask(%q) = %+v, %v, want %s", ref, got, err, want)
+		}
+	}
+}
+
+func TestClassifyRef(t *testing.T) {
+	cases := []struct {
+		ref    string
+		kind   refKind
+		digits string
+	}{
+		{"12", refRow, "12"},
+		{" 12 ", refRow, "12"},
+		{"#12", refRowLike, "12"},
+		{"# 12", refRowLike, "12"},
+		{"#12.", refRowLike, "12"},
+		{"(#12)", refRowLike, "12"},
+		{"(12)", refRowLike, "12"},
+		{"+12", refRowLike, "12"},
+		{"-12", refRowLike, "12"},
+		{"12.", refRowLike, "12"},
+		{"No. 12", refRowLike, "12"},
+		{"nr12", refRowLike, "12"},
+		{"N° 12", refRowLike, "12"},
+		{"Number 12", refRowLike, "12"},
+		{"2026-10-07", refPlain, ""},
+		{"12:30", refPlain, ""},
+		{"1.5", refPlain, ""},
+		{"1.2.3", refPlain, ""},
+		{"$100", refPlain, ""},
+		{"50%", refPlain, ""},
+		{"1,000", refPlain, ""},
+		{"#12a", refPlain, ""},
+		{"v2", refPlain, ""},
+		{"Note 12", refPlain, ""},
+		{"#", refPlain, ""},
+		{"", refPlain, ""},
+	}
+	for _, tc := range cases {
+		kind, digits := classifyRef(tc.ref)
+		if kind != tc.kind || digits != tc.digits {
+			t.Errorf("classifyRef(%q) = %d, %q, want %d, %q", tc.ref, kind, digits, tc.kind, tc.digits)
 		}
 	}
 }
