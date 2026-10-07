@@ -475,7 +475,9 @@ read-back (five seconds by default; see `--verify-timeout` under Editing).
 Under `--json` the unconfirmed cases print `{"title": …, "confirmed":
 false, "reason": "no-verify"|"unreadable"|"ambiguous"}`, with
 `"candidates": [uuids]` for `ambiguous`. There is no `uuid`, because the
-add did not return one.
+add did not return one. An add that `--when` did not file where it said
+(below) prints the same object with `"reason": "misfiled"`, the item's
+`"uuid"` and where it `"landed"`, and exits non-zero.
 
 ## Editing
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -174,5 +175,27 @@ func TestAddReadBackChecksWhen(t *testing.T) {
 				t.Fatalf("add = %v, want a --when read-back failure naming new-1", err)
 			}
 		})
+	}
+}
+
+// Under --json a misfiled add prints a confirmed:false object with the item's
+// uuid and where it landed, besides the error, so an agent has the uuid on
+// stdout.
+func TestAddMisfiledJSON(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask, extra: "start = 1"})
+
+	out, err := runOut(t, database, "--json", "add", "Buy oat milk", "--when", "someday")
+	if err == nil || !strings.Contains(err.Error(), "add did not apply as sent") {
+		t.Fatalf("add = %v, want the --when read-back failure", err)
+	}
+	var got unconfirmedAdd
+	if jerr := json.Unmarshal([]byte(out), &got); jerr != nil {
+		t.Fatalf("unmarshal %q: %v", out, jerr)
+	}
+	want := unconfirmedAdd{Title: "Buy oat milk", Reason: "misfiled", UUID: "new-1", Landed: "in anytime with no start date"}
+	if got.Title != want.Title || got.Confirmed || got.Reason != want.Reason || got.UUID != want.UUID || got.Landed != want.Landed {
+		t.Errorf("stdout = %+v, want %+v", got, want)
 	}
 }

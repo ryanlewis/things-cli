@@ -628,8 +628,16 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 		}
 		return printUnconfirmedAdd(d, title, "ambiguous", uuids)
 	case !whenSent.holds(&found[0]):
+		where := describeStart(&found[0])
+		// Under --json the item's uuid goes to stdout too, as the ambiguous
+		// case gives its candidates, so an agent need not parse the error.
+		if d.JSON {
+			if err := output.PrintJSON(d.Stdout, unconfirmedAdd{Title: title, Reason: "misfiled", UUID: found[0].UUID, Landed: where}); err != nil {
+				return err
+			}
+		}
 		return fmt.Errorf("add did not apply as sent: Things created %q (%s), but --when %q did not file it there: it is %s. Do not add it again; move it with `things edit %s --when ...` if it matters",
-			title, found[0].UUID, when, describeStart(&found[0]), found[0].UUID)
+			title, found[0].UUID, when, where, found[0].UUID)
 	}
 	return printItem(d, database, &found[0])
 }
@@ -642,13 +650,17 @@ func searchCommand(d *Deps, title string) string {
 }
 
 // unconfirmedAdd is the --json output for an add that was sent but not read
-// back. There is no uuid: the add returns none, and finding it is the
-// read-back. candidates lists the new items an ambiguous read-back found.
+// back. There is no uuid, except for a misfiled item: the add returns none,
+// and finding it is the read-back. candidates lists the new items an
+// ambiguous read-back found. A misfiled item, one --when did not file where
+// it said, gives its uuid and where it landed.
 type unconfirmedAdd struct {
 	Title      string   `json:"title"`
 	Confirmed  bool     `json:"confirmed"`
 	Reason     string   `json:"reason"`
 	Candidates []string `json:"candidates,omitempty"`
+	UUID       string   `json:"uuid,omitempty"`
+	Landed     string   `json:"landed,omitempty"`
 }
 
 // printUnconfirmedAdd is printUnconfirmedEdit for an add.
