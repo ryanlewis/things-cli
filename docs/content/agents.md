@@ -78,10 +78,12 @@ token instead of resolving. So does a numeric reference made against a
 different database from the one the listing read. A number that is not a row in
 the last list at all, or with no listing to read, fails with `not found` rather
 than matching a title that happens to contain it; only a title that is exactly
-that number resolves. A number with punctuation, symbols or space around it
-(`+N`, `#N`, `N.`, `(N)`, `-N`) or led by `No.` is not a row number: it fails
-with `not found` the same way, never resolving to row N or to a title that
-mentions `#N`; only an exact title matches. This is a safety net for people, not a mode to code
+that number resolves. A reference shaped like a row number is not one: `#N`,
+`+N`, `-N`, `# N`, `N.`, `#N.`, `(N)`, `(#N)`, and `N` led by `No`, `Nr`,
+`Num`, `Number`, `N°`, `Nº` or `№` (with or without a dot). It fails with `not
+found` the same way, never resolving to row N or to a title that mentions
+`#N`; only an exact title matches. `-N` needs `--` before it on the command
+line (`things complete -- -3`). This is a safety net for people, not a mode to code
 against: act on the `uuid` and it never applies.
 
 ## Hand a task to an agent

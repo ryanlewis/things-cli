@@ -353,14 +353,17 @@ part of a title: after a 10-row list, `things complete 12` does not complete
 says to re-run the list. A task whose title is exactly that number still
 resolves, as does a uuid.
 
-Only bare digits are row numbers. A reference that is a number with
-punctuation, symbols or space around it, such as `+3`, `#3`, `# 3`, `3.`,
-`(3)` or `-3`, or one led by `No.`, `Nr.` or `Num`, is not a row number,
-even when row 3 exists. It is not searched for as part of a title either:
+Only bare digits are row numbers. A reference shaped like one is not, even
+when row 3 exists: `#3`, `+3`, `-3`, `# 3`, `3.`, `#3.`, `(3)`, `(#3)`, and
+`3` led by `No`, `Nr`, `Num`, `Number`, `N°`, `Nº` or `№` (with or without a
+dot). On the command line `-3` needs `--` before it, as in `things complete
+-- -3`. A row-shaped reference is not searched for as part of a title either:
 `things complete '#12'` does not complete "Fix issue #12". The error says to
 pass the uuid, and to use `3` when the last list has a row 3. A task whose
-title is exactly `#3` or `(3)` still resolves, and space around a number or a marked ref
-is not part of the title: ` 2026 ` finds a task titled "2026".
+title is exactly `#3` or `(3)` still resolves. Anything with more than one number
+or another symbol, such as `2026-10-07`, `12:30`, `$100` or `1.2.3`, still
+matches part of a title. Space around a number or a marked ref is not part of
+the title: ` 2026 ` finds a task titled "2026".
 
 A `--json` listing is the exception: it prints no numbers and records
 none, so it leaves your indices pointing where they did. That keeps a
