@@ -99,6 +99,25 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 	return target, n > 0, nil
 }
 
+// HeadingTarget returns the uuid of the heading things:///update files a
+// to-do under when sent heading for project, "" when the project has none
+// that matches. Things matches the title ignoring case, and among headings
+// whose titles differ only in case it takes the one with the lowest uuid,
+// whichever case was sent and whichever comes first in the project: measured
+// on 7 Oct 2026 in five projects with two to four such headings.
+func (d *DB) HeadingTarget(project, heading string) (string, error) {
+	var id string
+	err := d.db.QueryRow(`
+		SELECT uuid FROM TMTask
+		WHERE type = ? AND project = ? AND COALESCE(trashed, 0) = 0 AND fold(title) = ?
+		ORDER BY uuid LIMIT 1`,
+		int(model.TypeHeading), project, FoldCase(heading)).Scan(&id)
+	if err != nil && err != sql.ErrNoRows {
+		return "", fmt.Errorf("finding heading: %w", err)
+	}
+	return id, nil
+}
+
 // AreaTarget reports the area Things files an item in when sent area, a
 // title or a uuid, as add's list and add-project's and update-project's area
 // do: by uuid, trimmed, or by title under FoldName but not ignoring

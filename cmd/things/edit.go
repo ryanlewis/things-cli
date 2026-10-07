@@ -103,9 +103,9 @@ func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 // left out when it is not there. A heading-id moves the to-do under that
 // heading, whatever list or heading title comes with it, and one Things cannot
 // find is ignored. A move to where the to-do already is changes nothing, and
-// Things does not record it. Each of those is reported as no change. Headings
-// are compared by folded title, so two in one project whose titles fold
-// together are not told apart. A database that cannot be read gives no
+// Things does not record it. Each of those is reported as no change. Of
+// headings whose titles differ only in case, Things picks one, and so does
+// the check (db.HeadingTarget). A database that cannot be read gives no
 // warning here, and the move counts as a change.
 func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	switch {
@@ -180,7 +180,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	switch {
 	case target.UUID != "" && found:
-		return !inList || db.FoldCase(task.HeadingTitle) != db.FoldCase(heading)
+		return !inList || headingMoves(database, task, target.UUID, heading)
 	case target.UUID != "":
 		if c.Heading != nil {
 			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
@@ -203,7 +203,15 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will leave the to-do where it is\n", task.ProjectTitle, heading)
 		return false
 	}
-	return db.FoldCase(task.HeadingTitle) != db.FoldCase(heading)
+	return headingMoves(database, task, t.UUID, heading)
+}
+
+// headingMoves reports whether sending heading for project files the to-do
+// under a heading other than its own (see db.HeadingTarget). A database that
+// cannot be read counts as a move.
+func headingMoves(database *db.DB, task *model.Task, project, heading string) bool {
+	id, err := database.HeadingTarget(project, heading)
+	return err != nil || task.HeadingUUID != id
 }
 
 // emptyID reports whether an id flag was given as blank.

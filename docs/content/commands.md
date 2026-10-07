@@ -529,7 +529,9 @@ or trashed, and leaves the project closed.
 A move Things will drop counts as no change, and so does a move to the
 list, area or heading the to-do is already in, since Things records no
 change for it. An edit made only of such moves prints the item at once
-instead of waiting for a change.
+instead of waiting for a change. When a project has headings whose titles
+differ only in case, Things files the to-do under the same one of them
+whichever case you send, and the check follows it.
 
 Things reports nothing back from an edit, so the CLI waits for the item's
 modification date to change (and, with `--complete` or `--cancel`, for the
