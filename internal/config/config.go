@@ -448,6 +448,16 @@ func (f *File) JSON() bool {
 	return v
 }
 
+// OpenOnly reports whether the file sets open_only, which a listing's
+// recorded command line has to override when the flag turned it off.
+func (f *File) OpenOnly() bool {
+	if f == nil {
+		return false
+	}
+	v, _ := f.values["open_only"].(bool)
+	return v
+}
+
 // Resolver seeds kong's flag resolution from the file. It returns nil for any
 // flag the file does not mention, leaving kong's own default in place.
 func (f *File) Resolver() kong.Resolver {

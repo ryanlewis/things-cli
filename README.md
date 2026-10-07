@@ -331,7 +331,8 @@ items have no start date, so they can't be date-filtered, and neither can
 or `--area` listing, show the items you ticked off in that list which Things
 still keeps there, marked `[x]` or `[~]`, unless you pass `--open-only`; a
 bare `--tag` sweep lists open tasks only. `--include-completed`, which used to
-turn this on, is accepted and does nothing. `logbook` holds every other closed
+turn this on, is accepted and does nothing beyond overriding `open_only` in
+the config file. `logbook` holds every other closed
 item, today's closes outside those lists included, so a closed
 item whose project is still open is either logged or still listed, never both.
 The lists do overlap each other — a task scheduled for today is in the Anytime
