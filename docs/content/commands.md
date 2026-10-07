@@ -756,7 +756,9 @@ a string or `null`, such as a number, makes Things reject the whole
 payload, so `import` refuses it before anything is sent, with reason
 `invalid-type`.
 `import` prints a warning for each item that Things will not file where
-the payload asks, as `add` does. A to-do in a project's `items` must be in
+the payload asks, as `add` does, and the same notes as `add` when a list
+or area title is shared or a project is closed or in the Trash, once per
+list or area. A to-do in a project's `items` must be in
 that project. To-dos inside a project the payload creates are read back
 too. A to-do inside the `items` of
 a project the payload updates is checked too: Things drops those without

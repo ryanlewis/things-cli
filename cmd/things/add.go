@@ -84,27 +84,37 @@ func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 }
 
 // noteTarget says on stderr when Things will file into a list the user may
-// not expect, though it is where ref leads: one of several kind ("lists" or
-// "areas") that share the title ref gives, or a closed or trashed project.
-// Callers give it only for a write that files the item somewhere new.
-// Measured in Things 3: add and update file into a closed project, logged
-// or not, and reopen it, and into a trashed one, which stays in the Trash.
+// not expect, though it is where ref leads (see targetNotes).
 func noteTarget(d *Deps, ref, kind string, t db.Target) {
+	for _, note := range targetNotes(ref, kind, t) {
+		fmt.Fprintf(d.errOut(), "note: %s\n", note)
+	}
+}
+
+// targetNotes are the notes for a write that files an item into t, where ref
+// leads: one of several kind ("lists" or "areas") that share the title ref
+// gives, or a closed or trashed project. Callers give it only for a write
+// that files the item somewhere new. Measured in Things 3: add and update
+// file into a closed project, logged or not, and reopen it, and into a
+// trashed one, which stays in the Trash.
+func targetNotes(ref, kind string, t db.Target) []string {
+	var notes []string
 	switch {
 	case t.Others == 0:
 	case !t.Area && t.OtherAreas > 0:
-		fmt.Fprintf(d.errOut(), "note: several lists are called %q (%s and %s); Things will use the project %q (%s); pass a UUID to choose\n",
-			ref, count(t.Others-t.OtherAreas+1, "a project", "projects"), count(t.OtherAreas, "an area", "areas"), t.Title, t.UUID)
+		notes = append(notes, fmt.Sprintf("several lists are called %q (%s and %s); Things will use the project %q (%s); pass a UUID to choose",
+			ref, count(t.Others-t.OtherAreas+1, "a project", "projects"), count(t.OtherAreas, "an area", "areas"), t.Title, t.UUID))
 	default:
-		fmt.Fprintf(d.errOut(), "note: several %s are called %q; Things will use %q (%s); pass a UUID to choose\n", kind, ref, t.Title, t.UUID)
+		notes = append(notes, fmt.Sprintf("several %s are called %q; Things will use %q (%s); pass a UUID to choose", kind, ref, t.Title, t.UUID))
 	}
 	switch {
 	case t.Area:
 	case t.Trashed:
-		fmt.Fprintf(d.errOut(), "note: %q is in the Trash; Things will file into it there\n", t.Title)
+		notes = append(notes, fmt.Sprintf("%q is in the Trash; Things will file into it there", t.Title))
 	case t.Status == model.StatusCompleted || t.Status == model.StatusCancelled:
-		fmt.Fprintf(d.errOut(), "note: %q is %s; Things will file into it and reopen it\n", t.Title, t.Status)
+		notes = append(notes, fmt.Sprintf("%q is %s; Things will file into it and reopen it", t.Title, t.Status))
 	}
+	return notes
 }
 
 // count is one when n is 1 and many otherwise.

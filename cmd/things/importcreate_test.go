@@ -985,3 +985,42 @@ func TestImportRefusesNonStringDestination(t *testing.T) {
 		t.Errorf("message does not name the value:\n%s", p.Message)
 	}
 }
+
+// The import gives add's notes about where Things files an item, once per
+// list or area however many items go there.
+func TestImportNotesTargets(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-a", "Tools", 5)
+	fx.Project("proj-b", "TOOLS", 6)
+	fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("proj-bin", "Bin", 8, dbtest.Trashed())
+	fx.Area("area-1", "Home", 1)
+	fx.Area("area-2", "home", 2)
+	stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"a","list":"tools"}},
+	  {"type":"to-do","attributes":{"title":"b","list":"tools"}},
+	  {"type":"to-do","attributes":{"title":"c","list-id":"proj-done"}},
+	  {"type":"to-do","attributes":{"title":"d","list-id":"proj-bin"}},
+	  {"type":"project","attributes":{"title":"e","area":"HOME"}}
+	]`
+	_, stderr, err := runImportOut(t, database, payload, "--no-verify")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for _, want := range []string{
+		`note: [0]: several lists are called "tools"; Things will use "Tools" (proj-a); pass a UUID to choose`,
+		`note: [2]: "Done" is completed; Things will file into it and reopen it`,
+		`note: [3]: "Bin" is in the Trash; Things will file into it there`,
+		`note: [4]: several areas are called "HOME"; Things will use "Home" (area-1); pass a UUID to choose`,
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stderr, "note: [1]") {
+		t.Errorf("noted the same list twice:\n%s", stderr)
+	}
+}

@@ -192,6 +192,17 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 	warn := func(c importCreate, format string, args ...any) {
 		fmt.Fprintf(d.errOut(), "warning: %s: "+format+"\n", append([]any{c.path}, args...)...)
 	}
+	// note gives add's notes about where Things files an item, once per
+	// list or area the payload names however many items go there.
+	noted := map[string]bool{}
+	note := func(c importCreate, ref, kind string, t db.Target) {
+		for _, n := range targetNotes(ref, kind, t) {
+			if !noted[n] {
+				noted[n] = true
+				fmt.Fprintf(d.errOut(), "note: %s: %s\n", c.path, n)
+			}
+		}
+	}
 	// Many items in a payload share a list, area or heading; each is looked
 	// up once.
 	type areaRes struct {
@@ -233,7 +244,7 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 		c := &creates[i]
 		to := c.to
 		if c.typ == model.TypeProject {
-			c.dest = projectImportDest(*c, warn, areaLookup)
+			c.dest = projectImportDest(*c, warn, note, areaLookup)
 			continue
 		}
 		switch {
@@ -318,6 +329,7 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			c.dest = createdDest{checked: true}
 			continue
 		}
+		note(*c, list, "lists", res.target)
 		c.dest = addDest(res.target.UUID, heading, res.headingFound)
 		if heading != "" && !res.headingFound {
 			if to.headingInPayload {
@@ -353,7 +365,7 @@ func missedTarget(attr, noun, ref string, byID bool, target db.Target, fallback 
 
 // projectImportDest is resolveImportDests for a project the payload creates:
 // the area its area-id or area names (see db.AreaTarget), or none.
-func projectImportDest(c importCreate, warn func(importCreate, string, ...any), areaLookup func(string) (db.Target, error)) createdDest {
+func projectImportDest(c importCreate, warn func(importCreate, string, ...any), note func(importCreate, string, string, db.Target), areaLookup func(string) (db.Target, error)) createdDest {
 	to := c.to
 	area, byID := to.area, to.hasAreaID
 	if byID {
@@ -376,6 +388,7 @@ func projectImportDest(c importCreate, warn func(importCreate, string, ...any), 
 		warn(c, "%s", missedTarget("area", "area", area, byID, target, "create the project in no area"))
 		return createdDest{checked: true}
 	}
+	note(c, area, "areas", target)
 	return createdDest{checked: true, list: target.UUID}
 }
 
