@@ -124,6 +124,9 @@ type importTo struct {
 	// renamed is the ids of the projects the payload renames before this
 	// item: the database still has their old titles.
 	renamed []string
+	// ignored names the destination attributes a to-do in a project's items
+	// gives, which Things ignores.
+	ignored []string
 }
 
 // datedSlack widens the read-back window for a dated item's creation-date,
@@ -261,7 +264,13 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			continue
 		case to.nested:
 			// The project is not there before the import, so it can only
-			// be matched by title, trimmed as created titles are.
+			// be matched by title, trimmed as created titles are. Measured
+			// in Things 3: the to-do goes in that project, under the heading
+			// before it in the items if any, whatever list, list-id,
+			// heading-id or heading it gives.
+			if len(to.ignored) > 0 {
+				warn(*c, "Things files a to-do in a project's items in that project and ignores its %s", strings.Join(to.ignored, ", "))
+			}
 			c.dest = createdDest{checked: true, list: db.FoldName(strings.TrimSpace(to.parentTitle)), byTitle: true, anyHeading: true}
 			continue
 		}
@@ -475,7 +484,13 @@ func importCreates(payload []any) []importCreate {
 			return
 		}
 		to, nested := parents[path]
-		if !nested {
+		if nested {
+			for _, name := range importDestAttrs {
+				if v, ok := attrs[name]; ok && v != nil {
+					to.ignored = append(to.ignored, name)
+				}
+			}
+		} else {
 			to.listID, to.hasListID = attrs["list-id"].(string)
 			to.list, _ = attrs["list"].(string)
 			to.headingID, to.hasHeadingID = attrs["heading-id"].(string)

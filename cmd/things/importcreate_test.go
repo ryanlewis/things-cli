@@ -1136,3 +1136,30 @@ func TestImportRefusesBadDateOnHeadingOrChecklistItem(t *testing.T) {
 		t.Errorf("payload was sent: %v", *captured)
 	}
 }
+
+// A to-do in the items of a project the payload creates goes in that
+// project whatever list or heading it names, so it is checked against the
+// project and the import warns that the rest is ignored.
+func TestImportNestedIgnoresOwnDestination(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-1", "Tools", 5)
+	stubExecAdding(t, sqlDB,
+		createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject},
+		createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'new-p'`})
+
+	payload := `[{"type":"project","attributes":{"title":"Launch","items":[
+	  {"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1","heading":"Setup","list":null}}
+	]}}]`
+	out, stderr, err := runImportOut(t, database, payload, "--json")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if got := decodeCreated(t, out); len(got) != 2 || got[1].UUID != "mine" {
+		t.Errorf("got %+v, want the nested to-do confirmed in the new project", got)
+	}
+	if want := `[0].attributes.items[0]: Things files a to-do in a project's items in that project and ignores its list-id, heading`; !strings.Contains(stderr, want) {
+		t.Errorf("stderr missing %q:\n%s", want, stderr)
+	}
+}

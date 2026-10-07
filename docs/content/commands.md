@@ -756,15 +756,20 @@ surrounding space matches nothing, and a `null` one counts as not given. A
 a string or `null`, such as a number, makes Things reject the whole
 payload, so `import` refuses it before anything is sent, with reason
 `invalid-type`.
+
 `import` prints a warning for each item that Things will not file where
 the payload asks, as `add` does, and the same notes as `add` when a list
 or area title is shared or a project is closed or in the Trash, once per
-list or area. A to-do in a project's `items` must be in
-that project. To-dos inside a project the payload creates are read back
-too. A to-do inside the `items` of
-a project the payload updates is checked too: Things drops those without
-saying so, and the read-back reports it as `not-found`. Headings and
-checklist items are not read back, and nor is an item with no title. `import` prints one line per created item:
+list or area.
+
+A to-do in a project's `items` must be in that project. Things files a
+to-do in the items of a project the payload creates there, under the
+heading before it, and ignores any `list`, `list-id`, `heading-id` or
+`heading` it gives, which `import` warns about. A to-do inside the `items`
+of a project the payload updates is checked too: Things drops those
+without saying so, and the read-back reports it as `not-found`. Headings
+and checklist items are not read back, and nor is an item with no title.
+`import` prints one line per created item:
 
 ```text
 Created and confirmed: [0] "Buy oat milk" (8QK2xgV1m3C9p7RfT4hLwe)
