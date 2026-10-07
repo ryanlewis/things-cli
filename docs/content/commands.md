@@ -806,6 +806,13 @@ an unconfirmed `add` does, and no `uuid`:
   that could each be filed where they appeared (when one of them has a
   destination that is not checked). `candidates` lists the ones that did
   appear.
+- `completion-date-dropped`: the payload completes or cancels the item
+  with a `completion-date`, and the new item was saved with another
+  completion date. It carries its `uuid`, since it is there. The import
+  exits non-zero with `import partially applied`, and under `--json` the
+  item is in `items` with its `id`; set the date in the Things app rather
+  than importing the item again. A `completion-date` on an item the payload
+  does not complete or cancel is ignored by Things and not checked.
 
 The first four exit 0 with the list printed. Any `not-found` or
 `shares-dated-title` item makes the import exit non-zero with `import

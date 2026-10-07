@@ -91,6 +91,11 @@ type importCreate struct {
 	// datedAt is that creation-date, or zero when Things takes it but the
 	// CLI cannot read it, which leaves when Things saves it unknown.
 	datedAt time.Time
+	// closedAt is the completion-date of an item the payload completes or
+	// cancels, zero when there is none or the CLI cannot read it. Measured in
+	// Things 3: the item is saved with that stopDate, and an open item's
+	// completion-date is ignored.
+	closedAt time.Time
 	// to is where the payload files the item, and dest is where the CLI
 	// resolved that to before the import was sent (see resolveImportDests).
 	to   importTo
@@ -488,7 +493,13 @@ func importCreates(payload []any) []importCreate {
 		// Things rejects.
 		raw := attrs["creation-date"]
 		datedAt, _ := parseThingsDate(raw)
-		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: raw != nil, datedAt: datedAt, to: to})
+		var closedAt time.Time
+		completed, _ := attrs["completed"].(bool)
+		canceled, _ := attrs["canceled"].(bool)
+		if completed || canceled {
+			closedAt, _ = parseThingsDate(attrs["completion-date"])
+		}
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: raw != nil, datedAt: datedAt, closedAt: closedAt, to: to})
 	})
 	return creates
 }
@@ -753,6 +764,11 @@ func failsImport(reason string) bool {
 	return reason == "not-found" || reason == "shares-dated-title"
 }
 
+// dateDropped is the verdict on a created item saved without the
+// completion-date the payload gives it. The item is there, so the import
+// fails without asking for it to be created again.
+const dateDropped = "completion-date-dropped"
+
 // missing is the created items that are not known to be there: the ones to
 // search for and re-run.
 func (e *importVerifyError) missing() []importCreated {
@@ -784,10 +800,20 @@ func (e *importVerifyError) Error() string {
 		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed (each line says why). The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
 			len(missing), len(e.created), e.search, strings.Join(lines, "\n")))
 	}
-	if len(e.created) > len(missing) {
+	var dropped []string
+	for _, it := range e.created {
+		if it.Reason == dateDropped {
+			dropped = append(dropped, fmt.Sprintf("  %s: %s", it.Path, it.detail))
+		}
+	}
+	if len(dropped) > 0 {
+		parts = append(parts, fmt.Sprintf("%d created items were saved without the completion-date the payload gives. They are there, so do not import them again; set the date in the Things app:\n%s",
+			len(dropped), strings.Join(dropped, "\n")))
+	}
+	if len(e.created) > len(missing)+len(dropped) {
 		lines := []string{"The other created items:"}
 		for _, it := range e.created {
-			if !failsImport(it.Reason) {
+			if !failsImport(it.Reason) && it.Reason != dateDropped {
 				lines = append(lines, "  "+it.line())
 			}
 		}
@@ -806,7 +832,9 @@ func (e *importVerifyError) Error() string {
 // is one that shares its type and title with such an item whose date falls
 // in the read-back window, when one of its new items is also filed where that
 // item goes: reason "shares-dated-title", with candidates listing its new
-// items.
+// items. A confirmed item the payload closes with a completion-date that was
+// saved with another stopDate is turned back with reason
+// "completion-date-dropped", keeping its uuid.
 type importCreated struct {
 	Path       string   `json:"path"`
 	Kind       string   `json:"kind"`
@@ -973,7 +1001,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	// pointing at a list printed elsewhere would name detail the consumer
 	// cannot see. Every created item's verdict goes in with them, since the
 	// success list is not printed beside an error.
-	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return failsImport(c.Reason) }) {
+	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return failsImport(c.Reason) || c.Reason == dateDropped }) {
 		return &importVerifyError{
 			items: failures, total: total, created: created,
 			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
@@ -1072,6 +1100,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		}
 	}
 	unconfirmShared(out, creates, found)
+	checkClosedAt(out, creates, found)
 	if err != nil && len(want) > 0 && !d.dbWarned {
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
@@ -1152,6 +1181,31 @@ func unconfirmShared(out []importCreated, creates []importCreate, found map[crea
 	}
 }
 
+// checkClosedAt turns back each confirmation of an item the payload closes
+// with a completion-date whose row was saved with another stopDate, keeping
+// its uuid: the item is there, without its date.
+func checkClosedAt(out []importCreated, creates []importCreate, found map[createdWant][]model.Task) {
+	for i, c := range creates {
+		if !out[i].Confirmed || c.closedAt.IsZero() {
+			continue
+		}
+		idx := slices.IndexFunc(found[c.want()], func(t model.Task) bool { return t.UUID == out[i].UUID })
+		if idx < 0 {
+			continue
+		}
+		stop := found[c.want()][idx].StopDate
+		if stop != nil && stop.Sub(c.closedAt).Abs() < time.Millisecond {
+			continue
+		}
+		got := "none"
+		if stop != nil {
+			got = stop.UTC().Format(time.RFC3339Nano)
+		}
+		out[i].Confirmed, out[i].Reason = false, dateDropped
+		out[i].detail = fmt.Sprintf("%s %q (%s) was saved with completion date %s, not %s", c.kind(), c.title, out[i].UUID, got, c.closedAt.UTC().Format(time.RFC3339Nano))
+	}
+}
+
 // distinctCreationDates reports whether no two of tasks, oldest first, share a
 // creation date, so their order is the order Things saved them in.
 func distinctCreationDates(tasks []model.Task) bool {
@@ -1171,6 +1225,8 @@ func (c importCreated) line() string {
 		return fmt.Sprintf("Created and confirmed: %s %q (%s)", c.Path, c.Title, c.UUID)
 	case len(c.Candidates) > 0:
 		return fmt.Sprintf("%s: %s %q (%s)", unconfirmedMsg[c.Reason], c.Path, c.Title, strings.Join(c.Candidates, ", "))
+	case c.UUID != "":
+		return fmt.Sprintf("%s: %s %q (%s)", unconfirmedMsg[c.Reason], c.Path, c.Title, c.UUID)
 	}
 	return fmt.Sprintf("%s: %s %q", unconfirmedMsg[c.Reason], c.Path, c.Title)
 }
@@ -1259,6 +1315,11 @@ func (e *importRefusalError) jsonItems() []jsonErrorItem {
 // that never appeared, for the --json error payload.
 func (e *importVerifyError) jsonItems() []jsonErrorItem {
 	missing := e.missing()
+	for _, it := range e.created {
+		if it.Reason == dateDropped {
+			missing = append(missing, it)
+		}
+	}
 	out := make([]jsonErrorItem, len(e.items), len(e.items)+len(missing))
 	for i, it := range e.items {
 		out[i] = jsonErrorItem{
@@ -1274,6 +1335,7 @@ func (e *importVerifyError) jsonItems() []jsonErrorItem {
 	for _, it := range missing {
 		out = append(out, jsonErrorItem{
 			Path:       it.Path,
+			ID:         it.UUID,
 			Title:      it.Title,
 			Confirmed:  new(bool),
 			Reason:     it.Reason,
