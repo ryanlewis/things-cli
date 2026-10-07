@@ -1054,3 +1054,51 @@ func TestImportListOldTitleAfterRename(t *testing.T) {
 		t.Errorf("got %+v, want the to-do confirmed as mine", got)
 	}
 }
+
+// A created item the payload completes or cancels with a completion-date is
+// saved with that stopDate. One saved without it fails the import, keeping
+// its uuid and not asking for it to be created again; an open item's
+// completion-date, which Things ignores, is not checked.
+func TestImportChecksCompletionDate(t *testing.T) {
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Done","completed":true,"completion-date":"2026-10-05T12:30:00+02:00"}},
+	  {"type":"to-do","attributes":{"title":"Open","completion-date":"2026-10-05T10:30:00Z"}}
+	]`
+	for _, tc := range []struct {
+		name string
+		stop string
+		fail bool
+	}{
+		{"applied", "1791196200", false},
+		{"dropped", "1791200000", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			stubExecAdding(t, sqlDB,
+				createdRow{uuid: "done-1", title: "Done", extra: `status = 3, stopDate = ` + tc.stop},
+				createdRow{uuid: "open-1", title: "Open"})
+			out, _, err := runImportOut(t, database, payload, "--json")
+			if !tc.fail {
+				if err != nil {
+					t.Fatalf("import: %v", err)
+				}
+				if got := decodeCreated(t, out); len(got) != 2 || !got[0].Confirmed || !got[1].Confirmed {
+					t.Errorf("got %+v, want both confirmed", got)
+				}
+				return
+			}
+			var verr *importVerifyError
+			if !errors.As(err, &verr) {
+				t.Fatalf("err = %v, want an importVerifyError", err)
+			}
+			items := verr.jsonItems()
+			if len(items) != 1 || items[0].Path != "[0]" || items[0].ID != "done-1" || items[0].Reason != dateDropped {
+				t.Errorf("items = %+v, want [0] done-1 %s", items, dateDropped)
+			}
+			if msg := err.Error(); !strings.Contains(msg, "do not import them again") || strings.Contains(msg, "did not appear") {
+				t.Errorf("message:\n%s", msg)
+			}
+		})
+	}
+}

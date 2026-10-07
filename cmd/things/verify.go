@@ -562,6 +562,9 @@ var unconfirmedMsg = map[string]string{
 	// Import only: an item that shares its kind and title with one the
 	// payload dates back could be confused with that item's row.
 	"shares-dated-title": "Sent to Things, not confirmed (a dated item has the same title)",
+	// Import only: the item was saved, but not with the completion-date the
+	// payload gives it.
+	"completion-date-dropped": "Created without its completion-date",
 }
 
 // applyAdd sends write, which creates an item of typ titled title, then finds
