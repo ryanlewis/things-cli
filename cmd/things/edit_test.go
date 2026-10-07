@@ -627,6 +627,12 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		// A repeating project's template is no title match, but its own
 		// heading is still found by the project's uuid.
 		{"sameHeadingInTemplate", []string{"edit", "rephead-todo", "--heading", "setup"}, "", true},
+		// Measured in Things 3: a heading alone moves a to-do under it in its
+		// own project when that project is logged or trashed, too.
+		{"headingInLoggedProject", []string{"edit", "logged-todo", "--heading", "setup"}, "", false},
+		{"headingInTrashedProject", []string{"edit", "trashed-todo", "--heading", "setup"}, "", false},
+		// What Things does with an empty area was not checked.
+		{"projectEmptyArea", []string{"project", "edit", "repproj-1", "--area", ""}, "", false},
 		{"projectKnownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "area-1"}, "", false},
 		{"projectUnknownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "nope"}, `no area with id "nope"; the project will stay where it is`, true},
 		{"projectUnknownAreaAndTitle", []string{"project", "edit", "repproj-1", "--area", "Nowhere", "--title", "Monthly review"}, `no area called "Nowhere"`, false},
@@ -649,6 +655,12 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Todo("area3-todo", "Mop", 12, dbtest.Anytime(), dbtest.InArea("area-3"))
 			fx.Heading("head-rep", "Setup", 13, dbtest.InProject("repproj-1"))
 			fx.Todo("rephead-todo", "Plan week", 14, dbtest.Anytime(), dbtest.UnderHeading("head-rep"))
+			fx.Project("proj-logged", "Shipped", 15, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+			fx.Heading("head-logged", "Setup", 16, dbtest.InProject("proj-logged"))
+			fx.Todo("logged-todo", "Write notes", 17, dbtest.Anytime(), dbtest.InProject("proj-logged"))
+			fx.Project("proj-trashed", "Binned", 18, dbtest.Trashed())
+			fx.Heading("head-trashed", "Setup", 19, dbtest.InProject("proj-trashed"))
+			fx.Todo("trashed-todo", "Bin notes", 20, dbtest.Anytime(), dbtest.InProject("proj-trashed"))
 			calls := stubExecDropping(t)
 
 			_, stderr, err := runStreams(t, database, tc.args...)

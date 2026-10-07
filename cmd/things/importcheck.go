@@ -172,13 +172,13 @@ func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest
 func resolveImportDests(database *db.DB, creates []importCreate) {
 	// Many items in a payload share a list or area; each is looked up once.
 	type areaRes struct {
-		target string
+		target db.Target
 		err    error
 	}
 	areaTargets := map[string]areaRes{}
 	type targetKey struct{ list, heading string }
 	type targetRes struct {
-		target       string
+		target       db.Target
 		headingFound bool
 		err          error
 	}
@@ -199,12 +199,12 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 			res, ok := areaTargets[area]
 			if !ok {
 				t, err := database.AreaTarget(area)
-				res = areaRes{t.UUID, err}
+				res = areaRes{t, err}
 				areaTargets[area] = res
 			}
 			// As for list below: area-id is a uuid only, area a title only.
-			if res.err == nil && res.target != "" && (to.areaID != "") == (res.target == area) {
-				c.dest = createdDest{checked: true, list: res.target}
+			if res.err == nil && res.target.UUID != "" && (to.areaID != "") == res.target.ByUUID {
+				c.dest = createdDest{checked: true, list: res.target.UUID}
 			}
 		case to.parentID != "":
 			c.dest = createdDest{checked: true, list: strings.TrimSpace(to.parentID), anyHeading: true}
@@ -226,19 +226,16 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 			tk := targetKey{list, to.heading}
 			res, ok := targets[tk]
 			if !ok {
-				var t db.Target
-				t, res.headingFound, res.err = database.AddTarget(list, to.heading)
-				res.target = t.UUID
+				res.target, res.headingFound, res.err = database.AddTarget(list, to.heading)
 				targets[tk] = res
 			}
 			// AddTarget matches a uuid as well as a title, but Things takes
 			// list-id by uuid only and list by title only: a uuid given as list
 			// is not a title Things can find.
-			byUUID := res.target == strings.TrimSpace(list)
-			if res.err != nil || res.target == "" || (to.listID != "") != byUUID {
+			if res.err != nil || res.target.UUID == "" || (to.listID != "") != res.target.ByUUID {
 				continue
 			}
-			c.dest = addDest(res.target, to.heading, res.headingFound && to.headingID == "")
+			c.dest = addDest(res.target.UUID, to.heading, res.headingFound && to.headingID == "")
 			if c.dest.heading == "" && (to.heading != "" || to.headingID != "") {
 				c.dest.anyHeading = true
 			}

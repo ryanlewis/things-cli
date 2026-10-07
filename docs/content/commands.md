@@ -355,8 +355,10 @@ resolves, as does a uuid.
 
 Only bare digits are row numbers. `+3` and `#3` are not, even when row 3
 exists, and they are not searched for as part of a title either: `things
-complete '#12'` does not complete "Fix issue #12". The error says to use `3`
-or the uuid. A task whose title is exactly `#3` still resolves.
+complete '#12'` does not complete "Fix issue #12". The error says to pass
+the uuid, and to use `3` when the last list has a row 3. A task whose title
+is exactly `#3` still resolves, and space around a number or a marked ref
+is not part of the title: ` 2026 ` finds a task titled "2026".
 
 A `--json` listing is the exception: it prints no numbers and records
 none, so it leaves your indices pointing where they did. That keeps a
@@ -422,6 +424,7 @@ warning: Things finds no project or area called "Nowhere"; it will put the to-do
 warning: "Tools" has no heading "Later"; Things will add the to-do there without a heading
 warning: --heading "Later" needs --list or --project; Things will ignore it and put the to-do in the Inbox
 note: several lists are called "tools"; Things will use "Tools" (4Kc9…); pass a UUID to choose
+note: several lists are called "errands" (a project and an area); Things will use the project "Errands" (8TZX…); pass a UUID to choose
 note: "Tools" is completed; Things will file into it and reopen it
 note: "Tools" is in the Trash; Things will file into it there
 ```
@@ -515,6 +518,14 @@ warning: "Tools" has no heading "Later"; Things will leave the to-do where it is
 warning: --heading "Later" needs --list: the to-do is not in a project, so Things will leave it where it is
 ```
 
+When the move files the to-do somewhere new, `edit` notes the same things
+`add` does: several lists sharing the title and which one Things will use,
+or a closed or trashed project. Things moves a to-do into a closed project,
+logged or not, and reopens it, and into a trashed one by UUID, which stays
+in the Trash. A project wins over an area of the same title. `--heading` on
+its own moves the to-do under that heading even when its project is logged
+or trashed, and leaves the project closed.
+
 A move Things will drop counts as no change, and so does a move to the
 list, area or heading the to-do is already in, since Things records no
 change for it. An edit made only of such moves prints the item at once
@@ -594,8 +605,9 @@ way, pointing back at `things edit`.
 heading flags. `--area` takes an area name or UUID, matched as for
 `project add`; a UUID goes to Things as `area-id`. An area Things cannot
 match, by name or by `--area-id`, leaves the project where it is, and
-`project edit` warns. A move to the area the project is already in counts
-as no change.
+`project edit` warns. When several areas share the title, it notes which
+one Things will use, as `project add` does, unless the project is already
+there. A move to the area the project is already in counts as no change.
 
 ```
 warning: Things has no area called "Nowhere"; the project will stay where it is
