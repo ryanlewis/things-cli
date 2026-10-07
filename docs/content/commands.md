@@ -353,6 +353,11 @@ part of a title: after a 10-row list, `things complete 12` does not complete
 says to re-run the list. A task whose title is exactly that number still
 resolves, as does a uuid.
 
+Only bare digits are row numbers. `+3` and `#3` are not, even when row 3
+exists, and they are not searched for as part of a title either: `things
+complete '#12'` does not complete "Fix issue #12". The error says to use `3`
+or the uuid. A task whose title is exactly `#3` still resolves.
+
 A `--json` listing is the exception: it prints no numbers and records
 none, so it leaves your indices pointing where they did. That keeps a
 script or an agent running `--json` in another window from renumbering
@@ -403,7 +408,7 @@ area works too: the CLI sends it to Things as `list-id`. The add warns on
 stderr when the to-do will not land where you asked, then sends it anyway:
 
 ```
-warning: Things has no open project or area called "Nowhere"; it will put the to-do in the Inbox
+warning: Things finds no project or area called "Nowhere"; it will put the to-do in the Inbox
 warning: "Tools" has no heading "Later"; Things will add the to-do there without a heading
 warning: --heading "Later" needs --list or --project; Things will ignore it and put the to-do in the Inbox
 ```
@@ -484,9 +489,9 @@ heading; an unknown heading on its own is ignored; and an unknown
 that will happen, then sends the edit anyway:
 
 ```
-warning: Things has no open project or area called "Nowhere"; the to-do will stay where it is
-warning: Things has no open project or area called "Nowhere"; it will look for --heading "Setup" in the to-do's own project
-warning: Things has no open project or area with id "abc123"; the to-do will stay where it is
+warning: Things finds no project or area called "Nowhere"; the to-do will stay where it is
+warning: Things finds no project or area called "Nowhere"; it will look for --heading "Setup" in the to-do's own project
+warning: Things finds no project or area with id "abc123"; the to-do will stay where it is
 warning: Things has no heading with id "abc123"; the to-do will stay where it is
 warning: Things has no heading with id "abc123"; it will ignore --heading-id
 warning: "Tools" has no heading "Later"; Things will move the to-do there without a heading

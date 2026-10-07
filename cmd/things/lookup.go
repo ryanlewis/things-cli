@@ -55,8 +55,11 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// An all-digit ref that was not a row in the list is not a title
 	// fragment either: `12` past the end of a 10-row list must not complete
 	// "Chapter 12 notes" (issue #375). Only an exact title or uuid is taken.
+	// Nor is `+12` or `#12`, which reads as a row number but is not one: as
+	// a fragment, `#12` would complete a task that mentions issue #12.
+	markedRow, markedDigits := isMarkedRowRef(ref)
 	lookup := database.GetTask
-	if rowRef {
+	if rowRef || markedRow {
 		lookup = database.GetTaskExact
 	}
 	task, err := lookup(ref)
@@ -65,8 +68,15 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	}
 
 	var notFound *db.TaskNotFoundError
-	if rowRef && errors.As(err, &notFound) {
+	switch {
+	case rowRef && errors.As(err, &notFound):
 		return nil, notARowError(ref, last, cacheErr)
+	case markedRow && errors.As(err, &notFound):
+		return nil, &notFoundError{
+			Kind:  "task",
+			Query: ref,
+			msg:   fmt.Sprintf("%q is not a row reference; use %s for a row of the last list, or pass the task's uuid or full title", ref, markedDigits),
+		}
 	}
 
 	var ambig *db.AmbiguousTaskError
@@ -120,6 +130,17 @@ func isRowRef(ref string) bool {
 		}
 	}
 	return true
+}
+
+// isMarkedRowRef reports whether ref is spelled like a row number marked with
+// a leading + or #, after optional space, and returns the digits. Only bare
+// digits are row numbers; these are not, and do not match a title fragment.
+func isMarkedRowRef(ref string) (bool, string) {
+	s := strings.TrimLeftFunc(ref, unicode.IsSpace)
+	if s == "" || (s[0] != '+' && s[0] != '#') || !isRowRef(s[1:]) {
+		return false, ""
+	}
+	return true, s[1:]
 }
 
 // notARowError refuses an all-digit ref that is not a row in the last list and

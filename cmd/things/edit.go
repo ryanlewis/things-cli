@@ -150,7 +150,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		case err != nil:
 			return true
 		case t == "":
-			fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; %s\n", list, next)
+			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area called %q; %s\n", list, next)
 		case t == strings.TrimSpace(list):
 			c.List, c.ListID = nil, &t
 			fallthrough
@@ -165,7 +165,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 			return true
 		case t != strings.TrimSpace(list):
 			// AddTarget also matches a title, which list-id does not.
-			fmt.Fprintf(d.errOut(), "warning: Things has no open project or area with id %q; %s\n", list, next)
+			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area with id %q; %s\n", list, next)
 		default:
 			target, found = t, f
 		}
