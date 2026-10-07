@@ -403,8 +403,13 @@ titles of open projects and areas, and `--heading` against the headings of
 that project. Both ignore case but not surrounding space, so `" Tools "`
 does not match a project called Tools. When nothing matches it does not complain: it
 puts the to-do in the Inbox, or adds it to the list without the heading. A
-completed or trashed project does not match. A UUID of an open project or
-area works too: the CLI sends it to Things as `list-id`. The add warns on
+trashed project does not match, nor does a closed one Things has moved to
+the Logbook; one completed or cancelled today, which Things still shows,
+does. When several projects, or with no project several areas, match the
+title, Things files the to-do in the one whose UUID sorts first, even when
+another one's title matches exactly, and the CLI checks that one. A UUID
+of an open project or area names one directly: the CLI sends it to Things
+as `list-id`. The add warns on
 stderr when the to-do will not land where you asked, then sends it anyway:
 
 ```
@@ -418,8 +423,9 @@ warning: --heading "Later" needs --list or --project; Things will ignore it and 
 takes an area name or UUID; a UUID goes to Things as `area-id`, since
 Things matches `area` by title only. It matches the title ignoring case and
 compatibility forms (fullwidth letters, superscript digits) but not
-surrounding space, and when nothing matches it creates the project with
-no area. `project add` warns on stderr when that will happen, then sends the
+surrounding space; when several areas match, Things takes the one whose
+UUID sorts first, as for `add --list`. When nothing matches it creates the
+project with no area. `project add` warns on stderr when that will happen, then sends the
 project anyway:
 
 ```

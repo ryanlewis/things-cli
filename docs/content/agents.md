@@ -432,8 +432,8 @@ instead of assuming:
   if the status never changed. A non-zero exit means "still open", not
   "done".
 - **New items are read back.** `add` and `project add` find the item they
-  created, by kind, title and where it was sent (any of the projects, or
-  areas, that share the title it named), and print it as `things show` would, so the agent has its UUID without a `things search`. Agents
+  created, by kind, title and where it was sent (when several projects, or
+  areas, share the title it named, the one Things picks), and print it as `things show` would, so the agent has its UUID without a `things search`. Agents
   adding the same title to different projects at once each get their own
   item, or an error, not the other's (unless the database could not be read to resolve where the add was sent). If it never appears they exit non-zero; search
   for the title before retrying, so a retry does not make a duplicate.

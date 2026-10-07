@@ -277,20 +277,22 @@ func TestExactCaseIgnoresNormalisation(t *testing.T) {
 	}
 }
 
-// --list takes the same preference: a heading of the exact-case project is
-// found when the title was typed in the other normalisation form.
-func TestAddTargetExactCaseIgnoresNormalisation(t *testing.T) {
+// Titles that differ only in normalisation fold together, so the smallest
+// uuid wins whichever form list is typed in, as in Things.
+func TestAddTargetNormalisationPicksSmallestUUID(t *testing.T) {
 	d, fx := newFixture(t)
-	fx.Project("p-lower", "café", 1, anytime())
-	fx.Project("p-upper", "Café", 2, anytime())
-	fx.Heading("h-1", "Setup", 1, dbtest.InProject("p-upper"))
+	fx.Project("p-b", "Cafe\u0301", 1, anytime())
+	fx.Project("p-a", "CAF\u00c9", 2, anytime())
+	fx.Heading("h-1", "Setup", 1, dbtest.InProject("p-a"))
 
-	target, headOK, err := d.AddTarget("Café", "Setup")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if target != "p-upper" || !headOK {
-		t.Errorf("AddTarget(Café NFD, Setup) = %q, %v, want p-upper, true", target, headOK)
+	for _, list := range []string{"Cafe\u0301", "CAF\u00c9", "café"} {
+		target, headOK, err := d.AddTarget(list, "Setup")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if target != "p-a" || !headOK {
+			t.Errorf("AddTarget(%q, Setup) = %q, %v, want p-a, true", list, target, headOK)
+		}
 	}
 }
 

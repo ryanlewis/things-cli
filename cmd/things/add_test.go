@@ -631,6 +631,30 @@ func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
 	}
 }
 
+// Two areas share a title: Things files the project in the one whose uuid
+// sorts first, whichever title --area matches exactly, so only a project
+// filed there confirms the add.
+func TestProjectAddSharedAreaTitleChecksThingsPick(t *testing.T) {
+	for _, tc := range []struct {
+		filed string
+		ok    bool
+	}{{inArea1, true}, {`area = 'area-3'`, false}} {
+		t.Run(tc.filed, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "PERSONAL", 1)
+			fx.Area("area-3", "Personal", 3)
+			stubExecAdding(t, sqlDB, createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject, extra: tc.filed})
+
+			_, _, err := runStreams(t, database, "project", "add", "Launch", "--area", "Personal")
+			if tc.ok != (err == nil) {
+				t.Errorf("project add filed %s: err = %v, want ok %v", tc.filed, err, tc.ok)
+			}
+		})
+	}
+}
+
 // Two commands that add the same title to different places can both
 // snapshot before either saves, so each sees the other's row among the new
 // ones. A row filed somewhere other than where this add sent its item is not
@@ -705,11 +729,11 @@ func TestAddIgnoresSameTitleFiledElsewhere(t *testing.T) {
 	}
 }
 
-// A list title more than one open project, or more than one area, carries
-// names no single list: which one Things files the to-do in is not known, so
-// an item that lands in any of them is confirmed, and one filed elsewhere
-// still is not.
-func TestAddSharedListTitleFitsEither(t *testing.T) {
+// A list title more than one open project, or more than one area, carries:
+// Things files the to-do in the one whose uuid sorts first, so an item that
+// lands there is confirmed, and one filed in another list of that title is
+// not.
+func TestAddSharedListTitleChecksThingsPick(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
@@ -719,11 +743,13 @@ func TestAddSharedListTitleFitsEither(t *testing.T) {
 		{"firstArea", []string{"add", "Buy oat milk", "--list", "Personal"},
 			createdRow{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-1'`}, true},
 		{"secondArea", []string{"add", "Buy oat milk", "--list", "personal"},
-			createdRow{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-3'`}, true},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-3'`}, false},
 		{"firstProject", []string{"add", "Buy oat milk", "--project", "Tools", "--heading", "Setup"},
-			createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-1'`}, true},
-		{"secondProject", []string{"add", "Buy oat milk", "--project", "Tools"},
-			createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-3'`}, true},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-1', heading = 'head-1'`}, true},
+		{"firstProjectNoHeading", []string{"add", "Buy oat milk", "--project", "Tools", "--heading", "Setup"},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-1'`}, false},
+		{"secondProject", []string{"add", "Buy oat milk", "--project", "TOOLS"},
+			createdRow{uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-3'`}, false},
 		{"elsewhere", []string{"add", "Buy oat milk", "--list", "Personal"},
 			createdRow{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-2'`}, false},
 	}
