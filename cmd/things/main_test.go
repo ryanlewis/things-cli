@@ -657,13 +657,20 @@ func TestListCommandLineCarriesConfigFlag(t *testing.T) {
 	}
 }
 
-// A ref marked like a row number, `+N` or `#N`, is not one, even when row N
-// exists, and it does not match a title fragment: `complete '#12'` must not
-// close a task that mentions issue #12. Only an exact title or a uuid
-// resolves it; otherwise the error says to pass the uuid, and to use the
-// bare number when the last list has that row (it has 1 here).
+// A ref spelled like a number but not bare digits, such as `+N`, `#N.`,
+// `(N)` or `No. N`, is not a row number, even when row N exists, and it does
+// not match a title fragment: `complete '#12'` must not close a task that
+// mentions issue #12. Only an exact title or a uuid resolves it; otherwise the
+// error says to pass the uuid, and to use the bare number when the last list
+// has that row (it has 1 here) and the ref holds only that one number.
 func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
-	for ref, hint := range map[string]bool{"+12": false, "#12": false, " #12": false, "#12 ": false, "#0": false, "+1": true, " #1 ": true} {
+	refs := map[string]bool{
+		"+12": false, "#12": false, " #12": false, "#12 ": false, "#0": false,
+		"# 12": false, "#12.": false, "(#12)": false, "No. 12": false, "no 12": false,
+		"-12": false, "(12)": false, "12.": false, "№12": false, "1.5": false,
+		"+1": true, " #1 ": true, "1.": true, "No. 1": true, "(1)": true,
+	}
+	for ref, hint := range refs {
 		t.Run(ref, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			seedCache(t, time.Minute, "things today", "abc-123")
@@ -671,7 +678,8 @@ func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
 			f := dbtest.NewFixture(t, sqlDB)
 			f.Todo("abc-123", "Cached task", 0)
 			f.Todo("issue-12", "Fix issue #12 and +12 more", 0)
-			f.Todo("plus-1", "Lift +10 kg", 0)
+			f.Todo("variants-12", "See (#12), No. 12, -12 and (12) in 12. 1.5", 0)
+			f.Todo("plus-1", "Lift +10 kg (1) No. 1 1.", 0)
 
 			got, err := resolveTask(&Deps{}, ref, db.NewFromSQL(sqlDB))
 			var nf *notFoundError
@@ -690,17 +698,21 @@ func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
 	}
 }
 
-// A task titled exactly `#7` still resolves by that title, and refs that are
-// not marked that way, such as `2.`, keep matching title fragments.
+// A task titled exactly `#7` or `(12)` still resolves by that title, and a ref
+// with letters beyond a number marker, such as `v2` or `12a`, keeps matching
+// title fragments.
 func TestResolveTaskMarkedRowRefExactTitle(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	sqlDB := dbtest.NewSQL(t)
 	f := dbtest.NewFixture(t, sqlDB)
 	f.Todo("hash-7", "#7", 0)
-	f.Todo("ver-2", "Upgrade to 2.4", 0)
+	f.Todo("paren-12", "(12)", 0)
+	f.Todo("no-3", "No. 3", 0)
+	f.Todo("ver-2", "Upgrade to v2.4", 0)
+	f.Todo("flat-12a", "Visit flat 12a", 0)
 	database := db.NewFromSQL(sqlDB)
 
-	for ref, want := range map[string]string{"#7": "hash-7", " #7 ": "hash-7", "2.": "ver-2"} {
+	for ref, want := range map[string]string{"#7": "hash-7", " #7 ": "hash-7", "(12)": "paren-12", "No. 3": "no-3", "v2": "ver-2", "12a": "flat-12a"} {
 		got, err := resolveTask(&Deps{}, ref, database)
 		if err != nil || got.UUID != want {
 			t.Errorf("resolveTask(%q) = %+v, %v, want %s", ref, got, err, want)

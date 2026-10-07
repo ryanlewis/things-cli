@@ -353,11 +353,13 @@ part of a title: after a 10-row list, `things complete 12` does not complete
 says to re-run the list. A task whose title is exactly that number still
 resolves, as does a uuid.
 
-Only bare digits are row numbers. `+3` and `#3` are not, even when row 3
-exists, and they are not searched for as part of a title either: `things
-complete '#12'` does not complete "Fix issue #12". The error says to pass
-the uuid, and to use `3` when the last list has a row 3. A task whose title
-is exactly `#3` still resolves, and space around a number or a marked ref
+Only bare digits are row numbers. A reference that is a number with
+punctuation, symbols or space around it, such as `+3`, `#3`, `# 3`, `3.`,
+`(3)` or `-3`, or one led by `No.`, `Nr.` or `Num`, is not a row number,
+even when row 3 exists. It is not searched for as part of a title either:
+`things complete '#12'` does not complete "Fix issue #12". The error says to
+pass the uuid, and to use `3` when the last list has a row 3. A task whose
+title is exactly `#3` or `(3)` still resolves, and space around a number or a marked ref
 is not part of the title: ` 2026 ` finds a task titled "2026".
 
 A `--json` listing is the exception: it prints no numbers and records

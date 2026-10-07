@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,8 +22,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// number from being one: ` 12` is row 12, or refused as not a row, and
 	// never a title fragment.
 	rowRef := isRowRef(strings.TrimSpace(ref))
-	markedDigits := markedRowDigits(ref)
-	markedRow := markedDigits != ""
+	markedDigits, markedRow := numberRefDigits(ref)
 	var last cache.LastList
 	var cacheErr error
 	if rowRef || markedRow {
@@ -59,8 +59,9 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// An all-digit ref that was not a row in the list is not a title
 	// fragment either: `12` past the end of a 10-row list must not complete
 	// "Chapter 12 notes" (issue #375). Only an exact title or uuid is taken.
-	// Nor is `+12` or `#12`, which reads as a row number but is not one: as
-	// a fragment, `#12` would complete a task that mentions issue #12.
+	// Nor is anything else spelled like a number, such as `+12`, `#12.`,
+	// `(12)` or `No. 12`, which reads as a row number but is not one: as a
+	// fragment, `#12` would complete a task that mentions issue #12.
 	lookup := database.GetTask
 	if rowRef || markedRow {
 		lookup = database.GetTaskExact
@@ -135,19 +136,49 @@ func isRowRef(ref string) bool {
 	return true
 }
 
-// markedRowDigits returns the digits of ref when it is spelled like a row
-// number marked with a leading + or #, ignoring surrounding space, and ""
-// otherwise. Only bare digits are row numbers; these are not, and do not
-// match a title fragment.
-func markedRowDigits(ref string) string {
+// numberMarkers are the words that may lead a number-like ref, as in
+// `No. 12`, compared case-insensitively.
+var numberMarkers = []string{"no", "nr", "num"}
+
+// numberRefDigits reports whether ref is spelled like a number without being
+// a bare row number: ASCII digits mixed only with punctuation, symbols and
+// space, such as `+12`, `#12.`, `(12)` or `-12`, optionally led by a marker
+// such as `No.`. Only bare digits are row numbers; these are not, and do not
+// match a title fragment. digits is the number when ref holds exactly one run
+// of digits, and "" when it holds several, as `1.5` does.
+func numberRefDigits(ref string) (digits string, ok bool) {
 	s := strings.TrimSpace(ref)
-	if s == "" || (s[0] != '+' && s[0] != '#') || !isRowRef(s[1:]) {
-		return ""
+	if isRowRef(s) {
+		return "", false
 	}
-	return s[1:]
+	lead := strings.IndexFunc(s, func(r rune) bool { return !unicode.IsLetter(r) })
+	if lead > 0 && slices.Contains(numberMarkers, strings.ToLower(s[:lead])) {
+		s = s[lead:]
+	}
+	runs := 0
+	inRun := false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			if !inRun {
+				runs++
+				digits = ""
+			}
+			inRun = true
+			digits += string(r)
+		case unicode.IsPunct(r) || unicode.IsSymbol(r) || unicode.IsSpace(r):
+			inRun = false
+		default:
+			return "", false
+		}
+	}
+	if runs != 1 {
+		return "", runs > 1
+	}
+	return digits, true
 }
 
-// markedRowError refuses a `+N` or `#N` ref that is not the exact title of a
+// markedRowError refuses a number-like ref that is not the exact title of a
 // task. It suggests the bare number only when the last list has a row N.
 func markedRowError(ref, digits string, last cache.LastList, cacheErr error) error {
 	msg := fmt.Sprintf("%q is not a row reference and no task has exactly that title; ", ref)
