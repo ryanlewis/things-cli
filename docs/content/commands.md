@@ -71,9 +71,10 @@ group the same way but do list their project rows, because a project put in
 Today or Someday has actually been put somewhere. `someday` reaches only the
 first half of the arrangement: it carries no task with a parent project, so it
 ends at unfiled items and then areas.
-`today` then orders within a group by the position Things keeps for the day,
-which leaves an item closed today where it was rather than moving it to the
-end. `upcoming` reads by date instead, the way the app's own Upcoming does.
+`today` then orders within a group the way the app does: items placed in
+Today on the current day come above those carried over from an earlier day,
+and each set follows the position Things keeps for the day. An item closed
+today stays where it was rather than moving to the end. `upcoming` reads by date instead, the way the app's own Upcoming does.
 Like the app, it also lists an undated Anytime task whose deadline is still to
 come, under the deadline's day, and `--on`/`--from`/`--to` match it on that
 day. `today` likewise lists an undated task in the Inbox or Anytime once its
