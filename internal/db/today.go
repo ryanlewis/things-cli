@@ -29,10 +29,21 @@ func withToday(query string, args []any) (string, []any) {
 		return query, args
 	}
 	now := clock.Now()
-	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	day := int64(model.ThingsDateFromTime(now))
+	start, finish := dayStart(now), dayStart(now.AddDate(0, 0, 1))
 	query = "WITH " + todayClock + "(day, start, finish) AS (SELECT ?, ?, ?) " + query
-	return query, append([]any{day, model.TimeToUnix(start), model.TimeToUnix(start.AddDate(0, 0, 1))}, args...)
+	return query, append([]any{day, model.TimeToUnix(start), model.TimeToUnix(finish)}, args...)
+}
+
+// dayStart is the first instant of t's local day. Where daylight saving begins
+// at midnight, as in America/Santiago, that midnight does not exist and
+// time.Date gives 23:00 the day before; the day then starts at the transition.
+func dayStart(t time.Time) time.Time {
+	start := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	if start.Day() != t.Day() {
+		_, start = start.ZoneBounds()
+	}
+	return start
 }
 
 // query and queryRow run a query on the database with today_clock supplied.

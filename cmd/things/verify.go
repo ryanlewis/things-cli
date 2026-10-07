@@ -202,7 +202,10 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 		if len(pending) == 0 {
 			return true, nil
 		}
-		// One clock for the round, so a --when check cannot flip midway.
+		// One instant for the round's --when checks, so they cannot flip
+		// midway. The query below reads the clock for itself, so a round that
+		// straddles midnight can see rows a moment later than now; the next
+		// round reads both again.
 		now := clock.Now()
 		// One query per round for every item still pending, rather than one
 		// per item per round (issue #167).
