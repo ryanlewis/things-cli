@@ -21,8 +21,8 @@ func TestAddTarget(t *testing.T) {
 	fx.Project("proj-1", "Tools", 1)
 	fx.Project("proj-done", "Old", 2, dbtest.Status(model.StatusCompleted))
 	fx.Project("proj-trash", "Binned", 3, dbtest.Trashed())
-	fx.Project("proj-today", "Shelved", 4, dbtest.Cancelled(model.TimeToUnix(time.Now())))
-	fx.Project("proj-logged", "Shipped", 5, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("proj-today", "Shelved", 4, dbtest.Cancelled(model.TimeToUnix(testNow)))
+	fx.Project("proj-logged", "Shipped", 5, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 	fx.Heading("head-1", "Ärger", 1, dbtest.InProject("proj-1"))
 	fx.Heading("head-trash", "Gone", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
 	fx.Heading("head-sharp", "Straße", 3, dbtest.InProject("proj-1"))
@@ -124,13 +124,13 @@ func TestAddTargetPicksSmallestUUID(t *testing.T) {
 func TestAddTargetSkipsLoggedForSmallestUUID(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
-	fx.Project("A-today", "Work", 1, dbtest.Completed(model.TimeToUnix(time.Now())))
+	fx.Project("A-today", "Work", 1, dbtest.Completed(model.TimeToUnix(testNow)))
 	fx.Project("B-open", "work", 2)
 	fx.Project("1-trash", "WORK", 3, dbtest.Trashed())
-	fx.Project("2-logged", "Work", 4, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("2-logged", "Work", 4, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 	fx.Project("x-open", "Plan", 5)
 	fx.Project("1-template", "Plan", 7, dbtest.Repeats())
-	fx.Project("Y-logged", "Plan", 6, dbtest.Cancelled(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("Y-logged", "Plan", 6, dbtest.Cancelled(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 	d := &DB{db: sqlDB}
 	for list, want := range map[string]string{"work": "A-today", "plan": "x-open"} {
 		target, _, err := d.AddTarget(list, "")
@@ -180,7 +180,7 @@ func TestHeadingTarget(t *testing.T) {
 func TestAddTargetReportsTarget(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
-	fx.Project("A-work", "Work", 1, dbtest.Completed(model.TimeToUnix(time.Now())))
+	fx.Project("A-work", "Work", 1, dbtest.Completed(model.TimeToUnix(testNow)))
 	fx.Project("B-work", "WORK", 2)
 	fx.Project("C-work", "work", 3)
 	fx.Project("D-bin", "Bin", 4, dbtest.Trashed())
@@ -237,7 +237,7 @@ func TestAddTargetTemplateByUUIDOnly(t *testing.T) {
 // (0) holds none back, "manually" (4) every one closed since the last "Log
 // Completed Now". Only "daily" was measured in Things.
 func TestAddTargetLogInterval(t *testing.T) {
-	now := time.Now()
+	now := testNow
 	for _, tc := range []struct {
 		interval      int
 		today, before bool

@@ -833,7 +833,7 @@ func TestListTargetNotes(t *testing.T) {
 			fx := dbtest.NewFixture(t, sqlDB)
 			fx.Area("area-1", "Personal", 1)
 			fx.Area("area-3", "personal", 3)
-			fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(time.Now())))
+			fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(testNow)))
 			fx.Project("proj-bin", "Binned", 6, dbtest.Trashed())
 			fx.Project("proj-errands", "Errands", 7)
 			fx.Area("0-errands", "errands", 4)
@@ -860,7 +860,7 @@ func TestListTargetNotes(t *testing.T) {
 func TestEditNoClosedNoteInPlace(t *testing.T) {
 	database, sqlDB := seedWritable(t)
 	fx := dbtest.NewFixture(t, sqlDB)
-	fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(time.Now())))
+	fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(testNow)))
 	fx.Todo("in-done", "Sweep", 6, dbtest.Anytime(), dbtest.InProject("proj-done"))
 	stubExecDropping(t)
 

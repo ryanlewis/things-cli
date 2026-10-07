@@ -836,7 +836,7 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
 			fx.Heading("head-old", "Old", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
 			fx.Heading("head-twin", "SETUP", 4, dbtest.InProject("proj-1"))
-			fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+			fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 			fx.Project("proj-bin", "Bin", 8, dbtest.Trashed())
 			fx.Heading("head-bin", "Shelf", 3, dbtest.InProject("proj-bin"))
 			stubExecAdding(t, sqlDB, tc.rows...)

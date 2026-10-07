@@ -7,7 +7,7 @@ import (
 
 func (d *DB) GetAuthToken() (string, error) {
 	var token sql.NullString
-	err := d.db.QueryRow("SELECT uriSchemeAuthenticationToken FROM TMSettings LIMIT 1").Scan(&token)
+	err := d.queryRow("SELECT uriSchemeAuthenticationToken FROM TMSettings LIMIT 1").Scan(&token)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}

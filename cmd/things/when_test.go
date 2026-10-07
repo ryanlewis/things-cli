@@ -95,8 +95,8 @@ func TestWhenUnchangedTime(t *testing.T) {
 // A write sent before midnight and read after it may be filed by either day,
 // so the read-back accepts both. A value with no worked-out place holds.
 func TestWhenCheckAcrossMidnight(t *testing.T) {
-	yesterday := time.Now().AddDate(0, 0, -1)
-	today := model.ThingsDateFromTime(time.Now())
+	yesterday := testNow.AddDate(0, 0, -1)
+	today := model.ThingsDateFromTime(testNow)
 	before := model.ThingsDateFromTime(yesterday)
 	for _, tc := range []struct {
 		value string
@@ -110,18 +110,18 @@ func TestWhenCheckAcrossMidnight(t *testing.T) {
 	} {
 		day := tc.day
 		c := &whenCheck{value: tc.value, sent: yesterday}
-		if got := c.holds(&model.Task{Start: model.StartAnytime, StartDate: &day}, time.Now()); got != tc.want {
+		if got := c.holds(&model.Task{Start: model.StartAnytime, StartDate: &day}, testNow); got != tc.want {
 			t.Errorf("holds(%q on %s) = %v, want %v", tc.value, day, got, tc.want)
 		}
 	}
 	// A time sent within a minute of itself lands by when Things read it,
 	// so a read-back long after cannot judge it and lets it hold.
-	sent := time.Now().Add(-2 * time.Hour)
+	sent := testNow.Add(-2 * time.Hour)
 	c := &whenCheck{value: sent.Format("15:04"), sent: sent}
-	if !c.holds(&model.Task{Start: model.StartAnytime, StartDate: &today}, time.Now()) {
+	if !c.holds(&model.Task{Start: model.StartAnytime, StartDate: &today}, testNow) {
 		t.Error("a time ambiguous when sent must hold")
 	}
-	if !(*whenCheck)(nil).holds(&model.Task{}, time.Now()) {
+	if !(*whenCheck)(nil).holds(&model.Task{}, testNow) {
 		t.Error("a nil whenCheck must hold")
 	}
 }
@@ -130,7 +130,7 @@ func TestWhenCheckAcrossMidnight(t *testing.T) {
 // recording the rest of the edit, fails the read-back rather than confirming
 // on the modification date alone.
 func TestEditReadBackChecksWhen(t *testing.T) {
-	today := strconv.Itoa(int(model.ThingsDateFromTime(time.Now())))
+	today := strconv.Itoa(int(model.ThingsDateFromTime(testNow)))
 	for _, tc := range []struct {
 		name  string
 		apply string
@@ -187,7 +187,7 @@ func TestAddReadBackChecksWhen(t *testing.T) {
 // the error, with the "misfiled" token, the item's uuid and where it landed.
 // The command prints nothing of its own before it.
 func TestMisfiledJSONIsOneObject(t *testing.T) {
-	today := strconv.Itoa(int(model.ThingsDateFromTime(time.Now())))
+	today := strconv.Itoa(int(model.ThingsDateFromTime(testNow)))
 	cases := []struct {
 		name string
 		args []string

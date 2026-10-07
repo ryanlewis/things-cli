@@ -62,7 +62,7 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 		repeatingParentPlaceholder, "NULL",
 	).Replace(query)
 
-	rows, err := d.db.Query(query, args...)
+	rows, err := d.query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("querying projects: %w", err)
 	}

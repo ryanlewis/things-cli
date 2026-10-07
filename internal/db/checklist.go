@@ -17,7 +17,7 @@ func (d *DB) GetChecklistItems(taskUUID string) ([]model.ChecklistItem, error) {
 		-- would otherwise come back in an order SQLite does not define.
 		ORDER BY "index" ASC, uuid ASC
 	`
-	rows, err := d.db.Query(query, taskUUID)
+	rows, err := d.query(query, taskUUID)
 	if err != nil {
 		return nil, fmt.Errorf("querying checklist items: %w", err)
 	}

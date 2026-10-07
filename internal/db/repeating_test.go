@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -290,7 +289,7 @@ func TestTemplateChildExcludedFromSomeday(t *testing.T) {
 // once inside an ordinary project — the sibling proves the guard discriminates
 // rather than just hiding everything.
 func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 
 	cases := []struct {

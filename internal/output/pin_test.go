@@ -3,6 +3,8 @@ package output
 import (
 	"testing"
 	"time"
+
+	"github.com/ryanlewis/things-cli/internal/clock"
 )
 
 // pinLayout makes the rest of the test see stdout as a terminal width columns
@@ -22,10 +24,10 @@ func pinLayout(t *testing.T, width int, tty bool) {
 // one of them.
 func pinClock(t *testing.T, now time.Time, loc *time.Location) {
 	t.Helper()
-	prevNow, prevLocal := nowFn, time.Local
-	t.Cleanup(func() { nowFn, time.Local = prevNow, prevLocal })
+	prevLocal := time.Local
+	t.Cleanup(func() { time.Local = prevLocal })
 	if !now.IsZero() {
-		nowFn = func() time.Time { return now }
+		t.Cleanup(clock.Pin(now))
 	}
 	if loc != nil {
 		time.Local = loc
