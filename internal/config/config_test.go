@@ -149,6 +149,7 @@ func TestLoadReadsEveryKey(t *testing.T) {
 json = true
 color = "never"
 hints = false
+open_only = true
 no_verify = true
 verify_timeout = "2500ms"
 strict_tags = true
@@ -160,8 +161,8 @@ strict_tags = true
 	if !f.Exists {
 		t.Error("Exists = false for a file that is there")
 	}
-	want := map[string]any{"json": true, "color": "never", "hints": false, "no_verify": true, "verify_timeout": "2500ms", "strict_tags": true, "db": "", "create_tags": false, "assume_yes": false}
-	source := map[string]string{"json": "config", "color": "config", "hints": "config", "no_verify": "config", "verify_timeout": "config", "strict_tags": "config", "db": "default", "create_tags": "default", "assume_yes": "default"}
+	want := map[string]any{"json": true, "color": "never", "hints": false, "open_only": true, "no_verify": true, "verify_timeout": "2500ms", "strict_tags": true, "db": "", "create_tags": false, "assume_yes": false}
+	source := map[string]string{"json": "config", "color": "config", "hints": "config", "open_only": "config", "no_verify": "config", "verify_timeout": "config", "strict_tags": "config", "db": "default", "create_tags": "default", "assume_yes": "default"}
 	for _, s := range f.Settings() {
 		if s.Value != want[s.Key] {
 			t.Errorf("%s = %v, want %v", s.Key, s.Value, want[s.Key])
@@ -193,7 +194,7 @@ func TestLoadRejectsBadFiles(t *testing.T) {
 		body string
 		want []string
 	}{
-		{"unknown key", "nope = 1\n", []string{"unknown key", `"nope"`, "json, color, hints, db, no_verify, verify_timeout, strict_tags, create_tags, assume_yes"}},
+		{"unknown key", "nope = 1\n", []string{"unknown key", `"nope"`, "json, color, hints, open_only, db, no_verify, verify_timeout, strict_tags, create_tags, assume_yes"}},
 		{"malformed", "json = \n", []string{"invalid TOML", "line 1"}},
 		{"wrong type", `json = "yes"` + "\n", []string{`key "json" must be a boolean`, "got string"}},
 		{"table value", "[json]\na = 1\n", []string{`key "json" must be a boolean`, "got table"}},

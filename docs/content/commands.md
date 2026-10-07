@@ -113,8 +113,12 @@ date, or an undated one with a deadline after today.
 still to do: `things today --open-only`. It works on every listing, and changes
 nothing on the ones that list only open tasks anyway (`deadlines`, `repeating`,
 a bare `--tag` sweep); `logbook` and `trash` reject it.
+To make it the default, set `open_only = true` in the
+[config file](/configuration/); `--open-only=false` then lists the closed
+items for one call, and `logbook` and `trash` ignore the setting.
 `--include-completed`, which used to be how to ask for the closed items, is
-still accepted and now has no effect.
+still accepted. It has no effect except to override `open_only`, as
+`--open-only=false` does.
 
 `logbook` holds nothing Things has not logged yet, wherever it was closed, as
 the app's Logbook does. A closed item is therefore either in `logbook` or

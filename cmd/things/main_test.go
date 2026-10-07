@@ -585,6 +585,23 @@ func TestListCommandLine(t *testing.T) {
 	}
 }
 
+// A --open-only=false that overrode open_only in the config file has to be
+// recorded, or the re-run would read the same file and list fewer rows.
+func TestListCommandLineCarriesOpenOnlyOverride(t *testing.T) {
+	isolateHome(t)
+	cfg, err := config.Load(writeConfig(t, "open_only = true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Deps{Config: cfg}
+	if got, want := (&ListCmd{}).commandLine(d, "today", ""), "things today --open-only=false"; got != want {
+		t.Errorf("commandLine = %q, want %q", got, want)
+	}
+	if got, want := (&ListCmd{OpenOnly: true}).commandLine(d, "today", ""), "things today --open-only"; got != want {
+		t.Errorf("commandLine = %q, want %q", got, want)
+	}
+}
+
 // A --db the flag supplied has to survive into the recorded command: re-running
 // without it would read the default database and renumber against other rows.
 func TestListCommandLineCarriesDBFlag(t *testing.T) {

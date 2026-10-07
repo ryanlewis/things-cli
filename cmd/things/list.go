@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alecthomas/kong"
+
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -16,14 +18,14 @@ type ListCmd struct {
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
 
-	OpenOnly         bool   `help:"Leave out the closed items the inbox, today, anytime, upcoming and someday views, and a --project or --area listing, show by default: the ones Things hasn't logged out of the list yet, which under the app's default Daily logging means closed today. Not supported on logbook or trash." xor:"closed"`
-	IncludeCompleted bool   `hidden:"" help:"No effect: the closed items Things still shows are listed by default since --open-only was added. Accepted so existing scripts keep working." xor:"closed"`
+	OpenOnly         bool   `help:"Leave out the closed items the inbox, today, anytime, upcoming and someday views, and a --project or --area listing, show by default: the ones Things hasn't logged out of the list yet, which under the app's default Daily logging means closed today. Not supported on logbook or trash. --open-only=false overrides open_only in the config file." xor:"closed"`
+	IncludeCompleted bool   `hidden:"" help:"No effect beyond overriding open_only in the config file: the closed items Things still shows are listed by default since --open-only was added. Accepted so existing scripts keep working." xor:"closed"`
 	On               string `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline. Mutually exclusive with --from/--to."`
 	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
 	To               string `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
 }
 
-func (c *ListCmd) Run(d *Deps) error {
+func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
 	database, err := d.Database()
 	if err != nil {
 		return err
@@ -67,9 +69,14 @@ func (c *ListCmd) Run(d *Deps) error {
 	// --open-only is a no-op on the views that list only open rows anyway,
 	// so an agent can pass it everywhere. logbook and trash are the two that
 	// list closed rows as their whole point, and dropping them would leave
-	// nothing true to say, so those reject it.
+	// nothing true to say, so those reject it. open_only in the config file is
+	// a default for the lists it applies to, not a request, so there it is
+	// dropped instead.
 	if c.OpenOnly && (view == db.ViewLogbook || view == db.ViewTrash) {
-		return fmt.Errorf("--open-only is not supported on the %q view", view)
+		if !flagResolved(kctx, "open-only") {
+			return fmt.Errorf("--open-only is not supported on the %q view", view)
+		}
+		c.OpenOnly = false
 	}
 
 	// someday lists only what has no parent project, so narrowing it to one
@@ -134,10 +141,38 @@ func (c *ListCmd) commandLine(d *Deps, view, project string) string {
 			parts = append(parts, f.flag, shellQuote(f.value))
 		}
 	}
+	// The re-run reads the same config file, so a --open-only=false that
+	// overrode it has to come along or the re-run would list fewer rows.
 	if c.OpenOnly {
 		parts = append(parts, "--open-only")
+	} else if configOpenOnly(d) {
+		parts = append(parts, "--open-only=false")
 	}
 	return strings.Join(parts, " ")
+}
+
+// flagResolved reports whether the named flag took its value from a resolver,
+// which here means the config file, rather than from the command line.
+func flagResolved(kctx *kong.Context, name string) bool {
+	if kctx == nil {
+		return false
+	}
+	for _, p := range kctx.Path {
+		if p.Resolved && p.Flag != nil && p.Flag.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// configOpenOnly reports whether the config file sets open_only.
+func configOpenOnly(d *Deps) bool {
+	for _, s := range d.config().Settings() {
+		if s.Key == "open_only" {
+			return s.Value == true
+		}
+	}
+	return false
 }
 
 // noteEmptyRepeatingProject explains an empty listing whose --project named a
