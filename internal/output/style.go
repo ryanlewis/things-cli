@@ -116,7 +116,7 @@ func styledDate(d *model.ThingsDate, deadline bool) string {
 	if d == nil {
 		return ""
 	}
-	return styleDate(d.String(), deadline, daysFromToday(d))
+	return styleDate(d.String(), deadline, daysFromToday(d, clock.Now()))
 }
 
 // styledCompactDate is styledDate's short form for a narrow terminal, relative
@@ -129,7 +129,8 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 	if d == nil {
 		return ""
 	}
-	days := daysFromToday(d)
+	now := clock.Now()
+	days := daysFromToday(d, now)
 	target := d.ToTime()
 	var text string
 	switch {
@@ -143,7 +144,7 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 		text = target.Format("Mon")
 	case days < -1 && days > -7:
 		text = fmt.Sprintf("%dd ago", -days)
-	case target.Year() == clock.Now().Year():
+	case target.Year() == now.Year():
 		text = target.Format("2 Jan")
 	default:
 		text = target.Format("2 Jan 06")
@@ -151,12 +152,12 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 	return styleDate(text, deadline, days)
 }
 
-// daysFromToday counts the calendar days from today to d in local time,
+// daysFromToday counts the calendar days from now's day to d in local time,
 // negative for a date in the past. It rounds rather than truncates, so a
 // daylight-saving change, which puts two midnights 23 or 25 hours apart, does
 // not shift a day.
-func daysFromToday(d *model.ThingsDate) int {
-	today := startOfDay(clock.Now())
+func daysFromToday(d *model.ThingsDate, now time.Time) int {
+	today := startOfDay(now)
 	target := startOfDay(d.ToTime())
 	return int(math.Round(target.Sub(today).Hours() / 24))
 }
