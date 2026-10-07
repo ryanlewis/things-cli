@@ -156,3 +156,25 @@ func (d *DB) HeadingExists(uuid string) (bool, error) {
 	}
 	return n > 0, nil
 }
+
+// HeadingProject returns the project of the heading uuid names, and the
+// heading's title, for an import's heading-id. Things files the to-do under
+// that heading whatever list the item names, and whatever state the heading
+// and its project are in: measured in Things 3, a heading in a logged project
+// takes the to-do and is reopened with its project, and one in a trashed
+// project takes it into the Trash. found is false when no heading has that
+// uuid.
+func (d *DB) HeadingProject(uuid string) (project, title string, found bool, err error) {
+	var proj sql.NullString
+	err = d.db.QueryRow(`
+		SELECT project, COALESCE(title, '') FROM TMTask
+		WHERE type = ? AND uuid = ?`,
+		int(model.TypeHeading), uuid).Scan(&proj, &title)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", "", false, nil
+	case err != nil:
+		return "", "", false, fmt.Errorf("finding heading: %w", err)
+	}
+	return proj.String, title, true, nil
+}

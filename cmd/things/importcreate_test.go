@@ -705,14 +705,24 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: inArea1}, {uuid: "mine", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}}, []string{"mine"}},
 		{"nestedInUpdate", `[{"type":"project","operation":"update","id":"proj-2","attributes":{"items":[{"type":"to-do","attributes":{"title":"Buy oat milk"}}]}}]`,
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found"}},
+		// Things puts a to-do whose list matches nothing in the Inbox.
 		{"unknownList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}}]`,
-			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"other"}},
-		{"sharedRow", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
-			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found", "not-found"}},
-		{"sharedRowBothLand", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
-			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"ambiguous", "other"}},
-		{"uncheckedTakesShortRow", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Nowhere"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
-			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"not-found", "not-found", "not-found"}},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		// A heading-id files the to-do under the heading whatever state
+		// it is in, a trashed one too.
+		{"trashedHeadingID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","heading-id":"head-old"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj2}, {uuid: "mine", title: "Buy oat milk", extra: `heading = 'head-old'`}}, []string{"mine"}},
+		// A to-do whose list a project created earlier in the payload
+		// carries fits any list with that title, so it can claim a row
+		// filed for a to-do sent to the list Things had: a row both are
+		// confirmed with, or one the loose one is confirmed with that the
+		// other also fits, confirms neither.
+		{"sharedRow", `[{"type":"project","attributes":{"title":"tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1"}}]`,
+			[]createdRow{{uuid: "new-p", title: "tools", typ: model.TypeProject}, {uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"new-p", "not-found", "not-found"}},
+		{"sharedRowBothLand", `[{"type":"project","attributes":{"title":"tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1"}}]`,
+			[]createdRow{{uuid: "new-p", title: "tools", typ: model.TypeProject}, {uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'new-p'`}}, []string{"new-p", "ambiguous", "other"}},
+		{"looseTakesShortRow", `[{"type":"project","attributes":{"title":"tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1"}}]`,
+			[]createdRow{{uuid: "new-p", title: "tools", typ: model.TypeProject}, {uuid: "other", title: "Buy oat milk", extra: inProj1}}, []string{"new-p", "not-found", "not-found", "not-found"}},
 		// A list-id and a title naming the same project are one
 		// destination, so the two rows pair with the items as usual.
 		{"listIDAndTitle", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
@@ -730,6 +740,55 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			[]createdRow{{uuid: "dated", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"creation-date", "mine"}},
 		{"datedSameList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","creation-date":"` + now + `"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
 			[]createdRow{{uuid: "dated", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"creation-date", "shares-dated-title"}},
+		// An id attribute wins over its title, even an empty or unknown
+		// one, and an empty or unknown one files the item nowhere.
+		{"listIDOverList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Garden","list-id":"proj-1"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj2}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"mine"}},
+		{"emptyListID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","list-id":""}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		{"unknownListID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","list-id":"nope"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		{"headingIDOverList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-2","heading-id":"head-1"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj2}, {uuid: "mine", title: "Buy oat milk", extra: underHead1}}, []string{"mine"}},
+		{"unknownHeadingID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1","heading":"Setup","heading-id":"nope"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: underHead1}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"mine"}},
+		{"emptyHeadingID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"Setup","heading-id":""}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: underHead1}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"mine"}},
+		{"unknownHeadingIDAlone", `[{"type":"to-do","attributes":{"title":"Buy oat milk","heading-id":"nope"}}]`,
+			[]createdRow{{uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		{"unknownArea", `[{"type":"project","attributes":{"title":"Launch","area":"Nowhere"}}]`,
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: inArea1}, {uuid: "mine", title: "Launch", typ: model.TypeProject}}, []string{"mine"}},
+		{"emptyAreaID", `[{"type":"project","attributes":{"title":"Launch","area":"Errands","area-id":""}}]`,
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}, {uuid: "mine", title: "Launch", typ: model.TypeProject}}, []string{"mine"}},
+		{"unknownAreaID", `[{"type":"project","attributes":{"title":"Launch","area":"Errands","area-id":"nope"}}]`,
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}, {uuid: "mine", title: "Launch", typ: model.TypeProject}}, []string{"mine"}},
+		// A list-id files the to-do into the project whatever its state,
+		// and so does a heading-id of a heading in it.
+		{"loggedListID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-done"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk"}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-done'`}}, []string{"mine"}},
+		{"trashedListID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-bin"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk"}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-bin'`}}, []string{"mine"}},
+		{"trashedProjectHeadingID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","heading-id":"head-bin"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: `project = 'proj-bin'`}, {uuid: "mine", title: "Buy oat milk", extra: `heading = 'head-bin'`}}, []string{"mine"}},
+		// Things does not trim an id, so one with surrounding space matches
+		// nothing, and a null one is no id at all.
+		{"paddedListID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":" proj-1 "}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		{"paddedHeadingID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","heading-id":" head-1 "}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: underHead1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		{"paddedAreaID", `[{"type":"project","attributes":{"title":"Launch","area-id":" area-2 "}}]`,
+			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}, {uuid: "mine", title: "Launch", typ: model.TypeProject}}, []string{"mine"}},
+		{"nullListID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","list-id":null}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk"}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"mine"}},
+		// A list a project created earlier in the payload carries may be
+		// that project or the one the database already had; a project
+		// created later is not there yet, so the to-do goes to the Inbox.
+		{"listCreatedEarlier", `[{"type":"project","attributes":{"title":"tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
+			[]createdRow{{uuid: "new-p", title: "tools", typ: model.TypeProject}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'new-p'`}}, []string{"new-p", "mine"}},
+		{"listCreatedEarlierExisting", `[{"type":"project","attributes":{"title":"tools"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
+			[]createdRow{{uuid: "new-p", title: "tools", typ: model.TypeProject}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"new-p", "mine"}},
+		{"listCreatedLater", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Shed"}},{"type":"project","attributes":{"title":"Shed"}}]`,
+			[]createdRow{{uuid: "new-p", title: "Shed", typ: model.TypeProject}, {uuid: "other", title: "Buy oat milk", extra: `project = 'new-p'`}}, []string{"not-found", "new-p"}},
 		// A title two areas share fits the one whose uuid sorts first,
 		// which Things picks, and not the other.
 		{"sharedAreaTitle", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Personal"}}]`,
@@ -748,6 +807,10 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			fx.Project("proj-1", "Tools", 5)
 			fx.Project("proj-2", "Garden", 6)
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+			fx.Heading("head-old", "Old", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
+			fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+			fx.Project("proj-bin", "Bin", 8, dbtest.Trashed())
+			fx.Heading("head-bin", "Shelf", 3, dbtest.InProject("proj-bin"))
 			stubExecAdding(t, sqlDB, tc.rows...)
 
 			out, _, err := runImportOut(t, database, tc.payload, "--json")
@@ -773,5 +836,60 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The import warns about each item Things will not file where the payload
+// asks, as add does, under --no-verify too, and not about a list a project
+// created earlier in the payload carries.
+func TestImportWarnsAboutDestinations(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-1", "Tools", 5)
+	fx.Project("proj-2", "Garden", 6)
+	fx.Heading("head-1", "Plan", 1, dbtest.InProject("proj-1"))
+	stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"a","list":"Nowhere"}},
+	  {"type":"to-do","attributes":{"title":"b","list":"Tools","list-id":""}},
+	  {"type":"to-do","attributes":{"title":"c","list-id":"nope"}},
+	  {"type":"to-do","attributes":{"title":"d","list":"Tools","heading":"Setup","heading-id":"nope"}},
+	  {"type":"to-do","attributes":{"title":"e","list":"Tools","heading":"Setup"}},
+	  {"type":"project","attributes":{"title":"Shed","area":"Nowhere"}},
+	  {"type":"project","attributes":{"title":"Barn","area-id":"nope"}},
+	  {"type":"to-do","attributes":{"title":"f","list":"shed"}},
+	  {"type":"to-do","attributes":{"title":"g","list":"Garden","heading-id":"head-1"}},
+	  {"type":"to-do","attributes":{"title":"h","list-id":"proj-2","heading-id":"head-1"}},
+	  {"type":"to-do","attributes":{"title":"i","list":"proj-1"}},
+	  {"type":"to-do","attributes":{"title":"j","list":" shed"}},
+	  {"type":"to-do","attributes":{"title":"k","list":"Tools","heading-id":"head-1"}}
+	]`
+	_, stderr, err := runImportOut(t, database, payload, "--no-verify")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for _, want := range []string{
+		`[0]: Things finds no project or area called "Nowhere"; it will put the to-do in the Inbox`,
+		`[1]: list-id is empty; Things will put the to-do in the Inbox`,
+		`[2]: Things finds no project or area with id "nope"; it will put the to-do in the Inbox`,
+		`[3]: Things has no heading with id "nope"; it will ignore heading-id and heading`,
+		`[4]: "Tools" has no heading "Setup"; Things will add the to-do there without a heading`,
+		`[5]: Things has no area called "Nowhere"; it will create the project in no area`,
+		`[6]: Things has no area with id "nope"; it will create the project in no area`,
+		`[8]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list "Garden"`,
+		`[9]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list-id`,
+		`[10]: list "proj-1" is an id, and Things matches list by title only`,
+		`[11]: Things finds no project or area called " shed"`,
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stderr, "[7]") {
+		t.Errorf("warned about a list the payload creates:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "[12]") {
+		t.Errorf("warned about a heading-id in the list the payload names:\n%s", stderr)
 	}
 }
