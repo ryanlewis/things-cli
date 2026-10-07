@@ -471,6 +471,78 @@ func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
 	}
 }
 
+// A to-do sharing a dated item's title is not confirmed, but names the new
+// items it could be, as an ambiguous one does, in the error and under --json.
+func TestImportSharesDatedTitleListsCandidates(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + time.Now().UTC().Format(time.RFC3339) + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review"}}
+	]`
+	_, _, err := runImportOut(t, database, payload, "--json")
+	var verr *importVerifyError
+	if !errors.As(err, &verr) {
+		t.Fatalf("err = %v, want an importVerifyError", err)
+	}
+	items := verr.jsonItems()
+	if len(items) != 1 || items[0].Reason != "shares-dated-title" || strings.Join(items[0].Candidates, ",") != "new-1" {
+		t.Errorf("items = %+v, want [1] shares-dated-title with candidates [new-1]", items)
+	}
+	if !strings.Contains(err.Error(), "may be either (new-1)") {
+		t.Errorf("error does not name the candidate:\n%v", err)
+	}
+}
+
+// Things rejects the whole payload over a creation-date with no time or no
+// UTC offset, so the import refuses it before sending anything, even under
+// --no-verify.
+func TestImportRefusesCreationDateThingsRejects(t *testing.T) {
+	database := seedFullDB(t)
+	captured := stubExec(t)
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Fine","creation-date":"2026-10-05T10:30:00Z"}},
+	  {"type":"to-do","attributes":{"title":"Day only","creation-date":"2026-10-05"}},
+	  {"type":"project","attributes":{"title":"P","items":[
+	    {"type":"to-do","attributes":{"title":"No offset","creation-date":"2026-10-05T10:30:00"}}
+	  ]}}
+	]`
+	_, _, err := runImportOut(t, database, payload, "--no-verify")
+	if err == nil {
+		t.Fatal("expected the payload to be refused")
+	}
+	for _, want := range []string{`[1]: "2026-10-05"`, `[2].attributes.items[0]: "2026-10-05T10:30:00"`, "Nothing was sent"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error missing %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), " [0]:") {
+		t.Errorf("error names the valid creation-date:\n%v", err)
+	}
+	if len(*captured) != 0 {
+		t.Errorf("payload was sent: %v", *captured)
+	}
+}
+
+// Things saves an item whose creation-date is null as created now, so it is
+// read back like an undated one.
+func TestImportNullCreationDateIsReadBack(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk"})
+
+	out, _, err := runImportOut(t, database, `[{"type":"to-do","attributes":{"title":"Buy oat milk","creation-date":null}}]`)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if want := "Created and confirmed: [0] \"Buy oat milk\" (new-1)\n"; out != want {
+		t.Errorf("output = %q, want %q", out, want)
+	}
+}
+
 // A dated item whose creation-date is well before the import can never land
 // in the read-back window, so an undated item with the same title is still
 // read back and confirmed, and the import exits 0.

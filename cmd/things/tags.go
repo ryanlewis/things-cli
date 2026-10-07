@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -134,14 +133,8 @@ func splitTagValues(values ...*string) []string {
 
 // importTags collects every tag named anywhere in a Things JSON payload. Tags
 // live under an item's `attributes`, and items nest (a project carries
-// `items`), so this walks the whole decoded tree. The payload has already
-// been validated as JSON by the caller; anything unparseable yields no tags
-// and the import proceeds as before.
-func importTags(data []byte) []string {
-	var payload any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
+// `items`), so this walks the whole decoded tree.
+func importTags(payload []any) []string {
 	var names []string
 	walkImportTags(payload, &names)
 	return names
