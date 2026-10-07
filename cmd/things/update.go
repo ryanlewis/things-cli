@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,9 +39,13 @@ var (
 	}
 	updateBuildInfo  = debug.ReadBuildInfo
 	latestReleaseURL = "https://api.github.com/repos/ryanlewis/things-cli/releases/latest"
-	latestReleaseTag = fetchLatestReleaseTag
-	updateCommand    = exec.Command
-	dirWritable      = func(dir string) bool {
+	// latestReleasePage redirects to the newest release's tag page. It is the
+	// fallback when the API check fails, and needs no token.
+	latestReleasePage = "https://github.com/ryanlewis/things-cli/releases/latest"
+	latestReleaseTag  = fetchLatestReleaseTag
+	updateCommand     = exec.Command
+	updateTransport   = http.DefaultTransport
+	dirWritable       = func(dir string) bool {
 		const wOK = 0x2 // W_OK in <unistd.h>
 		return syscall.Access(dir, wOK) == nil
 	}
@@ -272,15 +277,48 @@ func (c *UpdateCmd) Run(d *Deps) error {
 	return nil
 }
 
-// fetchLatestReleaseTag asks the GitHub API for the newest release's tag.
+// fetchLatestReleaseTag asks the GitHub API for the newest release's tag and,
+// when that fails, reads the tag from where the releases/latest page
+// redirects.
 func fetchLatestReleaseTag() (string, error) {
+	tag, apiErr := fetchAPIReleaseTag()
+	if apiErr == nil {
+		return tag, nil
+	}
+	tag, pageErr := fetchRedirectReleaseTag()
+	if pageErr == nil {
+		return tag, nil
+	}
+	return "", fmt.Errorf("%w; %w", apiErr, pageErr)
+}
+
+// githubToken is the token for the API check: GH_TOKEN, then GITHUB_TOKEN, the
+// order gh reads them in.
+func githubToken() string {
+	for _, k := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// noRedirects stops the client at the first response, so neither request
+// follows a redirect: the token never leaves api.github.com, and the release
+// page's tag is read from its Location rather than from HTML.
+func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+func fetchAPIReleaseTag() (string, error) {
 	req, err := http.NewRequest(http.MethodGet, latestReleaseURL, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "things-cli")
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if tok := githubToken(); tok != "" && req.URL.Scheme == "https" && req.URL.Host == "api.github.com" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	resp, err := (&http.Client{Transport: updateTransport, CheckRedirect: noRedirects, Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -298,4 +336,33 @@ func fetchLatestReleaseTag() (string, error) {
 		return "", errors.New("GitHub API response has no tag_name")
 	}
 	return release.TagName, nil
+}
+
+// fetchRedirectReleaseTag reads the newest release's tag from the Location
+// the releases/latest page redirects to: /OWNER/REPO/releases/tag/TAG.
+func fetchRedirectReleaseTag() (string, error) {
+	req, err := http.NewRequest(http.MethodGet, latestReleasePage, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "things-cli")
+	resp, err := (&http.Client{Transport: updateTransport, CheckRedirect: noRedirects, Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently {
+		return "", fmt.Errorf("%s returned %s, not a redirect", latestReleasePage, resp.Status)
+	}
+	loc, err := resp.Location()
+	if err != nil {
+		return "", fmt.Errorf("%s redirect: %w", latestReleasePage, err)
+	}
+	page, _ := url.Parse(latestReleasePage)
+	prefix := strings.TrimSuffix(page.Path, "latest") + "tag/"
+	tag, ok := strings.CutPrefix(loc.Path, prefix)
+	if loc.Host != page.Host || !ok || tag == "" || strings.Contains(tag, "/") {
+		return "", fmt.Errorf("%s redirects to %s, not a release tag", latestReleasePage, loc)
+	}
+	return tag, nil
 }

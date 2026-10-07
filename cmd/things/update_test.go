@@ -384,23 +384,141 @@ func TestUpdateReportsAFailedCommand(t *testing.T) {
 	}
 }
 
-func TestFetchLatestReleaseTag(t *testing.T) {
-	status, body := http.StatusOK, `{"tag_name":"v0.9.0"}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+// fakeGitHub answers the release check's requests in-process, keyed by host,
+// and records each one. Nothing reaches the network.
+type fakeGitHub struct {
+	api, page http.HandlerFunc
+	reqs      []*http.Request
+}
+
+func (g *fakeGitHub) RoundTrip(req *http.Request) (*http.Response, error) {
+	g.reqs = append(g.reqs, req)
+	h := g.page
+	if req.URL.Host == "api.github.com" {
+		h = g.api
+	}
+	rec := httptest.NewRecorder()
+	h(rec, req)
+	return rec.Result(), nil
+}
+
+func (g *fakeGitHub) install(t *testing.T) {
+	t.Helper()
+	orig := updateTransport
+	updateTransport = g
+	t.Cleanup(func() { updateTransport = orig })
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+}
+
+func apiReturns(status int, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
-	}))
-	defer srv.Close()
-	orig := latestReleaseURL
-	latestReleaseURL = srv.URL
-	t.Cleanup(func() { latestReleaseURL = orig })
+	}
+}
 
+func pageRedirectsTo(loc string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", loc)
+		w.WriteHeader(http.StatusFound)
+	}
+}
+
+func TestFetchLatestReleaseTag(t *testing.T) {
+	g := &fakeGitHub{api: apiReturns(http.StatusOK, `{"tag_name":"v0.9.0"}`)}
+	g.install(t)
 	if tag, err := fetchLatestReleaseTag(); err != nil || tag != "v0.9.0" {
 		t.Errorf("got %q, %v; want v0.9.0", tag, err)
 	}
-	status, body = http.StatusForbidden, `{"message":"rate limited"}`
-	if _, err := fetchLatestReleaseTag(); err == nil || !strings.Contains(err.Error(), "403") {
-		t.Errorf("err = %v, want the 403", err)
+	if len(g.reqs) != 1 || g.reqs[0].Header.Get("Authorization") != "" {
+		t.Errorf("requests %v, want one to the API with no token", g.reqs)
+	}
+}
+
+func TestFetchLatestReleaseTagSendsTheToken(t *testing.T) {
+	cases := []struct {
+		name, gh, github, want string
+	}{
+		{"GITHUB_TOKEN", "", "ghp_github", "Bearer ghp_github"},
+		{"GH_TOKEN", "ghp_gh", "", "Bearer ghp_gh"},
+		{"GH_TOKEN first, as gh does", "ghp_gh", "ghp_github", "Bearer ghp_gh"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &fakeGitHub{api: apiReturns(http.StatusOK, `{"tag_name":"v0.9.0"}`)}
+			g.install(t)
+			t.Setenv("GH_TOKEN", tc.gh)
+			t.Setenv("GITHUB_TOKEN", tc.github)
+			if _, err := fetchLatestReleaseTag(); err != nil {
+				t.Fatal(err)
+			}
+			if got := g.reqs[0].Header.Get("Authorization"); got != tc.want {
+				t.Errorf("Authorization = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFetchLatestReleaseTagKeepsTheTokenOnAPIGitHub(t *testing.T) {
+	// The token goes to api.github.com only: not to another API URL, not to
+	// the releases page, and not along a redirect.
+	g := &fakeGitHub{
+		api:  pageRedirectsTo("https://elsewhere.example/releases/latest"),
+		page: pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/v0.9.0"),
+	}
+	g.install(t)
+	t.Setenv("GITHUB_TOKEN", "ghp_secret")
+	if tag, err := fetchLatestReleaseTag(); err != nil || tag != "v0.9.0" {
+		t.Fatalf("got %q, %v; want v0.9.0 from the page", tag, err)
+	}
+	orig := latestReleaseURL
+	latestReleaseURL = "https://elsewhere.example/repos/ryanlewis/things-cli/releases/latest"
+	t.Cleanup(func() { latestReleaseURL = orig })
+	_, _ = fetchLatestReleaseTag()
+	for _, r := range g.reqs {
+		if r.URL.Host != "api.github.com" && r.Header.Get("Authorization") != "" {
+			t.Errorf("token sent to %s", r.URL)
+		}
+	}
+	if len(g.reqs) != 4 {
+		t.Errorf("made %d requests, want 4 (no redirect followed)", len(g.reqs))
+	}
+}
+
+func TestFetchLatestReleaseTagFallsBackToTheRedirect(t *testing.T) {
+	g := &fakeGitHub{
+		api:  apiReturns(http.StatusForbidden, `{"message":"rate limited"}`),
+		page: pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/v0.9.1"),
+	}
+	g.install(t)
+	if tag, err := fetchLatestReleaseTag(); err != nil || tag != "v0.9.1" {
+		t.Errorf("got %q, %v; want v0.9.1", tag, err)
+	}
+	if len(g.reqs) != 2 || g.reqs[1].URL.String() != latestReleasePage {
+		t.Errorf("requests %v, want the API then %s", g.reqs, latestReleasePage)
+	}
+}
+
+func TestFetchLatestReleaseTagRedirectMustNameATag(t *testing.T) {
+	cases := map[string]http.HandlerFunc{
+		"no releases yet": pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases"),
+		"other host":      pageRedirectsTo("https://elsewhere.example/ryanlewis/things-cli/releases/tag/v0.9.1"),
+		"other repo":      pageRedirectsTo("https://github.com/someone/else/releases/tag/v0.9.1"),
+		"deeper path":     pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/v0.9.1/extra"),
+		"no redirect":     apiReturns(http.StatusOK, "<html>"),
+		"not found":       apiReturns(http.StatusNotFound, ""),
+	}
+	for name, page := range cases {
+		t.Run(name, func(t *testing.T) {
+			g := &fakeGitHub{api: apiReturns(http.StatusForbidden, ""), page: page}
+			g.install(t)
+			_, err := fetchLatestReleaseTag()
+			if err == nil || !strings.Contains(err.Error(), "GitHub API returned 403 Forbidden; ") ||
+				!strings.Contains(err.Error(), latestReleasePage) {
+				t.Errorf("err = %v, want both failures", err)
+			}
+		})
 	}
 }
 
