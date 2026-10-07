@@ -32,18 +32,15 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	}
 	// Things matches area by title only; a uuid has to go as area-id.
 	area, areaID := c.Area, ""
-	id, known, areas := projectAreaID(d, area, "it will create the project with no area")
-	// Where Things will file the project, for the read-back.
-	dest := createdDest{checked: true}
+	target, read := projectArea(d, area, "it will create the project with no area")
+	// Where Things will file the project, for the read-back: the area the
+	// title or uuid leads to, or none when it leads nowhere.
+	dest := createdDest{checked: true, list: target}
 	switch {
-	case id != "":
-		area, areaID = "", id
-		dest.list = id
-	case area == "" || !known:
-	case areas == nil:
+	case !read:
 		dest = createdDest{}
-	default:
-		dest = areaTitleDest(areas, area)
+	case target != "" && target == strings.TrimSpace(area):
+		area, areaID = "", target
 	}
 	return applyAdd(d, model.TypeProject, c.Title, dest, func() error {
 		return things.AddProject(things.AddProjectParams{
@@ -59,65 +56,37 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	})
 }
 
-// areaTitleDest is where Things files a project sent with area, a title at
-// least one of areas has: the area titledArea picks, by uuid.
-func areaTitleDest(areas []model.Area, area string) createdDest {
-	return createdDest{checked: true, list: titledArea(areas, area)}
-}
-
-// titledArea returns the uuid of the area Things files into when sent area as
-// a title, "" when no area has it. Several areas can share a title under
-// FoldName; Things takes the one whose uuid sorts first byte by byte, even
-// when another one's title matches area exactly (see db.AddTarget).
-func titledArea(areas []model.Area, area string) string {
-	key, id := db.FoldName(area), ""
-	for _, a := range areas {
-		if db.FoldName(a.Title) == key && (id == "" || a.UUID < id) {
-			id = a.UUID
-		}
-	}
-	return id
-}
-
-// projectAreaID returns area when it is the uuid of an area, which has to go
-// to Things as area-id, and warns when Things will not file the project under
-// any area. Things matches the title ignoring case but not surrounding space,
-// and when nothing matches it goes ahead without the area and without
-// reporting it: add creates the project with no area, and update leaves it
-// where it is. fallback says which, for the warning. known is false only when
-// the warning was given. areas is every area, read for the check, and nil
-// when area is empty or the areas could not be read. A database that cannot
-// be read gives no warning here: the read-back reports that.
-func projectAreaID(d *Deps, area, fallback string) (id string, known bool, areas []model.Area) {
+// projectArea returns the uuid of the area Things files a project in when
+// sent area, by title or uuid (see db.AreaTarget); when it is area itself,
+// the uuid has to go to Things as area-id. It warns when Things will not
+// file the project under any area: Things matches the title ignoring case
+// but not surrounding space, and when nothing matches it goes ahead without
+// the area and without reporting it: add creates the project with no area,
+// and update leaves it where it is. fallback says which, for the warning. It
+// notes when several areas share the title. read is false when the database
+// cannot be read, which gives no warning here: the read-back reports that.
+// An empty area returns "", true.
+func projectArea(d *Deps, area, fallback string) (target string, read bool) {
 	if area == "" {
-		return "", true, nil
+		return "", true
 	}
 	database, err := d.Database()
 	if err != nil {
-		return "", true, nil
-	}
-	areas, err = database.ListAreas()
-	if err != nil {
-		return "", true, nil
-	}
-	if areas == nil {
-		areas = []model.Area{}
+		return "", false
 	}
 	// Not FindAreaUUID: it ignores surrounding space, and Things does not.
 	// Checked in Things 3 with " Personal " against an area called Personal,
 	// for project add's area and add's list alike: neither matched.
-	found := false
-	for _, a := range areas {
-		// A uuid goes as area-id, which is sent trimmed.
-		if a.UUID == strings.TrimSpace(area) {
-			return a.UUID, true, areas
-		}
-		found = found || db.FoldName(a.Title) == db.FoldName(area)
-	}
-	if !found {
+	t, err := database.AreaTarget(area)
+	switch {
+	case err != nil:
+		return "", false
+	case t.UUID == "":
 		fmt.Fprintf(d.errOut(), "warning: Things has no area called %q; %s\n", area, fallback)
+	default:
+		noteTarget(d, area, "areas", t, true)
 	}
-	return "", found, areas
+	return t.UUID, true
 }
 
 type ProjectEditCmd struct {
@@ -154,12 +123,11 @@ func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bo
 	case c.Area == nil || c.AreaID != nil:
 		return anySet(c.Area, c.AreaID)
 	}
-	id, known, areas := projectAreaID(d, *c.Area, "the project will stay where it is")
-	if id != "" {
-		c.Area, c.AreaID = nil, &id
-		return id != task.AreaUUID
+	target, read := projectArea(d, *c.Area, "the project will stay where it is")
+	if target != "" && target == strings.TrimSpace(*c.Area) {
+		c.Area, c.AreaID = nil, &target
 	}
-	return known && (areas == nil || titledArea(areas, *c.Area) != task.AreaUUID)
+	return !read || target != "" && target != task.AreaUUID
 }
 
 // checkAreaID warns when Things has no area with the uuid --area-id gives,

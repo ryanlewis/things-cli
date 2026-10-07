@@ -466,7 +466,9 @@ func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 		{"projectUUID", []string{"--project", "proj-1"}, "", inProj1},
 		{"areaUUID", []string{"--list", "area-1"}, "", inArea1},
 		{"headingInProjectUUID", []string{"--project", "proj-1", "--heading", "Setup"}, "", underHead1},
-		{"completedProjectUUID", []string{"--project", "proj-done"}, `no project or area called "proj-done"`, ""},
+		// Measured in Things 3: list-id files into a logged project, and
+		// reopens it.
+		{"completedProjectUUID", []string{"--project", "proj-done"}, `"Old" is completed; Things will file into it and reopen it`, `project = 'proj-done'`},
 		{"knownHeading", []string{"--list", "Tools", "--heading", "setup"}, "", underHead1},
 		{"unknownList", []string{"--list", "Nowhere"}, `no project or area called "Nowhere"`, ""},
 		{"unknownProjectFlag", []string{"--project", "Nowhere"}, `no project or area called "Nowhere"`, ""},
@@ -501,21 +503,22 @@ func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 				}
 				return
 			}
-			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
-				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
+			if !strings.Contains(stderr, "warning: ") && !strings.Contains(stderr, "note: ") || !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want a warning or note containing %q", stderr, tc.want)
 			}
 		})
 	}
 }
 
 // Things matches --list and --project by title only, so a uuid filed the
-// to-do in the Inbox. A uuid of an open project or area now goes to Things as
+// to-do in the Inbox. A uuid of a project or area now goes to Things as
 // list-id; a title still goes as list.
 func TestAddSendsUUIDAsListID(t *testing.T) {
 	cases := []struct {
 		name, flag, value, want string
 	}{
 		{"projectUUID", "--project", "proj-1", "list-id=proj-1"},
+		{"templateUUID", "--list", "repproj-1", "list-id=repproj-1"},
 		{"paddedUUID", "--project", " proj-1 ", "list-id=proj-1"},
 		{"areaUUID", "--list", "area-1", "list-id=area-1"},
 		{"title", "--project", "Tools", "list=Tools"},
@@ -784,5 +787,88 @@ func TestAddSharedListTitleChecksThingsPick(t *testing.T) {
 				t.Errorf("printed %s, want %s", got.UUID, tc.row.uuid)
 			}
 		})
+	}
+}
+
+// Things files into a list the user may not expect when several share the
+// title they gave, or when the project is closed: each write that names a
+// list or area says so on stderr, and still goes ahead.
+func TestListTargetNotes(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"addShared", []string{"add", "Buy oat milk", "--list", "personal"},
+			`note: several lists are called "personal"; Things will use "Personal" (area-1); pass a UUID to choose`},
+		{"addClosed", []string{"add", "Buy oat milk", "--project", "Shelved"},
+			`note: "Shelved" is completed; Things will file into it and reopen it`},
+		{"addTrashedUUID", []string{"add", "Buy oat milk", "--project", "proj-bin"},
+			`note: "Binned" is in the Trash; Things will file into it there`},
+		{"editShared", []string{"edit", "one-1", "--list", "PERSONAL"},
+			`note: several lists are called "PERSONAL"; Things will use "Personal" (area-1)`},
+		{"editClosed", []string{"edit", "one-1", "--list", "shelved"},
+			`note: "Shelved" is completed; Things will file into it and reopen it`},
+		{"projectAddShared", []string{"project", "add", "Launch", "--area", "personal"},
+			`note: several areas are called "personal"; Things will use "Personal" (area-1)`},
+		{"projectEditShared", []string{"project", "edit", "repproj-1", "--area", "personal"},
+			`note: several areas are called "personal"; Things will use "Personal" (area-1)`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Area("area-1", "Personal", 1)
+			fx.Area("area-3", "personal", 3)
+			fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(time.Now())))
+			fx.Project("proj-bin", "Binned", 6, dbtest.Trashed())
+			stubExecDropping(t)
+
+			_, stderr, _ := runStreams(t, database, append([]string{"--no-verify"}, tc.args...)...)
+			if !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want %q", stderr, tc.want)
+			}
+		})
+	}
+}
+
+// A to-do already in a closed project is not moved there again, so nothing
+// reopens and there is no note.
+func TestEditNoClosedNoteInPlace(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(time.Now())))
+	fx.Todo("in-done", "Sweep", 6, dbtest.Anytime(), dbtest.InProject("proj-done"))
+	stubExecDropping(t)
+
+	_, stderr, _ := runStreams(t, database, "--no-verify", "edit", "in-done", "--list", "Shelved")
+	if strings.Contains(stderr, "note: ") {
+		t.Errorf("stderr = %q, want no note", stderr)
+	}
+}
+
+// When the areas cannot be read, project edit --area cannot rule a move out,
+// so it waits for the change rather than calling the edit a no-op.
+func TestProjectEditAreaUnreadable(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Area("area-1", "Personal", 1)
+	fx.Project("in-area", "Garden", 5, dbtest.InArea("area-1"))
+	task, err := database.GetTaskByUUID("in-area")
+	if err != nil || task == nil {
+		t.Fatalf("GetTaskByUUID: %v", err)
+	}
+	if _, err := sqlDB.Exec(`DROP TABLE TMArea`); err != nil {
+		t.Fatal(err)
+	}
+	var stderr strings.Builder
+	d := &Deps{DB: database, Stderr: &stderr}
+	area := "Personal"
+	c := &ProjectEditCmd{Area: &area}
+	if !c.checkOwn(d, database, task) {
+		t.Error("checkOwn = false, want true: the move cannot be ruled out")
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want no warning", stderr.String())
 	}
 }

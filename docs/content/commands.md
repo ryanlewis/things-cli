@@ -399,23 +399,31 @@ things add "Groceries" --checklist "Milk\nBread\nEggs"
 `YYYY-MM-DD` date only.
 
 Things files the to-do by matching `--list` (or `--project`) against the
-titles of open projects and areas, and `--heading` against the headings of
-that project. Both ignore case but not surrounding space, so `" Tools "`
-does not match a project called Tools. When nothing matches it does not complain: it
-puts the to-do in the Inbox, or adds it to the list without the heading. A
-trashed project does not match, nor does a closed one Things has moved to
-the Logbook; one closed but not yet logged (by default, one completed or
-cancelled today), which Things still shows, does. When several projects,
-or with no project several areas, match the title, Things files the to-do in the one whose UUID sorts first, even when
-another one's title matches exactly, and the CLI checks that one. A UUID
-of an open project or area names one directly: the CLI sends it to Things
-as `list-id`. The add warns on
-stderr when the to-do will not land where you asked, then sends it anyway:
+titles of the projects and areas it shows, and `--heading` against the
+headings of that project. Both ignore case but not surrounding space, so
+`" Tools "` does not match a project called Tools. When nothing matches it
+does not complain: it puts the to-do in the Inbox, or adds it to the list
+without the heading. A trashed project does not match by title, nor does a
+closed one Things has moved to the Logbook; one closed but not yet logged
+(by default, one completed or cancelled today), which Things still shows,
+does, and Things reopens it. Only the default "Move completed items to
+Logbook" choice, daily, was measured; under the others the CLI assumes the
+same not-yet-logged rule its lists follow. When several projects, or with
+no project several areas, match the title, Things files the to-do in the
+one whose UUID sorts first, even when another one's title matches exactly,
+and the CLI checks that one. A UUID names one directly: the CLI sends it
+to Things as `list-id`, and Things files into that project whatever its
+state, reopening a closed one, or into that area. The add warns on stderr
+when the to-do will not land where you asked, and notes when it will land
+somewhere you may not expect, then sends it anyway:
 
 ```
 warning: Things finds no project or area called "Nowhere"; it will put the to-do in the Inbox
 warning: "Tools" has no heading "Later"; Things will add the to-do there without a heading
 warning: --heading "Later" needs --list or --project; Things will ignore it and put the to-do in the Inbox
+note: several lists are called "tools"; Things will use "Tools" (4Kc9…); pass a UUID to choose
+note: "Tools" is completed; Things will file into it and reopen it
+note: "Tools" is in the Trash; Things will file into it there
 ```
 
 `things project add` creates a new project with the same flag set
@@ -424,9 +432,9 @@ takes an area name or UUID; a UUID goes to Things as `area-id`, since
 Things matches `area` by title only. It matches the title ignoring case and
 compatibility forms (fullwidth letters, superscript digits) but not
 surrounding space; when several areas match, Things takes the one whose
-UUID sorts first, as for `add --list`. When nothing matches it creates the
-project with no area. `project add` warns on stderr when that will happen, then sends the
-project anyway:
+UUID sorts first, as for `add --list`, and the CLI notes which. When
+nothing matches it creates the project with no area. `project add` warns on
+stderr when that will happen, then sends the project anyway:
 
 ```
 warning: Things has no area called "Nowhere"; it will create the project with no area
@@ -485,7 +493,7 @@ does for `add`: ignoring case and compatibility forms but not surrounding
 space, and only against
 the projects (including one closed but not yet logged) and areas `add`
 matches; when several share the title, the one whose UUID sorts first is
-the one the to-do moves to. `--list` also takes a UUID of an open project or
+the one the to-do moves to. `--list` also takes a UUID of a project or
 area, which the CLI sends to Things as `list-id`; `--list-id` and
 `--heading-id` take UUIDs directly. `--heading` on its own looks in the
 project the to-do is already in. When nothing matches, Things does not

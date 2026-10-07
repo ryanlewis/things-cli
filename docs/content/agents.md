@@ -456,8 +456,11 @@ instead of assuming:
   The CLI warns before writing; `--create-tags` creates the missing ones
   first and `--strict-tags` refuses to write instead.
 - **Lists, headings and areas must match.** Things files or moves an item
-  only when `--list`, `--heading` or `--area` matches an open project, area
-  or heading, ignoring case but not surrounding space. A project or area
+  only when `--list`, `--heading` or `--area` matches a project Things
+  shows (open, or closed but not yet logged, which it reopens), an area or
+  a heading, ignoring case but not surrounding space. When several projects
+  or areas match, Things takes the one whose UUID sorts first, and the CLI
+  notes which on stderr; pass a UUID to choose. A project or area
   title also matches across compatibility forms (fullwidth `Ｗork` is
   `Work`). Otherwise it drops
   that part without a word: a new to-do goes to the Inbox, an edited item
