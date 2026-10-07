@@ -45,7 +45,7 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	if target.UUID != "" {
 		noteTarget(d, area, "areas", target)
 	}
-	return applyAdd(d, model.TypeProject, c.Title, dest, func() error {
+	return applyAdd(d, model.TypeProject, c.Title, dest, c.When, func() error {
 		return things.AddProject(things.AddProjectParams{
 			Title:    c.Title,
 			Notes:    c.Notes,

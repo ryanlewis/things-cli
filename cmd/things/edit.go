@@ -318,12 +318,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 			Reveal:       s.Reveal,
 		})
 	}
-	// A reminder that cannot be read counts as one, so the edit waits.
-	hasReminder := func() bool {
-		ok, err := database.HasReminder(task.UUID)
-		return ok || err != nil
-	}
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), hasReminder)
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), readReminder(database, task.UUID))
 	if already {
 		if !changed && !s.Reveal {
 			noteAlreadyClosed(d, task)
@@ -331,16 +326,16 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 		}
 		fmt.Fprintf(d.errOut(), "note: %q is already %s; the status is left out of the edit\n", task.Title, task.Status)
 	}
-	return applyEdit(d, database, task, changed, checklist, want, s.Duplicate, update)
+	return applyEdit(d, database, task, changed, checklist, want, s.Duplicate, f.When, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
 // leaves the item as it is, so there is no modification to wait for.
 // uncovered says whether any field flag outside coveredFields is set,
 // dropped holds the folded tag names Things will drop (foldTags), and
-// hasReminder reads whether the item has a reminder (whenUnchanged).
-func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, hasReminder func() bool) bool {
-	return !uncovered && f.covered().unchanged(task, dropped, hasReminder)
+// reminder reads the item's reminder (whenUnchanged).
+func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, reminder func() (int, error)) bool {
+	return !uncovered && f.covered().unchanged(task, dropped, reminder)
 }
 
 // foldTags folds the names verifyTags says Things will drop, so the no-op
@@ -384,7 +379,7 @@ func (f coveredFields) set() bool {
 // counts as a change, and the edit waits for its read-back as before. Tags
 // named in dropped do not exist in Things, which ignores them, so they count
 // as no change.
-func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, hasReminder func() bool) bool {
+func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, reminder func() (int, error)) bool {
 	if f.title != nil && *f.title != task.Title {
 		return false
 	}
@@ -396,7 +391,7 @@ func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, 
 	if f.prependNotes != nil && *f.prependNotes != "" || f.appendNotes != nil && *f.appendNotes != "" {
 		return false
 	}
-	if f.when != nil && !whenUnchanged(*f.when, task, time.Now(), hasReminder) {
+	if f.when != nil && !whenUnchanged(*f.when, task, time.Now(), reminder) {
 		return false
 	}
 	// Tags compare the way Things matches them: case-insensitively, after
@@ -447,51 +442,6 @@ func deadlineUnchanged(value string, current *model.ThingsDate) bool {
 	}
 	date, err := time.ParseInLocation("2006-01-02", v, time.Local)
 	return err == nil && current != nil && *current == model.ThingsDateFromTime(date)
-}
-
-// whenUnchanged covers a --when that leaves the item where it is, as checked
-// in Things 3 on to-dos and projects. anytime, and an empty value, match an
-// Anytime item with no start date; someday matches a Someday item with no
-// start date. today and evening match an item scheduled for today in that part
-// of the day, and a date of today matches either part. Each of those clears a
-// reminder, which counts as a change, so hasReminder is asked only then.
-// tomorrow, or a later date, matches an item scheduled that day, reminder or
-// not. A time, a phrase, or a date already past counts as a change.
-func whenUnchanged(value string, task *model.Task, now time.Time, hasReminder func() bool) bool {
-	v, err := things.NormalizeWhen(value)
-	if err != nil {
-		return false
-	}
-	switch v {
-	case "", "anytime":
-		return task.Start == model.StartAnytime && task.StartDate == nil
-	case "someday":
-		return task.Start == model.StartSomeday && task.StartDate == nil
-	case "tomorrow":
-		v = now.AddDate(0, 0, 1).Format("2006-01-02")
-	}
-	today := model.ThingsDateFromTime(now)
-	if task.StartDate == nil {
-		return false
-	}
-	switch v {
-	case "today":
-		return *task.StartDate == today && task.StartBucket == 0 && !hasReminder()
-	case "evening":
-		return *task.StartDate == today && task.StartBucket == 1 && !hasReminder()
-	}
-	date, err := time.ParseInLocation("2006-01-02", v, time.Local)
-	if err != nil {
-		return false
-	}
-	want := model.ThingsDateFromTime(date)
-	switch {
-	case want < today:
-		return false
-	case want == today:
-		return *task.StartDate == today && !hasReminder()
-	}
-	return *task.StartDate == want
 }
 
 // anySet reports whether any of the optional flags was given.

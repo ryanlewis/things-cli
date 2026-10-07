@@ -412,7 +412,7 @@ func TestAddNotFoundSearchHintKeepsGlobalFlags(t *testing.T) {
 		Stderr: io.Discard,
 	}
 
-	err := applyAdd(d, model.TypeTask, "Buy oat milk", createdDest{}, func() error { return things.AddTask(things.AddParams{Title: "Buy oat milk"}) })
+	err := applyAdd(d, model.TypeTask, "Buy oat milk", createdDest{}, "", func() error { return things.AddTask(things.AddParams{Title: "Buy oat milk"}) })
 	want := "things --db '/tmp/my things.sqlite' --config /tmp/c.toml search 'Buy oat milk'"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("err = %v, want the hint %q", err, want)

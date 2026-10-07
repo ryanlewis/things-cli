@@ -4778,21 +4778,21 @@ func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
 	}
 }
 
-// HasReminder reads reminderTime alone; a missing item has none.
-func TestHasReminder(t *testing.T) {
+// ReminderTime reads reminderTime alone; a missing item has none.
+func TestReminderTime(t *testing.T) {
 	d, fx := newFixture(t)
 	fx.Todo("rem-1", "Reminded", 1)
 	fx.Todo("plain-1", "Plain", 2)
 	if _, err := d.db.Exec(`UPDATE TMTask SET reminderTime = 1207959552 WHERE uuid = 'rem-1'`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	for uuid, want := range map[string]bool{"rem-1": true, "plain-1": false, "nope": false} {
-		got, err := d.HasReminder(uuid)
+	for uuid, want := range map[string]int64{"rem-1": 1207959552, "plain-1": -1, "nope": -1} {
+		raw, ok, err := d.ReminderTime(uuid)
 		if err != nil {
-			t.Fatalf("HasReminder(%q): %v", uuid, err)
+			t.Fatalf("ReminderTime(%q): %v", uuid, err)
 		}
-		if got != want {
-			t.Errorf("HasReminder(%q) = %v, want %v", uuid, got, want)
+		if got := map[bool]int64{true: raw, false: -1}[ok]; got != want {
+			t.Errorf("ReminderTime(%q) = %d, %v, want %d", uuid, raw, ok, want)
 		}
 	}
 }
