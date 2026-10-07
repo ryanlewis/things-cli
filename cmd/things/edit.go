@@ -249,7 +249,26 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 			Retry: kind.retry,
 		}
 	}
-	if err := checkRepeating(task, restrictedEdits(f.When, f.Deadline, s.Complete, s.Cancel, s.Duplicate)); err != nil {
+	// The status flags go through the guard `complete` and `cancel` use. A
+	// status the item already has is dropped from the write, and the rest of
+	// the edit still goes; a switch between completed and cancelled is
+	// refused whole.
+	complete, cancel := s.Complete, s.Cancel
+	var already model.Status
+	if complete || cancel {
+		want := model.StatusCompleted
+		if cancel {
+			want = model.StatusCancelled
+		}
+		same, err := checkClosed(task, want)
+		if err != nil {
+			return err
+		}
+		if same {
+			already, complete, cancel = want, false, false
+		}
+	}
+	if err := checkRepeating(task, restrictedEdits(f.When, f.Deadline, complete, cancel, s.Duplicate)); err != nil {
 		return err
 	}
 	// After checkRepeating: no point warning about tags on an edit Things
@@ -273,8 +292,8 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 			Deadline:     f.Deadline,
 			Tags:         f.Tags,
 			AddTags:      f.AddTags,
-			Completed:    s.Complete,
-			Canceled:     s.Cancel,
+			Completed:    complete,
+			Canceled:     cancel,
 			Duplicate:    s.Duplicate,
 			Reveal:       s.Reveal,
 		})
@@ -285,7 +304,14 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 		return ok || err != nil
 	}
 	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), hasReminder)
-	return applyEdit(d, database, task, changed, checklist, s.Complete, s.Cancel, s.Duplicate, update)
+	if already != model.StatusOpen {
+		if !changed && !s.Duplicate && !s.Reveal {
+			fmt.Fprintf(d.errOut(), "note: %q is already %s; nothing sent\n", task.Title, already)
+			return printItem(d, database, task)
+		}
+		fmt.Fprintf(d.errOut(), "note: %q is already %s; the other edits are sent without the status\n", task.Title, already)
+	}
+	return applyEdit(d, database, task, changed, checklist, complete, cancel, s.Duplicate, update)
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
@@ -503,16 +529,13 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 	if err != nil {
 		return err
 	}
-	// Listings show the items closed today by default, numbered like the
-	// rest, so a ref can land on one. Nothing is sent for it: closing it the
-	// same way again has nothing to do, and switching a completed item to
-	// cancelled, or back, is not what either command is for.
-	if task.Status == want {
+	same, err := checkClosed(task, want)
+	if err != nil {
+		return err
+	}
+	if same {
 		fmt.Fprintf(d.errOut(), "note: %q is already %s; nothing sent\n", task.Title, want)
 		return nil
-	}
-	if task.Status != model.StatusOpen {
-		return fmt.Errorf("%q is already %s, so it was not %s; nothing sent", task.Title, task.Status, want)
 	}
 	if err := checkRepeating(task, []string{sc.blockedWord}); err != nil {
 		return err
@@ -525,4 +548,20 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 		write = func() error { return sc.projectWrite(task.UUID) }
 	}
 	return applyStatusWrite(d, database, task, want, write)
+}
+
+// checkClosed reports whether task already has the closed status want, and
+// refuses to switch a completed item to cancelled, or back. Listings show the
+// items closed today by default, numbered like the rest, so a ref can land on
+// one: closing it the same way again has nothing to do, and the switch is not
+// what `complete`, `cancel` or their `edit` flags are for. Things itself
+// ignores the first and applies the second.
+func checkClosed(task *model.Task, want model.Status) (bool, error) {
+	if task.Status == want {
+		return true, nil
+	}
+	if task.Status != model.StatusOpen {
+		return false, fmt.Errorf("%q is already %s, so it was not %s; nothing sent", task.Title, task.Status, want)
+	}
+	return false, nil
 }

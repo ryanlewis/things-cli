@@ -538,8 +538,15 @@ is. It then prints the item straight away. Any other re-set value, such as
 a `--when` with a time or an English phrase, still waits and reports the
 same error, so on that error check the item with `things show` before
 retrying.
-An edit with nothing to change (no field flags, or `--complete` on a task
-that is already complete) prints the item without waiting.
+An edit with nothing to change (no field flags) prints the item without
+waiting.
+
+`--complete` and `--cancel` follow the same rule as `things complete` and
+`things cancel`. On an item already in that state, the status is not sent:
+with no other flags, nothing is sent and the item is printed with a note;
+with other flags, those are sent and read back as usual. Completing a
+cancelled item, or cancelling a completed one, refuses the whole edit and
+sends nothing.
 
 Two cases are not read back, and say so instead of printing the item:
 

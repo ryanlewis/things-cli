@@ -289,6 +289,8 @@ things edit <task> [--title --notes --prepend-notes --append-notes --when --dead
     # tasks only; a project reference is refused — edit projects with `things project edit`
 things project edit <project> [--title --notes --prepend-notes --append-notes --when --deadline --tags --add-tags --area --area-id --complete --cancel --duplicate --reveal --strict-tags --create-tags]
     # projects only; a task reference is refused — edit tasks with `things edit`
+    # --complete/--cancel on either: same guard as `complete`/`cancel` below; a status
+    # the item already has is dropped and the other flags still apply; a switch refuses the whole edit
 things complete <task> [-y|--yes]   # task or project; a project asks first (rule 4)
 things cancel <task> [-y|--yes]
     # on an item already in that state: exit 0, a note, nothing sent; on one

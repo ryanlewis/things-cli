@@ -220,6 +220,86 @@ func TestCompleteCancelOnClosedItemSendsNothing(t *testing.T) {
 	}
 }
 
+// edit --complete and --cancel go through the same guard: on an item already
+// in that state they exit 0 with a note and send nothing, and a switch between
+// completed and cancelled is refused whole, other edits included. The same
+// holds for project edit.
+func TestEditStatusOnClosedItemSendsNothing(t *testing.T) {
+	cases := []struct {
+		name    string
+		uuid    string
+		status  int
+		args    []string
+		wantErr string
+	}{
+		{"complete completed", "one-1", 3, []string{"edit", "one-1", "--complete"}, ""},
+		{"cancel cancelled", "one-1", 2, []string{"edit", "one-1", "--cancel"}, ""},
+		{"complete cancelled", "one-1", 2, []string{"edit", "one-1", "--complete"}, "is already cancelled, so it was not completed"},
+		{"cancel completed", "one-1", 3, []string{"edit", "one-1", "--cancel", "--title", "New"}, "is already completed, so it was not cancelled"},
+		{"project complete completed", "proj-1", 3, []string{"project", "edit", "proj-1", "--complete"}, ""},
+		{"project cancel completed", "proj-1", 3, []string{"project", "edit", "proj-1", "--cancel"}, "is already completed, so it was not cancelled"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			dbtest.NewFixture(t, sqlDB).Project("proj-1", "Move house", 4)
+			if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = ?`, tc.status, tc.uuid); err != nil {
+				t.Fatal(err)
+			}
+			calls := stubExecDropping(t)
+
+			stderr, err := runCapturingStderr(t, database, tc.args...)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want it to say %q", err, tc.wantErr)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("run %v: %v", tc.args, err)
+				}
+				if !strings.Contains(stderr, "nothing sent") {
+					t.Errorf("stderr = %q, want a note saying nothing was sent", stderr)
+				}
+			}
+			if *calls != 0 {
+				t.Errorf("issued %d write(s); a closed item must not reach Things", *calls)
+			}
+		})
+	}
+}
+
+// On an item already completed, edit --complete with other flags still sends
+// those, without the status Things already has, and waits for them to land.
+func TestEditCompleteOnCompletedSendsOtherEdits(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET status = 3 WHERE uuid = 'one-1'`); err != nil {
+		t.Fatal(err)
+	}
+	var sent []string
+	prev := things.SetExecCommandForTest(func(name string, args ...string) *exec.Cmd {
+		sent = append(sent, strings.Join(args, " "))
+		if _, err := sqlDB.Exec(`UPDATE TMTask SET title = 'Post parcel' WHERE uuid = 'one-1'`); err != nil {
+			t.Errorf("simulating Things write: %v", err)
+		}
+		bumpModificationDates(t, sqlDB)
+		return exec.Command("true")
+	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+	stderr, err := runCapturingStderr(t, database, "edit", "one-1", "--complete", "--title", "Post parcel")
+	if err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if len(sent) != 1 || !strings.Contains(sent[0], "title=Post%20parcel") || strings.Contains(sent[0], "completed") {
+		t.Errorf("sent %q, want one write with the title and no status", sent)
+	}
+	if !strings.Contains(stderr, "already completed") {
+		t.Errorf("stderr = %q, want a note that the status was already set", stderr)
+	}
+}
+
 // The core of issue #129: a write Things accepts and then ignores must not be
 // reported as success.
 func TestSilentlyDroppedWriteFails(t *testing.T) {
