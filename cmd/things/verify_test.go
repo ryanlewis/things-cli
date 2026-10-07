@@ -228,23 +228,23 @@ func TestEditStatusOnClosedItemSendsNothing(t *testing.T) {
 	cases := []struct {
 		name    string
 		uuid    string
-		status  int
+		status  model.Status
 		args    []string
 		wantErr string
 	}{
-		{"complete completed", "one-1", 3, []string{"edit", "one-1", "--complete"}, ""},
-		{"cancel cancelled", "one-1", 2, []string{"edit", "one-1", "--cancel"}, ""},
-		{"complete cancelled", "one-1", 2, []string{"edit", "one-1", "--complete"}, "is already cancelled, so it was not completed"},
-		{"cancel completed", "one-1", 3, []string{"edit", "one-1", "--cancel", "--title", "New"}, "is already completed, so it was not cancelled"},
-		{"project complete completed", "proj-1", 3, []string{"project", "edit", "proj-1", "--complete"}, ""},
-		{"project cancel completed", "proj-1", 3, []string{"project", "edit", "proj-1", "--cancel"}, "is already completed, so it was not cancelled"},
+		{"complete completed", "one-1", model.StatusCompleted, []string{"edit", "one-1", "--complete"}, ""},
+		{"cancel cancelled", "one-1", model.StatusCancelled, []string{"edit", "one-1", "--cancel"}, ""},
+		{"complete cancelled", "one-1", model.StatusCancelled, []string{"edit", "one-1", "--complete"}, "is already cancelled, so it was not completed"},
+		{"cancel completed", "one-1", model.StatusCompleted, []string{"edit", "one-1", "--cancel", "--title", "New"}, "is already completed, so it was not cancelled"},
+		{"project complete completed", "proj-1", model.StatusCompleted, []string{"project", "edit", "proj-1", "--complete"}, ""},
+		{"project cancel completed", "proj-1", model.StatusCompleted, []string{"project", "edit", "proj-1", "--cancel"}, "is already completed, so it was not cancelled"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fastVerify(t)
 			database, sqlDB := seedWritable(t)
 			dbtest.NewFixture(t, sqlDB).Project("proj-1", "Move house", 4)
-			if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = ?`, tc.status, tc.uuid); err != nil {
+			if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = ?`, int(tc.status), tc.uuid); err != nil {
 				t.Fatal(err)
 			}
 			calls := stubExecDropping(t)
@@ -297,6 +297,29 @@ func TestEditCompleteOnCompletedSendsOtherEdits(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "already completed") {
 		t.Errorf("stderr = %q, want a note that the status was already set", stderr)
+	}
+}
+
+// --reveal alongside a status the item already has still goes, without the
+// status, and nothing waits for a change.
+func TestEditCompleteOnCompletedStillReveals(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`UPDATE TMTask SET status = ? WHERE uuid = 'one-1'`, int(model.StatusCompleted)); err != nil {
+		t.Fatal(err)
+	}
+	var sent []string
+	prev := things.SetExecCommandForTest(func(name string, args ...string) *exec.Cmd {
+		sent = append(sent, strings.Join(args, " "))
+		return exec.Command("true")
+	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+	if _, err := runCapturingStderr(t, database, "edit", "one-1", "--complete", "--reveal"); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if len(sent) != 1 || !strings.Contains(sent[0], "reveal=true") || strings.Contains(sent[0], "completed") {
+		t.Errorf("sent %q, want one write with reveal and no status", sent)
 	}
 }
 
