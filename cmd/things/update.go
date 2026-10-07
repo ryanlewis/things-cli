@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -198,7 +199,7 @@ func (c *UpdateCmd) Run(d *Deps) error {
 	}
 	fmt.Fprintf(d.Stdout, "%s was installed %s.\n", exe, plan.how)
 
-	tag, checkErr := latestReleaseTag()
+	tag, checkErr := latestReleaseTag(d.errOut())
 	latest := strings.TrimPrefix(tag, "v")
 	if checkErr == nil {
 		if latest == plan.current {
@@ -278,14 +279,16 @@ func (c *UpdateCmd) Run(d *Deps) error {
 
 // fetchLatestReleaseTag asks the GitHub API for the newest release's tag and,
 // when that fails, reads the tag from where the releases/latest page
-// redirects.
-func fetchLatestReleaseTag() (string, error) {
+// redirects. A fallback that works is noted on stderr, so a bad or expired
+// token does not go unnoticed.
+func fetchLatestReleaseTag(stderr io.Writer) (string, error) {
 	tag, apiErr := fetchAPIReleaseTag()
 	if apiErr == nil {
 		return tag, nil
 	}
 	tag, pageErr := fetchRedirectReleaseTag()
 	if pageErr == nil {
+		fmt.Fprintf(stderr, "note: GitHub API check failed (%v); used the releases/latest redirect\n", apiErr)
 		return tag, nil
 	}
 	return "", fmt.Errorf("%w; %w", apiErr, pageErr)
@@ -338,6 +341,14 @@ func fetchAPIReleaseTag() (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		// GitHub says why in the body: "Bad credentials", "API rate limit
+		// exceeded ...".
+		var apiErr struct {
+			Message string `json:"message"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&apiErr) == nil && apiErr.Message != "" {
+			return "", fmt.Errorf("GitHub API returned %s: %s", resp.Status, apiErr.Message)
+		}
 		return "", fmt.Errorf("GitHub API returned %s", resp.Status)
 	}
 	var release struct {
@@ -352,8 +363,13 @@ func fetchAPIReleaseTag() (string, error) {
 	return release.TagName, nil
 }
 
+// releaseTagPath is where latestReleasePage redirects, less the tag. It is
+// compared ignoring case, as GitHub matches owner and repo names; a redirect
+// to a renamed repository is not followed.
+const releaseTagPath = "/ryanlewis/things-cli/releases/tag/"
+
 // fetchRedirectReleaseTag reads the newest release's tag from the Location
-// the releases/latest page redirects to: /OWNER/REPO/releases/tag/TAG.
+// the releases/latest page redirects to: releaseTagPath + TAG.
 func fetchRedirectReleaseTag() (string, error) {
 	req, err := http.NewRequest(http.MethodGet, latestReleasePage, nil)
 	if err != nil {
@@ -376,9 +392,13 @@ func fetchRedirectReleaseTag() (string, error) {
 		return "", fmt.Errorf("%s redirect: %w", latestReleasePage, err)
 	}
 	page := req.URL
-	prefix := strings.TrimSuffix(page.Path, "latest") + "tag/"
-	tag, ok := strings.CutPrefix(loc.Path, prefix)
-	if loc.Scheme != page.Scheme || loc.Host != page.Host || !ok || tag == "" || strings.Contains(tag, "/") {
+	n := len(releaseTagPath)
+	ok := len(loc.Path) > n && strings.EqualFold(loc.Path[:n], releaseTagPath)
+	tag := ""
+	if ok {
+		tag = loc.Path[n:]
+	}
+	if loc.Scheme != page.Scheme || loc.Host != page.Host || !ok || strings.Contains(tag, "/") {
 		return "", fmt.Errorf("%s redirects to %s, not a release tag", latestReleasePage, loc)
 	}
 	return tag, nil
