@@ -17,14 +17,16 @@ import (
 )
 
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
-	// Try numeric index from last list
-	rowRef := isRowRef(ref)
+	// Try numeric index from last list. Surrounding space does not stop a
+	// number from being one: ` 12` is row 12, or refused as not a row, and
+	// never a title fragment.
+	rowRef := isRowRef(strings.TrimSpace(ref))
 	var last cache.LastList
 	var cacheErr error
 	if rowRef {
 		last, cacheErr = cache.ReadLastList()
 	}
-	if n, err := strconv.Atoi(ref); rowRef && err == nil && n >= 1 {
+	if n, err := strconv.Atoi(strings.TrimSpace(ref)); rowRef && err == nil && n >= 1 {
 		if cacheErr == nil && n <= len(last.UUIDs) {
 			// The row exists in the cache, so this reference is a row number
 			// and nothing else. Refuse it when the listing behind it is old

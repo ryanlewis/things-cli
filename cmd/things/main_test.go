@@ -704,3 +704,21 @@ func TestResolveTaskMarkedRowRefExactTitle(t *testing.T) {
 		}
 	}
 }
+
+// Space around a number does not make it a title fragment: ` 12 ` past the
+// end of the list is refused as not a row, and ` 1 ` is row 1.
+func TestResolveTaskNumericWithSpace(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	seedCache(t, time.Minute, "things today", "abc-123")
+	database := seedNumericTitleDB(t)
+
+	got, err := resolveTask(&Deps{}, " 12 ", database)
+	var nf *notFoundError
+	if !errors.As(err, &nf) || !strings.Contains(err.Error(), "is not a row") {
+		t.Fatalf("resolveTask(\" 12 \") = %+v, %v, want a not-a-row error", got, err)
+	}
+	got, err = resolveTask(&Deps{}, " 1 ", database)
+	if err != nil || got.UUID != "abc-123" {
+		t.Errorf("resolveTask(\" 1 \") = %+v, %v, want abc-123", got, err)
+	}
+}
