@@ -609,6 +609,10 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"unknownHeadingInListUUID", []string{"edit", "one-1", "--list", "proj-1", "--heading", "Later"}, `"proj-1" has no heading "Later"`, false},
 		{"headingInAreaUUID", []string{"edit", "one-1", "--list", "area-1", "--heading", "Setup"}, `"area-1" has no heading "Setup"`, false},
 		{"headingOnlyKnown", []string{"edit", "tool-1", "--heading", "SETUP"}, "", false},
+		// Of two headings that differ only in case, Things files the to-do
+		// under the one with the lower uuid, whichever case was sent.
+		{"caseTwinHeading", []string{"edit", "twin-todo", "--heading", "SETUP"}, "", false},
+		{"caseTwinListAndHeading", []string{"edit", "twin-todo", "--list", "Tools", "--heading", "SETUP"}, "", false},
 		{"headingOnlyUnknown", []string{"edit", "tool-1", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will leave the to-do where it is`, true},
 		{"headingOnlyNoProject", []string{"edit", "one-1", "--heading", "Setup"}, `--heading "Setup" needs --list: the to-do is not in a project, so Things will leave it where it is`, true},
 		{"headingID", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "head-1"}, "", false},
@@ -648,6 +652,8 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
 			fx.Todo("tool-1", "Oil hinges", 7, dbtest.Anytime(), dbtest.InProject("proj-1"))
 			fx.Todo("head-todo", "Buy oil", 8, dbtest.Anytime(), dbtest.UnderHeading("head-1"))
+			fx.Heading("head-2", "SETUP", 2, dbtest.InProject("proj-1"))
+			fx.Todo("twin-todo", "Buy rags", 11, dbtest.Anytime(), dbtest.UnderHeading("head-2"))
 			fx.Todo("area-todo", "Sweep", 9, dbtest.Anytime(), dbtest.InArea("area-1"))
 			fx.Project("areaproj-1", "Garden", 10, dbtest.InArea("area-1"))
 			fx.Area("area-3", "personal", 3)

@@ -143,6 +143,38 @@ func TestAddTargetSkipsLoggedForSmallestUUID(t *testing.T) {
 	}
 }
 
+// Of headings whose titles differ only in case, HeadingTarget picks the one
+// Things files a to-do under: the lowest uuid, whatever case is asked for and
+// whichever heading comes first in the project. A trashed heading, or one in
+// another project, does not count.
+func TestHeadingTarget(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-1", "Tools", 1)
+	fx.Project("proj-2", "Garden", 2)
+	fx.Heading("head-b", "setup", 1, dbtest.InProject("proj-1"))
+	fx.Heading("head-c", "SETUP", 2, dbtest.InProject("proj-1"))
+	fx.Heading("head-a", "Setup", 3, dbtest.InProject("proj-1"), dbtest.Trashed())
+	fx.Heading("head-0", "Setup", 1, dbtest.InProject("proj-2"))
+	d := &DB{db: sqlDB}
+
+	for _, tc := range []struct{ project, heading, want string }{
+		{"proj-1", "setup", "head-b"},
+		{"proj-1", "SETUP", "head-b"},
+		{"proj-1", "Setup", "head-b"},
+		{"proj-1", "Later", ""},
+		{"proj-2", "SETUP", "head-0"},
+	} {
+		got, err := d.HeadingTarget(tc.project, tc.heading)
+		if err != nil {
+			t.Fatalf("HeadingTarget(%q, %q): %v", tc.project, tc.heading, err)
+		}
+		if got != tc.want {
+			t.Errorf("HeadingTarget(%q, %q) = %q, want %q", tc.project, tc.heading, got, tc.want)
+		}
+	}
+}
+
 // A heading-id counts only for an untrashed heading, never another item.
 func TestHeadingExists(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
