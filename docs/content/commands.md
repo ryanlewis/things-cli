@@ -575,10 +575,12 @@ files the item under today. `--when today`, `evening`, today's date or a
 past date clears a reminder, so on an item with one it counts as a change
 and waits; a later day keeps the reminder. A time sets the reminder, for
 today if the time is still to come and tomorrow if it has passed, so it
-is no change only on an item with that reminder on that day. Just after
-midnight, a row Things has not moved into today yet stays where it is for
-`--when today`, today's date or a past date, so those are no change for it
-too, whatever its date, part of the day or reminder. Tags that do
+is no change only on an item with that reminder on that day. A row Things
+has not moved into today yet (as just after midnight, or when Things has
+not run since its date) stays where it is for `--when today`, today's date
+or a past date, so those are no change for it too, whatever its date, part
+of the day or reminder; so is `evening` on such a row already in the
+evening. Tags that do
 not exist in Things count as no change, since Things drops them, unless
 `--create-tags` creates them first. So does a move the warnings above say
 will leave the item where it is. It then prints the item straight away.

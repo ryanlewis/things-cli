@@ -325,7 +325,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 // leaves the item as it is, so there is no modification to wait for.
 // uncovered says whether any field flag outside coveredFields is set,
 // dropped holds the folded tag names Things will drop (foldTags), and
-// reminder reads the item's reminder (whenUnchanged).
+// reads reads the item's reminder and stored start (whenUnchanged).
 func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, reads whenReads) bool {
 	return !uncovered && f.covered().unchanged(task, dropped, reads)
 }

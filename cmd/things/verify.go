@@ -333,7 +333,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 	var whenSent *whenCheck
 	if when != nil && changed {
 		whenSent = &whenCheck{value: *when, sent: time.Now()}
-		if unmoved(task, whenSent.sent, readWhen(database, task.UUID).stored) {
+		if !duplicate && !d.NoVerify && unmoved(task, whenSent.sent, func() (model.Start, error) { return database.StoredStart(task.UUID) }) {
 			whenSent.before = task
 		}
 	}

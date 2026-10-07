@@ -184,11 +184,13 @@ func whenUnchanged(value string, task *model.Task, now time.Time, reads whenRead
 }
 
 // unmoved reports whether task is a row Things has not moved into today yet:
-// open, untrashed, stored as Someday and dated today or earlier, the rows
-// db's shownStart reports as Anytime. A start that cannot be read counts as
-// moved, which leaves the stricter check in place.
+// one db's shownStart reports as Anytime while it is stored as Someday. That
+// rewrite already limits it to open, untrashed rows outside a repeating
+// template that are dated today or earlier; the date is checked against now
+// as well, in case the day turned since the row was read. A start that cannot
+// be read counts as moved, which leaves the stricter check in place.
 func unmoved(task *model.Task, now time.Time, stored func() (model.Start, error)) bool {
-	if task.StartDate == nil || *task.StartDate > model.ThingsDateFromTime(now) || task.Status != model.StatusOpen || task.Trashed {
+	if task.Start != model.StartAnytime || task.StartDate == nil || *task.StartDate > model.ThingsDateFromTime(now) {
 		return false
 	}
 	s, err := stored()
