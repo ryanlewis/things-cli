@@ -126,7 +126,11 @@ func nearOffsetChange(now time.Time) bool {
 
 // holds reports whether t is filed where p says, by its start, start date and
 // part of the day. A row Things has not moved into today yet reads as Anytime
-// (db's shownStart), so a dated place is checked by its date alone.
+// (db's shownStart), so a dated place is checked by its date alone. That also
+// makes today, or today's date, no change for such a row, which is what
+// Things does: on 8 Oct 2026 at 00:00, a to-do scheduled for that day and
+// still start = 2 kept its start and modification date through both, for
+// the quarter hour watched; evening moved it to start = 1.
 func (p whenPlace) holds(t *model.Task) bool {
 	if p.day == 0 {
 		return t.StartDate == nil && t.Start == p.start
