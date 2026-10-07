@@ -768,7 +768,9 @@ is pinned to the same tag. The check uses the GitHub API, with a token
 from `GH_TOKEN` or `GITHUB_TOKEN` when one is set (sent to
 `api.github.com` only), which avoids the API's rate limit for
 unauthenticated calls. If the API call fails, it reads the tag from where
-`https://github.com/ryanlewis/things-cli/releases/latest` redirects. If
+`https://github.com/ryanlewis/things-cli/releases/latest` redirects, and
+prints a note on stderr naming the API error, so a bad or expired token
+shows up. If
 neither works (offline, say), or the latest tag isn't a `vMAJOR.MINOR.PATCH` version it can
 compare and pin, the install script and `go install`
 methods stop with an error and print the command for you to run
