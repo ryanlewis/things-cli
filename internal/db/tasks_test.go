@@ -4778,6 +4778,27 @@ func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
 	}
 }
 
+// StoredStart reads the start as stored, which the task queries hide for a
+// row Things has not moved into today yet; a missing item reads as the Inbox.
+func TestStoredStart(t *testing.T) {
+	d, fx := newFixture(t)
+	today := model.ThingsDateFromTime(time.Now())
+	fx.Todo("unmoved-1", "Not moved yet", 1)
+	if _, err := d.db.Exec(`UPDATE TMTask SET start = 2, startDate = ? WHERE uuid = 'unmoved-1'`, int64(today)); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	task, err := d.GetTaskByUUID("unmoved-1")
+	if err != nil || task.Start != model.StartAnytime {
+		t.Fatalf("listed start = %v, %v; want anytime", task, err)
+	}
+	for uuid, want := range map[string]model.Start{"unmoved-1": model.StartSomeday, "nope": model.StartInbox} {
+		got, err := d.StoredStart(uuid)
+		if err != nil || got != want {
+			t.Errorf("StoredStart(%q) = %v, %v, want %v", uuid, got, err, want)
+		}
+	}
+}
+
 // ReminderTime reads reminderTime alone; a missing item has none.
 func TestReminderTime(t *testing.T) {
 	d, fx := newFixture(t)

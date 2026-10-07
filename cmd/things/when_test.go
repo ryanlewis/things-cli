@@ -85,7 +85,7 @@ func TestWhenUnchangedTime(t *testing.T) {
 	for _, tc := range cases {
 		day := tc.day
 		task := &model.Task{Start: model.StartAnytime, StartDate: &day, StartBucket: tc.bucket}
-		if got := whenUnchanged(tc.value, task, now, tc.reminder); got != tc.want {
+		if got := whenUnchanged(tc.value, task, now, whenReads{reminder: tc.reminder, stored: func() (model.Start, error) { return model.StartAnytime, nil }}); got != tc.want {
 			t.Errorf("%s: whenUnchanged(%q) = %v, want %v", tc.name, tc.value, got, tc.want)
 		}
 	}
@@ -281,5 +281,32 @@ func TestPlaceWhenNearOffsetChange(t *testing.T) {
 	}
 	if _, ok := placeWhen("today", change); !ok {
 		t.Error("a keyword is placed whatever the clock")
+	}
+}
+
+// An edit with --when today on a row Things has not moved for days, which
+// Things is taken to leave on its date (see unmovedKeeps), passes the
+// read-back once the rest of the edit lands, rather than failing as
+// misfiled. A row Things has moved gets no such allowance.
+func TestEditReadBackKeepsUnmovedRow(t *testing.T) {
+	old := strconv.Itoa(int(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -3))))
+	for _, tc := range []struct {
+		name  string
+		start int
+		ok    bool
+	}{{"unmoved", 2, true}, {"moved", 1, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			if _, err := sqlDB.Exec(`UPDATE TMTask SET start = ?, startDate = `+old+`, startBucket = 0 WHERE uuid = 'one-1'`, tc.start); err != nil {
+				t.Fatal(err)
+			}
+			stubExecEditing(t, sqlDB, `UPDATE TMTask SET title = 'Post parcel' WHERE uuid = 'one-1'`)
+
+			_, err := runOut(t, database, "edit", "one-1", "--when", "today", "--title", "Post parcel")
+			if tc.ok != (err == nil) {
+				t.Fatalf("edit = %v, want ok %v", err, tc.ok)
+			}
+		})
 	}
 }

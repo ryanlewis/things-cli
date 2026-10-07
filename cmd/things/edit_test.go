@@ -373,6 +373,20 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"whenTodayOnUnmoved", []string{"edit", "unmoved-1", "--when", "today"}, true},
 		{"whenTodayDateOnUnmoved", []string{"edit", "unmoved-1", "--when", day(0)}, true},
 		{"whenEveningOnUnmoved", []string{"edit", "unmoved-1", "--when", "evening"}, false},
+		// Unmeasured, chosen so a correct write never reports failure (see
+		// unmovedKeeps): a reminder is kept, an older date stays, a project
+		// behaves as a to-do, and the evening part stays.
+		{"whenTodayOnUnmovedReminder", []string{"edit", "unmoved-rem", "--when", "today"}, true},
+		{"whenTodayDateOnUnmovedReminder", []string{"edit", "unmoved-rem", "--when", day(0)}, true},
+		{"whenTodayOnUnmovedOld", []string{"edit", "unmoved-old", "--when", "today"}, true},
+		{"whenPastDateOnUnmovedOld", []string{"edit", "unmoved-old", "--when", day(-1)}, true},
+		{"whenEveningOnUnmovedOld", []string{"edit", "unmoved-old", "--when", "evening"}, false},
+		{"whenTodayOnUnmovedEvening", []string{"edit", "unmoved-eve", "--when", "today"}, true},
+		{"whenEveningOnUnmovedEvening", []string{"edit", "unmoved-eve", "--when", "evening"}, true},
+		{"whenTimeOnUnmoved", []string{"edit", "unmoved-1", "--when", day(0) + "@08:00"}, false},
+		{"projectWhenTodayOnUnmoved", []string{"project", "edit", "unmoved-proj", "--when", "today"}, true},
+		// A moved row with an older date still moves to today.
+		{"whenTodayOnMovedOld", []string{"edit", "past-1", "--when", "today"}, false},
 		{"whenTodayDateOnEvening", []string{"edit", "eve-1", "--when", day(0)}, true},
 		{"whenTodayOnEvening", []string{"edit", "eve-1", "--when", "today"}, false},
 		// Things clears a reminder on a --when for today without a time.
@@ -426,6 +440,10 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('past-1', 'Overdue start', 0, 0, 0, 1, ` + dayInt(-1) + `, 0)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('some-1', 'Someday', 0, 0, 0, 2)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('unmoved-1', 'Not moved yet', 0, 0, 0, 2, ` + strconv.Itoa(today) + `, 0)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket, reminderTime) VALUES ('unmoved-rem', 'Not moved, reminded', 0, 0, 0, 2, ` + strconv.Itoa(today) + `, 0, 1207959552)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('unmoved-old', 'Not moved for days', 0, 0, 0, 2, ` + dayInt(-3) + `, 0)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('unmoved-eve', 'Not moved, evening', 0, 0, 0, 2, ` + strconv.Itoa(today) + `, 1)`,
+				`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket) VALUES ('unmoved-proj', 'Project not moved yet', 1, 0, 0, 2, ` + strconv.Itoa(today) + `, 0)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('inbox-1', 'Inbox', 0, 0, 0, 0)`,
 				`INSERT INTO TMTask (uuid, title, type, status, trashed, start) VALUES ('proj-1', 'Someday project', 1, 0, 0, 2)`,
 				`INSERT INTO TMArea (uuid, title, "index") VALUES ('area-1', 'Home', 1)`,

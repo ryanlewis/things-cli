@@ -310,7 +310,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 			Reveal:       s.Reveal,
 		})
 	}
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), readReminder(database, task.UUID))
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), readWhen(database, task.UUID))
 	if already {
 		if !changed && !s.Reveal {
 			noteAlreadyClosed(d, task)
@@ -326,8 +326,8 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 // uncovered says whether any field flag outside coveredFields is set,
 // dropped holds the folded tag names Things will drop (foldTags), and
 // reminder reads the item's reminder (whenUnchanged).
-func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, reminder func() (int, error)) bool {
-	return !uncovered && f.covered().unchanged(task, dropped, reminder)
+func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, reads whenReads) bool {
+	return !uncovered && f.covered().unchanged(task, dropped, reads)
 }
 
 // foldTags folds the names verifyTags says Things will drop, so the no-op
@@ -371,7 +371,7 @@ func (f coveredFields) set() bool {
 // counts as a change, and the edit waits for its read-back as before. Tags
 // named in dropped do not exist in Things, which ignores them, so they count
 // as no change.
-func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, reminder func() (int, error)) bool {
+func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, reads whenReads) bool {
 	if f.title != nil && *f.title != task.Title {
 		return false
 	}
@@ -383,7 +383,7 @@ func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, 
 	if f.prependNotes != nil && *f.prependNotes != "" || f.appendNotes != nil && *f.appendNotes != "" {
 		return false
 	}
-	if f.when != nil && !whenUnchanged(*f.when, task, time.Now(), reminder) {
+	if f.when != nil && !whenUnchanged(*f.when, task, time.Now(), reads) {
 		return false
 	}
 	// Tags compare the way Things matches them: case-insensitively, after
