@@ -164,14 +164,16 @@ func readWhen(database *db.DB, uuid string) whenReads {
 
 // whenUnchanged reports whether value leaves the item where it is, so Things
 // records no change for it (see whenPlace). The reminder is read only when
-// the value sets or clears one.
+// the value sets or clears one. On a row Things has not moved into today yet
+// (unmoved), only the case measured is certain; the others are sent and read
+// back (unmovedKeeps).
 func whenUnchanged(value string, task *model.Task, now time.Time, reads whenReads) bool {
 	p, ok := placeWhen(value, now)
 	if !ok {
 		return false
 	}
-	if unmovedKeeps(p, now, task) && unmoved(task, now, reads.stored) {
-		return true
+	if unmoved(task, now, reads.stored) && !unmovedMeasured(value, task, now) {
+		return false
 	}
 	if !p.holds(task) {
 		return false
@@ -197,21 +199,30 @@ func unmoved(task *model.Task, now time.Time, stored func() (model.Start, error)
 	return err == nil && s == model.StartSomeday
 }
 
-// unmovedKeeps reports whether p, a value read at now, leaves an unmoved row
-// (see unmoved) such as task where it is. Measured on 8 Oct 2026 at 00:00 on
-// to-dos dated that day, in the day part, with no reminder: today and today's
-// date changed nothing, and evening moved the row. The rest is unmeasured and
-// chosen so a correct write never reports failure:
-//
-//   - with a reminder, today and today's date are taken to leave it, rather
-//     than clear it as they do on a moved row;
-//   - a row dated before today, which Things has not moved for days, is
-//     taken to stay on its date for today, today's date or a past date;
-//   - a project is taken to behave as a to-do;
-//   - a row already in the evening part is taken to stay there for today and
-//     today's date, and for evening.
-//
-// A time sets a reminder, so it is not one of these.
+// unmovedMeasured reports whether value on task, an unmoved row, is the case
+// measured on 8 Oct 2026 at 00:00: a to-do dated today, in the day part, sent
+// today or today's date, which Things left as it was. On such a row with no
+// reminder that is a certain no-op. evening moved the same row.
+func unmovedMeasured(value string, task *model.Task, now time.Time) bool {
+	v, err := things.NormalizeWhen(value)
+	if err != nil || v != "today" && v != now.Format("2006-01-02") {
+		return false
+	}
+	return task.Type == model.TypeTask && task.StartDate != nil &&
+		*task.StartDate == model.ThingsDateFromTime(now) && task.StartBucket == 0
+}
+
+// unmovedKeeps reports whether p, a value read at now, may leave an unmoved
+// row (see unmoved) such as task where it is. Outside unmovedMeasured these
+// are unmeasured: a row with a reminder, a row dated before today that Things
+// has not moved for days, a project, and a row in the evening part, sent
+// today, today's date, a past date, or evening on an evening row. Such an
+// edit is not a certain no-op, since Things may move the row and the item
+// printed would be stale, so it is sent and read back, and the read-back
+// accepts either outcome: the row where the value puts it, or the row where
+// it was (whenCheck). Chosen so a correct write never reports failure; the
+// cost is the read-back budget when Things leaves the row. A time sets a
+// reminder, so it is not one of these.
 func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
 	if p.reminder != reminderNone || p.day != model.ThingsDateFromTime(now) {
 		return false
@@ -221,11 +232,14 @@ func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
 
 // whenCheck is the --when part of a read-back: the value sent and when it was
 // sent. before is the item as read before the write when it was a row Things
-// had not moved into today yet (unmoved), nil otherwise.
+// had not moved into today yet (unmoved), nil otherwise. whenOnly says the
+// edit changes nothing but --when, so an unmoved row Things left as it was,
+// with nothing recorded, is the edit applied (unmovedKeeps).
 type whenCheck struct {
-	value  string
-	sent   time.Time
-	before *model.Task
+	value    string
+	sent     time.Time
+	before   *model.Task
+	whenOnly bool
 }
 
 // holds reports whether t, read at now, is filed where the value puts it. The
@@ -252,12 +266,30 @@ func (c *whenCheck) holds(t *model.Task, now time.Time) bool {
 
 // landed reports whether t is where p, read at now, puts it.
 func (c *whenCheck) landed(p whenPlace, now time.Time, t *model.Task) bool {
-	if p.holds(t) {
-		return true
-	}
+	return p.holds(t) || c.kept(p, now, t)
+}
+
+// kept reports whether t, an unmoved row before the write, is still where it
+// was, for a value p, read at now, that may leave it there (unmovedKeeps).
+func (c *whenCheck) kept(p whenPlace, now time.Time, t *model.Task) bool {
 	b := c.before
 	return b != nil && unmovedKeeps(p, now, b) && t.StartDate != nil && b.StartDate != nil &&
 		*t.StartDate == *b.StartDate && t.StartBucket == b.StartBucket
+}
+
+// keptQuietly reports whether a --when-only edit of an unmoved row ended with
+// the row where it was and nothing recorded, which the read-back accepts as
+// applied (unmovedKeeps).
+func (c *whenCheck) keptQuietly(t *model.Task, now time.Time) bool {
+	if c == nil || !c.whenOnly {
+		return false
+	}
+	for _, at := range []time.Time{c.sent, now} {
+		if p, ok := placeWhen(c.value, at); ok && c.kept(p, at, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // misfiledError is an add or edit that Things applied but filed somewhere
