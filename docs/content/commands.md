@@ -715,7 +715,7 @@ the fraction of a second, so `import` refuses it before anything is sent
 Both refusals are one: a run names every refused item, whichever the
 reason. Under `--json` it is `import refused`, with one entry per item:
 `blocked` names every attribute refused on it, and `reason` says why,
-`repeating`, `invalid-date`, or both separated by a space.
+`repeating`, `invalid-date` or `invalid-type`, several separated by a space.
 
 Every to-do and project the payload creates is read back too, the way
 `add` finds its item: a new item of that kind with that title (surrounding
@@ -731,18 +731,25 @@ payload puts it, as Things files it:
   state its project is in: a closed or logged project is reopened, and a
   trashed one takes the to-do into the Trash.
 - A `list` title goes to the list Things picks for that title, as for
-  `add`, under its `heading` when it has one. A title that matches
-  nothing, or a uuid given as `list`, puts the to-do in the Inbox. When a
-  project created earlier in the same payload has that title, the to-do
-  may go to either, so any list with the title counts. A project created
-  later in the payload is not there yet.
+  `add`, under its `heading` when it has one. Things does not trim it, so
+  `"Work "` does not match `Work`. A title that matches nothing, or a uuid
+  given as `list`, puts the to-do in the Inbox. When a project created
+  earlier in the same payload, or renamed to that title by an earlier
+  update item, has that title, the to-do may go to either, so any list with
+  the title counts. A project created later in the payload is not there
+  yet. A `heading` the list does not have is left out, unless the payload
+  creates a heading with that title earlier, which the to-do may go under.
 - A to-do with none of these goes to the Inbox.
 - A project goes to the area its `area-id` names, or else its `area`. An
   empty or unknown `area-id`, or an `area` that matches nothing, leaves it
   in no area.
 
 Things does not trim an id, so a `heading-id`, `list-id` or `area-id` with
-surrounding space matches nothing, and a `null` one counts as not given.
+surrounding space matches nothing, and a `null` one counts as not given. A
+`list`, `list-id`, `heading`, `heading-id`, `area` or `area-id` that is not
+a string or `null`, such as a number, makes Things reject the whole
+payload, so `import` refuses it before anything is sent, with reason
+`invalid-type`.
 `import` prints a warning for each item that Things will not file where
 the payload asks, as `add` does. A to-do in a project's `items` must be in
 that project. To-dos inside a project the payload creates are read back

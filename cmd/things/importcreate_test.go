@@ -762,6 +762,25 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}, {uuid: "mine", title: "Launch", typ: model.TypeProject}}, []string{"mine"}},
 		{"unknownAreaID", `[{"type":"project","attributes":{"title":"Launch","area":"Errands","area-id":"nope"}}]`,
 			[]createdRow{{uuid: "other", title: "Launch", typ: model.TypeProject, extra: `area = 'area-2'`}, {uuid: "mine", title: "Launch", typ: model.TypeProject}}, []string{"mine"}},
+		// Things does not trim a list title either.
+		{"paddedList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools "}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		// A heading-id wins over a heading title, and a list-id naming an
+		// area takes the to-do without its heading.
+		{"headingIDOverHeading", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1","heading-id":"head-1","heading":"Other"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: underHead1}}, []string{"mine"}},
+		{"areaListIDWithHeading", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"area-1","heading":"Setup"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: underHead1}, {uuid: "mine", title: "Buy oat milk", extra: inArea1}}, []string{"mine"}},
+		// A heading the payload creates earlier may take a to-do sent to
+		// its title; without one, the list's lack of it is checked.
+		{"headingInPayload", `[{"type":"project","operation":"update","id":"proj-1","attributes":{"items":[{"type":"heading","attributes":{"title":"Phase 2"}}]}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"phase 2"}}]`,
+			[]createdRow{{uuid: "head-new", title: "Phase 2", typ: model.TypeHeading, extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: `heading = 'head-new'`}}, []string{"mine"}},
+		{"headingNotInPayload", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"Phase 2"}}]`,
+			[]createdRow{{uuid: "head-new", title: "Phase 2", typ: model.TypeHeading, extra: inProj1}, {uuid: "other", title: "Buy oat milk", extra: `heading = 'head-new'`}}, []string{"not-found"}},
+		// To-dos in a project the payload creates go by its title, so a
+		// row in the same-titled project Things had fits them too.
+		{"nestedBesideListID", `[{"type":"project","attributes":{"title":"Tools","items":[{"type":"to-do","attributes":{"title":"Buy oat milk"}}]}},{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-1"}}]`,
+			[]createdRow{{uuid: "new-p", title: "Tools", typ: model.TypeProject}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'new-p'`}, {uuid: "other", title: "Buy oat milk", extra: inProj1 + `, creationDate = creationDate + 0.001`}}, []string{"new-p", "ambiguous", "other"}},
 		// A list-id files the to-do into the project whatever its state,
 		// and so does a heading-id of a heading in it.
 		{"loggedListID", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"proj-done"}}]`,
@@ -863,7 +882,11 @@ func TestImportWarnsAboutDestinations(t *testing.T) {
 	  {"type":"to-do","attributes":{"title":"h","list-id":"proj-2","heading-id":"head-1"}},
 	  {"type":"to-do","attributes":{"title":"i","list":"proj-1"}},
 	  {"type":"to-do","attributes":{"title":"j","list":" shed"}},
-	  {"type":"to-do","attributes":{"title":"k","list":"Tools","heading-id":"head-1"}}
+	  {"type":"to-do","attributes":{"title":"k","list":"Tools","heading-id":"head-1"}},
+	  {"type":"to-do","attributes":{"title":"l","list-id":"","heading-id":"head-1"}},
+	  {"type":"to-do","attributes":{"title":"m","list-id":" proj-2 ","heading-id":"head-1"}},
+	  {"type":"to-do","attributes":{"title":"n","list":"Shed","heading-id":"head-1"}},
+	  {"type":"to-do","attributes":{"title":"o","list-id":"proj-1","heading-id":"head-1","heading":"Other"}}
 	]`
 	_, stderr, err := runImportOut(t, database, payload, "--no-verify")
 	if err != nil {
@@ -875,12 +898,14 @@ func TestImportWarnsAboutDestinations(t *testing.T) {
 		`[2]: Things finds no project or area with id "nope"; it will put the to-do in the Inbox`,
 		`[3]: Things has no heading with id "nope"; it will ignore heading-id and heading`,
 		`[4]: "Tools" has no heading "Setup"; Things will add the to-do there without a heading`,
-		`[5]: Things has no area called "Nowhere"; it will create the project in no area`,
-		`[6]: Things has no area with id "nope"; it will create the project in no area`,
+		`[5]: Things finds no area called "Nowhere"; it will create the project in no area`,
+		`[6]: Things finds no area with id "nope"; it will create the project in no area`,
 		`[8]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list "Garden"`,
 		`[9]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list-id`,
 		`[10]: list "proj-1" is an id, and Things matches list by title only`,
 		`[11]: Things finds no project or area called " shed"`,
+		`[15]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list "Shed"`,
+		`[16]: Things will file the to-do under the heading heading-id "head-1" names and ignore heading "Other"`,
 	} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("stderr missing %q:\n%s", want, stderr)
@@ -889,7 +914,74 @@ func TestImportWarnsAboutDestinations(t *testing.T) {
 	if strings.Contains(stderr, "[7]") {
 		t.Errorf("warned about a list the payload creates:\n%s", stderr)
 	}
-	if strings.Contains(stderr, "[12]") {
-		t.Errorf("warned about a heading-id in the list the payload names:\n%s", stderr)
+	// A heading-id in the list the payload names, or with an empty or
+	// padded list-id Things cannot find, files the to-do nowhere else.
+	for _, quiet := range []string{"[12]", "[13]", "[14]"} {
+		if strings.Contains(stderr, quiet) {
+			t.Errorf("warned about %s:\n%s", quiet, stderr)
+		}
+	}
+}
+
+// A to-do sent to the title an earlier update item renames a project to may
+// go to that project, which the database knows by its old title until the
+// import lands.
+func TestImportListRenamedEarlier(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-2", "Garden", 6)
+	prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
+		now := model.TimeToUnix(time.Now())
+		if _, err := sqlDB.Exec(`UPDATE TMTask SET title = 'Shed' WHERE uuid = 'proj-2'`); err != nil {
+			t.Errorf("simulating Things: %v", err)
+		}
+		if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start, creationDate, userModificationDate, project) VALUES ('mine', 'Buy oat milk', 0, 0, 0, 0, ?, ?, 'proj-2')`, now, now); err != nil {
+			t.Errorf("simulating Things: %v", err)
+		}
+		return exec.Command("true")
+	})
+	t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+	payload := `[{"type":"project","operation":"update","id":"proj-2","attributes":{"title":"Shed"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Shed"}}]`
+	out, stderr, err := runImportOut(t, database, payload, "--json")
+	if err != nil {
+		t.Fatalf("import: %v\n%s", err, stderr)
+	}
+	got := decodeCreated(t, out)
+	if len(got) != 1 || got[0].UUID != "mine" {
+		t.Errorf("got %+v, want the to-do confirmed as mine", got)
+	}
+	if strings.Contains(stderr, "Shed") {
+		t.Errorf("warned about the renamed list:\n%s", stderr)
+	}
+}
+
+// Things rejects the whole payload over a destination that is neither a
+// string nor null, so the import refuses it before sending anything.
+func TestImportRefusesNonStringDestination(t *testing.T) {
+	database, _ := seedWritable(t)
+	calls := stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"a","list":"Tools","list-id":5}},
+	  {"type":"project","attributes":{"title":"b","area-id":true,"area":null}},
+	  {"type":"to-do","attributes":{"title":"c","list":null,"heading":null}}
+	]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	if *calls != 0 {
+		t.Errorf("payload was sent (%d calls)", *calls)
+	}
+	p, raw := decodePayload(t, err)
+	if p.Error != "import refused" || len(p.Items) != 2 {
+		t.Fatalf("got %s, want import refused naming [0] and [1]", raw)
+	}
+	for i, want := range []string{"list-id", "area-id"} {
+		if it := p.Items[i]; strings.Join(it.Blocked, ",") != want || it.Reason != "invalid-type" {
+			t.Errorf("item %d = %+v, want %s blocked as invalid-type", i, it, want)
+		}
+	}
+	if !strings.Contains(p.Message, `[0] list-id: 5`) {
+		t.Errorf("message does not name the value:\n%s", p.Message)
 	}
 }
