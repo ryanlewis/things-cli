@@ -59,6 +59,7 @@ type Key struct {
 	Enum     []string // permitted values, for keys with a fixed set
 	Excludes []string // keys this one cannot be combined with
 	Commands []string // commands whose flags this key may seed; empty means all
+	YieldsTo []string // other flags that, passed on the command line, override this key
 	Duration bool     // a string holding a positive Go duration, e.g. "5s"
 	Comment  []string // template comment, one line per entry
 	Example  string   // template assignment, written commented out
@@ -100,6 +101,20 @@ var Keys = []Key{
 			"JSON, so turning it off is for terminal use.",
 		},
 		Example: "hints = true",
+	},
+	{
+		Name:     "open_only",
+		Flag:     "open-only",
+		Default:  false,
+		Commands: []string{"list"},
+		YieldsTo: []string{"include-completed"},
+		Comment: []string{
+			"Leave out the closed items Things hasn't logged yet from every listing",
+			"that shows them, as the CLI did before v0.10.0. Same as --open-only.",
+			"Pass --open-only=false to list them for one call. logbook and trash",
+			"ignore this setting.",
+		},
+		Example: "open_only = false",
 	},
 	{
 		Name:    "db",
@@ -459,7 +474,7 @@ func (f *File) Resolver() kong.Resolver {
 				continue
 			}
 			values[k.Flag] = v
-			excludes[k.Flag] = excludingFlags(k)
+			excludes[k.Flag] = append(excludingFlags(k), k.YieldsTo...)
 			commands[k.Flag] = k.Commands
 		}
 	}
@@ -479,7 +494,8 @@ func (f *File) Resolver() kong.Resolver {
 		// answering here would turn `--strict-tags` against a file that says
 		// `create_tags = true` into "can't be used together" rather than the
 		// override it is. Only one of a pair ever reaches this map, so a set
-		// partner can only have come from the command line.
+		// partner can only have come from the command line. A YieldsTo flag is
+		// never seeded from the file at all.
 		for _, name := range excludes[flag.Name] {
 			for _, other := range parent.Flags {
 				if other.Name == name && other.Set {

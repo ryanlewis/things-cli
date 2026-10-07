@@ -424,6 +424,53 @@ func TestRunListOpenOnlyFlag(t *testing.T) {
 	}
 }
 
+// open_only in the config file makes --open-only the default on the list
+// command. --open-only=false, or the older --include-completed, brings the
+// closed rows back for one call, and logbook and trash ignore the setting
+// rather than refuse to list.
+func TestRunListOpenOnlyConfig(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	stop := model.TimeToUnix(time.Now())
+	fx.Todo("todo-brush", "Charge toothbrush", 0, dbtest.AnytimeOn(today), dbtest.TodayIndex(-2), dbtest.Completed(stop))
+	fx.Todo("todo-milk", "Buy milk", 1, dbtest.AnytimeOn(today), dbtest.TodayIndex(-1))
+	database := db.NewFromSQL(sqlDB)
+	path := writeConfig(t, "open_only = true\n")
+
+	uuids := func(args ...string) []string {
+		t.Helper()
+		out, err := runOut(t, database, append([]string{"--config", path, "--json", "list"}, args...)...)
+		if err != nil {
+			t.Fatalf("list %v: %v", args, err)
+		}
+		var tasks []model.Task
+		if err := json.Unmarshal([]byte(out), &tasks); err != nil {
+			t.Fatalf("unmarshal %q: %v", out, err)
+		}
+		got := make([]string, len(tasks))
+		for i, task := range tasks {
+			got[i] = task.UUID
+		}
+		return got
+	}
+
+	if got := uuids("today"); !slices.Equal(got, []string{"todo-milk"}) {
+		t.Errorf("list today under open_only = %v, want [todo-milk]", got)
+	}
+	both := []string{"todo-brush", "todo-milk"}
+	for _, args := range [][]string{{"today", "--open-only=false"}, {"today", "--include-completed"}} {
+		if got := uuids(args...); !slices.Equal(got, both) {
+			t.Errorf("list %v under open_only = %v, want %v", args, got, both)
+		}
+	}
+	for _, view := range []string{"logbook", "trash"} {
+		if err := runWith(t, database, "--config", path, "list", view); err != nil {
+			t.Errorf("list %s under open_only: %v", view, err)
+		}
+	}
+}
+
 func TestRunListDateFilterRejectsOnWithRange(t *testing.T) {
 	database := seedFullDB(t)
 	err := runWith(t, database, "list", "upcoming", "--on", "2026-05-09", "--from", "2026-05-09")

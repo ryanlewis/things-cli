@@ -240,6 +240,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # when you want only work still to do, e.g. before acting on `.[0]`. It is
     # a no-op on views that list only open tasks and an error on logbook and
     # trash. --include-completed is accepted but does nothing now.
+    # open_only = true in the config file makes --open-only the default
+    # (logbook and trash ignore it); --open-only=false overrides it.
     # upcoming keeps only what was in it while open (a task closed ahead of
     # its date, or an undated one due later). logbook holds nothing Things
     # hasn't logged, wherever it was closed, as in the app, so a closed item

@@ -197,6 +197,7 @@ snake_case form.
 | `json` | `--json` | boolean | `false` |
 | `color` | `--color` | `"auto"`, `"always"`, `"never"` | `"auto"` |
 | `hints` | `--hints` / `--no-hints` | boolean | `true` |
+| `open_only` | `--open-only` | boolean | `false` |
 | `db` | `--db` | string path (must exist) | auto-detected |
 | `no_verify` | `--no-verify` | boolean | `false` |
 | `verify_timeout` | `--verify-timeout` | duration string, e.g. `"2500ms"` | `"5s"` |

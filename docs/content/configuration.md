@@ -69,6 +69,7 @@ an error rather than a coin toss.
 | `json` | — | boolean | `false` | every command | Print JSON instead of the plain text listing |
 | `color` | — | `"auto"` \| `"always"` \| `"never"` | `"auto"` | every command | When to colour output; `auto` means only on a terminal |
 | `hints` | — | boolean | `true` | every command | Print a line of common next actions, and a note on turning it off, under a plain task listing |
+| `open_only` | `open-only` | boolean | `false` | `list` (`things today`, `things inbox` and the rest) | Leave out the closed items Things hasn't logged yet, as before v0.10.0; `--open-only=false` lists them for one call, and `logbook` and `trash` ignore it |
 | `db` | — | path | auto-detected | every command | Where the Things3 SQLite database is; the file must exist |
 | `no_verify` | `no-verify` | boolean | `false` | `add`, `project add`, `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a new item (an import's included), a status change, an edit, or a tag creation landed |
 | `verify_timeout` | `verify-timeout` | duration string | `"5s"` | the same writes as `no_verify` | How long the read-back waits before reporting a write as not applied |
@@ -133,6 +134,12 @@ commented out. Uncomment a line to change that default.
 # only ever appears when stdout is a terminal and the output is not
 # JSON, so turning it off is for terminal use.
 # hints = true
+
+# Leave out the closed items Things hasn't logged yet from every listing
+# that shows them, as the CLI did before v0.10.0. Same as --open-only.
+# Pass --open-only=false to list them for one call. logbook and trash
+# ignore this setting.
+# open_only = false
 
 # Path to the Things3 SQLite database. Same as --db.
 # Leave unset to let things-cli find it. The file must exist.
@@ -208,6 +215,7 @@ These apply when no flag overrides them.
   json            false    default
   color           always   config
   hints           true     default
+  open_only       false    default
   db              (unset)  default
   no_verify       false    default
   verify_timeout  3s       config
@@ -263,7 +271,7 @@ dump. The command exits `2`.
 
 ```console
 $ things config path
-Error: config file /Users/me/.config/things-cli/config.toml: unknown key "verbose" (valid keys: json, color, hints, db, no_verify, verify_timeout, strict_tags, create_tags, assume_yes)
+Error: config file /Users/me/.config/things-cli/config.toml: unknown key "verbose" (valid keys: json, color, hints, open_only, db, no_verify, verify_timeout, strict_tags, create_tags, assume_yes)
 ```
 
 ```console
@@ -362,15 +370,16 @@ things skill uninstall claude --yes   # the flag works
                                       # assume_yes = true does not do this for you
 ```
 
-Keys can be scoped this way in general — `assume_yes` is the only one
-that currently is.
+Keys can be scoped this way in general. `assume_yes` is one;
+`open_only` is the other, and reaches only the listing commands.
 
 ## Notes for agents and scripts
 
 A config file can change defaults you would otherwise assume. `json =
 true` makes every command emit JSON; `no_verify = true` turns off the
 read-back that confirms an `add`, a `complete` or an `edit` landed; `hints = false` drops the
-next-actions hint and its note.
+next-actions hint and its note; `open_only = true` leaves the closed items
+Things still shows out of every listing.
 
 If you are writing something that has to behave the same on any machine,
 pass the flags you depend on rather than inheriting them:
