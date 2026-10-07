@@ -654,7 +654,8 @@ var views = map[string]viewSpec{
 		// 2026 over a 26-row Today, these keys reproduce its order in every
 		// position. The reference date is the day a row's todayIndex was last
 		// written, so a row placed today sits above rows carried over from an
-		// earlier day, and todayIndex orders the rows that share a day.
+		// earlier day (and of two earlier days, the more recent comes first),
+		// and todayIndex orders the rows that share a day.
 		// Issue #237 dropped the reference date as not a sort key, which put
 		// carried-over rows out of place among the day's own.
 		//
@@ -910,8 +911,8 @@ const uuidTiebreak = `, t.uuid ASC`
 // reconstructed from either alone.
 //
 // The caller adds its own within-group key after these — t."index" for anytime
-// and someday, today's todayIndex ordering for today — and the uuid tiebreak
-// last. Together they put a project's to-dos in one contiguous block, so the
+// and someday, todayIndexReferenceDate then todayIndex for today — and the
+// uuid tiebreak last. Together they put a project's to-dos in one contiguous block, so the
 // rendered group header prints once above them, which is the app's own
 // presentation of a project in these lists.
 const listGrouping = `CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, ` +
