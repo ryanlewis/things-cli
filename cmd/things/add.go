@@ -75,7 +75,7 @@ func resolveAddTarget(d *Deps, list, heading string) (string, createdDest) {
 	case err != nil:
 		return "", createdDest{}
 	case target == "":
-		fmt.Fprintf(d.errOut(), "warning: Things has no open project or area called %q; it will put the to-do in the Inbox\n", list)
+		fmt.Fprintf(d.errOut(), "warning: Things finds no project or area called %q; it will put the to-do in the Inbox\n", list)
 		return "", createdDest{checked: true}
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)

@@ -78,7 +78,9 @@ token instead of resolving. So does a numeric reference made against a
 different database from the one the listing read. A number that is not a row in
 the last list at all, or with no listing to read, fails with `not found` rather
 than matching a title that happens to contain it; only a title that is exactly
-that number resolves. This is a safety net for people, not a mode to code
+that number resolves. `+N` and `#N` are not row numbers: they fail with `not
+found` the same way, never resolving to row N or to a title that mentions
+`#N`. This is a safety net for people, not a mode to code
 against: act on the `uuid` and it never applies.
 
 ## Hand a task to an agent

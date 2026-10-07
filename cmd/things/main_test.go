@@ -656,3 +656,51 @@ func TestListCommandLineCarriesConfigFlag(t *testing.T) {
 		t.Errorf("commandLine = %q, want %q", got, "things today")
 	}
 }
+
+// A ref marked like a row number, `+N` or `#N`, is not one, even when row N
+// exists, and it does not match a title fragment: `complete '#12'` must not
+// close a task that mentions issue #12. Only an exact title or a uuid
+// resolves it; otherwise the error says to use the bare number.
+func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
+	for _, ref := range []string{"+12", "#12", " #12", "+1"} {
+		t.Run(ref, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			seedCache(t, time.Minute, "things today", "abc-123")
+			sqlDB := dbtest.NewSQL(t)
+			f := dbtest.NewFixture(t, sqlDB)
+			f.Todo("abc-123", "Cached task", 0)
+			f.Todo("issue-12", "Fix issue #12 and +12 more", 0)
+			f.Todo("plus-1", "Lift +10 kg", 0)
+
+			got, err := resolveTask(&Deps{}, ref, db.NewFromSQL(sqlDB))
+			var nf *notFoundError
+			if !errors.As(err, &nf) {
+				t.Fatalf("resolveTask(%q) = %+v, %v, want a not-found error", ref, got, err)
+			}
+			digits := strings.TrimLeft(ref, " +#")
+			for _, want := range []string{"not a row reference", "use " + digits, "uuid"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("message %q does not mention %q", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
+// A task titled exactly `#7` still resolves by that title, and refs that are
+// not marked that way, such as `2.`, keep matching title fragments.
+func TestResolveTaskMarkedRowRefExactTitle(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	sqlDB := dbtest.NewSQL(t)
+	f := dbtest.NewFixture(t, sqlDB)
+	f.Todo("hash-7", "#7", 0)
+	f.Todo("ver-2", "Upgrade to 2.4", 0)
+	database := db.NewFromSQL(sqlDB)
+
+	for ref, want := range map[string]string{"#7": "hash-7", "2.": "ver-2"} {
+		got, err := resolveTask(&Deps{}, ref, database)
+		if err != nil || got.UUID != want {
+			t.Errorf("resolveTask(%q) = %+v, %v, want %s", ref, got, err, want)
+		}
+	}
+}
