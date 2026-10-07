@@ -44,12 +44,18 @@ func (c *ImportCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
+	// A creation-date Things rejects is refused before the tag check, which
+	// writes to Things under --create-tags.
+	creates, err := importCreates(payload)
+	if err != nil {
+		return err
+	}
 	if _, err := verifyTags(d, c.TagFlags, importTags(payload)); err != nil {
 		return err
 	}
 	// Refuse before anything is sent if any `operation: update` item would
 	// change an attribute Things drops silently on a repeating item.
-	plan, err := prepareImport(d, database, payload)
+	plan, err := prepareImport(d, database, payload, creates)
 	if err != nil {
 		return err
 	}

@@ -527,6 +527,31 @@ func TestImportRefusesCreationDateThingsRejects(t *testing.T) {
 	}
 }
 
+// The creation-date refusal comes before --create-tags makes any tag, so
+// nothing is written, and under --json it is an import refused naming each
+// item with creation-date blocked.
+func TestImportCreationDateRefusalWritesNothing(t *testing.T) {
+	database := seedFullDB(t)
+	captured := stubExec(t)
+
+	payload := `[{"type":"to-do","attributes":{"title":"Day only","tags":["brand-new"],"creation-date":"2026-10-05"}}]`
+	err := runWith(t, database, "--json", "import", "--create-tags", "--file", importPayload(t, payload))
+	if err == nil {
+		t.Fatal("expected the payload to be refused")
+	}
+	if len(*captured) != 0 {
+		t.Errorf("something was written before the refusal: %v", *captured)
+	}
+	p, raw := decodePayload(t, err)
+	if p.Error != "import refused" {
+		t.Errorf("error token = %q, want %q (%s)", p.Error, "import refused", raw)
+	}
+	it := findItem(t, p.Items, "[0]")
+	if it.Title != "Day only" || strings.Join(it.Blocked, ",") != "creation-date" {
+		t.Errorf("item = %+v, want Day only blocked [creation-date]", it)
+	}
+}
+
 // Things saves an item whose creation-date is null as created now, so it is
 // read back like an undated one.
 func TestImportNullCreationDateIsReadBack(t *testing.T) {

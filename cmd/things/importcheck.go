@@ -254,7 +254,7 @@ func (c importCreate) kind() string {
 // it is to Things, which saves the item as created now.
 func importCreates(payload []any) ([]importCreate, error) {
 	var creates []importCreate
-	var badDates []string
+	var badDates []importBadDate
 	// parents maps the path of each item in a project's items to that
 	// project. The walk visits a project before its items.
 	parents := map[string]importTo{}
@@ -285,15 +285,16 @@ func importCreates(payload []any) ([]importCreate, error) {
 		default:
 			return
 		}
+		title, _ := attrs["title"].(string)
+		title = strings.TrimSpace(title)
 		raw := attrs["creation-date"]
 		datedAt, ok := parseCreationDate(raw)
 		if !ok && raw != nil {
 			shown, _ := json.Marshal(raw)
-			badDates = append(badDates, fmt.Sprintf("  %s: %s", path, shown))
+			badDates = append(badDates, importBadDate{path: path, title: title, value: string(shown)})
 			return
 		}
-		title, _ := attrs["title"].(string)
-		if title = strings.TrimSpace(title); title == "" {
+		if title == "" {
 			return
 		}
 		to, nested := parents[path]
@@ -308,10 +309,40 @@ func importCreates(payload []any) ([]importCreate, error) {
 		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: ok, datedAt: datedAt, to: to})
 	})
 	if len(badDates) > 0 {
-		return nil, fmt.Errorf("a creation-date must be a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00: Things rejects the whole payload over any other form. Nothing was sent to Things — fix these and run the import again:\n%s",
-			strings.Join(badDates, "\n"))
+		return nil, &importDateError{items: badDates}
 	}
 	return creates, nil
+}
+
+// importBadDate is one created item whose `creation-date` Things rejects.
+type importBadDate struct {
+	path, title string
+	value       string // the creation-date as the payload wrote it, in JSON
+}
+
+// importDateError refuses a payload with a `creation-date` Things rejects. It
+// is a refusal like importRefusalError, so --json reports it the same way,
+// with each item's `blocked` naming creation-date.
+type importDateError struct {
+	items []importBadDate
+}
+
+func (e *importDateError) Error() string {
+	lines := make([]string, len(e.items))
+	for i, it := range e.items {
+		lines[i] = fmt.Sprintf("  %s: %s", it.path, it.value)
+	}
+	return fmt.Sprintf("a creation-date must be a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00: Things rejects the whole payload over any other form. Nothing was sent to Things — fix these and run the import again:\n%s",
+		strings.Join(lines, "\n"))
+}
+
+// jsonItems renders the refused items for the --json error payload.
+func (e *importDateError) jsonItems() []jsonErrorItem {
+	out := make([]jsonErrorItem, len(e.items))
+	for i, it := range e.items {
+		out[i] = jsonErrorItem{Path: it.path, Title: it.title, Blocked: []string{"creation-date"}}
+	}
+	return out
 }
 
 // walkImportNode calls visit for every object in a decoded Things JSON
@@ -545,11 +576,10 @@ type importCreated struct {
 // and gives no per-item result, so there is no way to send the rest and report
 // what was skipped. Refusing before anything is sent leaves the user with a
 // payload they can fix and re-run.
-func prepareImport(d *Deps, database *db.DB, payload []any) (*importPlan, error) {
-	creates, err := importCreates(payload)
-	if err != nil {
-		return nil, err
-	}
+//
+// creates is the payload's importCreates, which the caller reads before the
+// tag check so that a creation-date refusal comes before --create-tags writes.
+func prepareImport(d *Deps, database *db.DB, payload []any, creates []importCreate) (*importPlan, error) {
 	plan := &importPlan{updates: importUpdates(payload), tasks: map[string]*model.Task{}, creates: creates}
 
 	// One query for the whole payload rather than one per item (issue #167).
