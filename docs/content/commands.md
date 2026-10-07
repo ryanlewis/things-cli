@@ -709,7 +709,7 @@ two-way, so `false` is refused as readily as `true`. Update items that set
 that Things dropped are reported one per line with a non-zero exit.
 
 A `creation-date` or `completion-date` on a to-do or project the payload
-creates or updates must be a date and time with seconds and a UTC offset,
+creates or updates, or on a heading or checklist item, must be a date and time with seconds and a UTC offset,
 such as `2026-10-05T10:30:00Z` or `2026-10-05T10:30:00+02:00` (`+0200` and
 `+02` work too). Things rejects the whole payload over a date on its own, a
 time with no seconds or no offset, a lowercase `t` or `z`, or a comma before
