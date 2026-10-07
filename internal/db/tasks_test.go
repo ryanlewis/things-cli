@@ -4786,13 +4786,17 @@ func TestReminderTime(t *testing.T) {
 	if _, err := d.db.Exec(`UPDATE TMTask SET reminderTime = 1207959552 WHERE uuid = 'rem-1'`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	for uuid, want := range map[string]int64{"rem-1": 1207959552, "plain-1": -1, "nope": -1} {
-		raw, ok, err := d.ReminderTime(uuid)
+	for _, tc := range []struct {
+		uuid   string
+		raw    int64
+		wantOK bool
+	}{{"rem-1", 1207959552, true}, {"plain-1", 0, false}, {"nope", 0, false}} {
+		raw, ok, err := d.ReminderTime(tc.uuid)
 		if err != nil {
-			t.Fatalf("ReminderTime(%q): %v", uuid, err)
+			t.Fatalf("ReminderTime(%q): %v", tc.uuid, err)
 		}
-		if got := map[bool]int64{true: raw, false: -1}[ok]; got != want {
-			t.Errorf("ReminderTime(%q) = %d, %v, want %d", uuid, raw, ok, want)
+		if ok != tc.wantOK || ok && raw != tc.raw {
+			t.Errorf("ReminderTime(%q) = %d, %v, want %d, %v", tc.uuid, raw, ok, tc.raw, tc.wantOK)
 		}
 	}
 }

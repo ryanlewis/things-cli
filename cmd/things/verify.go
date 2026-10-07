@@ -215,10 +215,14 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			current := found[w.uuid]
 			readErr := err
 			landed := readErr == nil && current != nil && w.landed(current)
+			// applied says Things recorded the edit, by its modification date
+			// or its checklist, whether or not --when filed it as sent.
+			applied := readErr == nil && current != nil && w.modified(current)
 			if !landed && readErr == nil && current != nil && w.watchChecklist && current.Status == w.want {
 				var items []model.ChecklistItem
-				if items, readErr = database.GetChecklistItems(w.uuid); readErr == nil {
-					landed = w.checklistChanged(items) && w.when.holds(current)
+				if items, readErr = database.GetChecklistItems(w.uuid); readErr == nil && w.checklistChanged(items) {
+					applied = true
+					landed = w.when.holds(current)
 				}
 			}
 			switch {
@@ -237,7 +241,7 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			case landed:
 				results[i].task = current
 				continue
-			case expired && current.Status == w.want && w.modified(current) && !w.when.holds(current):
+			case expired && current.Status == w.want && applied && !w.when.holds(current):
 				results[i] = statusResult{
 					err: fmt.Errorf("edit did not apply as sent: %q (%s) was modified, but --when %q did not file it there: it is %s. Things may have ignored or reread the value. Run `things show %s` before retrying; do not retry blindly",
 						w.title, w.uuid, w.when.value, describeStart(current), w.uuid),

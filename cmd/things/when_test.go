@@ -108,6 +108,13 @@ func TestWhenCheckAcrossMidnight(t *testing.T) {
 			t.Errorf("holds(%q on %s) = %v, want %v", tc.value, day, got, tc.want)
 		}
 	}
+	// A time sent within a minute of itself lands by when Things read it,
+	// so a read-back long after cannot judge it and lets it hold.
+	sent := time.Now().Add(-2 * time.Hour)
+	c := &whenCheck{value: sent.Format("15:04"), sent: sent}
+	if !c.holds(&model.Task{Start: model.StartAnytime, StartDate: &today}) {
+		t.Error("a time ambiguous when sent must hold")
+	}
 	if !(*whenCheck)(nil).holds(&model.Task{}) {
 		t.Error("a nil whenCheck must hold")
 	}

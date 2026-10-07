@@ -89,22 +89,20 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 	if heading == "" {
 		return target, false, nil
 	}
-	var n int
-	if err := d.db.QueryRow(`
-		SELECT COUNT(*) FROM TMTask
-		WHERE type = ? AND project = ? AND COALESCE(trashed, 0) = 0 AND fold(title) = ?`,
-		int(model.TypeHeading), target.UUID, FoldCase(heading)).Scan(&n); err != nil {
-		return target, false, fmt.Errorf("finding heading: %w", err)
+	headingID, err := d.HeadingTarget(target.UUID, heading)
+	if err != nil {
+		return target, false, err
 	}
-	return target, n > 0, nil
+	return target, headingID != "", nil
 }
 
 // HeadingTarget returns the uuid of the heading things:///update files a
 // to-do under when sent heading for project, "" when the project has none
 // that matches. Things matches the title ignoring case, and among headings
-// whose titles differ only in case it takes the one with the lowest uuid,
-// whichever case was sent and whichever comes first in the project: measured
-// on 7 Oct 2026 in five projects with two to four such headings.
+// whose titles are the same or differ only in case it takes the one with the
+// lowest uuid, whichever case was sent and whichever comes first in the
+// project: measured on 7 Oct 2026 in six projects with two to four such
+// headings.
 func (d *DB) HeadingTarget(project, heading string) (string, error) {
 	var id string
 	err := d.db.QueryRow(`

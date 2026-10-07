@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"regexp"
-	"strconv"
 	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -42,8 +40,15 @@ type whenPlace struct {
 	reminder int // minutes after midnight, reminderNone or reminderKept
 }
 
-// clockRE matches the HH:MM time --when sends verbatim.
-var clockRE = regexp.MustCompile(`^([01]?[0-9]|2[0-3]):([0-5][0-9])$`)
+// parseClock reads the HH:MM (or H:MM) time --when sends verbatim, in
+// minutes after midnight.
+func parseClock(s string) (int, bool) {
+	t, err := time.Parse("15:04", s)
+	if err != nil {
+		return 0, false
+	}
+	return t.Hour()*60 + t.Minute(), true
+}
 
 // placeWhen returns where value files an item when Things reads it at now. ok
 // is false for a value whose outcome is not worked out here: an English
@@ -67,8 +72,7 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 	case "tomorrow":
 		return whenPlace{day: model.ThingsDateFromTime(now.AddDate(0, 0, 1)), bucket: -1, reminder: reminderKept}, true
 	}
-	if m := clockRE.FindStringSubmatch(v); m != nil {
-		clock := atoi(m[1])*60 + atoi(m[2])
+	if clock, ok := parseClock(v); ok {
 		at := time.Date(now.Year(), now.Month(), now.Day(), clock/60, clock%60, 0, 0, time.Local)
 		switch {
 		case at.Sub(now) > time.Minute:
@@ -88,11 +92,10 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 	}
 	day := model.ThingsDateFromTime(date)
 	if timed {
-		m := clockRE.FindStringSubmatch(clockPart)
-		if m == nil {
+		clock, ok := parseClock(clockPart)
+		if !ok {
 			return whenPlace{}, false
 		}
-		clock := atoi(m[1])*60 + atoi(m[2])
 		if day <= today {
 			return whenPlace{day: today, bucket: 0, reminder: clock}, true
 		}
@@ -105,11 +108,6 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 		return whenPlace{day: today, bucket: -1, reminder: reminderNone}, true
 	}
 	return whenPlace{day: day, bucket: -1, reminder: reminderKept}, true
-}
-
-func atoi(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
 }
 
 // holds reports whether t is filed where p says, by its start, start date and
@@ -162,21 +160,19 @@ type whenCheck struct {
 
 // holds reports whether t is filed where the value puts it. The value is read
 // against the day it was sent and the day it is now, so a write that crosses
-// midnight is judged by either. A value whose place is not worked out holds.
+// midnight is judged by either. A value whose place is not worked out when it
+// was sent holds: a time within a minute of the send lands by when Things
+// read it, which a later read-back cannot tell.
 func (c *whenCheck) holds(t *model.Task) bool {
 	if c == nil {
 		return true
 	}
-	known := false
-	for _, now := range []time.Time{c.sent, time.Now()} {
-		if p, ok := placeWhen(c.value, now); ok {
-			known = true
-			if p.holds(t) {
-				return true
-			}
-		}
+	p, ok := placeWhen(c.value, c.sent)
+	if !ok || p.holds(t) {
+		return true
 	}
-	return !known
+	p, ok = placeWhen(c.value, time.Now())
+	return ok && p.holds(t)
 }
 
 // describeStart says where t is filed, for an error about a --when that did
