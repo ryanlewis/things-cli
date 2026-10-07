@@ -9,8 +9,16 @@
 #   - otherwise a leading `cd <path> &&` (or `;`) sets the directory
 #   - otherwise the session's working directory (`cwd` in the hook input)
 #
-# Text inside quotes or a heredoc body is data, not a command, so `echo "git
-# commit"` is left alone. (A `bash -c "git commit"` is therefore not seen.)
+# Text inside quotes, a heredoc body or a comment is data, not a command, so
+# `echo "git commit"` is left alone. The masking is a text scan, not a shell
+# parser, so some real commands are missed (the hook fails open):
+#   - `bash -c "git commit"` and other commands inside quotes
+#   - a quoted `git` word, as in `"git" commit`
+#   - `$(...)` inside double quotes, as in `echo "$(git commit)"`
+#   - `bash <<EOF` with git commands in the body
+#   - `$'...'` strings with escaped quotes, as in `$'it\'s'`
+#   - `<<` in arithmetic, as in `$((1<<2))`, read as a heredoc
+# Run `prove .claude/hooks/no-commit-on-main.t` to test it.
 use strict;
 use warnings;
 use JSON::PP;
