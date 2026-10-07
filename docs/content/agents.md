@@ -451,7 +451,8 @@ instead of assuming:
   such as `--when someday` on a Someday item, prints the item at once, so
   re-running a plan does not fail on work already done. With `--when`, the
   item must also land where the value puts it; `add` checks the same and,
-  when it does not, names the item it made so it is not added again. With
+  when it does not, names the item it found (`"error": "misfiled"` under
+  `--json`) so the agent can search before adding it again. With
   `--no-verify` or `--duplicate` nothing is read back and the output says
   the edit is unconfirmed.
 - **Tags must already exist.** Things silently drops tags it does not know.

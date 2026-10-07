@@ -29,6 +29,9 @@ type Target struct {
 	// and an area share a title, Things takes the project. Both are 0 for a
 	// uuid.
 	Others, OtherAreas int
+	// Heading is the uuid of the heading Things files the to-do under
+	// (HeadingTarget), "" when none was asked for or matched.
+	Heading string
 }
 
 // AddTarget reports where things:///add would file a to-do given list and
@@ -89,11 +92,10 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 	if heading == "" {
 		return target, false, nil
 	}
-	headingID, err := d.HeadingTarget(target.UUID, heading)
-	if err != nil {
+	if target.Heading, err = d.HeadingTarget(target.UUID, heading); err != nil {
 		return target, false, err
 	}
-	return target, headingID != "", nil
+	return target, target.Heading != "", nil
 }
 
 // HeadingTarget returns the uuid of the heading things:///update files a
@@ -102,7 +104,8 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 // whose titles are the same or differ only in case it takes the one with the
 // lowest uuid, whichever case was sent and whichever comes first in the
 // project: measured on 7 Oct 2026 in six projects with two to four such
-// headings.
+// headings. An archived heading counts the same, and Things reopens it when
+// it files a to-do there: measured the same day in three more projects.
 func (d *DB) HeadingTarget(project, heading string) (string, error) {
 	var id string
 	err := d.db.QueryRow(`

@@ -476,8 +476,8 @@ Under `--json` the unconfirmed cases print `{"title": …, "confirmed":
 false, "reason": "no-verify"|"unreadable"|"ambiguous"}`, with
 `"candidates": [uuids]` for `ambiguous`. There is no `uuid`, because the
 add did not return one. An add that `--when` did not file where it said
-(below) prints the same object with `"reason": "misfiled"`, the item's
-`"uuid"` and where it `"landed"`, and exits non-zero.
+(below) is an error instead: under `--json` its one object has `"error":
+"misfiled"`, the item's `"uuid"` and where it `"landed"`.
 
 ## Editing
 
@@ -583,7 +583,10 @@ the value puts it: Anytime, Someday, today, this evening or the date. If
 it was modified but filed somewhere else, `edit` exits non-zero with `edit
 did not apply as sent: …` and says where the item is. `add` and `project
 add` check the same, and exit non-zero with `add did not apply as sent: …`
-naming the item they made, so it is not added twice. An English phrase is
+naming the item they found; search for the title before adding it again,
+since another add of the same title at the same moment can be the one
+found. Under `--json` either error is one object with `"error":
+"misfiled"`, the item's `"uuid"` and where it `"landed"`. An English phrase is
 not checked. A write sent just before midnight counts as filed for either
 day.
 An edit with no field flags and no status to change prints the item

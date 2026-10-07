@@ -52,8 +52,10 @@ func parseClock(s string) (int, bool) {
 
 // placeWhen returns where value files an item when Things reads it at now. ok
 // is false for a value whose outcome is not worked out here: an English
-// phrase, a time other than HH:MM, or a time within a minute of now, which
-// lands today or tomorrow depending on when Things reads it.
+// phrase, a time other than HH:MM, a time within a minute of now, which lands
+// today or tomorrow depending on when Things reads it, or a time within an
+// hour of a daylight-saving change, where how Things reads the wall clock was
+// not measured.
 func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 	v, err := things.NormalizeWhen(value)
 	if err != nil {
@@ -73,6 +75,9 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 		return whenPlace{day: model.ThingsDateFromTime(now.AddDate(0, 0, 1)), bucket: -1, reminder: reminderKept}, true
 	}
 	if clock, ok := parseClock(v); ok {
+		if nearOffsetChange(now) {
+			return whenPlace{}, false
+		}
 		at := time.Date(now.Year(), now.Month(), now.Day(), clock/60, clock%60, 0, 0, time.Local)
 		switch {
 		case at.Sub(now) > time.Minute:
@@ -108,6 +113,15 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 		return whenPlace{day: today, bucket: -1, reminder: reminderNone}, true
 	}
 	return whenPlace{day: day, bucket: -1, reminder: reminderKept}, true
+}
+
+// nearOffsetChange reports whether the local UTC offset an hour before now
+// differs from the one an hour after: a daylight-saving change within the
+// hour either side.
+func nearOffsetChange(now time.Time) bool {
+	_, before := now.Add(-time.Hour).In(time.Local).Zone()
+	_, after := now.Add(time.Hour).In(time.Local).Zone()
+	return before != after
 }
 
 // holds reports whether t is filed where p says, by its start, start date and
@@ -158,12 +172,14 @@ type whenCheck struct {
 	sent  time.Time
 }
 
-// holds reports whether t is filed where the value puts it. The value is read
-// against the day it was sent and the day it is now, so a write that crosses
-// midnight is judged by either. A value whose place is not worked out when it
-// was sent holds: a time within a minute of the send lands by when Things
-// read it, which a later read-back cannot tell.
-func (c *whenCheck) holds(t *model.Task) bool {
+// holds reports whether t, read at now, is filed where the value puts it. The
+// value is read against the day it was sent and the day of the read, so a
+// write that crosses midnight is judged by either. A caller passes one now
+// for everything it judges together, so the verdict cannot flip between
+// checks. A value whose place is not worked out when it was sent holds: a
+// time within a minute of the send lands by when Things read it, which a
+// later read-back cannot tell.
+func (c *whenCheck) holds(t *model.Task, now time.Time) bool {
 	if c == nil {
 		return true
 	}
@@ -171,8 +187,29 @@ func (c *whenCheck) holds(t *model.Task) bool {
 	if !ok || p.holds(t) {
 		return true
 	}
-	p, ok = placeWhen(c.value, time.Now())
+	p, ok = placeWhen(c.value, now)
 	return ok && p.holds(t)
+}
+
+// misfiledError is an add or edit that Things applied but filed somewhere
+// other than --when put it. The item exists, so the JSON error carries its
+// uuid and where it landed for a caller to act on.
+type misfiledError struct {
+	msg    string
+	kind   string // "task" or "project"
+	title  string
+	uuid   string
+	landed string
+}
+
+func (e *misfiledError) Error() string { return e.msg }
+
+// kindWord is the error payload's word for an item of type typ.
+func kindWord(typ model.TaskType) string {
+	if typ == model.TypeProject {
+		return "project"
+	}
+	return "task"
 }
 
 // describeStart says where t is filed, for an error about a --when that did

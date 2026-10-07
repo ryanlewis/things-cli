@@ -128,14 +128,14 @@ type statusWant struct {
 }
 
 // landed reports whether current shows the change w asked for.
-func (w statusWant) landed(current *model.Task) bool {
+func (w statusWant) landed(current *model.Task, now time.Time) bool {
 	if current.Status != w.want {
 		return false
 	}
 	if !w.edit {
 		return true
 	}
-	return w.modified(current) && w.when.holds(current)
+	return w.modified(current) && w.when.holds(current, now)
 }
 
 // modified reports whether current's modification date moved from w.since.
@@ -201,6 +201,8 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 		if len(pending) == 0 {
 			return true, nil
 		}
+		// One clock for the round, so a --when check cannot flip midway.
+		now := time.Now()
 		// One query per round for every item still pending, rather than one
 		// per item per round (issue #167).
 		uuids := make([]string, len(pending))
@@ -214,15 +216,15 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			w := wants[i]
 			current := found[w.uuid]
 			readErr := err
-			landed := readErr == nil && current != nil && w.landed(current)
+			landed := readErr == nil && current != nil && w.landed(current, now)
 			// applied says Things recorded the edit, by its modification date
 			// or its checklist, whether or not --when filed it as sent.
 			applied := readErr == nil && current != nil && w.modified(current)
-			if !landed && readErr == nil && current != nil && w.watchChecklist && current.Status == w.want {
+			if !landed && !applied && readErr == nil && current != nil && w.watchChecklist && current.Status == w.want {
 				var items []model.ChecklistItem
 				if items, readErr = database.GetChecklistItems(w.uuid); readErr == nil && w.checklistChanged(items) {
 					applied = true
-					landed = w.when.holds(current)
+					landed = w.when.holds(current, now)
 				}
 			}
 			switch {
@@ -241,10 +243,14 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			case landed:
 				results[i].task = current
 				continue
-			case expired && current.Status == w.want && applied && !w.when.holds(current):
+			case expired && current.Status == w.want && applied && !w.when.holds(current, now):
+				where := describeStart(current)
 				results[i] = statusResult{
-					err: fmt.Errorf("edit did not apply as sent: %q (%s) was modified, but --when %q did not file it there: it is %s. Things may have ignored or reread the value. Run `things show %s` before retrying; do not retry blindly",
-						w.title, w.uuid, w.when.value, describeStart(current), w.uuid),
+					err: &misfiledError{
+						msg: fmt.Sprintf("edit did not apply as sent: %q (%s) was modified, but --when %q did not file it there: it is %s. Things may have ignored or reread the value. Run `things show %s` before retrying; do not retry blindly",
+							w.title, w.uuid, w.when.value, where, w.uuid),
+						kind: kindWord(current.Type), title: w.title, uuid: w.uuid, landed: where,
+					},
 					got:      current.Status,
 					observed: true,
 				}
@@ -627,17 +633,20 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 			uuids[i] = t.UUID
 		}
 		return printUnconfirmedAdd(d, title, "ambiguous", uuids)
-	case !whenSent.holds(&found[0]):
-		where := describeStart(&found[0])
-		// Under --json the item's uuid goes to stdout too, as the ambiguous
-		// case gives its candidates, so an agent need not parse the error.
-		if d.JSON {
-			if err := output.PrintJSON(d.Stdout, unconfirmedAdd{Title: title, Reason: "misfiled", UUID: found[0].UUID, Landed: where}); err != nil {
-				return err
-			}
+	case !whenSent.holds(&found[0], time.Now()):
+		// The new item may be another add of the same title at the same
+		// moment, so the advice is to search first, as for a missing one.
+		item := &found[0]
+		where := describeStart(item)
+		edit := append(append([]string{"things"}, globalFlags(d)...), "edit")
+		if typ == model.TypeProject {
+			edit = append(edit[:len(edit)-1], "project", "edit")
 		}
-		return fmt.Errorf("add did not apply as sent: Things created %q (%s), but --when %q did not file it there: it is %s. Do not add it again; move it with `things edit %s --when ...` if it matters",
-			title, found[0].UUID, when, where, found[0].UUID)
+		return &misfiledError{
+			msg: fmt.Sprintf("add did not apply as sent: a new %s titled %q (%s) appeared, but --when %q did not file it there: it is %s. Run `%s` before adding it again; move it with `%s %s --when ...` if it matters",
+				kindWord(typ), title, item.UUID, when, where, searchCommand(d, title), strings.Join(edit, " "), item.UUID),
+			kind: kindWord(typ), title: title, uuid: item.UUID, landed: where,
+		}
 	}
 	return printItem(d, database, &found[0])
 }
@@ -650,17 +659,13 @@ func searchCommand(d *Deps, title string) string {
 }
 
 // unconfirmedAdd is the --json output for an add that was sent but not read
-// back. There is no uuid, except for a misfiled item: the add returns none,
-// and finding it is the read-back. candidates lists the new items an
-// ambiguous read-back found. A misfiled item, one --when did not file where
-// it said, gives its uuid and where it landed.
+// back. There is no uuid: the add returns none, and finding it is the
+// read-back. candidates lists the new items an ambiguous read-back found.
 type unconfirmedAdd struct {
 	Title      string   `json:"title"`
 	Confirmed  bool     `json:"confirmed"`
 	Reason     string   `json:"reason"`
 	Candidates []string `json:"candidates,omitempty"`
-	UUID       string   `json:"uuid,omitempty"`
-	Landed     string   `json:"landed,omitempty"`
 }
 
 // printUnconfirmedAdd is printUnconfirmedEdit for an add.
