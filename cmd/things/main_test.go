@@ -662,7 +662,7 @@ func TestListCommandLineCarriesConfigFlag(t *testing.T) {
 // close a task that mentions issue #12. Only an exact title or a uuid
 // resolves it; otherwise the error says to use the bare number.
 func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
-	for _, ref := range []string{"+12", "#12", " #12", "+1"} {
+	for _, ref := range []string{"+12", "#12", " #12", "#12 ", "+1"} {
 		t.Run(ref, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			seedCache(t, time.Minute, "things today", "abc-123")
@@ -677,7 +677,7 @@ func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
 			if !errors.As(err, &nf) {
 				t.Fatalf("resolveTask(%q) = %+v, %v, want a not-found error", ref, got, err)
 			}
-			digits := strings.TrimLeft(ref, " +#")
+			digits := strings.Trim(ref, " +#")
 			for _, want := range []string{"not a row reference", "use " + digits, "uuid"} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("message %q does not mention %q", err.Error(), want)
