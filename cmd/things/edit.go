@@ -142,6 +142,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		next = fmt.Sprintf("it will look for --heading %q in the to-do's own project", heading)
 	}
 	list, target, found := "", "", false
+	var resolved db.Target
 	switch {
 	case c.List != nil:
 		list = *c.List
@@ -149,13 +150,14 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		switch {
 		case err != nil:
 			return true
-		case t == "":
+		case t.UUID == "":
 			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area called %q; %s\n", list, next)
-		case t == strings.TrimSpace(list):
-			c.List, c.ListID = nil, &t
+		case t.UUID == strings.TrimSpace(list):
+			id := t.UUID
+			c.List, c.ListID = nil, &id
 			fallthrough
 		default:
-			target, found = t, f
+			resolved, target, found = t, t.UUID, f
 		}
 	case c.ListID != nil:
 		list = *c.ListID
@@ -163,12 +165,15 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		switch {
 		case err != nil:
 			return true
-		case t != strings.TrimSpace(list):
+		case t.UUID != strings.TrimSpace(list):
 			// AddTarget also matches a title, which list-id does not.
 			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area with id %q; %s\n", list, next)
 		default:
-			target, found = t, f
+			resolved, target, found = t, t.UUID, f
 		}
+	}
+	if target != "" {
+		noteTarget(d, list, "lists", resolved, task.ProjectUUID != target)
 	}
 	switch {
 	case target != "" && found:
@@ -190,7 +195,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	t, f, err := database.AddTarget(task.ProjectUUID, heading)
 	switch {
-	case err != nil || t == "":
+	case err != nil || t.UUID == "":
 		return true
 	case !f:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will leave the to-do where it is\n", task.ProjectTitle, heading)

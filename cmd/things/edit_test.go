@@ -624,6 +624,9 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		// uuid sorts first, so a project or to-do in area-3 moves.
 		{"projectSharedAreaOther", []string{"project", "edit", "areaproj-3", "--area", "personal"}, "", false},
 		{"sharedAreaOther", []string{"edit", "area3-todo", "--list", "Personal"}, "", false},
+		// A repeating project's template is no title match, but its own
+		// heading is still found by the project's uuid.
+		{"sameHeadingInTemplate", []string{"edit", "rephead-todo", "--heading", "setup"}, "", true},
 		{"projectKnownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "area-1"}, "", false},
 		{"projectUnknownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "nope"}, `no area with id "nope"; the project will stay where it is`, true},
 		{"projectUnknownAreaAndTitle", []string{"project", "edit", "repproj-1", "--area", "Nowhere", "--title", "Monthly review"}, `no area called "Nowhere"`, false},
@@ -644,6 +647,8 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Area("area-3", "personal", 3)
 			fx.Project("areaproj-3", "Shed", 11, dbtest.InArea("area-3"))
 			fx.Todo("area3-todo", "Mop", 12, dbtest.Anytime(), dbtest.InArea("area-3"))
+			fx.Heading("head-rep", "Setup", 13, dbtest.InProject("repproj-1"))
+			fx.Todo("rephead-todo", "Plan week", 14, dbtest.Anytime(), dbtest.UnderHeading("head-rep"))
 			calls := stubExecDropping(t)
 
 			_, stderr, err := runStreams(t, database, tc.args...)
@@ -671,7 +676,7 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 }
 
 // Things matches an update's list and area by title only, so a uuid left the
-// item where it was. A uuid of an open project or area now goes to Things as
+// item where it was. A uuid of a project or area now goes to Things as
 // list-id or area-id; a title still goes as list or area.
 func TestEditSendsUUIDAsListID(t *testing.T) {
 	cases := []struct {

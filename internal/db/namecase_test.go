@@ -290,8 +290,8 @@ func TestAddTargetNormalisationPicksSmallestUUID(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if target != "p-a" || !headOK {
-			t.Errorf("AddTarget(%q, Setup) = %q, %v, want p-a, true", list, target, headOK)
+		if target.UUID != "p-a" || !headOK {
+			t.Errorf("AddTarget(%q, Setup) = %q, %v, want p-a, true", list, target.UUID, headOK)
 		}
 	}
 }

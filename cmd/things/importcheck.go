@@ -170,13 +170,12 @@ func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest
 // which Things matches by title only. A title several lists share is checked
 // against the one Things picks (see db.AddTarget).
 func resolveImportDests(database *db.DB, creates []importCreate) {
-	var (
-		areas     []model.Area
-		areasErr  error
-		areasRead bool
-	)
-	// Many to-dos in a payload share a list; each list and heading is
-	// looked up once.
+	// Many items in a payload share a list or area; each is looked up once.
+	type areaRes struct {
+		target string
+		err    error
+	}
+	areaTargets := map[string]areaRes{}
 	type targetKey struct{ list, heading string }
 	type targetRes struct {
 		target       string
@@ -193,23 +192,19 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 				c.dest = createdDest{checked: true}
 				continue
 			}
-			if !areasRead {
-				areas, areasErr = database.ListAreas()
-				areasRead = true
+			area := to.area
+			if to.areaID != "" {
+				area = strings.TrimSpace(to.areaID)
 			}
-			if areasErr != nil {
-				continue
+			res, ok := areaTargets[area]
+			if !ok {
+				t, err := database.AreaTarget(area)
+				res = areaRes{t.UUID, err}
+				areaTargets[area] = res
 			}
-			if to.areaID == "" {
-				if titledArea(areas, to.area) != "" {
-					c.dest = areaTitleDest(areas, to.area)
-				}
-				continue
-			}
-			for _, a := range areas {
-				if a.UUID == strings.TrimSpace(to.areaID) {
-					c.dest = createdDest{checked: true, list: a.UUID}
-				}
+			// As for list below: area-id is a uuid only, area a title only.
+			if res.err == nil && res.target != "" && (to.areaID != "") == (res.target == area) {
+				c.dest = createdDest{checked: true, list: res.target}
 			}
 		case to.parentID != "":
 			c.dest = createdDest{checked: true, list: strings.TrimSpace(to.parentID), anyHeading: true}
@@ -231,7 +226,9 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 			tk := targetKey{list, to.heading}
 			res, ok := targets[tk]
 			if !ok {
-				res.target, res.headingFound, res.err = database.AddTarget(list, to.heading)
+				var t db.Target
+				t, res.headingFound, res.err = database.AddTarget(list, to.heading)
+				res.target = t.UUID
 				targets[tk] = res
 			}
 			// AddTarget matches a uuid as well as a title, but Things takes

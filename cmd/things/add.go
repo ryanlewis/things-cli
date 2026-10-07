@@ -74,13 +74,31 @@ func resolveAddTarget(d *Deps, list, heading string) (string, createdDest) {
 	switch {
 	case err != nil:
 		return "", createdDest{}
-	case target == "":
+	case target.UUID == "":
 		fmt.Fprintf(d.errOut(), "warning: Things finds no project or area called %q; it will put the to-do in the Inbox\n", list)
 		return "", createdDest{checked: true}
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will add the to-do there without a heading\n", list, heading)
 	}
-	return target, addDest(target, heading, headingFound)
+	noteTarget(d, list, "lists", target, true)
+	return target.UUID, addDest(target.UUID, heading, headingFound)
+}
+
+// noteTarget says on stderr when Things will file into a list the user may
+// not expect, though it is where ref leads: one of several kind ("lists" or
+// "areas") that share the title ref gives, or a closed or trashed project.
+// filing is false when the item is already there, so nothing will reopen.
+func noteTarget(d *Deps, ref, kind string, t db.Target, filing bool) {
+	if t.Others > 0 {
+		fmt.Fprintf(d.errOut(), "note: several %s are called %q; Things will use %q (%s); pass a UUID to choose\n", kind, ref, t.Title, t.UUID)
+	}
+	switch {
+	case !filing || t.Area:
+	case t.Trashed:
+		fmt.Fprintf(d.errOut(), "note: %q is in the Trash; Things will file into it there\n", t.Title)
+	case t.Status == model.StatusCompleted || t.Status == model.StatusCancelled:
+		fmt.Fprintf(d.errOut(), "note: %q is %s; Things will file into it and reopen it\n", t.Title, t.Status)
+	}
 }
 
 // addDest is where Things files a to-do sent to list, which AddTarget

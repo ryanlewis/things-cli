@@ -10,8 +10,9 @@ import (
 
 // AddTarget matches the way Things filed throwaway to-dos in a real run: an
 // open project or an area by title, ignoring case but not surrounding space;
-// a project closed today and not yet logged, but never a logged or trashed
-// one; a heading only inside the project it names, matched the same way.
+// by title, a project closed today and not yet logged, but never a logged or
+// trashed one, which only its uuid reaches; a heading only inside the
+// project it names, matched the same way.
 func TestAddTarget(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
@@ -36,8 +37,10 @@ func TestAddTarget(t *testing.T) {
 		{"proj-1", "", true, false},
 		{"area-1", "", true, false},
 		{"proj-1", "Ärger", true, true},
-		{"proj-done", "", false, false},
-		{"proj-trash", "", false, false},
+		// By uuid Things files into any project, closed, logged or
+		// trashed (measured with list-id).
+		{"proj-done", "", true, false},
+		{"proj-trash", "", true, false},
 		{"Tools", "", true, false},
 		{"tools", "", true, false},
 		{"personal", "", true, false},
@@ -70,7 +73,7 @@ func TestAddTarget(t *testing.T) {
 	}
 	for _, tc := range cases {
 		target, headOK, err := d.AddTarget(tc.list, tc.heading)
-		listOK := target != ""
+		listOK := target.UUID != ""
 		if err != nil {
 			t.Fatalf("AddTarget(%q, %q): %v", tc.list, tc.heading, err)
 		}
@@ -101,15 +104,15 @@ func TestAddTargetPicksSmallestUUID(t *testing.T) {
 			if err != nil {
 				t.Fatalf("AddTarget(%q): %v", list, err)
 			}
-			if target != "B-lower" || !headOK {
-				t.Errorf("insert order %v: AddTarget(%q, Setup) = %q, %v, want B-lower, true", order, list, target, headOK)
+			if target.UUID != "B-lower" || !headOK {
+				t.Errorf("insert order %v: AddTarget(%q, Setup) = %q, %v, want B-lower, true", order, list, target.UUID, headOK)
 			}
 			area, _, err := d.AddTarget(list+" area", "")
 			if err != nil {
 				t.Fatalf("AddTarget(%q area): %v", list, err)
 			}
-			if area != "B-lower-area" {
-				t.Errorf("insert order %v: AddTarget(%q area) = %q, want B-lower-area", order, list, area)
+			if area.UUID != "B-lower-area" {
+				t.Errorf("insert order %v: AddTarget(%q area) = %q, want B-lower-area", order, list, area.UUID)
 			}
 		}
 	}
@@ -134,8 +137,8 @@ func TestAddTargetSkipsLoggedForSmallestUUID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("AddTarget(%q): %v", list, err)
 		}
-		if target != want {
-			t.Errorf("AddTarget(%q) = %q, want %q", list, target, want)
+		if target.UUID != want {
+			t.Errorf("AddTarget(%q) = %q, want %q", list, target.UUID, want)
 		}
 	}
 }
@@ -155,6 +158,91 @@ func TestHeadingExists(t *testing.T) {
 		}
 		if got != want {
 			t.Errorf("HeadingExists(%q) = %v, want %v", uuid, got, want)
+		}
+	}
+}
+
+// AddTarget reports what the CLI notes about the row it picked: how many
+// other rows the title matched, and a project's status and trash state.
+func TestAddTargetReportsTarget(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("A-work", "Work", 1, dbtest.Completed(model.TimeToUnix(time.Now())))
+	fx.Project("B-work", "WORK", 2)
+	fx.Project("C-work", "work", 3)
+	fx.Project("D-bin", "Bin", 4, dbtest.Trashed())
+	fx.Area("A-home", "Home", 1)
+	fx.Area("B-home", "HOME", 2)
+	d := &DB{db: sqlDB}
+
+	for _, tc := range []struct {
+		list string
+		want Target
+	}{
+		{"work", Target{UUID: "A-work", Title: "Work", Status: model.StatusCompleted, Others: 2}},
+		{"B-work", Target{UUID: "B-work", Title: "WORK"}},
+		{"D-bin", Target{UUID: "D-bin", Title: "Bin", Trashed: true}},
+		{"home", Target{UUID: "A-home", Title: "Home", Area: true, Others: 1}},
+		{"B-home", Target{UUID: "B-home", Title: "HOME", Area: true}},
+	} {
+		got, _, err := d.AddTarget(tc.list, "")
+		if err != nil {
+			t.Fatalf("AddTarget(%q): %v", tc.list, err)
+		}
+		if got != tc.want {
+			t.Errorf("AddTarget(%q) = %+v, want %+v", tc.list, got, tc.want)
+		}
+	}
+}
+
+// A repeating project's template is no title match, but its uuid still
+// names it, as list-id does in Things.
+func TestAddTargetTemplateByUUIDOnly(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("tmpl", "Weekly", 1, dbtest.Repeats())
+	fx.Heading("head-t", "Setup", 1, dbtest.InProject("tmpl"))
+	d := &DB{db: sqlDB}
+
+	if got, _, err := d.AddTarget("Weekly", ""); err != nil || got.UUID != "" {
+		t.Errorf("AddTarget(Weekly) = %+v, %v, want no match", got, err)
+	}
+	got, headOK, err := d.AddTarget("tmpl", "Setup")
+	if err != nil || got.UUID != "tmpl" || !headOK {
+		t.Errorf("AddTarget(tmpl, Setup) = %+v, %v, %v, want tmpl with its heading", got, headOK, err)
+	}
+}
+
+// The other "Move completed items to Logbook" choices decide which closed
+// projects a title still matches, as they decide the lists: "immediately"
+// (0) holds none back, "manually" (4) every one closed since the last "Log
+// Completed Now". Only "daily" was measured in Things.
+func TestAddTargetLogInterval(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		interval      int
+		today, before bool
+	}{
+		{0, false, false},
+		{4, true, true},
+	} {
+		sqlDB := dbtest.NewSQL(t)
+		fx := dbtest.NewFixture(t, sqlDB)
+		fx.Project("p-today", "Today", 1, dbtest.Completed(model.TimeToUnix(now)))
+		fx.Project("p-before", "Before", 2, dbtest.Completed(model.TimeToUnix(now.Add(-48*time.Hour))))
+		if _, err := sqlDB.Exec(`INSERT INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
+			tc.interval, model.TimeToUnix(now.Add(-72*time.Hour))); err != nil {
+			t.Fatal(err)
+		}
+		d := &DB{db: sqlDB}
+		for list, want := range map[string]bool{"Today": tc.today, "Before": tc.before} {
+			got, _, err := d.AddTarget(list, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (got.UUID != "") != want {
+				t.Errorf("logInterval %d: AddTarget(%q) = %+v, want match %v", tc.interval, list, got, want)
+			}
 		}
 	}
 }
