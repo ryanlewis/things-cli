@@ -139,11 +139,10 @@ func TestImportTags(t *testing.T) {
 			  "items":[{"type":"to-do","attributes":{"title":"t","tags":["inner"]}}]}}]`,
 			[]string{"outer", "inner"},
 		},
-		{"invalidJSON", `not json`, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := importTags([]byte(c.payload))
+			got := importTags(decodeImport(t, c.payload))
 			if len(got) != len(c.want) {
 				t.Fatalf("importTags = %v, want %v", got, c.want)
 			}

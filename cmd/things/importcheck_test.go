@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
@@ -43,7 +44,7 @@ func TestImportUpdatesWalksNestedItems(t *testing.T) {
 	     {"type":"to-do","operation":"update","id":"c","attributes":{"completed":true}}
 	  ]}}
 	]`
-	got := importUpdates([]byte(payload))
+	got := importUpdates(decodeImport(t, payload))
 	want := []struct{ path, id string }{
 		{"[1]", "a"},
 		{"[2]", "b"},
@@ -70,7 +71,7 @@ func TestImportUpdatesOrderIsStable(t *testing.T) {
 	var first []string
 	for i := 0; i < 25; i++ {
 		var paths []string
-		for _, u := range importUpdates([]byte(payload)) {
+		for _, u := range importUpdates(decodeImport(t, payload)) {
 			paths = append(paths, u.path)
 		}
 		if i == 0 {
@@ -83,9 +84,45 @@ func TestImportUpdatesOrderIsStable(t *testing.T) {
 	}
 }
 
-func TestImportUpdatesIgnoresUnparseablePayload(t *testing.T) {
-	if got := importUpdates([]byte(`[{"type":}]`)); got != nil {
-		t.Errorf("want no updates from invalid JSON, got %+v", got)
+// decodeImport decodes payload as the import does before any check reads it.
+func decodeImport(t *testing.T, payload string) []any {
+	t.Helper()
+	items, err := decodeImportJSON([]byte(payload))
+	if err != nil {
+		t.Fatalf("decodeImportJSON: %v", err)
+	}
+	return items
+}
+
+// The forms Things accepts and rejects were checked against Things 3 by
+// importing each one.
+func TestParseCreationDate(t *testing.T) {
+	cases := []struct {
+		raw  any
+		want string // UTC, "" when Things rejects it
+	}{
+		{"2026-10-05T10:30:00Z", "2026-10-05T10:30:00Z"},
+		{"2026-10-05T10:30:00+02:00", "2026-10-05T08:30:00Z"},
+		{"2026-10-05T10:30:00+0200", "2026-10-05T08:30:00Z"},
+		{"2026-10-05T10:30:00+02", "2026-10-05T08:30:00Z"},
+		{"2026-10-05T10:30:00.5+05:30", "2026-10-05T05:00:00.5Z"},
+		{"2026-10-05", ""},
+		{"2026-10-05T10:30:00", ""},
+		{"2026-10-05T10:30Z", ""},
+		{"2026-10-05 10:30:00Z", ""},
+		{"2026-10-05t10:30:00z", ""},
+		{" 2026-10-05T10:30:00Z ", ""},
+		{"", ""},
+		{float64(1791196200), ""},
+	}
+	for _, c := range cases {
+		got, ok := parseCreationDate(c.raw)
+		switch {
+		case c.want == "" && ok:
+			t.Errorf("parseCreationDate(%#v) = %v, want rejected", c.raw, got)
+		case c.want != "" && (!ok || got.UTC().Format(time.RFC3339Nano) != c.want):
+			t.Errorf("parseCreationDate(%#v) = %v, %v, want %s", c.raw, got, ok, c.want)
+		}
 	}
 }
 

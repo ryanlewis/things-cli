@@ -40,15 +40,16 @@ func (c *ImportCmd) Run(d *Deps) error {
 			return fmt.Errorf("reading stdin: %w", err)
 		}
 	}
-	if err := validateImportJSON(data); err != nil {
+	payload, err := decodeImportJSON(data)
+	if err != nil {
 		return err
 	}
-	if _, err := verifyTags(d, c.TagFlags, importTags(data)); err != nil {
+	if _, err := verifyTags(d, c.TagFlags, importTags(payload)); err != nil {
 		return err
 	}
 	// Refuse before anything is sent if any `operation: update` item would
 	// change an attribute Things drops silently on a repeating item.
-	plan, err := prepareImport(d, database, data)
+	plan, err := prepareImport(d, database, payload)
 	if err != nil {
 		return err
 	}
@@ -59,36 +60,31 @@ func (c *ImportCmd) Run(d *Deps) error {
 	})
 }
 
-// validateImportJSON checks the payload is a non-empty JSON array — the shape
-// the Things JSON URL scheme requires — without allocating on the happy path.
-// On syntax errors it falls back to a full decode purely to extract the byte
-// offset, which it converts to line/column so the user can jump to the bad
-// byte in their editor.
-func validateImportJSON(data []byte) error {
-	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) == 0 {
-		return fmt.Errorf("empty payload")
+// decodeImportJSON decodes the payload once for every check that reads it,
+// and checks it is a non-empty JSON array, the shape the Things JSON URL
+// scheme requires. A syntax error is reported with its line and column so
+// the user can jump to the bad byte in their editor.
+func decodeImportJSON(data []byte) ([]any, error) {
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil, fmt.Errorf("empty payload")
 	}
-	if !json.Valid(data) {
-		// Re-decode to get an offset for the error message; this is the slow
-		// path (only on invalid input) so the allocation doesn't matter.
-		var v any
-		err := json.Unmarshal(data, &v)
+	var payload any
+	if err := json.Unmarshal(data, &payload); err != nil {
 		var syn *json.SyntaxError
 		if errors.As(err, &syn) {
 			line, col := offsetToLineCol(data, syn.Offset)
-			return fmt.Errorf("invalid JSON at line %d, column %d: %s", line, col, syn.Error())
+			return nil, fmt.Errorf("invalid JSON at line %d, column %d: %s", line, col, syn.Error())
 		}
-		return fmt.Errorf("invalid JSON: %w", err)
+		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
-	if trimmed[0] != '[' {
-		return fmt.Errorf("payload must be a JSON array of items")
+	items, ok := payload.([]any)
+	if !ok {
+		return nil, fmt.Errorf("payload must be a JSON array of items")
 	}
-	// Valid JSON starting with `[` is at minimum `[]`, so len >= 2.
-	if len(bytes.TrimSpace(trimmed[1:len(trimmed)-1])) == 0 {
-		return fmt.Errorf("payload array is empty")
+	if len(items) == 0 {
+		return nil, fmt.Errorf("payload array is empty")
 	}
-	return nil
+	return items, nil
 }
 
 func offsetToLineCol(data []byte, offset int64) (int, int) {

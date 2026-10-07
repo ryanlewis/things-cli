@@ -23,7 +23,7 @@ func stubExec(t *testing.T) *[]string {
 	return &captured
 }
 
-func TestValidateImportJSON(t *testing.T) {
+func TestDecodeImportJSON(t *testing.T) {
 	cases := []struct {
 		name    string
 		input   string
@@ -32,12 +32,13 @@ func TestValidateImportJSON(t *testing.T) {
 		{"valid", `[{"type":"to-do","attributes":{"title":"x"}}]`, ""},
 		{"notArray", `{"type":"to-do"}`, "must be a JSON array"},
 		{"emptyArray", `[]`, "empty"},
+		{"blank", " \n", "empty payload"},
 		{"syntax", `[{"type":}]`, "invalid JSON at line 1"},
 		{"multilineSyntax", "[\n  {\"a\": 1,},\n]", "invalid JSON at line"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := validateImportJSON([]byte(c.input))
+			_, err := decodeImportJSON([]byte(c.input))
 			if c.wantErr == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
