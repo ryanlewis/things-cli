@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -303,9 +302,24 @@ func githubToken() string {
 	return ""
 }
 
-// noRedirects stops the client at the first response, so neither request
-// follows a redirect: the token never leaves api.github.com, and the release
-// page's tag is read from its Location rather than from HTML.
+// releaseClient makes the check's requests. checkRedirect decides which
+// redirects it follows.
+func releaseClient(checkRedirect func(*http.Request, []*http.Request) error) *http.Client {
+	return &http.Client{Transport: updateTransport, CheckRedirect: checkRedirect, Timeout: 10 * time.Second}
+}
+
+// apiRedirects follows a redirect only while it stays on https://api.github.com,
+// so the token never leaves it but a renamed repository's 301 to
+// /repositories/ID/... still resolves.
+func apiRedirects(req *http.Request, via []*http.Request) error {
+	if req.URL.Scheme != "https" || req.URL.Host != "api.github.com" || len(via) >= 10 {
+		return http.ErrUseLastResponse
+	}
+	return nil
+}
+
+// noRedirects stops the client at the first response, so the release page's
+// tag is read from its Location rather than from HTML.
 func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func fetchAPIReleaseTag() (string, error) {
@@ -318,7 +332,7 @@ func fetchAPIReleaseTag() (string, error) {
 	if tok := githubToken(); tok != "" && req.URL.Scheme == "https" && req.URL.Host == "api.github.com" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
-	resp, err := (&http.Client{Transport: updateTransport, CheckRedirect: noRedirects, Timeout: 10 * time.Second}).Do(req)
+	resp, err := releaseClient(apiRedirects).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -346,22 +360,25 @@ func fetchRedirectReleaseTag() (string, error) {
 		return "", err
 	}
 	req.Header.Set("User-Agent", "things-cli")
-	resp, err := (&http.Client{Transport: updateTransport, CheckRedirect: noRedirects, Timeout: 10 * time.Second}).Do(req)
+	resp, err := releaseClient(noRedirects).Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently {
+	switch resp.StatusCode {
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther,
+		http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+	default:
 		return "", fmt.Errorf("%s returned %s, not a redirect", latestReleasePage, resp.Status)
 	}
 	loc, err := resp.Location()
 	if err != nil {
 		return "", fmt.Errorf("%s redirect: %w", latestReleasePage, err)
 	}
-	page, _ := url.Parse(latestReleasePage)
+	page := req.URL
 	prefix := strings.TrimSuffix(page.Path, "latest") + "tag/"
 	tag, ok := strings.CutPrefix(loc.Path, prefix)
-	if loc.Host != page.Host || !ok || tag == "" || strings.Contains(tag, "/") {
+	if loc.Scheme != page.Scheme || loc.Host != page.Host || !ok || tag == "" || strings.Contains(tag, "/") {
 		return "", fmt.Errorf("%s redirects to %s, not a release tag", latestReleasePage, loc)
 	}
 	return tag, nil
