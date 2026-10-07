@@ -656,14 +656,15 @@ two-way, so `false` is refused as readily as `true`. Update items that set
 `completed` or `canceled` are read back from the database afterwards, and any
 that Things dropped are reported one per line with a non-zero exit.
 
-A `creation-date` on a to-do or project the payload creates must be a date
-and time with seconds and a UTC offset, such as `2026-10-05T10:30:00Z` or
-`2026-10-05T10:30:00+02:00` (`+0200` and `+02` work too). Things rejects
-the whole payload over any other form, a date on its own or a time with no
-offset included, so `import` refuses it before anything is sent and names
-each item; under `--json` it is `import refused`, with `blocked` naming
-`creation-date` on each item. A `null` creation-date is no date: Things saves the item as
-created now.
+A `creation-date` or `completion-date` on a to-do or project the payload
+creates or updates must be a date and time with seconds and a UTC offset,
+such as `2026-10-05T10:30:00Z` or `2026-10-05T10:30:00+02:00` (`+0200` and
+`+02` work too). Things rejects the whole payload over a date on its own, a
+time with no seconds or no offset, a lowercase `t` or `z`, or a comma before
+the fraction of a second, so `import` refuses it before anything is sent
+(tags included) and names each item; under `--json` it is `import refused`,
+with `blocked` naming the attribute on each item. A `null` creation-date is
+no date: Things saves the item as created now.
 
 Every to-do and project the payload creates is read back too, the way
 `add` finds its item: a new item of that kind with that title (surrounding
@@ -706,10 +707,10 @@ an unconfirmed `add` does, and no `uuid`:
   items and does not look for it. The line says `not checked
   (creation-date set)`.
 - `shares-dated-title`: another item in the payload with the same kind and
-  title sets a `creation-date` within the last minute or later. A new item
-  with that title could be either one, so this item is not confirmed.
-  `candidates` lists the new items with that kind and title filed where
-  this item goes. The line says `not confirmed (a dated item has the same
+  title sets a `creation-date` within the last minute or later, and a new
+  item filed where this one goes is also filed where that one goes. It
+  could be either one, so this item is not confirmed. `candidates` lists
+  the new items with that kind and title filed where this item goes. The line says `not confirmed (a dated item has the same
   title)`. An older `creation-date` cannot be mistaken for a new item, so
   it does not stop the read-back.
 - `not-found`: no new item with that title appeared within the read-back

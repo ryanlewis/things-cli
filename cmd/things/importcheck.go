@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -51,6 +52,7 @@ type importPlan struct {
 	updates []importUpdate
 	tasks   map[string]*model.Task // by id; a nil value means "not in the database"
 	creates []importCreate
+	missing []string // update items with no row, as `path (id …)`
 }
 
 // importUpdates collects every `operation: update` item in a Things JSON
@@ -86,7 +88,8 @@ type importCreate struct {
 	// Things saves it with that date, so it is not read back: one in the
 	// past never shows up among the items created since the write.
 	dated bool
-	// datedAt is that creation-date.
+	// datedAt is that creation-date, or zero when Things takes it but the
+	// CLI cannot read it, which leaves when Things saves it unknown.
 	datedAt time.Time
 	// to is where the payload files the item, and dest is where the CLI
 	// resolved that to before the import was sent (see resolveImportDests).
@@ -113,26 +116,37 @@ const datedSlack = time.Minute
 
 // landsInWindow reports whether c, a dated item, may be saved inside the
 // read-back window that starts at since, where its row could pass for a new
-// undated item with the same type and title.
+// undated item with the same type and title. A creation-date the CLI cannot
+// read might be anything, so it may.
 func (c importCreate) landsInWindow(since time.Time) bool {
-	return !c.datedAt.Before(since.Add(-datedSlack))
+	return c.datedAt.IsZero() || !c.datedAt.Before(since.Add(-datedSlack))
 }
 
-// creationDateLayouts are the `creation-date` forms Things accepts: a date and
-// time to the second, with a fraction or not, and a UTC offset written as Z,
-// +02:00, +0200 or +02. Things rejects the whole payload over any other form,
-// a date with no time or a time with no offset included.
+// creationDateShape is the shape of every `creation-date` Things was seen to
+// take: a date, T, a time to the second with an optional fraction, and a UTC
+// offset. Things takes one-digit fields and offsets such as +2 or +02:0 too,
+// and rejects the whole payload over a value without this shape: a date with
+// no time, a time with no seconds or no offset, a lowercase t or z, a comma
+// before the fraction, or a number. It also rejects some values with the
+// shape, such as month 13 or offset +200, which are sent and left to Things.
+var creationDateShape = regexp.MustCompile(`^\d+-\d+-\d+T\d+:\d+:\d+(\.\d+)?(Z|[+-]\d+(:\d+)?)$`)
+
+// creationDateLayouts read the usual forms of a creation-date with that
+// shape, with the offset written as Z, +02:00, +0200 or +02.
 var creationDateLayouts = []string{
 	"2006-01-02T15:04:05Z07:00",
 	"2006-01-02T15:04:05Z0700",
 	"2006-01-02T15:04:05Z07",
 }
 
-// parseCreationDate reads a `creation-date` the way Things does, reporting
-// false for a value Things rejects.
-func parseCreationDate(raw any) (time.Time, bool) {
+// parseThingsDate reads a `creation-date` or `completion-date`, reporting
+// false for a value
+// Things rejects the payload over. A value Things may take that none of
+// creationDateLayouts reads, such as one with an hour of 25, which Things
+// rolls into the next day, gives a zero time.
+func parseThingsDate(raw any) (time.Time, bool) {
 	str, ok := raw.(string)
-	if !ok {
+	if !ok || !creationDateShape.MatchString(str) {
 		return time.Time{}, false
 	}
 	for _, layout := range creationDateLayouts {
@@ -140,7 +154,7 @@ func parseCreationDate(raw any) (time.Time, bool) {
 			return t, true
 		}
 	}
-	return time.Time{}, false
+	return time.Time{}, true
 }
 
 func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
@@ -248,13 +262,8 @@ func (c importCreate) kind() string {
 // that is not an `operation: update`, at any depth: a project's `items`, and
 // the `items` of a project the payload updates, create to-dos too. An item
 // with no title is left out, since there is nothing to find it by.
-//
-// A `creation-date` in a form Things rejects is an error: Things refuses the
-// whole payload over one, creating nothing. A null one is no date at all, as
-// it is to Things, which saves the item as created now.
-func importCreates(payload []any) ([]importCreate, error) {
+func importCreates(payload []any) []importCreate {
 	var creates []importCreate
-	var badDates []importBadDate
 	// parents maps the path of each item in a project's items to that
 	// project. The walk visits a project before its items.
 	parents := map[string]importTo{}
@@ -286,15 +295,7 @@ func importCreates(payload []any) ([]importCreate, error) {
 			return
 		}
 		title, _ := attrs["title"].(string)
-		title = strings.TrimSpace(title)
-		raw := attrs["creation-date"]
-		datedAt, ok := parseCreationDate(raw)
-		if !ok && raw != nil {
-			shown, _ := json.Marshal(raw)
-			badDates = append(badDates, importBadDate{path: path, title: title, value: string(shown)})
-			return
-		}
-		if title == "" {
+		if title = strings.TrimSpace(title); title == "" {
 			return
 		}
 		to, nested := parents[path]
@@ -306,23 +307,57 @@ func importCreates(payload []any) ([]importCreate, error) {
 			to.areaID, _ = attrs["area-id"].(string)
 			to.area, _ = attrs["area"].(string)
 		}
-		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: ok, datedAt: datedAt, to: to})
+		// A null creation-date is no date at all, as it is to Things, which
+		// saves the item as created now. checkImportDates has refused any
+		// value Things rejects.
+		raw := attrs["creation-date"]
+		datedAt, _ := parseThingsDate(raw)
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: raw != nil, datedAt: datedAt, to: to})
 	})
-	if len(badDates) > 0 {
-		return nil, &importDateError{items: badDates}
-	}
-	return creates, nil
+	return creates
 }
 
-// importBadDate is one created item whose `creation-date` Things rejects.
+// importDateAttrs are the date attributes of a to-do or project, created or
+// updated, that Things rejects the whole payload over when it cannot read
+// them.
+var importDateAttrs = []string{"creation-date", "completion-date"}
+
+// checkImportDates refuses a payload with a creation-date or completion-date
+// Things rejects (see creationDateShape) on any to-do or project in it. Things
+// creates and updates nothing from such a payload, so nothing is sent.
+func checkImportDates(payload []any) error {
+	var bad []importBadDate
+	walkImportNode(payload, "", func(path string, v map[string]any) {
+		if itemType, _ := v["type"].(string); itemType != "to-do" && itemType != "project" {
+			return
+		}
+		attrs, _ := v["attributes"].(map[string]any)
+		for _, name := range importDateAttrs {
+			raw := attrs[name]
+			if _, ok := parseThingsDate(raw); ok || raw == nil {
+				continue
+			}
+			shown, _ := json.Marshal(raw)
+			title, _ := attrs["title"].(string)
+			bad = append(bad, importBadDate{path: path, title: strings.TrimSpace(title), attr: name, value: string(shown)})
+		}
+	})
+	if len(bad) > 0 {
+		return &importDateError{items: bad}
+	}
+	return nil
+}
+
+// importBadDate is one date attribute Things rejects on a payload item.
 type importBadDate struct {
 	path, title string
-	value       string // the creation-date as the payload wrote it, in JSON
+	attr        string // creation-date or completion-date
+	value       string // the date as the payload wrote it, in JSON
 }
 
-// importDateError refuses a payload with a `creation-date` Things rejects. It
-// is a refusal like importRefusalError, so --json reports it the same way,
-// with each item's `blocked` naming creation-date.
+// importDateError refuses a payload with a date Things rejects. It is a
+// refusal like importRefusalError, so --json reports it the same way, with
+// each item's `blocked` naming the attribute.
 type importDateError struct {
 	items []importBadDate
 }
@@ -330,9 +365,9 @@ type importDateError struct {
 func (e *importDateError) Error() string {
 	lines := make([]string, len(e.items))
 	for i, it := range e.items {
-		lines[i] = fmt.Sprintf("  %s: %s", it.path, it.value)
+		lines[i] = fmt.Sprintf("  %s %s: %s", it.path, it.attr, it.value)
 	}
-	return fmt.Sprintf("a creation-date must be a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00: Things rejects the whole payload over any other form. Nothing was sent to Things — fix these and run the import again:\n%s",
+	return fmt.Sprintf("a creation-date or completion-date must be a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00: Things rejects the whole payload over any other form. Nothing was sent to Things — fix these and run the import again:\n%s",
 		strings.Join(lines, "\n"))
 }
 
@@ -340,7 +375,7 @@ func (e *importDateError) Error() string {
 func (e *importDateError) jsonItems() []jsonErrorItem {
 	out := make([]jsonErrorItem, len(e.items))
 	for i, it := range e.items {
-		out[i] = jsonErrorItem{Path: it.path, Title: it.title, Blocked: []string{"creation-date"}}
+		out[i] = jsonErrorItem{Path: it.path, Title: it.title, Blocked: []string{it.attr}}
 	}
 	return out
 }
@@ -553,8 +588,9 @@ func (e *importVerifyError) Error() string {
 // ones that did appear when fewer than the payload asked for did). An item
 // with a `creation-date` is not checked at all: reason "creation-date". Nor
 // is one that shares its type and title with such an item whose date falls
-// in the read-back window: reason "shares-dated-title", with candidates
-// listing the new items with its type and title filed where it goes.
+// in the read-back window, when one of its new items is also filed where that
+// item goes: reason "shares-dated-title", with candidates listing its new
+// items.
 type importCreated struct {
 	Path       string   `json:"path"`
 	Kind       string   `json:"kind"`
@@ -576,11 +612,8 @@ type importCreated struct {
 // and gives no per-item result, so there is no way to send the rest and report
 // what was skipped. Refusing before anything is sent leaves the user with a
 // payload they can fix and re-run.
-//
-// creates is the payload's importCreates, which the caller reads before the
-// tag check so that a creation-date refusal comes before --create-tags writes.
-func prepareImport(d *Deps, database *db.DB, payload []any, creates []importCreate) (*importPlan, error) {
-	plan := &importPlan{updates: importUpdates(payload), tasks: map[string]*model.Task{}, creates: creates}
+func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
+	plan := &importPlan{updates: importUpdates(payload), tasks: map[string]*model.Task{}, creates: importCreates(payload)}
 
 	// One query for the whole payload rather than one per item (issue #167).
 	var ids []string
@@ -600,14 +633,13 @@ func prepareImport(d *Deps, database *db.DB, payload []any, creates []importCrea
 	}
 
 	var refusals []importRefusalItem
-	var missing []string
 	for _, u := range plan.updates {
 		if !u.resolvable() {
 			continue
 		}
 		task := plan.tasks[u.id]
 		if task == nil {
-			missing = append(missing, fmt.Sprintf("%s (id %s)", u.path, u.id))
+			plan.missing = append(plan.missing, fmt.Sprintf("%s (id %s)", u.path, u.id))
 			continue
 		}
 		blocked := restrictedImportAttrs(u.attrs)
@@ -623,17 +655,20 @@ func prepareImport(d *Deps, database *db.DB, payload []any, creates []importCrea
 		})
 	}
 
-	// Refuse first: the warnings below promise that Things will report the
-	// unknown ids itself, which is only true when the payload is actually
-	// sent. A refused import never reaches Things.
 	if len(refusals) > 0 {
 		return nil, &importRefusalError{items: refusals, total: len(plan.updates)}
 	}
+	return plan, nil
+}
 
-	for _, m := range missing {
+// warnMissing warns about each update item the database does not have. It
+// runs once nothing else can refuse the import: the warning promises that
+// Things will report the unknown id itself, which is only true when the
+// payload is actually sent.
+func (p *importPlan) warnMissing(d *Deps) {
+	for _, m := range p.missing {
 		fmt.Fprintf(d.errOut(), "warning: %s is not in the Things database — Things will report this itself\n", m)
 	}
-	return plan, nil
 }
 
 // applyImport sends write, the import, then reads it back: the items it
@@ -703,37 +738,33 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 // leaves every item unconfirmed as unreadable, with a warning. An item the
 // payload gives a creation-date is not looked for, and is reported as not
 // checked. When that date is inside the read-back window its row can land
-// among the new items, so an item without one that shares its type and title
-// is not confirmed either: it fails the import, rather than risk confirming
-// it with the dated item's row, and names the new items it could be.
+// among the new items, so an item without one whose new items include one
+// that also fits where a dated item with its type and title is filed is not
+// confirmed: it fails the import, rather than risk confirming it with the
+// dated item's row, and names the new items it could be.
 func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, budget time.Duration) []importCreated {
 	if len(creates) == 0 {
 		return nil
 	}
-	dated := map[createdKey]bool{}
+	// dated is where each dated item whose row may land among the new items
+	// is filed, by type and title.
+	dated := map[createdKey][]createdDest{}
 	for _, c := range creates {
 		if c.dated && c.landsInWindow(snap.since) {
-			dated[c.key()] = true
+			dated[c.key()] = append(dated[c.key()], c.dest)
 		}
 	}
-	// want is the items to confirm, and look adds the ones that share a
-	// dated item's title, which are only looked for to name the candidates.
 	want := map[createdWant]int{}
-	look := map[createdWant]int{}
 	for _, c := range creates {
-		if c.dated {
-			continue
-		}
-		look[c.want()]++
-		if !dated[c.key()] {
+		if !c.dated {
 			want[c.want()]++
 		}
 	}
 	var found map[createdWant][]model.Task
 	err := snapErr
-	if err == nil && len(look) > 0 {
+	if err == nil && len(want) > 0 {
 		var readOK bool
-		found, readOK, err = findCreated(database, snap, look, budget)
+		found, readOK, err = findCreated(database, snap, want, budget)
 		if readOK {
 			err = nil
 		}
@@ -749,17 +780,18 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		for n, t := range matches {
 			uuids[n] = t.UUID
 		}
+		sharesDated := slices.ContainsFunc(matches, func(t model.Task) bool {
+			return slices.ContainsFunc(dated[c.key()], func(dst createdDest) bool { return dst.fits(t) })
+		})
 		switch n := want[w]; {
 		case c.dated:
 			out[i].Reason = "creation-date"
-		case dated[c.key()]:
-			out[i].Reason, out[i].Candidates = "shares-dated-title", uuids
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, so a new item with that title may be either", c.kind(), c.title)
-			if len(uuids) > 0 {
-				out[i].detail += " (" + strings.Join(uuids, ", ") + ")"
-			}
 		case err != nil:
 			out[i].Reason = "unreadable"
+		case sharesDated:
+			out[i].Reason, out[i].Candidates = "shares-dated-title", uuids
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, so a new item with that title may be either", c.kind(), c.title)
+			out[i].detail += " (" + strings.Join(uuids, ", ") + ")"
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
 			// Two saved at the same instant cannot be paired with the
 			// payload's items by order, so neither is confirmed.
@@ -779,7 +811,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		}
 	}
 	unconfirmShared(out, creates, found)
-	if err != nil && len(look) > 0 && !d.dbWarned {
+	if err != nil && len(want) > 0 && !d.dbWarned {
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
 	return out

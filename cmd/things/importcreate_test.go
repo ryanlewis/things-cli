@@ -437,10 +437,10 @@ Created and confirmed: [1] "Buy oat milk" (new-1)
 }
 
 // A dated item's row can land inside the read-back window, so an undated
-// item with the same kind and title cannot be told apart from it. Here
-// Things drops the undated to-do nested in a project update and saves only
-// the dated one: its row must not confirm the dropped item, and the import
-// fails naming it.
+// item with the same kind and title cannot be told apart from it where both
+// could be filed. Here Things drops the undated to-do nested in a project
+// update and saves only the dated one, at the top level: its row must not
+// confirm the dropped item, and the import fails naming it as not found.
 func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
@@ -461,8 +461,8 @@ func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
 		t.Fatalf("err = %v, want an importVerifyError", err)
 	}
 	items := verr.jsonItems()
-	if len(items) != 1 || items[0].Path != "[1].attributes.items[0]" || items[0].Reason != "shares-dated-title" {
-		t.Errorf("items = %+v, want the nested to-do with reason shares-dated-title", items)
+	if len(items) != 1 || items[0].Path != "[1].attributes.items[0]" || items[0].Reason != "not-found" {
+		t.Errorf("items = %+v, want the nested to-do with reason not-found", items)
 	}
 	for _, c := range verr.created {
 		if c.Confirmed {
@@ -496,9 +496,9 @@ func TestImportSharesDatedTitleListsCandidates(t *testing.T) {
 	}
 }
 
-// Things rejects the whole payload over a creation-date with no time or no
-// UTC offset, so the import refuses it before sending anything, even under
-// --no-verify.
+// Things rejects the whole payload over a creation-date or completion-date
+// with no time or no UTC offset, on an item it creates or updates, so the
+// import refuses it before sending anything, even under --no-verify.
 func TestImportRefusesCreationDateThingsRejects(t *testing.T) {
 	database := seedFullDB(t)
 	captured := stubExec(t)
@@ -508,18 +508,19 @@ func TestImportRefusesCreationDateThingsRejects(t *testing.T) {
 	  {"type":"to-do","attributes":{"title":"Day only","creation-date":"2026-10-05"}},
 	  {"type":"project","attributes":{"title":"P","items":[
 	    {"type":"to-do","attributes":{"title":"No offset","creation-date":"2026-10-05T10:30:00"}}
-	  ]}}
+	  ]}},
+	  {"type":"to-do","operation":"update","id":"t1","attributes":{"completion-date":"2026-10-05"}}
 	]`
 	_, _, err := runImportOut(t, database, payload, "--no-verify")
 	if err == nil {
 		t.Fatal("expected the payload to be refused")
 	}
-	for _, want := range []string{`[1]: "2026-10-05"`, `[2].attributes.items[0]: "2026-10-05T10:30:00"`, "Nothing was sent"} {
+	for _, want := range []string{`[1] creation-date: "2026-10-05"`, `[2].attributes.items[0] creation-date: "2026-10-05T10:30:00"`, `[3] completion-date: "2026-10-05"`, "Nothing was sent"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error missing %q:\n%v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), " [0]:") {
+	if strings.Contains(err.Error(), " [0] ") {
 		t.Errorf("error names the valid creation-date:\n%v", err)
 	}
 	if len(*captured) != 0 {
@@ -620,8 +621,11 @@ func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
 // adding the same title at the same moment, does not confirm it. A list the
 // CLI cannot resolve is not checked, and when that leaves two items able to
 // claim the same row, neither is confirmed; when fewer rows appeared than
-// the items that could claim them, they are not found.
+// the items that could claim them, they are not found. A recently dated
+// item stops the read-back of an undated one with its title only where its
+// row could be filed.
 func TestImportCreatedChecksDestination(t *testing.T) {
+	now := time.Now().UTC().Format(time.RFC3339)
 	cases := []struct {
 		name, payload string
 		rows          []createdRow
@@ -658,6 +662,10 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 		// against the project it names: the item may land in the Inbox.
 		{"uuidAsList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"proj-1"}}]`,
 			[]createdRow{{uuid: "mine", title: "Buy oat milk"}}, []string{"mine"}},
+		{"datedElsewhere", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","creation-date":"` + now + `"}},{"type":"to-do","attributes":{"title":"Buy oat milk"}}]`,
+			[]createdRow{{uuid: "dated", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"creation-date", "mine"}},
+		{"datedSameList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","creation-date":"` + now + `"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
+			[]createdRow{{uuid: "dated", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"creation-date", "shares-dated-title"}},
 		// A title two areas share fits either of them.
 		{"sharedAreaTitle", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Personal"}}]`,
 			[]createdRow{{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-3'`}}, []string{"mine"}},

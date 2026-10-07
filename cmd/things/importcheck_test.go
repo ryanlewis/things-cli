@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -98,30 +99,41 @@ func decodeImport(t *testing.T, payload string) []any {
 // importing each one.
 func TestParseCreationDate(t *testing.T) {
 	cases := []struct {
-		raw  any
-		want string // UTC, "" when Things rejects it
+		raw     any
+		want    string // UTC, "" when Things rejects it or the CLI cannot read it
+		refused bool
 	}{
-		{"2026-10-05T10:30:00Z", "2026-10-05T10:30:00Z"},
-		{"2026-10-05T10:30:00+02:00", "2026-10-05T08:30:00Z"},
-		{"2026-10-05T10:30:00+0200", "2026-10-05T08:30:00Z"},
-		{"2026-10-05T10:30:00+02", "2026-10-05T08:30:00Z"},
-		{"2026-10-05T10:30:00.5+05:30", "2026-10-05T05:00:00.5Z"},
-		{"2026-10-05", ""},
-		{"2026-10-05T10:30:00", ""},
-		{"2026-10-05T10:30Z", ""},
-		{"2026-10-05 10:30:00Z", ""},
-		{"2026-10-05t10:30:00z", ""},
-		{" 2026-10-05T10:30:00Z ", ""},
-		{"", ""},
-		{float64(1791196200), ""},
+		{"2026-10-05T10:30:00Z", "2026-10-05T10:30:00Z", false},
+		{"2026-10-05T10:30:00+02:00", "2026-10-05T08:30:00Z", false},
+		{"2026-10-05T10:30:00+0200", "2026-10-05T08:30:00Z", false},
+		{"2026-10-05T10:30:00+02", "2026-10-05T08:30:00Z", false},
+		{"2026-10-05T10:30:00.5+05:30", "2026-10-05T05:00:00.5Z", false},
+		{"2026-10-05T9:30:00Z", "2026-10-05T09:30:00Z", false},
+		// Things takes these, but the CLI cannot tell when.
+		{"2026-10-5T10:30:00Z", "", false},
+		{"2026-10-05T10:30:00+2", "", false},
+		{"2026-10-05T25:30:00Z", "", false},
+		{"2026-10-05", "", true},
+		{"2026-10-05T10:30:00", "", true},
+		{"2026-10-05T10:30:00.5", "", true},
+		{"2026-10-05T10:30Z", "", true},
+		{"2026-10-05 10:30:00Z", "", true},
+		{"2026-10-05t10:30:00z", "", true},
+		{"2026-10-05T10:30:00,5Z", "", true},
+		{"2026-10-05T10:30:00.Z", "", true},
+		{"+2026-10-05T10:30:00Z", "", true},
+		{" 2026-10-05T10:30:00Z ", "", true},
+		{"", "", true},
+		{float64(1791196200), "", true},
 	}
 	for _, c := range cases {
-		got, ok := parseCreationDate(c.raw)
-		switch {
-		case c.want == "" && ok:
-			t.Errorf("parseCreationDate(%#v) = %v, want rejected", c.raw, got)
-		case c.want != "" && (!ok || got.UTC().Format(time.RFC3339Nano) != c.want):
-			t.Errorf("parseCreationDate(%#v) = %v, %v, want %s", c.raw, got, ok, c.want)
+		got, ok := parseThingsDate(c.raw)
+		gotUTC := ""
+		if !got.IsZero() {
+			gotUTC = got.UTC().Format(time.RFC3339Nano)
+		}
+		if ok == c.refused || gotUTC != c.want {
+			t.Errorf("parseThingsDate(%#v) = %q, %v, want %q, %v", c.raw, gotUTC, ok, c.want, !c.refused)
 		}
 	}
 }
@@ -229,6 +241,23 @@ func TestImportRefusesRepeatingUpdates(t *testing.T) {
 				t.Errorf("payload was sent to Things anyway (%d calls)", *calls)
 			}
 		})
+	}
+}
+
+// The repeating refusal comes before --create-tags makes any tag, so a
+// refused import writes nothing.
+func TestImportRepeatingRefusalCreatesNoTags(t *testing.T) {
+	database, _ := seedWritable(t)
+	calls := stubExecDropping(t)
+
+	payload := `[{"type":"to-do","operation":"update","id":"rep-1","attributes":{"when":"today","add-tags":["brand-new"]}}]`
+	err := runWith(t, database, "import", "--create-tags", "--file", importPayload(t, payload))
+	var refusal *importRefusalError
+	if !errors.As(err, &refusal) {
+		t.Fatalf("err = %v, want an importRefusalError", err)
+	}
+	if *calls != 0 {
+		t.Errorf("something was written before the refusal (%d calls)", *calls)
 	}
 }
 
