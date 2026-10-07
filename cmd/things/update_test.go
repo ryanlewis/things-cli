@@ -573,6 +573,9 @@ func TestFetchLatestReleaseTagRedirectMustNameATag(t *testing.T) {
 		"plain http":      pageRedirectsTo("http://github.com/ryanlewis/things-cli/releases/tag/v0.9.1"),
 		"other repo":      pageRedirectsTo("https://github.com/someone/else/releases/tag/v0.9.1"),
 		"deeper path":     pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/v0.9.1/extra"),
+		"userinfo":        pageRedirectsTo("https://user:pass@github.com/ryanlewis/things-cli/releases/tag/v0.9.1"),
+		"encoded command": pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/v1.2.3%3B%20rm"),
+		"not a release":   pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/nightly"),
 		"no redirect":     respond(http.StatusOK, "<html>"),
 		"not found":       respond(http.StatusNotFound, ""),
 	}
@@ -586,6 +589,28 @@ func TestFetchLatestReleaseTagRedirectMustNameATag(t *testing.T) {
 				t.Errorf("err = %v, want both failures", err)
 			}
 		})
+	}
+}
+
+func TestUpdateStopsOnAnEncodedTagFromTheRedirect(t *testing.T) {
+	// The Location's path is decoded, so %3B%20 would put "; " into the tag.
+	f := fakeUpdate{exe: "/usr/local/bin/things", version: "0.9.0", writable: true}
+	f.install(t)
+	latestReleaseTag = fetchLatestReleaseTag
+	g := &fakeGitHub{
+		api:  respond(http.StatusForbidden, ""),
+		page: pageRedirectsTo("https://github.com/ryanlewis/things-cli/releases/tag/v1.2.3%3B%20rm"),
+	}
+	g.install(t)
+	for _, dryRun := range []bool{false, true} {
+		var out, stderr bytes.Buffer
+		err := (&UpdateCmd{DryRun: dryRun}).Run(&Deps{Stdout: &out, Stderr: &stderr})
+		if !dryRun && (err == nil || !strings.Contains(err.Error(), "not a release tag")) {
+			t.Errorf("err = %v, want a refusal naming the redirect", err)
+		}
+		if len(f.ran) != 0 || strings.Contains(out.String()+stderr.String(), "v1.2.3;") {
+			t.Errorf("dryRun=%v: ran %v, output %q %q; want nothing run and no such tag used", dryRun, f.ran, out.String(), stderr.String())
+		}
 	}
 }
 

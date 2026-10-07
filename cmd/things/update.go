@@ -398,7 +398,10 @@ func fetchRedirectReleaseTag() (string, error) {
 	if ok {
 		tag = loc.Path[n:]
 	}
-	if loc.Scheme != page.Scheme || loc.Host != page.Host || !ok || strings.Contains(tag, "/") {
+	// The tag ends up in a URL and a shell command, so it must be a plain
+	// vX.Y.Z release before it leaves here.
+	v, isV := strings.CutPrefix(tag, "v")
+	if loc.User != nil || loc.Scheme != page.Scheme || loc.Host != page.Host || !ok || !isV || !releaseVersion.MatchString(v) {
 		return "", fmt.Errorf("%s redirects to %s, not a release tag", latestReleasePage, loc)
 	}
 	return tag, nil
