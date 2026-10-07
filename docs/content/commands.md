@@ -720,13 +720,33 @@ reason. Under `--json` it is `import refused`, with one entry per item:
 Every to-do and project the payload creates is read back too, the way
 `add` finds its item: a new item of that kind with that title (surrounding
 whitespace trimmed) that was not there before the import, filed where the
-payload puts it. A to-do with `list-id` or `list` must be in that project
-or area (and under its `heading`, when Things has it), one with neither in
-no project or area (unless it has a `heading-id`, which is not checked), a project with `area-id` or `area` in that area and one
-with neither in no area. A to-do in a project's `items` must be in that
-project. A `list`, `heading` or `area` the database does not have before
-the import is not checked, since it may name a project the same payload
-creates. To-dos inside a project the payload creates are read back too. A to-do inside the `items` of
+payload puts it, as Things files it:
+
+- A to-do with a `heading-id` goes under that heading, in its project,
+  whatever list it names. Any `heading-id`, even an empty or unknown one,
+  makes Things ignore `heading`; an unknown one is otherwise ignored.
+- Otherwise a `list-id` wins over `list`. An empty or unknown `list-id`
+  puts the to-do in the Inbox.
+- A `list-id` or `heading-id` Things has files the to-do there whatever
+  state its project is in: a closed or logged project is reopened, and a
+  trashed one takes the to-do into the Trash.
+- A `list` title goes to the list Things picks for that title, as for
+  `add`, under its `heading` when it has one. A title that matches
+  nothing, or a uuid given as `list`, puts the to-do in the Inbox. When a
+  project created earlier in the same payload has that title, the to-do
+  may go to either, so any list with the title counts. A project created
+  later in the payload is not there yet.
+- A to-do with none of these goes to the Inbox.
+- A project goes to the area its `area-id` names, or else its `area`. An
+  empty or unknown `area-id`, or an `area` that matches nothing, leaves it
+  in no area.
+
+Things does not trim an id, so a `heading-id`, `list-id` or `area-id` with
+surrounding space matches nothing, and a `null` one counts as not given.
+`import` prints a warning for each item that Things will not file where
+the payload asks, as `add` does. A to-do in a project's `items` must be in
+that project. To-dos inside a project the payload creates are read back
+too. A to-do inside the `items` of
 a project the payload updates is checked too: Things drops those without
 saying so, and the read-back reports it as `not-found`. Headings and
 checklist items are not read back, and nor is an item with no title. `import` prints one line per created item:

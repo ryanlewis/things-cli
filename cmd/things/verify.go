@@ -422,6 +422,10 @@ type createdDest struct {
 	anyHeading bool
 }
 
+// loose reports whether dst fits rows filed in more than one list: it checks
+// nothing, or goes by a title several lists may carry.
+func (dst createdDest) loose() bool { return !dst.checked || dst.byTitle }
+
 // fits reports whether t, a new row with the item's type and title, is filed
 // where dst says.
 func (dst createdDest) fits(t model.Task) bool {

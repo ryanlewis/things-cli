@@ -107,6 +107,10 @@ type importTo struct {
 	areaID, area                     string
 	parentID, parentTitle            string
 	nested                           bool
+	// The id attributes win over the titles even when empty, so whether
+	// the payload gives each one at all matters. A null one counts as not
+	// given, as it does to Things.
+	hasListID, hasHeadingID, hasAreaID bool
 }
 
 // datedSlack widens the read-back window for a dated item's creation-date,
@@ -162,20 +166,41 @@ func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
 func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest: c.dest} }
 
 // resolveImportDests sets each create's dest from its destination attributes,
-// as Things will resolve them, the way add and project add resolve theirs.
-// A to-do in a project's items is checked against that project only. A list,
-// heading or area the database does not have, or that cannot be read, is left
-// unchecked: what Things does with one in an import was not checked, and a
-// list may be a project the same payload creates. So is a uuid given as list,
-// which Things matches by title only. A title several lists share is checked
-// against the one Things picks (see db.AddTarget).
-func resolveImportDests(database *db.DB, creates []importCreate) {
-	// Many items in a payload share a list or area; each is looked up once.
+// as Things files the item (measured in Things 3), and warns about each one
+// Things will not file where the payload asks. A to-do in a project's items
+// is checked against that project only. For any other to-do a heading-id
+// wins: Things files it under that heading, in the heading's project,
+// whatever list it names and whatever state the project is in, and ignores
+// the heading title whenever a heading-id is given, even an empty or unknown
+// one. Next a list-id wins over list, even an empty or unknown one, which
+// puts the to-do in the Inbox; a known one is filed into whatever its state
+// (see db.AddTarget). A list title goes to the list AddTarget finds; one a
+// project created earlier in the payload carries may be either, so any list
+// with that title fits. A title that matches nothing, a uuid given as list
+// among them, puts it in the Inbox, and a heading the list does not have is
+// left out. A project's area-id likewise wins over area, and an empty or
+// unknown area-id or area leaves it in no area. Things does not trim an id,
+// so one with surrounding space matches nothing. A list that cannot be read
+// is left unchecked.
+func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
+	warn := func(c importCreate, format string, args ...any) {
+		fmt.Fprintf(d.errOut(), "warning: %s: "+format+"\n", append([]any{c.path}, args...)...)
+	}
+	// Many items in a payload share a list, area or heading; each is looked
+	// up once.
 	type areaRes struct {
 		target db.Target
 		err    error
 	}
 	areaTargets := map[string]areaRes{}
+	areaLookup := func(area string) (db.Target, error) {
+		res, ok := areaTargets[area]
+		if !ok {
+			res.target, res.err = database.AreaTarget(area)
+			areaTargets[area] = res
+		}
+		return res.target, res.err
+	}
 	type targetKey struct{ list, heading string }
 	type targetRes struct {
 		target       db.Target
@@ -183,64 +208,162 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 		err          error
 	}
 	targets := map[targetKey]targetRes{}
+	lookup := func(list, heading string) targetRes {
+		tk := targetKey{list, heading}
+		res, ok := targets[tk]
+		if !ok {
+			res.target, res.headingFound, res.err = database.AddTarget(list, heading)
+			targets[tk] = res
+		}
+		return res
+	}
+	type headingRes struct {
+		project, title string
+		found          bool
+		err            error
+	}
+	headings := map[string]headingRes{}
+	// created holds the folded titles of the projects the payload creates
+	// before the item being resolved, in payload order.
+	created := map[string]bool{}
 	for i := range creates {
 		c := &creates[i]
 		to := c.to
+		if c.typ == model.TypeProject {
+			c.dest = projectImportDest(*c, warn, areaLookup)
+			created[db.FoldName(c.title)] = true
+			continue
+		}
 		switch {
-		case c.typ == model.TypeProject:
-			if to.areaID == "" && to.area == "" {
-				c.dest = createdDest{checked: true}
-				continue
-			}
-			area := to.area
-			if to.areaID != "" {
-				area = strings.TrimSpace(to.areaID)
-			}
-			res, ok := areaTargets[area]
-			if !ok {
-				t, err := database.AreaTarget(area)
-				res = areaRes{t, err}
-				areaTargets[area] = res
-			}
-			// As for list below: area-id is a uuid only, area a title only.
-			if res.err == nil && res.target.UUID != "" && (to.areaID != "") == res.target.ByUUID {
-				c.dest = createdDest{checked: true, list: res.target.UUID}
-			}
 		case to.parentID != "":
 			c.dest = createdDest{checked: true, list: strings.TrimSpace(to.parentID), anyHeading: true}
+			continue
 		case to.nested:
 			// The project is not there before the import, so it can only
 			// be matched by title, trimmed as created titles are.
 			c.dest = createdDest{checked: true, list: db.FoldName(strings.TrimSpace(to.parentTitle)), byTitle: true, anyHeading: true}
-		case to.listID == "" && to.list == "":
-			// A heading-id alone may file the to-do in that heading's
-			// project; what Things does with one was not checked.
-			if to.headingID == "" {
-				c.dest = createdDest{checked: true}
-			}
-		default:
-			list := to.list
-			if to.listID != "" {
-				list = strings.TrimSpace(to.listID)
-			}
-			tk := targetKey{list, to.heading}
-			res, ok := targets[tk]
-			if !ok {
-				res.target, res.headingFound, res.err = database.AddTarget(list, to.heading)
-				targets[tk] = res
-			}
-			// AddTarget matches a uuid as well as a title, but Things takes
-			// list-id by uuid only and list by title only: a uuid given as list
-			// is not a title Things can find.
-			if res.err != nil || res.target.UUID == "" || (to.listID != "") != res.target.ByUUID {
-				continue
-			}
-			c.dest = addDest(res.target.UUID, to.heading, res.headingFound && to.headingID == "")
-			if c.dest.heading == "" && (to.heading != "" || to.headingID != "") {
-				c.dest.anyHeading = true
-			}
+			continue
 		}
+		heading := to.heading
+		if to.hasHeadingID {
+			if id := to.headingID; id != "" {
+				h, ok := headings[id]
+				if !ok {
+					h.project, h.title, h.found, h.err = database.HeadingProject(id)
+					headings[id] = h
+				}
+				switch {
+				case h.err != nil:
+					c.dest = createdDest{}
+					continue
+				case h.found:
+					c.dest = createdDest{checked: true, list: h.project, heading: db.FoldCase(h.title)}
+					// The heading wins over the list the payload names.
+					switch {
+					case to.hasListID:
+						if to.listID != h.project {
+							warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list-id", id)
+						}
+					case to.list != "" && !created[db.FoldName(to.list)]:
+						if res := lookup(to.list, ""); res.err == nil && res.target.UUID != h.project {
+							warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list %q", id, to.list)
+						}
+					}
+					continue
+				}
+				warn(*c, "Things has no heading with id %q; it will ignore heading-id and heading", id)
+			} else if heading != "" {
+				warn(*c, "heading-id is empty; Things will ignore heading %q", heading)
+			}
+			heading = ""
+		}
+		list, byID := to.list, to.hasListID
+		if byID {
+			list = to.listID
+		}
+		switch {
+		case byID && list == "":
+			warn(*c, "list-id is empty; Things will put the to-do in the Inbox")
+			c.dest = createdDest{checked: true}
+			continue
+		case list == "":
+			if heading != "" {
+				warn(*c, "heading %q needs a list; Things will ignore it and put the to-do in the Inbox", heading)
+			}
+			c.dest = createdDest{checked: true}
+			continue
+		case !byID && created[db.FoldName(list)]:
+			// Things may file it in the project the payload created or in
+			// a list it already had with that title. It does not trim a
+			// list title, so one with surrounding space matches neither.
+			c.dest = createdDest{checked: true, list: db.FoldName(list), byTitle: true, anyHeading: heading != ""}
+			continue
+		}
+		res := lookup(list, heading)
+		if res.err != nil {
+			c.dest = createdDest{}
+			continue
+		}
+		// AddTarget matches a uuid as well as a title, but Things takes
+		// list-id by uuid only and list by title only. AddTarget matches a
+		// uuid trimmed, so a list that is one with surrounding space is a
+		// uuid too, while a list-id with surrounding space is no uuid to
+		// Things.
+		matched := res.target.UUID != "" && res.target.ByUUID == byID && (!byID || list == res.target.UUID)
+		if !matched {
+			switch {
+			case byID:
+				warn(*c, "Things finds no project or area with id %q; it will put the to-do in the Inbox", list)
+			case res.target.ByUUID:
+				warn(*c, "list %q is an id, and Things matches list by title only; it will put the to-do in the Inbox (use list-id)", list)
+			default:
+				warn(*c, "Things finds no project or area called %q; it will put the to-do in the Inbox", list)
+			}
+			c.dest = createdDest{checked: true}
+			continue
+		}
+		if heading != "" && !res.headingFound {
+			warn(*c, "%q has no heading %q; Things will add the to-do there without a heading", list, heading)
+		}
+		c.dest = addDest(res.target.UUID, heading, res.headingFound)
 	}
+}
+
+// projectImportDest is resolveImportDests for a project the payload creates:
+// the area its area-id or area names (see db.AreaTarget), or none.
+func projectImportDest(c importCreate, warn func(importCreate, string, ...any), areaLookup func(string) (db.Target, error)) createdDest {
+	to := c.to
+	area, byID := to.area, to.hasAreaID
+	if byID {
+		area = to.areaID
+	}
+	switch {
+	case byID && area == "":
+		if to.area != "" {
+			warn(c, "area-id is empty; Things will ignore area %q and create the project in no area", to.area)
+		}
+		return createdDest{checked: true}
+	case area == "":
+		return createdDest{checked: true}
+	}
+	target, err := areaLookup(area)
+	if err != nil {
+		return createdDest{}
+	}
+	// As for a to-do's list: area-id is a uuid only, untrimmed, and area a
+	// title only.
+	if target.UUID != "" && target.ByUUID == byID && (!byID || area == target.UUID) {
+		return createdDest{checked: true, list: target.UUID}
+	}
+	switch {
+	case byID:
+		warn(c, "Things has no area with id %q; it will create the project in no area", area)
+	case target.ByUUID:
+		warn(c, "area %q is an id, and Things matches area by title only; it will create the project in no area (use area-id)", area)
+	default:
+		warn(c, "Things has no area called %q; it will create the project in no area", area)
+	}
+	return createdDest{checked: true}
 }
 
 // kind is the CLI's word for the item: "task" or "project".
@@ -293,11 +416,11 @@ func importCreates(payload []any) []importCreate {
 		}
 		to, nested := parents[path]
 		if !nested {
-			to.listID, _ = attrs["list-id"].(string)
+			to.listID, to.hasListID = attrs["list-id"].(string)
 			to.list, _ = attrs["list"].(string)
-			to.headingID, _ = attrs["heading-id"].(string)
+			to.headingID, to.hasHeadingID = attrs["heading-id"].(string)
 			to.heading, _ = attrs["heading"].(string)
-			to.areaID, _ = attrs["area-id"].(string)
+			to.areaID, to.hasAreaID = attrs["area-id"].(string)
 			to.area, _ = attrs["area"].(string)
 		}
 		// A null creation-date is no date at all, as it is to Things, which
@@ -732,7 +855,6 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 		}
 	}
 	if len(types) > 0 {
-		resolveImportDests(database, plan.creates)
 		snap, snapErr = snapshotCreated(database, types)
 	}
 	if err := write(); err != nil {
@@ -856,11 +978,11 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 }
 
 // unconfirmShared turns back every confirmation whose new item another
-// created item can also claim. An item whose destination is unchecked fits a
-// row filed for another item with the same kind and title, so the two can
-// claim the same row: a row two items were both confirmed with, or a row an
-// unchecked item was confirmed with that fits another item's destination too,
-// confirms neither. They are reported ambiguous with every new item either
+// created item can also claim. An item whose destination is loose, unchecked
+// or matched by a title several lists may carry, fits a row filed for another
+// item with the same kind and title, so the two can claim the same row: a row
+// two items were both confirmed with, or a row a loose item was confirmed
+// with that fits another item's destination too, confirms neither. They are reported ambiguous with every new item either
 // could be, or not-found when fewer new items appeared than the created items
 // that could claim them, since then at least one of those never appeared.
 func unconfirmShared(out []importCreated, creates []importCreate, found map[createdWant][]model.Task) {
@@ -876,7 +998,7 @@ func unconfirmShared(out []importCreated, creates []importCreate, found map[crea
 			if j == i || creates[j].want() == creates[i].want() || !holds(j, c.UUID) {
 				continue
 			}
-			if !creates[i].dest.checked || (out[j].Confirmed && out[j].UUID == c.UUID) {
+			if creates[i].dest.loose() || (out[j].Confirmed && out[j].UUID == c.UUID) {
 				shared[i] = true
 				break
 			}

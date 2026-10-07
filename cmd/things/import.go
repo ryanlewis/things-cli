@@ -56,6 +56,7 @@ func (c *ImportCmd) Run(d *Deps) error {
 		return err
 	}
 	plan.warnMissing(d)
+	resolveImportDests(d, database, plan.creates)
 	// A token read error is only a warning: the payload may be create-only.
 	token := authToken(d, database)
 	return applyImport(d, database, plan, func() error {

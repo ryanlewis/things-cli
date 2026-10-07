@@ -284,3 +284,25 @@ func TestAddTargetLogInterval(t *testing.T) {
 		}
 	}
 }
+
+// HeadingProject finds a heading by uuid whatever its state, as Things files
+// a to-do under it.
+func TestHeadingProject(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-1", "Tools", 1)
+	fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+	fx.Heading("head-old", "Old", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
+	d := &DB{db: sqlDB}
+
+	project, title, found, err := d.HeadingProject("head-1")
+	if err != nil || !found || project != "proj-1" || title != "Setup" {
+		t.Errorf("head-1 = %q %q %v %v, want proj-1 Setup found", project, title, found, err)
+	}
+	if project, _, found, err := d.HeadingProject("head-old"); err != nil || !found || project != "proj-1" {
+		t.Errorf("head-old = %q %v %v, want proj-1 found", project, found, err)
+	}
+	if _, _, found, err := d.HeadingProject("proj-1"); err != nil || found {
+		t.Errorf("proj-1 = %v %v, want not found: it is not a heading", found, err)
+	}
+}
