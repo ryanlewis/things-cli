@@ -60,21 +60,23 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 }
 
 // areaTitleDest is where Things files a project sent with area, a title at
-// least one of areas has: that area, by uuid, when only one has it, or any
-// area with that title when several do, since which one Things picks is not
-// known.
+// least one of areas has: the area titledArea picks, by uuid.
 func areaTitleDest(areas []model.Area, area string) createdDest {
-	var match []string
+	return createdDest{checked: true, list: titledArea(areas, area)}
+}
+
+// titledArea returns the uuid of the area Things files into when sent area as
+// a title, "" when no area has it. Several areas can share a title under
+// FoldName; Things takes the one whose uuid sorts first byte by byte, even
+// when another one's title matches area exactly (see db.AddTarget).
+func titledArea(areas []model.Area, area string) string {
+	key, id := db.FoldName(area), ""
 	for _, a := range areas {
-		if db.FoldName(a.Title) == db.FoldName(area) {
-			match = append(match, a.UUID)
+		if db.FoldName(a.Title) == key && (id == "" || a.UUID < id) {
+			id = a.UUID
 		}
 	}
-	if len(match) == 1 {
-		return createdDest{checked: true, list: match[0]}
-	}
-	// fits compares the trimmed title of the list a row is filed in.
-	return createdDest{checked: true, list: db.FoldName(strings.TrimSpace(area)), byTitle: true}
+	return id
 }
 
 // projectAreaID returns area when it is the uuid of an area, which has to go
@@ -152,13 +154,12 @@ func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bo
 	case c.Area == nil || c.AreaID != nil:
 		return anySet(c.Area, c.AreaID)
 	}
-	id, known, _ := projectAreaID(d, *c.Area, "the project will stay where it is")
+	id, known, areas := projectAreaID(d, *c.Area, "the project will stay where it is")
 	if id != "" {
 		c.Area, c.AreaID = nil, &id
 		return id != task.AreaUUID
 	}
-	// Two areas whose titles fold together are not told apart here.
-	return known && (task.AreaTitle == "" || db.FoldName(task.AreaTitle) != db.FoldName(*c.Area))
+	return known && (areas == nil || titledArea(areas, *c.Area) != task.AreaUUID)
 }
 
 // checkAreaID warns when Things has no area with the uuid --area-id gives,

@@ -167,8 +167,8 @@ func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest
 // heading or area the database does not have, or that cannot be read, is left
 // unchecked: what Things does with one in an import was not checked, and a
 // list may be a project the same payload creates. So is a uuid given as list,
-// which Things matches by title only. A title several lists share fits any of
-// them (see listDest).
+// which Things matches by title only. A title several lists share is checked
+// against the one Things picks (see db.AddTarget).
 func resolveImportDests(database *db.DB, creates []importCreate) {
 	var (
 		areas     []model.Area
@@ -181,7 +181,6 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 	type targetRes struct {
 		target       string
 		headingFound bool
-		shared       bool
 		err          error
 	}
 	targets := map[targetKey]targetRes{}
@@ -230,9 +229,6 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 			res, ok := targets[tk]
 			if !ok {
 				res.target, res.headingFound, res.err = database.AddTarget(list, to.heading)
-				if res.err == nil {
-					res.shared, res.err = listShared(database, list, res.target)
-				}
 				targets[tk] = res
 			}
 			// AddTarget matches a uuid as well as a title, but Things takes
@@ -242,7 +238,7 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 			if res.err != nil || res.target == "" || (to.listID != "") != byUUID {
 				continue
 			}
-			c.dest = listDest(list, res.target, to.heading, res.headingFound && to.headingID == "", res.shared)
+			c.dest = addDest(res.target, to.heading, res.headingFound && to.headingID == "")
 			if c.dest.heading == "" && (to.heading != "" || to.headingID != "") {
 				c.dest.anyHeading = true
 			}

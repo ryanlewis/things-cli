@@ -2,6 +2,7 @@ package db
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -9,8 +10,8 @@ import (
 
 // AddTarget matches the way Things filed throwaway to-dos in a real run: an
 // open project or an area by title, ignoring case but not surrounding space;
-// never a completed or trashed project; a heading only inside the project it
-// names, matched the same way.
+// a project closed today and not yet logged, but never a logged or trashed
+// one; a heading only inside the project it names, matched the same way.
 func TestAddTarget(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
@@ -19,6 +20,8 @@ func TestAddTarget(t *testing.T) {
 	fx.Project("proj-1", "Tools", 1)
 	fx.Project("proj-done", "Old", 2, dbtest.Status(model.StatusCompleted))
 	fx.Project("proj-trash", "Binned", 3, dbtest.Trashed())
+	fx.Project("proj-today", "Shelved", 4, dbtest.Cancelled(model.TimeToUnix(time.Now())))
+	fx.Project("proj-logged", "Shipped", 5, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
 	fx.Heading("head-1", "Ärger", 1, dbtest.InProject("proj-1"))
 	fx.Heading("head-trash", "Gone", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
 	fx.Heading("head-sharp", "Straße", 3, dbtest.InProject("proj-1"))
@@ -41,6 +44,9 @@ func TestAddTarget(t *testing.T) {
 		{"Nowhere", "", false, false},
 		{"Old", "", false, false},
 		{"Binned", "", false, false},
+		{"Shelved", "", true, false},
+		{"proj-today", "", true, false},
+		{"Shipped", "", false, false},
 		{"Tools", "ärger", true, true},
 		{"Tools", "Nope", true, false},
 		{"Tools", "Gone", true, false},
@@ -74,30 +80,60 @@ func TestAddTarget(t *testing.T) {
 	}
 }
 
-// Open projects whose titles differ only in case: the exact-case title is the
-// one checked for the heading, whichever row the database returns first.
-func TestAddTargetPrefersExactCase(t *testing.T) {
+// Projects, or areas, whose titles fold together: Things files into the one
+// whose uuid sorts first byte by byte, whichever title list matches exactly
+// and whatever the insert order and index. "B…" sorts before "a…" byte by
+// byte but not ignoring case, so the uuids tell the two orders apart.
+func TestAddTargetPicksSmallestUUID(t *testing.T) {
 	for _, order := range [][2]string{{"work", "Work"}, {"Work", "work"}} {
 		sqlDB := dbtest.NewSQL(t)
 		fx := dbtest.NewFixture(t, sqlDB)
-		uuids := map[string]string{"work": "proj-lower", "Work": "proj-upper"}
+		uuids := map[string]string{"work": "B-lower", "Work": "a-upper"}
 		for i, title := range order {
 			fx.Project(uuids[title], title, i+1)
+			fx.Area(uuids[title]+"-area", title+" area", i+1)
 		}
-		fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-upper"))
+		fx.Heading("head-1", "Setup", 1, dbtest.InProject("B-lower"))
 		d := &DB{db: sqlDB}
 
-		for _, tc := range []struct {
-			list   string
-			headOK bool
-		}{{"Work", true}, {"work", false}} {
-			_, headOK, err := d.AddTarget(tc.list, "Setup")
+		for _, list := range []string{"Work", "work", "WORK"} {
+			target, headOK, err := d.AddTarget(list, "Setup")
 			if err != nil {
-				t.Fatalf("AddTarget(%q): %v", tc.list, err)
+				t.Fatalf("AddTarget(%q): %v", list, err)
 			}
-			if headOK != tc.headOK {
-				t.Errorf("insert order %v: AddTarget(%q, Setup) heading = %v, want %v", order, tc.list, headOK, tc.headOK)
+			if target != "B-lower" || !headOK {
+				t.Errorf("insert order %v: AddTarget(%q, Setup) = %q, %v, want B-lower, true", order, list, target, headOK)
 			}
+			area, _, err := d.AddTarget(list+" area", "")
+			if err != nil {
+				t.Fatalf("AddTarget(%q area): %v", list, err)
+			}
+			if area != "B-lower-area" {
+				t.Errorf("insert order %v: AddTarget(%q area) = %q, want B-lower-area", order, list, area)
+			}
+		}
+	}
+}
+
+// A project closed today still holds its place in Things, so it is a
+// candidate with the smallest uuid; a logged or trashed one is not.
+func TestAddTargetSkipsLoggedForSmallestUUID(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("A-today", "Work", 1, dbtest.Completed(model.TimeToUnix(time.Now())))
+	fx.Project("B-open", "work", 2)
+	fx.Project("1-trash", "WORK", 3, dbtest.Trashed())
+	fx.Project("2-logged", "Work", 4, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("x-open", "Plan", 5)
+	fx.Project("Y-logged", "Plan", 6, dbtest.Cancelled(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	d := &DB{db: sqlDB}
+	for list, want := range map[string]string{"work": "A-today", "plan": "x-open"} {
+		target, _, err := d.AddTarget(list, "")
+		if err != nil {
+			t.Fatalf("AddTarget(%q): %v", list, err)
+		}
+		if target != want {
+			t.Errorf("AddTarget(%q) = %q, want %q", list, target, want)
 		}
 	}
 }

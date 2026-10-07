@@ -725,9 +725,12 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			[]createdRow{{uuid: "dated", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk"}}, []string{"creation-date", "mine"}},
 		{"datedSameList", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","creation-date":"` + now + `"}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools"}}]`,
 			[]createdRow{{uuid: "dated", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inProj1}}, []string{"creation-date", "shares-dated-title"}},
-		// A title two areas share fits either of them.
+		// A title two areas share fits the one whose uuid sorts first,
+		// which Things picks, and not the other.
 		{"sharedAreaTitle", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Personal"}}]`,
-			[]createdRow{{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-3'`}}, []string{"mine"}},
+			[]createdRow{{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-1'`}}, []string{"mine"}},
+		{"sharedAreaTitleOther", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Personal"}}]`,
+			[]createdRow{{uuid: "mine", title: "Buy oat milk", extra: `area = 'area-3'`}}, []string{"not-found"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

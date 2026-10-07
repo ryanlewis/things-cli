@@ -620,6 +620,10 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"projectSameAreaFullwidth", []string{"project", "edit", "areaproj-1", "--area", "\uff30ERSONAL"}, "", true},
 		{"projectSameAreaUUID", []string{"project", "edit", "areaproj-1", "--area", "area-1"}, "", true},
 		{"projectSameAreaID", []string{"project", "edit", "areaproj-1", "--area-id", "area-1"}, "", true},
+		// Two areas are called Personal, and Things picks area-1, whose
+		// uuid sorts first, so a project or to-do in area-3 moves.
+		{"projectSharedAreaOther", []string{"project", "edit", "areaproj-3", "--area", "personal"}, "", false},
+		{"sharedAreaOther", []string{"edit", "area3-todo", "--list", "Personal"}, "", false},
 		{"projectKnownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "area-1"}, "", false},
 		{"projectUnknownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "nope"}, `no area with id "nope"; the project will stay where it is`, true},
 		{"projectUnknownAreaAndTitle", []string{"project", "edit", "repproj-1", "--area", "Nowhere", "--title", "Monthly review"}, `no area called "Nowhere"`, false},
@@ -637,6 +641,9 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Todo("head-todo", "Buy oil", 8, dbtest.Anytime(), dbtest.UnderHeading("head-1"))
 			fx.Todo("area-todo", "Sweep", 9, dbtest.Anytime(), dbtest.InArea("area-1"))
 			fx.Project("areaproj-1", "Garden", 10, dbtest.InArea("area-1"))
+			fx.Area("area-3", "personal", 3)
+			fx.Project("areaproj-3", "Shed", 11, dbtest.InArea("area-3"))
+			fx.Todo("area3-todo", "Mop", 12, dbtest.Anytime(), dbtest.InArea("area-3"))
 			calls := stubExecDropping(t)
 
 			_, stderr, err := runStreams(t, database, tc.args...)

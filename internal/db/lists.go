@@ -9,31 +9,38 @@ import (
 )
 
 // AddTarget reports where things:///add would file a to-do given list and
-// heading, as Things resolves them. list matches an open, untrashed project
-// or an area by title, under FoldName but not ignoring surrounding space, or by uuid; a completed or trashed
-// project does not count, and Things puts the to-do in the Inbox instead.
-// target is the uuid of the row list matched, "" when none did. heading
-// matches an untrashed heading of that project under FoldCase; a heading
-// under an area, or one the project lacks, is dropped and the to-do goes to
-// the list without one. When open projects differ only in case, the CLI
-// checks the one whose title matches list exactly; which one Things picks
-// is not known. headingFound is false whenever target is "".
+// heading, as Things resolves them. list matches an untrashed project Things
+// still shows, open or closed but not yet logged, or an area, by title under
+// FoldName but not ignoring surrounding space, or by uuid; a logged or
+// trashed project does not count, and Things puts the to-do in the Inbox
+// instead. target is the uuid of the row list matched, "" when none did.
+// heading matches an untrashed heading of that project under FoldCase; a
+// heading under an area, or one the project lacks, is dropped and the to-do
+// goes to the list without one. When several projects, or with no project
+// several areas, match the title, Things takes the one whose uuid sorts first
+// byte by byte, even when another one's title matches list exactly, and so
+// does this.
+// Measured in Things 3 with add, add-project's area and json, over pairs of
+// projects and of areas that differ in case, normalisation and compatibility
+// forms, created in either order. headingFound is false whenever target is
+// "".
 func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, err error) {
 	// A uuid goes to Things as list-id, which the CLI sends trimmed; a title
 	// goes as typed, and Things does not trim it.
 	id := strings.TrimSpace(list)
 	var project string
 	err = d.db.QueryRow(`
-		SELECT uuid FROM TMTask
-		WHERE type = ? AND status = ? AND COALESCE(trashed, 0) = 0 AND (uuid = ? OR fold_name(title) = ?)
-		ORDER BY uuid = ? DESC, nfc(title) = ? DESC
-		LIMIT 1`, int(model.TypeProject), int(model.StatusOpen), id, FoldName(list), id, normName(list)).Scan(&project)
+		SELECT uuid FROM TMTask t
+		WHERE type = ? AND (status = ? OR `+closedTodayUnlogged+`) AND COALESCE(trashed, 0) = 0
+			AND (uuid = ? OR fold_name(title) = ?)
+		ORDER BY uuid = ? DESC, uuid
+		LIMIT 1`, int(model.TypeProject), int(model.StatusOpen), id, FoldName(list), id).Scan(&project)
 	switch {
 	case err == sql.ErrNoRows:
 		var area string
 		err := d.db.QueryRow(`
 			SELECT uuid FROM TMArea WHERE uuid = ? OR fold_name(title) = ?
-			ORDER BY uuid = ? DESC LIMIT 1`, id, FoldName(list), id).Scan(&area)
+			ORDER BY uuid = ? DESC, uuid LIMIT 1`, id, FoldName(list), id).Scan(&area)
 		if err != nil && err != sql.ErrNoRows {
 			return "", false, fmt.Errorf("finding area: %w", err)
 		}
@@ -51,28 +58,6 @@ func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, 
 		return project, false, fmt.Errorf("finding heading: %w", err)
 	}
 	return project, n > 0, nil
-}
-
-// ListTitleShared reports whether list, a title, matches more than one row
-// the way AddTarget matches it: more than one open, untrashed project, or,
-// when no project matches, more than one area. AddTarget then picks one of
-// them, and which one Things files the to-do in is not known.
-func (d *DB) ListTitleShared(list string) (bool, error) {
-	var projects int
-	if err := d.db.QueryRow(`
-		SELECT COUNT(*) FROM TMTask
-		WHERE type = ? AND status = ? AND COALESCE(trashed, 0) = 0 AND fold_name(title) = ?`,
-		int(model.TypeProject), int(model.StatusOpen), FoldName(list)).Scan(&projects); err != nil {
-		return false, fmt.Errorf("finding project: %w", err)
-	}
-	if projects > 0 {
-		return projects > 1, nil
-	}
-	var areas int
-	if err := d.db.QueryRow(`SELECT COUNT(*) FROM TMArea WHERE fold_name(title) = ?`, FoldName(list)).Scan(&areas); err != nil {
-		return false, fmt.Errorf("finding area: %w", err)
-	}
-	return areas > 1, nil
 }
 
 // HeadingExists reports whether uuid names an untrashed project heading,
