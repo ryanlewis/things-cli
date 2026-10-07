@@ -308,8 +308,8 @@ func importCreates(payload []any) []importCreate {
 			to.area, _ = attrs["area"].(string)
 		}
 		// A null creation-date is no date at all, as it is to Things, which
-		// saves the item as created now. checkImportDates has refused any
-		// value Things rejects.
+		// saves the item as created now. prepareImport has refused any value
+		// Things rejects.
 		raw := attrs["creation-date"]
 		datedAt, _ := parseThingsDate(raw)
 		creates = append(creates, importCreate{path: path, typ: typ, title: title, dated: raw != nil, datedAt: datedAt, to: to})
@@ -322,68 +322,34 @@ func importCreates(payload []any) []importCreate {
 // them.
 var importDateAttrs = []string{"creation-date", "completion-date"}
 
-// checkImportDates refuses a payload with a creation-date or completion-date
-// Things rejects (see creationDateShape) on any to-do or project in it. Things
-// creates and updates nothing from such a payload, so nothing is sent.
-func checkImportDates(payload []any) error {
-	var bad []importBadDate
-	walkImportNode(payload, "", func(path string, v map[string]any) {
-		if itemType, _ := v["type"].(string); itemType != "to-do" && itemType != "project" {
-			return
+// badImportDates returns each date attribute of item, a payload object, that
+// Things rejects the whole payload over (see creationDateShape), as
+// `name: value` with the value in JSON, and the attribute names. Only to-dos
+// and projects carry these dates.
+func badImportDates(item map[string]any) (lines, names []string) {
+	if itemType, _ := item["type"].(string); !importTaskTypes[strings.TrimSpace(itemType)] {
+		return nil, nil
+	}
+	attrs, _ := item["attributes"].(map[string]any)
+	for _, name := range importDateAttrs {
+		raw := attrs[name]
+		if _, ok := parseThingsDate(raw); ok || raw == nil {
+			continue
 		}
-		attrs, _ := v["attributes"].(map[string]any)
-		for _, name := range importDateAttrs {
-			raw := attrs[name]
-			if _, ok := parseThingsDate(raw); ok || raw == nil {
-				continue
-			}
-			shown, _ := json.Marshal(raw)
-			title, _ := attrs["title"].(string)
-			bad = append(bad, importBadDate{path: path, title: strings.TrimSpace(title), attr: name, value: string(shown)})
-		}
-	})
-	if len(bad) > 0 {
-		return &importDateError{items: bad}
+		shown, _ := json.Marshal(raw)
+		lines = append(lines, fmt.Sprintf("%s: %s", name, shown))
+		names = append(names, name)
 	}
-	return nil
+	return lines, names
 }
 
-// importBadDate is one date attribute Things rejects on a payload item.
-type importBadDate struct {
-	path, title string
-	attr        string // creation-date or completion-date
-	value       string // the date as the payload wrote it, in JSON
-}
-
-// importDateError refuses a payload with a date Things rejects. It is a
-// refusal like importRefusalError, so --json reports it the same way, with
-// each item's `blocked` naming the attribute.
-type importDateError struct {
-	items []importBadDate
-}
-
-func (e *importDateError) Error() string {
-	lines := make([]string, len(e.items))
-	for i, it := range e.items {
-		lines[i] = fmt.Sprintf("  %s %s: %s", it.path, it.attr, it.value)
-	}
-	return fmt.Sprintf("a creation-date or completion-date must be a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00: Things rejects the whole payload over any other form. Nothing was sent to Things — fix these and run the import again:\n%s",
-		strings.Join(lines, "\n"))
-}
-
-// jsonItems renders the refused items for the --json error payload.
-func (e *importDateError) jsonItems() []jsonErrorItem {
-	out := make([]jsonErrorItem, len(e.items))
-	for i, it := range e.items {
-		out[i] = jsonErrorItem{Path: it.path, Title: it.title, Blocked: []string{it.attr}}
-	}
-	return out
-}
+// importTaskTypes are the payload item types that are to-dos or projects,
+// by the format's word for them.
+var importTaskTypes = map[string]bool{"to-do": true, "project": true}
 
 // walkImportNode calls visit for every object in a decoded Things JSON
 // payload with the path that locates it. Items nest — a project carries
-// `items`, a to-do carries `checklist-items` — so this walks the whole tree
-// the way walkImportTags does.
+// `items`, a to-do carries `checklist-items` — so this walks the whole tree.
 func walkImportNode(node any, path string, visit func(path string, item map[string]any)) {
 	switch v := node.(type) {
 	case map[string]any:
@@ -481,26 +447,62 @@ type importRefusalItem struct {
 	// emit it — the `items` array has no kind field (issue #245). The `import`
 	// payload's own spelling of a task is "to-do", the format's word, not the
 	// CLI's.
-	Kind    string
+	Kind string
+	// Blocked is every attribute refused on the item: the ones Things does
+	// not allow on a repeating item, then the dates it rejects.
 	Blocked []string
+
+	restricted []string // the attributes a repeating item does not allow
+	dates      []string // each date Things rejects, as `name: value`
+}
+
+// reason is why the item is refused: "repeating", "invalid-date", or both,
+// space-separated.
+func (it importRefusalItem) reason() string {
+	var reasons []string
+	if len(it.restricted) > 0 {
+		reasons = append(reasons, "repeating")
+	}
+	if len(it.dates) > 0 {
+		reasons = append(reasons, "invalid-date")
+	}
+	return strings.Join(reasons, " ")
 }
 
 // importRefusalError is the whole-payload refusal. It carries the offending
-// items so --json can hand them over one by one instead of a consumer having
-// to parse them back out of the message.
+// items, one entry each, so --json can hand them over one by one instead of a
+// consumer having to parse them back out of the message.
 type importRefusalError struct {
 	items []importRefusalItem
 	total int // update items in the payload, offending or not
 }
 
 func (e *importRefusalError) Error() string {
-	lines := make([]string, len(e.items))
-	for i, it := range e.items {
-		lines[i] = fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
-			it.Path, it.ID, it.Title, it.Kind, strings.Join(it.Blocked, ", "))
+	var repeating, dates []string
+	for _, it := range e.items {
+		if len(it.restricted) > 0 {
+			repeating = append(repeating, fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
+				it.Path, it.ID, it.Title, it.Kind, strings.Join(it.restricted, ", ")))
+		}
+		if len(it.dates) > 0 {
+			id := ""
+			if it.ID != "" {
+				id = " (id " + it.ID + ")"
+			}
+			dates = append(dates, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.dates, ", ")))
+		}
 	}
-	return fmt.Sprintf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s). Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app:\n%s",
-		len(e.items), e.total, repeatingDocsURL, strings.Join(lines, "\n"))
+	var parts []string
+	if len(repeating) > 0 {
+		parts = append(parts, fmt.Sprintf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s):\n%s",
+			len(repeating), e.total, repeatingDocsURL, strings.Join(repeating, "\n")))
+	}
+	if len(dates) > 0 {
+		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over a creation-date or completion-date that is not a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00:\n%s",
+			strings.Join(dates, "\n")))
+	}
+	parts = append(parts, "Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app.")
+	return strings.Join(parts, "\n")
 }
 
 // importVerifyItem is one status change that never landed. wanted and got name
@@ -606,7 +608,8 @@ type importCreated struct {
 // prepareImport is the pre-write pass over an import payload. It refuses the
 // whole import when any `operation: update` item would change an attribute
 // Things drops silently on a repeating to-do or project — the same check
-// `edit`, `complete` and `cancel` make, applied per item.
+// `edit`, `complete` and `cancel` make, applied per item — or when any to-do
+// or project gives a date Things rejects the whole payload over.
 //
 // The refusal is all-or-nothing on purpose: the URL scheme takes one payload
 // and gives no per-item result, so there is no way to send the rest and report
@@ -632,8 +635,13 @@ func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
 		plan.tasks[id] = found[id]
 	}
 
-	var refusals []importRefusalItem
+	// An item is refused when it changes an attribute Things does not allow
+	// on a repeating item, or gives a date Things rejects: one entry per
+	// item, in payload order, so one run reports every reason.
+	repeating := map[string]importRefusalItem{}
+	updates := map[string]importUpdate{}
 	for _, u := range plan.updates {
+		updates[u.path] = u
 		if !u.resolvable() {
 			continue
 		}
@@ -646,19 +654,51 @@ func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
 		if len(blocked) == 0 || !task.Repeating {
 			continue
 		}
-		kind := "task"
-		if task.Type == model.TypeProject {
-			kind = "project"
+		repeating[u.path] = importRefusalItem{
+			Path: u.path, ID: u.id, Title: task.Title, Kind: taskKind(task), Blocked: blocked, restricted: blocked,
 		}
-		refusals = append(refusals, importRefusalItem{
-			Path: u.path, ID: u.id, Title: task.Title, Kind: kind, Blocked: blocked,
-		})
 	}
-
+	var refusals []importRefusalItem
+	walkImportNode(payload, "", func(path string, v map[string]any) {
+		it, refused := repeating[path]
+		if lines, names := badImportDates(v); len(lines) > 0 {
+			if !refused {
+				it = importRefusalItem{Path: path, Kind: "task"}
+				if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
+					it.Kind = "project"
+				}
+				attrs, _ := v["attributes"].(map[string]any)
+				title, _ := attrs["title"].(string)
+				it.Title = strings.TrimSpace(title)
+				// An update item names its row by id, and the database
+				// has its title.
+				if u, ok := updates[path]; ok && u.id != "" {
+					it.ID = u.id
+					if task := plan.tasks[u.id]; task != nil {
+						it.Title, it.Kind = task.Title, taskKind(task)
+					}
+				}
+			}
+			it.Blocked = append(slices.Clip(it.Blocked), names...)
+			it.dates = lines
+			refused = true
+		}
+		if refused {
+			refusals = append(refusals, it)
+		}
+	})
 	if len(refusals) > 0 {
 		return nil, &importRefusalError{items: refusals, total: len(plan.updates)}
 	}
 	return plan, nil
+}
+
+// taskKind is the CLI's word for task: "task" or "project".
+func taskKind(task *model.Task) string {
+	if task.Type == model.TypeProject {
+		return "project"
+	}
+	return "task"
 }
 
 // warnMissing warns about each update item the database does not have. It
@@ -786,6 +826,11 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		switch n := want[w]; {
 		case c.dated:
 			out[i].Reason = "creation-date"
+		case err != nil && len(dated[c.key()]) > 0:
+			// With no rows to see where the dated item went, it may be
+			// any new item with the title.
+			out[i].Reason = "shares-dated-title"
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, so a new item with that title may be either", c.kind(), c.title)
 		case err != nil:
 			out[i].Reason = "unreadable"
 		case sharesDated:
@@ -988,6 +1033,7 @@ func (e *importRefusalError) jsonItems() []jsonErrorItem {
 			ID:      it.ID,
 			Title:   it.Title,
 			Blocked: append([]string(nil), it.Blocked...),
+			Reason:  it.reason(),
 		}
 	}
 	return out

@@ -44,13 +44,10 @@ func (c *ImportCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	// Both refusals come before the tag check, which writes to Things under
-	// --create-tags: a date Things rejects, and an `operation: update` item
+	// Refuse before the tag check, which writes to Things under
+	// --create-tags: a date Things rejects, or an `operation: update` item
 	// that would change an attribute Things drops silently on a repeating
 	// item.
-	if err := checkImportDates(payload); err != nil {
-		return err
-	}
 	plan, err := prepareImport(database, payload)
 	if err != nil {
 		return err

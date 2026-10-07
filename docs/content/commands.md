@@ -662,9 +662,13 @@ such as `2026-10-05T10:30:00Z` or `2026-10-05T10:30:00+02:00` (`+0200` and
 `+02` work too). Things rejects the whole payload over a date on its own, a
 time with no seconds or no offset, a lowercase `t` or `z`, or a comma before
 the fraction of a second, so `import` refuses it before anything is sent
-(tags included) and names each item; under `--json` it is `import refused`,
-with `blocked` naming the attribute on each item. A `null` creation-date is
-no date: Things saves the item as created now.
+(tags included) and names each item, with the id of an update item. A
+`null` creation-date is no date: Things saves the item as created now.
+
+Both refusals are one: a run names every refused item, whichever the
+reason. Under `--json` it is `import refused`, with one entry per item:
+`blocked` names every attribute refused on it, and `reason` says why,
+`repeating`, `invalid-date`, or both separated by a space.
 
 Every to-do and project the payload creates is read back too, the way
 `add` finds its item: a new item of that kind with that title (surrounding
@@ -710,9 +714,11 @@ an unconfirmed `add` does, and no `uuid`:
   title sets a `creation-date` within the last minute or later, and a new
   item filed where this one goes is also filed where that one goes. It
   could be either one, so this item is not confirmed. `candidates` lists
-  the new items with that kind and title filed where this item goes. The line says `not confirmed (a dated item has the same
-  title)`. An older `creation-date` cannot be mistaken for a new item, so
-  it does not stop the read-back.
+  the new items with that kind and title filed where this item goes. When
+  the database cannot be read, any recent dated item with the same kind
+  and title counts. The line says `not confirmed (a dated item has the
+  same title)`. An older `creation-date` cannot be mistaken for a new item,
+  so it does not stop the read-back.
 - `not-found`: no new item with that title appeared within the read-back
   wait, or fewer than the payload created, or fewer than the created items
   that could each be filed where they appeared (when one of them has a
