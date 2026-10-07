@@ -228,7 +228,8 @@ const todoOrProject = "t.type IN (0, 1)"
 const closedTodayUnlogged = `CASE COALESCE((SELECT logInterval FROM TMSettings LIMIT 1), 1)` +
 	` WHEN 0 THEN 0` +
 	` WHEN 4 THEN ` + closedAfterManualLog +
-	` ELSE ` + closedAfterManualLog + ` AND date(COALESCE(t.stopDate, 0), 'unixepoch', 'localtime') = date('now', 'localtime') END`
+	` ELSE ` + closedAfterManualLog + ` AND COALESCE(t.stopDate, 0) >= (SELECT start FROM today_clock)` +
+	` AND COALESCE(t.stopDate, 0) < (SELECT finish FROM today_clock) END`
 
 // closedAfterManualLog is true for a row closed after the last "Log Completed
 // Now", the condition the daily and manual choices share.
@@ -291,10 +292,8 @@ const todayDate = "COALESCE(t.startDate, " + thingsToday + ")"
 
 // thingsToday is today's local date in the ThingsDate encoding
 // (year<<16 | month<<12 | day<<7), so it compares directly with startDate and
-// deadline. It reads the day the same way closedTodayUnlogged does.
-const thingsToday = `((CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) << 16) | ` +
-	`(CAST(strftime('%m', 'now', 'localtime') AS INTEGER) << 12) | ` +
-	`(CAST(strftime('%d', 'now', 'localtime') AS INTEGER) << 7))`
+// deadline. It comes from today_clock, as closedTodayUnlogged's day does.
+const thingsToday = `(SELECT day FROM today_clock)`
 
 // heldInPlace is the set the Logbook withholds: every closed row Things has
 // not yet logged, wherever it sits. It used to be the union of what the Inbox,
@@ -1213,7 +1212,7 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 
 func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 	query := d.taskQuery() + " WHERE t.uuid = ? AND " + notHeading + " GROUP BY t.uuid"
-	row := d.db.QueryRow(query, uuid)
+	row := d.queryRow(query, uuid)
 	t, err := scanTask(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1243,7 +1242,7 @@ func (d *DB) StoredStart(uuid string) (model.Start, error) {
 // check needs it; nothing prints it. A missing item has none.
 func (d *DB) ReminderTime(uuid string) (int64, bool, error) {
 	var raw sql.NullInt64
-	err := d.db.QueryRow(`SELECT reminderTime FROM TMTask WHERE uuid = ?`, uuid).Scan(&raw)
+	err := d.queryRow(`SELECT reminderTime FROM TMTask WHERE uuid = ?`, uuid).Scan(&raw)
 	switch {
 	case err == sql.ErrNoRows:
 		return 0, false, nil
@@ -1491,7 +1490,7 @@ func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 }
 
 func (d *DB) collectTasks(query string, args ...any) ([]model.Task, error) {
-	rows, err := d.db.Query(query, args...)
+	rows, err := d.query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("querying tasks: %w", err)
 	}

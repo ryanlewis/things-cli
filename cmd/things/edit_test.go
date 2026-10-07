@@ -326,7 +326,7 @@ func TestEditWithNothingToChangeDoesNotWait(t *testing.T) {
 // Anything that is a real change, or whose outcome depends on how Things reads
 // it, still waits — a dropping stub turns those into a failure.
 func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
-	now := time.Now()
+	now := testNow
 	today := int(model.ThingsDateFromTime(now))
 	deadline := int(model.ThingsDateFromTime(time.Date(2026, 10, 15, 0, 0, 0, 0, time.Local)))
 	day := func(offset int) string { return now.AddDate(0, 0, offset).Format("2006-01-02") }
@@ -682,7 +682,7 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Todo("area3-todo", "Mop", 12, dbtest.Anytime(), dbtest.InArea("area-3"))
 			fx.Heading("head-rep", "Setup", 13, dbtest.InProject("repproj-1"))
 			fx.Todo("rephead-todo", "Plan week", 14, dbtest.Anytime(), dbtest.UnderHeading("head-rep"))
-			fx.Project("proj-logged", "Shipped", 15, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+			fx.Project("proj-logged", "Shipped", 15, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 			fx.Heading("head-logged", "Setup", 16, dbtest.InProject("proj-logged"))
 			fx.Todo("logged-todo", "Write notes", 17, dbtest.Anytime(), dbtest.InProject("proj-logged"))
 			fx.Project("proj-trashed", "Binned", 18, dbtest.Trashed())

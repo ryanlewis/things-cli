@@ -36,7 +36,7 @@ func (d *DB) ListAreas() ([]model.Area, error) {
 		-- otherwise list in an order SQLite does not define (issue #221).
 		ORDER BY "index" ASC, uuid ASC
 	`
-	rows, err := d.db.Query(query)
+	rows, err := d.query(query)
 	if err != nil {
 		return nil, fmt.Errorf("querying areas: %w", err)
 	}

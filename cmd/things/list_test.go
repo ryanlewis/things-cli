@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
@@ -100,7 +99,7 @@ func seedStuckRowDB(t *testing.T) *db.DB {
 	t.Helper()
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Todo("t-stuck", "Scheduled today, not yet moved", 1, dbtest.SomedayOn(today))
 	fx.Todo("t-someday", "Some day", 2, dbtest.Someday())
 	return db.NewFromSQL(sqlDB)

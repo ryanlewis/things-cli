@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -75,9 +76,6 @@ var (
 	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
 	labelStyle  = lipgloss.NewStyle().Bold(true)
 )
-
-// nowFn is overridable in tests.
-var nowFn = time.Now
 
 func styledStatus(status model.Status) string {
 	icon := statusIcon(status)
@@ -145,7 +143,7 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 		text = target.Format("Mon")
 	case days < -1 && days > -7:
 		text = fmt.Sprintf("%dd ago", -days)
-	case target.Year() == nowFn().Year():
+	case target.Year() == clock.Now().Year():
 		text = target.Format("2 Jan")
 	default:
 		text = target.Format("2 Jan 06")
@@ -158,7 +156,7 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 // daylight-saving change, which puts two midnights 23 or 25 hours apart, does
 // not shift a day.
 func daysFromToday(d *model.ThingsDate) int {
-	today := startOfDay(nowFn())
+	today := startOfDay(clock.Now())
 	target := startOfDay(d.ToTime())
 	return int(math.Round(target.Sub(today).Hours() / 24))
 }
@@ -216,7 +214,7 @@ func styledCompactTags(tags []string) string {
 }
 
 // termWidth returns the terminal width, falling back to 120 for non-TTY
-// (pipes, tests). It is a var, like nowFn, so a test can pin a width instead
+// (pipes, tests). It is a var so a test can pin a width instead
 // of depending on how the test binary's stdout happens to be attached.
 var termWidth = func() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {

@@ -63,7 +63,7 @@ func seedFullDB(t *testing.T) *db.DB {
 
 	fx.Tag("tag-1", "urgent", 0)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	// Task in today view (start=1, startBucket=0, startDate set, not trashed)
 	fx.Todo("task-1", "Buy milk", 0, dbtest.AnytimeOn(today), dbtest.InProject("proj-1"))
 	fx.Tagged("task-1", "tag-1")
@@ -229,8 +229,8 @@ func TestRunListWithTagFilter(t *testing.T) {
 
 func TestRunListDateFilterEndToEnd(t *testing.T) {
 	database := seedFullDB(t)
-	today := time.Now().Format("2006-01-02")
-	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	today := testNow.Format("2006-01-02")
+	tomorrow := testNow.AddDate(0, 0, 1).Format("2006-01-02")
 
 	// task-1 in seedFullDB is scheduled for today — --on today should match,
 	// --on tomorrow should not. Assert via the last-list cache, which records
@@ -356,8 +356,8 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 func TestRunListShowsClosedUnloggedByDefault(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	stop := model.TimeToUnix(time.Now())
+	today := int64(model.ThingsDateFromTime(testNow))
+	stop := model.TimeToUnix(testNow)
 	fx.Todo("todo-brush", "Charge toothbrush", 0, dbtest.AnytimeOn(today), dbtest.TodayIndex(-2), dbtest.Completed(stop))
 	fx.Todo("todo-milk", "Buy milk", 1, dbtest.AnytimeOn(today), dbtest.TodayIndex(-1))
 	database := db.NewFromSQL(sqlDB)
@@ -431,8 +431,8 @@ func TestRunListOpenOnlyFlag(t *testing.T) {
 func TestRunListOpenOnlyConfig(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	stop := model.TimeToUnix(time.Now())
+	today := int64(model.ThingsDateFromTime(testNow))
+	stop := model.TimeToUnix(testNow)
 	fx.Todo("todo-brush", "Charge toothbrush", 0, dbtest.AnytimeOn(today), dbtest.TodayIndex(-2), dbtest.Completed(stop))
 	fx.Todo("todo-milk", "Buy milk", 1, dbtest.AnytimeOn(today), dbtest.TodayIndex(-1))
 	database := db.NewFromSQL(sqlDB)
@@ -949,7 +949,7 @@ func TestRunListHeadingTaskShowsProject(t *testing.T) {
 // completes and cancels, so resolving to it strands the user (issue #156).
 func TestRunShowPrefersGeneratedTodoOverTemplate(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx := dbtest.NewFixture(t, sqlDB)
 	fx.Todo("tpl-water", "Water plants", 1, dbtest.Someday(), dbtest.Repeats())
 	fx.Todo("inst-water", "Water plants", 2, dbtest.AnytimeOn(today))
@@ -976,7 +976,7 @@ func TestRunShowPrefersGeneratedTodoOverTemplate(t *testing.T) {
 // reader can tell it from a to-do; JSON already carried "type".
 func TestRunListTodayIncludesScheduledProject(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx := dbtest.NewFixture(t, sqlDB)
 	fx.Project("proj-audit", "Runbook audit", 1, dbtest.AnytimeOn(today), dbtest.TodayIndexRef(today), dbtest.TodayIndex(2005))
 	fx.Todo("todo-milk", "Buy milk", 2, dbtest.AnytimeOn(today), dbtest.TodayIndexRef(today), dbtest.TodayIndex(1))
@@ -1026,7 +1026,7 @@ func TestRunListSomedayAndLogbookIncludeProjects(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	// An earlier calendar day: an item closed today is still under Today
 	// rather than in the Logbook (issue #230).
-	stopDate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	stopDate := model.TimeToUnix(testNow.Add(-26 * time.Hour))
 	fx := dbtest.NewFixture(t, sqlDB)
 	fx.Project("proj-welsh", "Learn Welsh", 1, dbtest.Someday())
 	fx.Todo("todo-book", "Read a book", 2, dbtest.Someday())
@@ -1095,7 +1095,7 @@ var numericTypeField = regexp.MustCompile(`"type":\s*-?\d`)
 // keep passing even if the encoder regressed to emitting ints.
 func TestRunJSONRendersTypeAsString(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx := dbtest.NewFixture(t, sqlDB)
 	fx.Project("proj-audit", "Runbook audit", 1, dbtest.AnytimeOn(today))
 	fx.Todo("todo-milk", "Buy milk", 2, dbtest.AnytimeOn(today))
@@ -1152,7 +1152,7 @@ var numericStartField = regexp.MustCompile(`"start":\s*-?\d`)
 // same way.
 func TestRunJSONRendersStartAsString(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx := dbtest.NewFixture(t, sqlDB)
 	fx.Todo("todo-inbox", "Sort post", 1, dbtest.Inbox())
 	fx.Todo("todo-today", "Buy milk", 2, dbtest.AnytimeOn(today))

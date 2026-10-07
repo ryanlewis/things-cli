@@ -24,7 +24,7 @@ func seedTasks(t *testing.T, d *DB) {
 	fx.Tag("tg-urgent", "urgent", 1)
 	fx.Tag("tg-home", "home", 2)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 	done := model.TimeToUnix(time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC))
 
@@ -182,13 +182,13 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 
 	// AddDate keeps the ThingsDate valid across month boundaries; raw bit
 	// subtraction would underflow the day field to 0 on the 1st.
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	yesterday := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -1)))
+	today := int64(model.ThingsDateFromTime(testNow))
+	yesterday := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -1)))
 	// Now, not "a minute ago": the calendar day decides membership since issue
 	// #230, and a minute before midnight falls on the previous day. 25 hours
 	// back is safely not today whatever the hour.
-	stopToday := model.TimeToUnix(time.Now())
-	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
+	stopToday := model.TimeToUnix(testNow)
+	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
 
 	// Completed today, not yet logged.
 	mustExec(t, d, `INSERT INTO TMTask
@@ -249,7 +249,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	// Simulate "Log Completed Now": bump manualLogDate past every stopDate.
 	// That is the second half of the rule — it files the day's closed items
 	// straight away instead of waiting for midnight.
-	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 
 	got, err = d.ListTasks("today", TaskFilter{})
@@ -276,7 +276,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 // never neither (issue #230). The today view only carries items scheduled for
 // today, so the partition is asserted over that set.
 func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 
 	cases := []struct {
 		name         string
@@ -286,10 +286,10 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 		// test states the rule instead of restating the implementation.
 		wantUnderToday bool
 	}{
-		{"closed today, not logged", model.TimeToUnix(time.Now()), false, true},
-		{"closed today, logged", model.TimeToUnix(time.Now()), true, false},
-		{"closed yesterday, not logged", model.TimeToUnix(time.Now().Add(-25 * time.Hour)), false, false},
-		{"closed yesterday, logged", model.TimeToUnix(time.Now().Add(-25 * time.Hour)), true, false},
+		{"closed today, not logged", model.TimeToUnix(testNow), false, true},
+		{"closed today, logged", model.TimeToUnix(testNow), true, false},
+		{"closed yesterday, not logged", model.TimeToUnix(testNow.Add(-25 * time.Hour)), false, false},
+		{"closed yesterday, logged", model.TimeToUnix(testNow.Add(-25 * time.Hour)), true, false},
 	}
 
 	for _, tc := range cases {
@@ -299,7 +299,7 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 				(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
 				VALUES ('t-closed', 'Closed', 0, 3, 0, 1, 0, ?, ?, 1)`, today, tc.stopDate)
 			if tc.manualLogSet {
-				future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+				future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 				mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 			}
 
@@ -328,7 +328,7 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 // daily, 4 manually. A missing setting reads as daily, the rule measured
 // before the setting was known.
 func TestHeldInPlaceFollowsLogSetting(t *testing.T) {
-	now := time.Now()
+	now := testNow
 	stopToday := model.TimeToUnix(now)
 	stopEarlier := model.TimeToUnix(now.AddDate(0, 0, -3))
 	logBetween := model.TimeToUnix(now.AddDate(0, 0, -5))
@@ -387,7 +387,7 @@ func TestHeldInPlaceFollowsLogSetting(t *testing.T) {
 // closed project. Each case names where the row is still listed, and the
 // Logbook must not have it.
 func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
-	now := time.Now()
+	now := testNow
 	stop := model.TimeToUnix(now)
 	today := int64(model.ThingsDateFromTime(now))
 	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 4)))
@@ -502,9 +502,9 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 // the lists that should be holding the row, and every case asserts it is in
 // the Logbook or in those lists, never both and never neither.
 func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	future := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3)))
-	stopNow := model.TimeToUnix(time.Now())
+	today := int64(model.ThingsDateFromTime(testNow))
+	future := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
+	stopNow := model.TimeToUnix(testNow)
 
 	cases := []struct {
 		uuid        string
@@ -573,11 +573,11 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 // of the day, not under Today and not in the Logbook.
 func TestClosedSuppressedInboxToDoStaysInInbox(t *testing.T) {
 	d := newTestDB(t)
-	earlier := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -2)))
+	earlier := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -2)))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, deadline, deadlineSuppressionDate, stopDate, "index")
 		VALUES ('t-closed', 'Closed', 0, 3, 0, 0, 0, ?, ?, ?, 1)`,
-		earlier, earlier, model.TimeToUnix(time.Now()))
+		earlier, earlier, model.TimeToUnix(testNow))
 
 	logged, err := d.ListTasks("logbook", TaskFilter{})
 	if err != nil {
@@ -602,13 +602,13 @@ func TestClosedSuppressedInboxToDoStaysInInbox(t *testing.T) {
 // a to-do closed today under a trashed project (issue #230).
 func TestClosedTodayUnderTrashedProjectIsReachable(t *testing.T) {
 	d := newTestDB(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index")
 		VALUES ('proj-binned', 'Binned', 1, 0, 1, 1)`)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index")
 		VALUES ('t-closed', 'Closed', 0, 3, 0, 1, 0, ?, ?, 'proj-binned', 2)`,
-		today, model.TimeToUnix(time.Now()))
+		today, model.TimeToUnix(testNow))
 
 	inToday, err := d.ListTasks("today", TaskFilter{})
 	if err != nil {
@@ -701,7 +701,7 @@ func TestListTasksDateFilters(t *testing.T) {
 
 	// Upcoming holds only the days after today (issue #363), so the dates
 	// are days to come rather than fixed ones.
-	now := time.Now()
+	now := testNow
 	d1 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 9)))
 	d2 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 10)))
 	d3 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 11)))
@@ -1084,7 +1084,7 @@ func TestScanTaskFieldsPopulated(t *testing.T) {
 // project filter has to reach it through the heading row (issue #139).
 func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
 	d, fx := newFixture(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Project("proj-h", "Ship v2", 1)
 	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
 	fx.Todo("t-direct", "Direct task", 3, anytimeOn(today), inProject("proj-h"))
@@ -1107,7 +1107,7 @@ func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
 // through the heading too.
 func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
 	d, fx := newFixture(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Area("area-launch", "Launch", 1)
 	fx.Project("proj-h", "Ship v2", 1, inArea("area-launch"))
 	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
@@ -1157,7 +1157,7 @@ func TestHeadingTaskCarriesProject(t *testing.T) {
 // returns tasks the today view would have hidden (issue #140).
 func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
 	d, fx := newFixture(t)
-	todayDate := int64(model.ThingsDateFromTime(time.Now()))
+	todayDate := int64(model.ThingsDateFromTime(testNow))
 	fx.Project("proj-h", "Ship v2", 1)
 	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
 	// One of the two is scheduled for today; the today view sees only that one.
@@ -1185,7 +1185,7 @@ func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
 // heading-nested task now that the project join reaches through the heading.
 func TestListTasksTagFilterIncludesHeadingTasks(t *testing.T) {
 	d, fx := newFixture(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Tag("tg-ship", "ship", 1)
 	fx.Project("proj-h", "Ship v2", 1)
 	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
@@ -1231,7 +1231,7 @@ func TestListTasksProjectViewExcludesTrashedProject(t *testing.T) {
 // seeding the row shape that view selects on, all of them inside a trashed
 // project.
 func TestListTasksViewsExcludeTrashedProject(t *testing.T) {
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 
 	// view → the columns beyond the shared ones that put a row in that view.
@@ -1347,7 +1347,7 @@ func TestLogbookFoldsClosedProjectChildren(t *testing.T) {
 
 	// A closed project and a trashed one, each holding children in several
 	// states, plus an open project as the control (issue #229).
-	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	stop := model.TimeToUnix(testNow.Add(-26 * time.Hour))
 	fx.Project("proj-done", "Finished", 1, completed(stop))
 	fx.Project("proj-binned", "Binned", 2, trashed())
 	fx.Project("proj-open", "Live", 3)
@@ -1389,7 +1389,7 @@ func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
 
 	// A closed project and a trashed one, each holding children in several
 	// states, plus an open project as the control (issue #229).
-	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	stop := model.TimeToUnix(testNow.Add(-26 * time.Hour))
 	fx.Project("proj-done", "Finished", 1, completed(stop))
 	fx.Project("proj-binned", "Binned", 2, trashed())
 	fx.Project("proj-open", "Live", 3)
@@ -1435,9 +1435,9 @@ func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
 func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	d, fx := newFixture(t)
 
-	stopToday := model.TimeToUnix(time.Now())
-	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
-	later := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 2)))
+	stopToday := model.TimeToUnix(testNow)
+	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
+	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 2)))
 	fx.Project("proj-open", "Live", 1)
 	fx.Heading("head", "Phase 1", 2, inProject("proj-open"))
 
@@ -1471,7 +1471,7 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 
 	// "Log Completed Now" files the day's closed items early, here as in
 	// anytime.
-	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 	afterLog, err := d.ListTasks("project", TaskFilter{Project: "proj-open"})
 	if err != nil {
@@ -1491,9 +1491,9 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 func TestAreaFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	d, fx := newFixture(t)
 
-	stopToday := model.TimeToUnix(time.Now())
-	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
-	later := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 2)))
+	stopToday := model.TimeToUnix(testNow)
+	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
+	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 2)))
 	fx.Area("ar", "Work", 1)
 	fx.Project("proj-open", "Live", 1, inArea("ar"))
 	fx.Project("proj-done", "Shipped", 2, inArea("ar"), completed(stopToday))
@@ -1532,7 +1532,7 @@ func TestAreaFilterDoesNotWidenToClosedContents(t *testing.T) {
 
 	// A closed project and an open one in the same area, each holding
 	// children in several states (issue #229).
-	stop := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	stop := model.TimeToUnix(testNow.Add(-26 * time.Hour))
 	fx.Area("ar", "Work", 1)
 	fx.Project("proj-done", "Finished", 1, inArea("ar"), completed(stop))
 	fx.Project("proj-open", "Live", 3, inArea("ar"))
@@ -1606,7 +1606,7 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 // so neither t.start nor t."index" alone produces the order.
 func TestListTasksProjectOrderMatchesProjectPage(t *testing.T) {
 	d, fx := newFixture(t)
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	sooner := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
 	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 17)))
@@ -1857,7 +1857,7 @@ func TestSearchTasksExcludesHeadings(t *testing.T) {
 // refuses writes (issue #143), so resolving to it strands the user.
 func TestGetTaskExactTitlePrefersInstance(t *testing.T) {
 	d, fx := newFixture(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
 	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 
@@ -1895,7 +1895,7 @@ func TestGetTaskExactTitleTemplateOnly(t *testing.T) {
 // first thing offered there too.
 func TestFindTasksByTitleOrdersTemplatesLast(t *testing.T) {
 	d, fx := newFixture(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
 	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 
@@ -1915,7 +1915,7 @@ func TestFindTasksByTitleOrdersTemplatesLast(t *testing.T) {
 // ambiguity branch; the candidates it reports are ordered the same way.
 func TestGetTaskAmbiguousListsInstanceFirst(t *testing.T) {
 	d, fx := newFixture(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
 	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 
@@ -1985,7 +1985,7 @@ func TestGetTaskExactTitleAmbiguousBetweenTodos(t *testing.T) {
 // reported are the instances alone rather than the template as well.
 func TestGetTaskExactTitleDropsTemplateFromCandidates(t *testing.T) {
 	d, fx := newFixture(t)
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
 	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 	fx.Todo("inst-water-2", "Water plants", 3, anytimeOn(today))
@@ -2204,7 +2204,7 @@ func TestGetTasksByUUIDsEmptyInput(t *testing.T) {
 func TestListTasksViewsIncludeProjects(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 
 	fx.Area("area-work", "Work", 1)
@@ -2256,7 +2256,7 @@ func TestListTasksViewsIncludeProjects(t *testing.T) {
 func TestListTasksProjectsExcludedFromViews(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
@@ -2305,7 +2305,7 @@ func TestListTasksProjectsExcludedFromViews(t *testing.T) {
 func TestAnytimeHasNoProjectRows(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 
 	fx.Area("area-work", "Work", 1)
@@ -2362,7 +2362,7 @@ func TestAnytimeHasNoProjectRows(t *testing.T) {
 func TestAnytimeLeavesOutToDosInDeferredProjects(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
 
@@ -2408,7 +2408,7 @@ func TestAnytimeLeavesOutToDosInDeferredProjects(t *testing.T) {
 // its project. One in an Anytime project stays in Anytime for the rest of the
 // day (issue #238).
 func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
-	now := time.Now()
+	now := testNow
 	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
 	stop := model.TimeToUnix(now)
 
@@ -2514,7 +2514,7 @@ func TestAnytimeGroupsByAreaThenProject(t *testing.T) {
 func TestUpcomingOrdersByDateThenTodayIndex(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 	later := today + (2 << 7)
 
@@ -2544,7 +2544,7 @@ func TestUpcomingOrdersByDateThenTodayIndex(t *testing.T) {
 func TestUpcomingListsAnytimeToDosDueLater(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
 	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 3)))
@@ -2590,7 +2590,7 @@ func TestUpcomingListsAnytimeToDosDueLater(t *testing.T) {
 func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
 	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
@@ -2648,7 +2648,7 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	yesterday := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1)))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
@@ -2706,7 +2706,7 @@ func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
 func TestScheduledRowNotYetMovedReportsAnytime(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
 	done := float64(now.Unix())
@@ -2770,7 +2770,7 @@ func keysOfStart(m map[string]model.Start) []string {
 func TestAnytimeKeepsToDosOfProjectNotYetMoved(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
 
@@ -2796,7 +2796,7 @@ func TestAnytimeKeepsToDosOfProjectNotYetMoved(t *testing.T) {
 func TestProjectPageOrdersNotYetMovedRowAsToday(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
 
@@ -2822,7 +2822,7 @@ func TestProjectPageOrdersNotYetMovedRowAsToday(t *testing.T) {
 func TestInboxLeavesOutToDosTodayHolds(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
 	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
@@ -2860,7 +2860,7 @@ func TestInboxLeavesOutToDosTodayHolds(t *testing.T) {
 func TestAnytimeListsInboxToDosTodayHolds(t *testing.T) {
 	d, fx := newFixture(t)
 
-	now := time.Now()
+	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
 	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
 	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
@@ -2887,7 +2887,7 @@ func TestAnytimeListsInboxToDosTodayHolds(t *testing.T) {
 func TestListTasksProjectRowsAndFilters(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Area("area-home", "Home", 2)
@@ -2941,7 +2941,7 @@ func TestListTasksProjectRowsAndFilters(t *testing.T) {
 func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 
 	fx.Area("area-work", "Work", 1)
@@ -2999,7 +2999,7 @@ func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
 func TestListTasksCatchAllViewExclusions(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 
 	fx.Area("area-work", "Work", 1)
@@ -3044,7 +3044,7 @@ func TestListTasksCatchAllViewExclusions(t *testing.T) {
 func TestListTasksTodayOrderWithProjects(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
@@ -3071,7 +3071,7 @@ func TestListTasksTodayOrderWithProjects(t *testing.T) {
 func TestTodayGroupsLooseTodosBeforeProjectTodos(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
 		('ar-first', 'Work', 1, -2005),
 		('ar-second', 'Home', 1, -550)`)
@@ -3105,8 +3105,8 @@ func TestTodayGroupsLooseTodosBeforeProjectTodos(t *testing.T) {
 func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	stop := model.TimeToUnix(time.Now())
+	today := int64(model.ThingsDateFromTime(testNow))
+	stop := model.TimeToUnix(testNow)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate,
 		 todayIndexReferenceDate, stopDate, "index", todayIndex) VALUES
@@ -3135,10 +3135,10 @@ func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 func TestTodayOrdersByReferenceDateThenTodayIndex(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	yesterday := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -1)))
-	earlier := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -3)))
-	stop := model.TimeToUnix(time.Now())
+	today := int64(model.ThingsDateFromTime(testNow))
+	yesterday := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -1)))
+	earlier := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -3)))
+	stop := model.TimeToUnix(testNow)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate,
 		 todayIndexReferenceDate, stopDate, "index", todayIndex) VALUES
@@ -3165,8 +3165,8 @@ func TestTodayOrdersByReferenceDateThenTodayIndex(t *testing.T) {
 func TestAnytimeIncludeCompleted(t *testing.T) {
 	d := newTestDB(t)
 
-	stopToday := model.TimeToUnix(time.Now())
-	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
+	stopToday := model.TimeToUnix(testNow)
+	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
 		('open-one',       'Open',           0, 0, 0, 1, 0, NULL, NULL, 1),
@@ -3196,7 +3196,7 @@ func TestAnytimeIncludeCompleted(t *testing.T) {
 
 	// "Log Completed Now" files the day's closed items early, and the flag
 	// respects it here exactly as it does in today.
-	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 	afterLog, err := d.ListTasks("anytime", TaskFilter{})
 	if err != nil {
@@ -3215,9 +3215,9 @@ func TestAnytimeIncludeCompleted(t *testing.T) {
 func TestUpcomingIncludeCompleted(t *testing.T) {
 	d, fx := newFixture(t)
 
-	stopToday := model.TimeToUnix(time.Now())
-	stopYesterday := model.TimeToUnix(time.Now().Add(-25 * time.Hour))
-	later := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 2)))
+	stopToday := model.TimeToUnix(testNow)
+	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
+	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 2)))
 
 	fx.Todo("open-later", "Open", 1, somedayOn(later))
 	fx.Todo("done-ahead", "Done ahead", 2, somedayOn(later), completed(stopToday))
@@ -3255,7 +3255,7 @@ func TestUpcomingIncludeCompleted(t *testing.T) {
 
 	// "Log Completed Now" files the day's closed items early, here as in
 	// today and anytime, and the Logbook takes them back.
-	future := model.TimeToUnix(time.Now().Add(1 * time.Minute))
+	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 	afterLog, err := d.ListTasks("upcoming", TaskFilter{})
 	if err != nil {
@@ -3280,11 +3280,11 @@ func TestUpcomingIncludeCompleted(t *testing.T) {
 func TestTodayAndAnytimeAgreeOnJustClosedRows(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
 		VALUES ('scheduled-and-done', 'Done', 0, 3, 0, 1, 0, ?, ?, 1)`,
-		today, model.TimeToUnix(time.Now()))
+		today, model.TimeToUnix(testNow))
 
 	for _, view := range []string{"today", "anytime"} {
 		got, err := d.ListTasks(view, TaskFilter{})
@@ -3315,7 +3315,7 @@ func TestTodayAndAnytimeAgreeOnJustClosedRows(t *testing.T) {
 func TestLogbookKeepsRepeatingTemplatesClosedToday(t *testing.T) {
 	d := newTestDB(t)
 
-	stopToday := model.TimeToUnix(time.Now())
+	stopToday := model.TimeToUnix(testNow)
 	// The template row itself: it carries the recurrence rule.
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, rt1_recurrenceRule, "index") VALUES
@@ -3356,9 +3356,9 @@ func TestLogbookKeepsRepeatingTemplatesClosedToday(t *testing.T) {
 // in one view and listed in another (issue #249). The fold waits until the
 // project is logged, so the project here closed on an earlier day.
 func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	stopToday := model.TimeToUnix(time.Now())
-	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
+	today := int64(model.ThingsDateFromTime(testNow))
+	stopToday := model.TimeToUnix(testNow)
+	stopLogged := model.TimeToUnix(testNow.AddDate(0, 0, -1))
 
 	for _, view := range []string{"today", "anytime"} {
 		t.Run(view, func(t *testing.T) {
@@ -3402,7 +3402,7 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 // its 11 untrashed ones. Every view but the catch-all zeroed those rows on the
 // trashed-parent guard before the filter could ask for them (issue #263).
 func TestNamedTrashedProjectLiftsTheTrashedParentGuard(t *testing.T) {
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
 
 	// view → the columns beyond the shared ones that put a row in that view.
@@ -3548,7 +3548,7 @@ func TestNamedTrashedProjectLiftsTheGuardThroughAHeading(t *testing.T) {
 // reaches a closed project's closed children.
 func TestNamedTrashedProjectReachesItsClosedChildren(t *testing.T) {
 	d := newTestDB(t)
-	stopped := model.TimeToUnix(time.Now().AddDate(0, 0, -3))
+	stopped := model.TimeToUnix(testNow.AddDate(0, 0, -3))
 
 	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
 		('proj-gone', 'Binned', 1, 0, 1, 1)`)
@@ -3579,9 +3579,9 @@ func TestNamedTrashedProjectReachesItsClosedChildren(t *testing.T) {
 // this, `things today --project "Launch v2" --include-completed` on a finished
 // project returned nothing at all (issue #253).
 func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	stopToday := model.TimeToUnix(time.Now())
-	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
+	today := int64(model.ThingsDateFromTime(testNow))
+	stopToday := model.TimeToUnix(testNow)
+	stopLogged := model.TimeToUnix(testNow.AddDate(0, 0, -1))
 
 	for _, view := range []string{"today", "anytime"} {
 		t.Run(view, func(t *testing.T) {
@@ -3731,9 +3731,9 @@ func TestFilterValuesMatchLiterally(t *testing.T) {
 func TestAreaAndTagFiltersDoNotLiftTheFold(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	stopToday := model.TimeToUnix(time.Now())
-	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
+	today := int64(model.ThingsDateFromTime(testNow))
+	stopToday := model.TimeToUnix(testNow)
+	stopLogged := model.TimeToUnix(testNow.AddDate(0, 0, -1))
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES ('ar', 'Work', 1, 1)`)
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, area, "index")
@@ -3771,11 +3771,11 @@ func TestAreaAndTagFiltersDoNotLiftTheFold(t *testing.T) {
 func TestIncludeCompletedKeepsOpenTodosUnderClosedProject(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
 		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 1)`,
-		today, model.TimeToUnix(time.Now()))
+		today, model.TimeToUnix(testNow))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, project, "index")
 		VALUES ('still-open', 'Left over', 0, 0, 0, 1, 0, ?, 'proj-done', 2)`, today)
@@ -3807,9 +3807,9 @@ func TestIncludeCompletedKeepsOpenTodosUnderClosedProject(t *testing.T) {
 func TestFoldedJustClosedRowIsReachableByProject(t *testing.T) {
 	d := newTestDB(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
-	stopToday := model.TimeToUnix(time.Now())
-	stopLogged := model.TimeToUnix(time.Now().AddDate(0, 0, -1))
+	today := int64(model.ThingsDateFromTime(testNow))
+	stopToday := model.TimeToUnix(testNow)
+	stopLogged := model.TimeToUnix(testNow.AddDate(0, 0, -1))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index")
 		VALUES ('proj-done', 'Finished', 1, 3, 0, 1, 0, ?, ?, 1)`, today, stopLogged)
@@ -3870,11 +3870,11 @@ func TestSomedayGroupsUnfiledThenAreas(t *testing.T) {
 func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
 	d, fx := newFixture(t)
 
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	// Now, not "a minute ago": the calendar day decides whether a closed row is
 	// still under Today (issue #230), and a minute before midnight falls on the
 	// previous day, which failed this test in the first minute of every day.
-	stopToday := model.TimeToUnix(time.Now())
+	stopToday := model.TimeToUnix(testNow)
 
 	fx.Area("area-work", "Work", 1)
 	// An open project for company, so the default list is not empty and the
@@ -3918,8 +3918,8 @@ func TestListTasksSomedayAndLogbookIncludeProjects(t *testing.T) {
 	// stop dates fall on an earlier calendar day, because an item closed today
 	// is still under Today rather than in the Logbook (issue #230).
 	fx.Area("area-work", "Work", 1)
-	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	stopEarly := model.TimeToUnix(testNow.Add(-48 * time.Hour))
+	stopLate := model.TimeToUnix(testNow.Add(-26 * time.Hour))
 
 	fx.Project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
 	fx.Todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
@@ -3962,8 +3962,8 @@ func TestListTasksSomedayAndLogbookIncludeProjects(t *testing.T) {
 func TestListTasksSomedayLogbookProjectExclusions(t *testing.T) {
 	d, fx := newFixture(t)
 
-	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	stopEarly := model.TimeToUnix(testNow.Add(-48 * time.Hour))
+	stopLate := model.TimeToUnix(testNow.Add(-26 * time.Hour))
 	fx.Project("proj-someday", "Learn Welsh", 1, someday())
 	fx.Project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
 
@@ -4017,8 +4017,8 @@ func TestListTasksLogbookOrderWithProject(t *testing.T) {
 
 	// stopLate is the later of the two, and the project carries it, so a
 	// Logbook ordered newest-first has the project row ahead of the to-do.
-	stopEarly := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	stopLate := model.TimeToUnix(time.Now().Add(-26 * time.Hour))
+	stopEarly := model.TimeToUnix(testNow.Add(-48 * time.Hour))
+	stopLate := model.TimeToUnix(testNow.Add(-26 * time.Hour))
 	fx.Project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
 	fx.Todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
 
@@ -4326,10 +4326,10 @@ func TestListTasksLogbookIncludesCancelled(t *testing.T) {
 	// Stop dates interleave the two statuses, and "index" runs against that
 	// order, so a view that grouped by status or fell back to "index" would
 	// return these in a different sequence.
-	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
-	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
-	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+	oldest := model.TimeToUnix(testNow.Add(-96 * time.Hour))
+	older := model.TimeToUnix(testNow.Add(-72 * time.Hour))
+	newer := model.TimeToUnix(testNow.Add(-48 * time.Hour))
+	newest := model.TimeToUnix(testNow.Add(-24 * time.Hour))
 
 	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
 	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
@@ -4374,10 +4374,10 @@ func TestListTasksLogbookCancelledOrder(t *testing.T) {
 	// Stop dates interleave the two statuses, and "index" runs against that
 	// order, so a view that grouped by status or fell back to "index" would
 	// return these in a different sequence.
-	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
-	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
-	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+	oldest := model.TimeToUnix(testNow.Add(-96 * time.Hour))
+	older := model.TimeToUnix(testNow.Add(-72 * time.Hour))
+	newer := model.TimeToUnix(testNow.Add(-48 * time.Hour))
+	newest := model.TimeToUnix(testNow.Add(-24 * time.Hour))
 
 	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
 	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
@@ -4399,7 +4399,7 @@ func TestListTasksLogbookCancelledOrder(t *testing.T) {
 func TestListTasksLogbookCancelledExclusions(t *testing.T) {
 	d, fx := newFixture(t)
 
-	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
+	older := model.TimeToUnix(testNow.Add(-72 * time.Hour))
 
 	// Open rows are not logged, a trashed row belongs to trash however it was
 	// closed, and a heading is structure inside a project, never a list row.
@@ -4430,10 +4430,10 @@ func TestListTasksLogbookCancelledFilters(t *testing.T) {
 	// Stop dates interleave the two statuses, and "index" runs against that
 	// order, so a view that grouped by status or fell back to "index" would
 	// return these in a different sequence.
-	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
-	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
-	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+	oldest := model.TimeToUnix(testNow.Add(-96 * time.Hour))
+	older := model.TimeToUnix(testNow.Add(-72 * time.Hour))
+	newer := model.TimeToUnix(testNow.Add(-48 * time.Hour))
+	newest := model.TimeToUnix(testNow.Add(-24 * time.Hour))
 
 	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest), inArea("area-lab"))
 	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer), inArea("area-lab"))
@@ -4466,10 +4466,10 @@ func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
 	// Stop dates interleave the two statuses, and "index" runs against that
 	// order, so a view that grouped by status or fell back to "index" would
 	// return these in a different sequence.
-	oldest := model.TimeToUnix(time.Now().Add(-96 * time.Hour))
-	older := model.TimeToUnix(time.Now().Add(-72 * time.Hour))
-	newer := model.TimeToUnix(time.Now().Add(-48 * time.Hour))
-	newest := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+	oldest := model.TimeToUnix(testNow.Add(-96 * time.Hour))
+	older := model.TimeToUnix(testNow.Add(-72 * time.Hour))
+	newer := model.TimeToUnix(testNow.Add(-48 * time.Hour))
+	newest := model.TimeToUnix(testNow.Add(-24 * time.Hour))
 
 	fx.Todo("log-todo-done", "Wrote it up", 4, anytime(), completed(newest))
 	fx.Project("log-proj-cancel", "Dropped work", 3, anytime(), cancelled(newer))
@@ -4481,9 +4481,9 @@ func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
 	// status — the assertion below would hold even if those views stopped
 	// filtering on status. Seed a cancelled row shaped to land in each of
 	// them, so only `t.status = 0` keeps it out.
-	today := int64(model.ThingsDateFromTime(time.Now()))
+	today := int64(model.ThingsDateFromTime(testNow))
 	tomorrow := today + (1 << 7)
-	stopped := model.TimeToUnix(time.Now().Add(-24 * time.Hour))
+	stopped := model.TimeToUnix(testNow.Add(-24 * time.Hour))
 	mustExec(t, d, `INSERT INTO TMTask
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, "index") VALUES
 		('cancel-today',    'Was due today', 0, 2, 0, 1, 0, ?,    ?, 8),

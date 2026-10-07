@@ -62,7 +62,7 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 	// project carries the same title. Not measured, as the CLI cannot make a
 	// repeating project. Its uuid still names it.
 	var trashed int
-	err = d.db.QueryRow(`
+	err = d.queryRow(`
 		SELECT uuid, COALESCE(title, ''), COALESCE(status, 0), COALESCE(trashed, 0), COUNT(*) OVER () - 1
 		FROM TMTask t
 		WHERE type = ? AND (uuid = ? OR (fold_name(title) = ? AND COALESCE(trashed, 0) = 0
@@ -83,7 +83,7 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 	} else {
 		// Measured in Things 3: a project wins over an area of the same
 		// title, whichever uuid sorts first.
-		if err := d.db.QueryRow(`SELECT COUNT(*) FROM TMArea WHERE fold_name(title) = ?`, FoldName(list)).
+		if err := d.queryRow(`SELECT COUNT(*) FROM TMArea WHERE fold_name(title) = ?`, FoldName(list)).
 			Scan(&target.OtherAreas); err != nil {
 			return Target{}, false, fmt.Errorf("finding area: %w", err)
 		}
@@ -109,7 +109,7 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 // Oct 2026 in three more projects.
 func (d *DB) HeadingTarget(project, heading string) (string, error) {
 	var id string
-	err := d.db.QueryRow(`
+	err := d.queryRow(`
 		SELECT uuid FROM TMTask
 		WHERE type = ? AND project = ? AND COALESCE(trashed, 0) = 0 AND fold(title) = ?
 		ORDER BY uuid LIMIT 1`,
@@ -127,7 +127,7 @@ func (d *DB) HeadingTarget(project, heading string) (string, error) {
 func (d *DB) AreaTarget(area string) (Target, error) {
 	id := strings.TrimSpace(area)
 	t := Target{Area: true}
-	err := d.db.QueryRow(`
+	err := d.queryRow(`
 		SELECT uuid, COALESCE(title, ''), COUNT(*) OVER () - 1 FROM TMArea
 		WHERE uuid = ? OR fold_name(title) = ?
 		ORDER BY uuid = ? DESC, uuid LIMIT 1`, id, FoldName(area), id).Scan(&t.UUID, &t.Title, &t.Others)
@@ -154,7 +154,7 @@ func (d *DB) AreaTarget(area string) (Target, error) {
 func (d *DB) HeadingProject(uuid string) (project, title string, found, trashed bool, err error) {
 	var proj sql.NullString
 	var trash int
-	err = d.db.QueryRow(`
+	err = d.queryRow(`
 		SELECT project, COALESCE(title, ''), COALESCE(trashed, 0) FROM TMTask
 		WHERE type = ? AND uuid = ?`,
 		int(model.TypeHeading), uuid).Scan(&proj, &title, &trash)

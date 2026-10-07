@@ -1,0 +1,48 @@
+package db
+
+import (
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/ryanlewis/things-cli/internal/clock"
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/model"
+)
+
+// The queries read today from the clock once, so at the last millisecond of
+// a month a row scheduled that day is in Today and one closed that evening is
+// held there, while one closed at the next midnight is not. Read from SQLite's
+// 'now' part by part, the same moment could have taken the year and month
+// before midnight and the day after it.
+func TestTodayReadsOneDayFromTheClock(t *testing.T) {
+	last := time.Date(2030, 1, 31, 23, 59, 59, int(999*time.Millisecond), time.Local)
+	t.Cleanup(clock.Pin(last))
+	d := newTestDB(t)
+	fx := dbtest.NewFixture(t, d.db)
+
+	day := int64(model.ThingsDateFromTime(last))
+	midnight := time.Date(2030, 2, 1, 0, 0, 0, 0, time.Local)
+	fx.Todo("open", "Open", 0, anytimeOn(day), todayIndexRef(day), todayIndex(1))
+	fx.Todo("closed-evening", "Closed this evening", 1, anytimeOn(day), todayIndexRef(day), todayIndex(2),
+		completed(model.TimeToUnix(last.Add(-time.Hour))))
+	fx.Todo("closed-midnight", "Closed at midnight", 2, anytimeOn(day), todayIndexRef(day), todayIndex(3),
+		completed(model.TimeToUnix(midnight)))
+
+	got, err := d.ListTasks(ViewToday, TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"open", "closed-evening"}; !slices.Equal(uuidsOf(got), want) {
+		t.Errorf("today at %s = %v, want %v", last, uuidsOf(got), want)
+	}
+}
+
+// A query that names today_clock without going through withToday fails
+// rather than reading some other day.
+func TestTodayClockMustBeSupplied(t *testing.T) {
+	d := newTestDB(t)
+	if _, err := d.db.Query(`SELECT day FROM ` + todayClock); err == nil {
+		t.Error("a bare query of today_clock succeeded, want no such table")
+	}
+}

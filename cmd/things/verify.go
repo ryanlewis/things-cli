@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
@@ -202,7 +203,7 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			return true, nil
 		}
 		// One clock for the round, so a --when check cannot flip midway.
-		now := time.Now()
+		now := clock.Now()
 		// One query per round for every item still pending, rather than one
 		// per item per round (issue #167).
 		uuids := make([]string, len(pending))
@@ -334,7 +335,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 		watchChecklist = err == nil
 	}
 	if when != nil {
-		when.sent = time.Now()
+		when.sent = clock.Now()
 	}
 	if err := update(); err != nil {
 		return err
@@ -611,7 +612,7 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 
 	var whenSent *whenCheck
 	if strings.TrimSpace(when) != "" {
-		whenSent = &whenCheck{value: when, sent: time.Now()}
+		whenSent = &whenCheck{value: when, sent: clock.Now()}
 	}
 	if err := write(); err != nil {
 		return err
@@ -642,7 +643,7 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 			uuids[i] = t.UUID
 		}
 		return printUnconfirmedAdd(d, title, "ambiguous", uuids)
-	case !whenSent.holds(&found[0], time.Now()):
+	case !whenSent.holds(&found[0], clock.Now()):
 		// The new item may be another add of the same title at the same
 		// moment, so the advice is to search first, as for a missing one.
 		item := &found[0]

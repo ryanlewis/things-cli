@@ -82,7 +82,7 @@ func (d *DB) probeRepeating() {
 // because PRAGMA does not accept bound parameters; every caller passes a
 // compile-time constant.
 func (d *DB) tableColumns(table string) (map[string]bool, error) {
-	rows, err := d.db.Query(fmt.Sprintf("PRAGMA table_info(%q)", table))
+	rows, err := d.query(fmt.Sprintf("PRAGMA table_info(%q)", table))
 	if err != nil {
 		return nil, fmt.Errorf("reading %s columns: %w", table, err)
 	}
@@ -127,7 +127,7 @@ func (d *DB) NamesRepeatingProject(ref string) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM TMTask t WHERE t.type = ? AND ` +
 		d.recurrenceCol() + ` IS NOT NULL AND ` + match + `)`
 	var found int
-	if err := d.db.QueryRow(query, append([]any{int(model.TypeProject)}, matchArgs...)...).Scan(&found); err != nil {
+	if err := d.queryRow(query, append([]any{int(model.TypeProject)}, matchArgs...)...).Scan(&found); err != nil {
 		return false, fmt.Errorf("checking for a repeating project: %w", err)
 	}
 	return found != 0, nil

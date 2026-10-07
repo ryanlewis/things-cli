@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
@@ -399,7 +400,7 @@ func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, 
 	if f.prependNotes != nil && *f.prependNotes != "" || f.appendNotes != nil && *f.appendNotes != "" {
 		return false
 	}
-	if f.when != nil && !whenUnchanged(*f.when, task, time.Now(), reads) {
+	if f.when != nil && !whenUnchanged(*f.when, task, clock.Now(), reads) {
 		return false
 	}
 	// Tags compare the way Things matches them: case-insensitively, after
