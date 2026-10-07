@@ -116,7 +116,8 @@ func TestAddTargetPicksSmallestUUID(t *testing.T) {
 }
 
 // A project closed today still holds its place in Things, so it is a
-// candidate with the smallest uuid; a logged or trashed one is not.
+// candidate with the smallest uuid; a logged or trashed one, or a repeating
+// project's template, is not.
 func TestAddTargetSkipsLoggedForSmallestUUID(t *testing.T) {
 	sqlDB := dbtest.NewSQL(t)
 	fx := dbtest.NewFixture(t, sqlDB)
@@ -125,6 +126,7 @@ func TestAddTargetSkipsLoggedForSmallestUUID(t *testing.T) {
 	fx.Project("1-trash", "WORK", 3, dbtest.Trashed())
 	fx.Project("2-logged", "Work", 4, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
 	fx.Project("x-open", "Plan", 5)
+	fx.Project("1-template", "Plan", 7, dbtest.Repeats())
 	fx.Project("Y-logged", "Plan", 6, dbtest.Cancelled(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
 	d := &DB{db: sqlDB}
 	for list, want := range map[string]string{"work": "A-today", "plan": "x-open"} {
