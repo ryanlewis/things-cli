@@ -3066,9 +3066,8 @@ func TestListTasksTodayOrderWithProjects(t *testing.T) {
 }
 
 // Today is arranged like Anytime and Someday — unfiled items, then areas, and
-// inside an area its loose to-dos before its projects' — and ordered within a
-// group by todayIndex alone. Measured against the app on 10 Sep 2026, where
-// these keys reproduced a 27-row Today in every position (issue #237).
+// inside an area its loose to-dos before its projects' — and the within-group
+// keys do not leak across groups (issue #237).
 func TestTodayGroupsLooseTodosBeforeProjectTodos(t *testing.T) {
 	d := newTestDB(t)
 
@@ -3100,9 +3099,9 @@ func TestTodayGroupsLooseTodosBeforeProjectTodos(t *testing.T) {
 }
 
 // The app leaves a closed item where it was, struck through, rather than
-// pushing it to the end of its group, so today orders on todayIndex alone and
-// not on status first. The app's Today interleaved six closed rows through
-// three groups when this was measured (issue #237).
+// pushing it to the end of its group, so today does not order on status
+// first. The app's Today interleaved six closed rows through three groups when
+// this was measured (issue #237).
 func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 	d := newTestDB(t)
 
@@ -3123,6 +3122,36 @@ func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 	want := []string{"open-first", "closed-mid", "open-last"}
 	if got := uuidsOf(got); !slices.Equal(got, want) {
 		t.Errorf("today order: got %v, want %v — the closed row must stay in place", got, want)
+	}
+}
+
+// Within a group the app puts rows whose todayIndex was written today above
+// rows carried over from an earlier day, and only then orders by todayIndex.
+// Measured against the app on 7 Oct 2026, where todayIndexReferenceDate DESC
+// then todayIndex ASC reproduced a 26-row Today in every position. todayIndex
+// runs against the reference date here so ordering on it alone would fail.
+func TestTodayOrdersByReferenceDateThenTodayIndex(t *testing.T) {
+	d := newTestDB(t)
+
+	today := int64(model.ThingsDateFromTime(time.Now()))
+	earlier := int64(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -2)))
+	stop := model.TimeToUnix(time.Now())
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, startDate,
+		 todayIndexReferenceDate, stopDate, "index", todayIndex) VALUES
+		('old-first',  'One',   0, 0, 0, 1, 0, ?, ?, NULL, 1, -900),
+		('new-second', 'Two',   0, 0, 0, 1, 0, ?, ?, NULL, 2, -100),
+		('new-closed', 'Three', 0, 3, 0, 1, 0, ?, ?, ?,    3, -200),
+		('old-second', 'Four',  0, 0, 0, 1, 0, ?, ?, NULL, 4, -800)`,
+		today, earlier, today, today, today, today, stop, today, earlier)
+
+	got, err := d.ListTasks("today", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"new-closed", "new-second", "old-first", "old-second"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("today order: got %v, want %v", got, want)
 	}
 }
 

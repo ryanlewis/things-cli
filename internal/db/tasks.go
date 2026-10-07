@@ -649,26 +649,25 @@ var views = map[string]viewSpec{
 		scope: todayScope, status: openRows, trashed: untrashedRows,
 		includesProjects: true, showsUnlogged: true, supportsDateFilter: true,
 		dateColumn: todayDate,
-		// Today takes the shared grouping and then todayIndex, which is the
-		// one signal the app orders within a group by. Measured against the
-		// app on 10 Sep 2026 over a 27-row Today, these keys reproduce its
-		// order in every position (issue #237).
+		// Today takes the shared grouping, then todayIndexReferenceDate
+		// newest first, then todayIndex. Measured against the app on 7 Oct
+		// 2026 over a 26-row Today, these keys reproduce its order in every
+		// position. The reference date is the day a row's todayIndex was last
+		// written, so a row placed today sits above rows carried over from an
+		// earlier day, and todayIndex orders the rows that share a day.
+		// Issue #237 dropped the reference date as not a sort key, which put
+		// carried-over rows out of place among the day's own.
 		//
-		// Two keys came off to get there, and both were doing harm. t.status
-		// put the closed items the view keeps at the end of their
-		// group, where the app leaves them in place among the open ones,
-		// struck through: the app's Today interleaved six closed rows through
-		// three groups. t.todayIndexReferenceDate DESC reordered whole groups
-		// by the day their todayIndex was last rewritten, which the app does
-		// not do either — it is the stamp that says which day a todayIndex
-		// belongs to, not a sort key.
+		// t.status is not a key: the app leaves the closed items the view
+		// keeps in place among the open ones, struck through, rather than at
+		// the end of their group.
 		//
 		// A project row scheduled for Today (issue #201) has no parent project
 		// of its own, so p.* is NULL and it lands in its area's group ahead of
 		// that area's projects. Its own todayIndex then places it among the
 		// area's loose to-dos, the same signal everything else here is ordered
 		// by.
-		orderBy: "ORDER BY " + listGrouping + ", t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
+		orderBy: "ORDER BY " + listGrouping + ", t.todayIndexReferenceDate DESC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
 	ViewInbox: {
 		scope: inboxBucket, status: openRows, trashed: untrashedRows,
