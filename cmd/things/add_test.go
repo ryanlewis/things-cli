@@ -685,6 +685,12 @@ func TestAddIgnoresSameTitleFiledElsewhere(t *testing.T) {
 			[]createdRow{{uuid: "other", title: "Buy oat milk"}}, ""},
 		{"otherHeading", []string{"add", "Buy oat milk", "--project", "Tools", "--heading", "Setup"},
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}}, ""},
+		// Of heading twins, Things takes the lowest uuid: a row under the
+		// other one is not this add's, whatever case the add asked for.
+		{"headingTwin", []string{"add", "Buy oat milk", "--project", "Tools", "--heading", "SETUP"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: `project = 'proj-1', heading = 'head-2'`}}, ""},
+		{"headingTwinLowest", []string{"add", "Buy oat milk", "--project", "Tools", "--heading", "SETUP"},
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: `project = 'proj-1', heading = 'head-2'`}, {uuid: "mine", title: "Buy oat milk", extra: `project = 'proj-1', heading = 'head-1'`}}, "mine"},
 		{"area", []string{"add", "Buy oat milk", "--list", "Personal"},
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: inArea1}}, "mine"},
 		{"projectAddOtherArea", []string{"project", "add", "Launch", "--area", "Errands"},
@@ -704,6 +710,7 @@ func TestAddIgnoresSameTitleFiledElsewhere(t *testing.T) {
 			fx.Project("proj-1", "Tools", 5)
 			fx.Project("proj-2", "Garden", 6)
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
+			fx.Heading("head-2", "SETUP", 2, dbtest.InProject("proj-1"))
 			// The other command's row lands after this add's snapshot,
 			// while it reads back, as an overlapping add's would.
 			stubExecAdding(t, sqlDB, tc.rows...)

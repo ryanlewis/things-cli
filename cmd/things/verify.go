@@ -416,8 +416,8 @@ type createdDest struct {
 	// area.
 	list    string
 	byTitle bool
-	// heading is FoldCase of the title of the heading the item goes under,
-	// "" for none. anyHeading leaves the heading unchecked.
+	// heading is the uuid of the heading the item goes under, "" for none.
+	// anyHeading leaves the heading unchecked.
 	heading    string
 	anyHeading bool
 }
@@ -456,7 +456,7 @@ func (dst createdDest) fits(t model.Task) bool {
 	case dst.heading == "":
 		return t.HeadingUUID == ""
 	}
-	return t.HeadingUUID != "" && db.FoldCase(t.HeadingTitle) == dst.heading
+	return t.HeadingUUID == dst.heading
 }
 
 // createdWant is one kind of item a write creates: what it is called and

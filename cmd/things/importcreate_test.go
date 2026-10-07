@@ -771,6 +771,10 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: inProj1}, {uuid: "mine", title: "Buy oat milk", extra: underHead1}}, []string{"mine"}},
 		{"areaListIDWithHeading", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list-id":"area-1","heading":"Setup"}}]`,
 			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: underHead1}, {uuid: "mine", title: "Buy oat milk", extra: inArea1}}, []string{"mine"}},
+		// Of heading twins Things takes the lowest uuid, so a row under the
+		// other one does not confirm the to-do.
+		{"headingTwin", `[{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"SETUP"}}]`,
+			[]createdRow{{uuid: "other", title: "Buy oat milk", extra: `heading = 'head-twin'`}, {uuid: "mine", title: "Buy oat milk", extra: underHead1}}, []string{"mine"}},
 		// A heading the payload creates earlier may take a to-do sent to
 		// its title; without one, the list's lack of it is checked.
 		{"headingInPayload", `[{"type":"project","operation":"update","id":"proj-1","attributes":{"items":[{"type":"heading","attributes":{"title":"Phase 2"}}]}},{"type":"to-do","attributes":{"title":"Buy oat milk","list":"Tools","heading":"phase 2"}}]`,
@@ -827,6 +831,7 @@ func TestImportCreatedChecksDestination(t *testing.T) {
 			fx.Project("proj-2", "Garden", 6)
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
 			fx.Heading("head-old", "Old", 2, dbtest.InProject("proj-1"), dbtest.Trashed())
+			fx.Heading("head-twin", "SETUP", 4, dbtest.InProject("proj-1"))
 			fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
 			fx.Project("proj-bin", "Bin", 8, dbtest.Trashed())
 			fx.Heading("head-bin", "Shelf", 3, dbtest.InProject("proj-bin"))
