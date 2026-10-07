@@ -200,12 +200,15 @@ func resolveImportDests(database *db.DB, creates []importCreate) {
 			if areasErr != nil {
 				continue
 			}
-			for _, a := range areas {
-				switch {
-				case to.areaID != "" && a.UUID == strings.TrimSpace(to.areaID):
-					c.dest = createdDest{checked: true, list: a.UUID}
-				case to.areaID == "" && db.FoldName(a.Title) == db.FoldName(to.area):
+			if to.areaID == "" {
+				if titledArea(areas, to.area) != "" {
 					c.dest = areaTitleDest(areas, to.area)
+				}
+				continue
+			}
+			for _, a := range areas {
+				if a.UUID == strings.TrimSpace(to.areaID) {
+					c.dest = createdDest{checked: true, list: a.UUID}
 				}
 			}
 		case to.parentID != "":

@@ -20,10 +20,10 @@ import (
 // several areas, match the title, Things takes the one whose uuid sorts first
 // byte by byte, even when another one's title matches list exactly, and so
 // does this.
-// Measured in Things 3 with add, add-project's area and json, over pairs of
-// projects and of areas that differ in case, normalisation and compatibility
-// forms, created in either order. headingFound is false whenever target is
-// "".
+// Measured in Things 3 with add, add-project's area, update and json, over
+// pairs of projects and of areas that differ in case, normalisation and
+// compatibility forms, created in either order. headingFound is false
+// whenever target is "".
 func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, err error) {
 	// A uuid goes to Things as list-id, which the CLI sends trimmed; a title
 	// goes as typed, and Things does not trim it.
