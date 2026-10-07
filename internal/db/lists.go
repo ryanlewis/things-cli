@@ -29,10 +29,13 @@ func (d *DB) AddTarget(list, heading string) (target string, headingFound bool, 
 	// goes as typed, and Things does not trim it.
 	id := strings.TrimSpace(list)
 	var project string
+	// A repeating project's template is left out: it is filed under
+	// Repeating, not offered as a list, and its generated project carries the
+	// same title. Not measured, as the CLI cannot make a repeating project.
 	err = d.db.QueryRow(`
 		SELECT uuid FROM TMTask t
 		WHERE type = ? AND (status = ? OR `+closedTodayUnlogged+`) AND COALESCE(trashed, 0) = 0
-			AND (uuid = ? OR fold_name(title) = ?)
+			AND `+d.recurrenceCol()+` IS NULL AND (uuid = ? OR fold_name(title) = ?)
 		ORDER BY uuid = ? DESC, uuid
 		LIMIT 1`, int(model.TypeProject), int(model.StatusOpen), id, FoldName(list), id).Scan(&project)
 	switch {
