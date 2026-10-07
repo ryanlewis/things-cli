@@ -21,9 +21,11 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// number from being one: ` 12` is row 12, or refused as not a row, and
 	// never a title fragment.
 	rowRef := isRowRef(strings.TrimSpace(ref))
+	markedDigits := markedRowDigits(ref)
+	markedRow := markedDigits != ""
 	var last cache.LastList
 	var cacheErr error
-	if rowRef {
+	if rowRef || markedRow {
 		last, cacheErr = cache.ReadLastList()
 	}
 	if n, err := strconv.Atoi(strings.TrimSpace(ref)); rowRef && err == nil && n >= 1 {
@@ -59,27 +61,25 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// "Chapter 12 notes" (issue #375). Only an exact title or uuid is taken.
 	// Nor is `+12` or `#12`, which reads as a row number but is not one: as
 	// a fragment, `#12` would complete a task that mentions issue #12.
-	markedDigits := markedRowDigits(ref)
-	markedRow := markedDigits != ""
 	lookup := database.GetTask
 	if rowRef || markedRow {
 		lookup = database.GetTaskExact
 	}
 	task, err := lookup(ref)
+	var notFound *db.TaskNotFoundError
+	if (rowRef || markedRow) && errors.As(err, &notFound) && strings.TrimSpace(ref) != ref {
+		// The space around ` 2026 ` is not part of the title "2026".
+		task, err = lookup(strings.TrimSpace(ref))
+	}
 	if err == nil {
 		return task, nil
 	}
 
-	var notFound *db.TaskNotFoundError
 	switch {
 	case rowRef && errors.As(err, &notFound):
 		return nil, notARowError(ref, last, cacheErr)
 	case markedRow && errors.As(err, &notFound):
-		return nil, &notFoundError{
-			Kind:  "task",
-			Query: ref,
-			msg:   fmt.Sprintf("%q is not a row reference and no task has exactly that title; if you meant row %s of the last list, use %s, otherwise pass the task's uuid or full title", ref, markedDigits, markedDigits),
-		}
+		return nil, markedRowError(ref, markedDigits, last, cacheErr)
 	}
 
 	var ambig *db.AmbiguousTaskError
@@ -145,6 +145,17 @@ func markedRowDigits(ref string) string {
 		return ""
 	}
 	return s[1:]
+}
+
+// markedRowError refuses a `+N` or `#N` ref that is not the exact title of a
+// task. It suggests the bare number only when the last list has a row N.
+func markedRowError(ref, digits string, last cache.LastList, cacheErr error) error {
+	msg := fmt.Sprintf("%q is not a row reference and no task has exactly that title; ", ref)
+	if n, err := strconv.Atoi(digits); err == nil && cacheErr == nil && n >= 1 && n <= len(last.UUIDs) {
+		msg += fmt.Sprintf("if you meant row %d of the last list, use %d, otherwise ", n, n)
+	}
+	msg += "pass the task's uuid or full title"
+	return &notFoundError{Kind: "task", Query: ref, msg: msg}
 }
 
 // notARowError refuses an all-digit ref that is not a row in the last list and

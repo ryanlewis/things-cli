@@ -660,9 +660,10 @@ func TestListCommandLineCarriesConfigFlag(t *testing.T) {
 // A ref marked like a row number, `+N` or `#N`, is not one, even when row N
 // exists, and it does not match a title fragment: `complete '#12'` must not
 // close a task that mentions issue #12. Only an exact title or a uuid
-// resolves it; otherwise the error says to use the bare number.
+// resolves it; otherwise the error says to pass the uuid, and to use the
+// bare number when the last list has that row (it has 1 here).
 func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
-	for _, ref := range []string{"+12", "#12", " #12", "#12 ", "+1"} {
+	for ref, hint := range map[string]bool{"+12": false, "#12": false, " #12": false, "#12 ": false, "#0": false, "+1": true, " #1 ": true} {
 		t.Run(ref, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			seedCache(t, time.Minute, "things today", "abc-123")
@@ -677,11 +678,13 @@ func TestResolveTaskMarkedRowRefIsRefused(t *testing.T) {
 			if !errors.As(err, &nf) {
 				t.Fatalf("resolveTask(%q) = %+v, %v, want a not-found error", ref, got, err)
 			}
-			digits := strings.Trim(ref, " +#")
-			for _, want := range []string{"not a row reference", "use " + digits, "uuid"} {
+			for _, want := range []string{"not a row reference", "uuid"} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("message %q does not mention %q", err.Error(), want)
 				}
+			}
+			if got := strings.Contains(err.Error(), "use 1,"); got != hint {
+				t.Errorf("message %q: row hint %v, want %v", err.Error(), got, hint)
 			}
 		})
 	}
@@ -697,7 +700,7 @@ func TestResolveTaskMarkedRowRefExactTitle(t *testing.T) {
 	f.Todo("ver-2", "Upgrade to 2.4", 0)
 	database := db.NewFromSQL(sqlDB)
 
-	for ref, want := range map[string]string{"#7": "hash-7", "2.": "ver-2"} {
+	for ref, want := range map[string]string{"#7": "hash-7", " #7 ": "hash-7", "2.": "ver-2"} {
 		got, err := resolveTask(&Deps{}, ref, database)
 		if err != nil || got.UUID != want {
 			t.Errorf("resolveTask(%q) = %+v, %v, want %s", ref, got, err, want)
@@ -720,5 +723,16 @@ func TestResolveTaskNumericWithSpace(t *testing.T) {
 	got, err = resolveTask(&Deps{}, " 1 ", database)
 	if err != nil || got.UUID != "abc-123" {
 		t.Errorf("resolveTask(\" 1 \") = %+v, %v, want abc-123", got, err)
+	}
+}
+
+// Space around a number is not part of a title: ` 2026 ` still finds the
+// task titled "2026" when it is not a row.
+func TestResolveTaskNumericExactTitleTrimmed(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	seedCache(t, time.Minute, "things today", "abc-123")
+	got, err := resolveTask(&Deps{}, " 2026 ", seedNumericTitleDB(t))
+	if err != nil || got.UUID != "year-2026" {
+		t.Errorf("resolveTask(\" 2026 \") = %+v, %v, want year-2026", got, err)
 	}
 }
