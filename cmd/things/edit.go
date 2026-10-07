@@ -253,21 +253,17 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	// status the item already has is dropped from the write, and the rest of
 	// the edit still goes; a switch between completed and cancelled is
 	// refused whole.
-	complete, cancel := s.Complete, s.Cancel
-	var already model.Status
-	if complete || cancel {
+	already := false
+	if s.Complete || s.Cancel {
 		want := model.StatusCompleted
-		if cancel {
+		if s.Cancel {
 			want = model.StatusCancelled
 		}
-		same, err := checkClosed(task, want)
-		if err != nil {
+		if already, err = checkClosed(task, want); err != nil {
 			return err
 		}
-		if same {
-			already, complete, cancel = want, false, false
-		}
 	}
+	complete, cancel := s.Complete && !already, s.Cancel && !already
 	if err := checkRepeating(task, restrictedEdits(f.When, f.Deadline, complete, cancel, s.Duplicate)); err != nil {
 		return err
 	}
@@ -304,12 +300,12 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 		return ok || err != nil
 	}
 	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), hasReminder)
-	if already != model.StatusOpen {
+	if already {
 		if !changed && !s.Duplicate && !s.Reveal {
-			fmt.Fprintf(d.errOut(), "note: %q is already %s; nothing sent\n", task.Title, already)
+			fmt.Fprintf(d.errOut(), "note: %q is already %s; nothing sent\n", task.Title, task.Status)
 			return printItem(d, database, task)
 		}
-		fmt.Fprintf(d.errOut(), "note: %q is already %s; the other edits are sent without the status\n", task.Title, already)
+		fmt.Fprintf(d.errOut(), "note: %q is already %s; the status is left out of the edit\n", task.Title, task.Status)
 	}
 	return applyEdit(d, database, task, changed, checklist, complete, cancel, s.Duplicate, update)
 }
