@@ -315,14 +315,19 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 		})
 	}
 	reads := readWhen(database, task.UUID)
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), reads)
+	// One instant for the no-op check and the read-back's row check, so they
+	// judge the item on the same day.
+	now := clock.Now()
+	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), reads, now)
 	var when *whenCheck
 	if f.When != nil && changed {
 		when = &whenCheck{value: *f.When}
-		now := clock.Now()
-		if !s.Duplicate && !d.NoVerify && (unmoved(task, now, reads.stored) || carriedOver(task, model.ThingsDateFromTime(now))) {
-			when.before = task
-			when.whenOnly = !uncovered && f.onlyWhen()
+		if !s.Duplicate && !d.NoVerify {
+			if h := heldIn(task, now, reads.stored); h == heldUnmoved || h == heldCarried {
+				when.before = task
+				when.carried = h == heldCarried
+				when.whenOnly = !uncovered && f.onlyWhen()
+			}
 		}
 	}
 	if already {
@@ -339,9 +344,10 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 // leaves the item as it is, so there is no modification to wait for.
 // uncovered says whether any field flag outside coveredFields is set,
 // dropped holds the folded tag names Things will drop (foldTags), and
-// reads reads the item's reminder and stored start (whenUnchanged).
-func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, reads whenReads) bool {
-	return !uncovered && f.covered().unchanged(task, dropped, reads)
+// reads reads the item's reminder and stored start (whenUnchanged). now is
+// the instant --when is judged at.
+func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, reads whenReads, now time.Time) bool {
+	return !uncovered && f.covered().unchanged(task, dropped, reads, now)
 }
 
 // foldTags folds the names verifyTags says Things will drop, so the no-op
@@ -392,7 +398,7 @@ func (f coveredFields) set() bool {
 // counts as a change, and the edit waits for its read-back as before. Tags
 // named in dropped do not exist in Things, which ignores them, so they count
 // as no change.
-func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, reads whenReads) bool {
+func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, reads whenReads, now time.Time) bool {
 	if f.title != nil && *f.title != task.Title {
 		return false
 	}
@@ -404,7 +410,7 @@ func (f coveredFields) unchanged(task *model.Task, dropped map[string]struct{}, 
 	if f.prependNotes != nil && *f.prependNotes != "" || f.appendNotes != nil && *f.appendNotes != "" {
 		return false
 	}
-	if f.when != nil && !whenUnchanged(*f.when, task, clock.Now(), reads) {
+	if f.when != nil && !whenUnchanged(*f.when, task, now, reads) {
 		return false
 	}
 	// Tags compare the way Things matches them: case-insensitively, after

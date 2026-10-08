@@ -128,8 +128,8 @@ func nearOffsetChange(now time.Time) bool {
 // part of the day, with p read on the day today. A row Things has not moved
 // into today yet reads as Anytime (db's shownStart), so a dated place is
 // checked by its date alone; what Things does with such a row is
-// unmovedKeeps. A row still in Today from an earlier day (carriedOver) is
-// filed today.
+// unmovedKeeps. A row in Today from an earlier day (carriedOver) is filed
+// today.
 func (p whenPlace) holds(t *model.Task, today model.ThingsDate) bool {
 	if p.day == 0 {
 		return t.StartDate == nil && t.Start == p.start
@@ -147,27 +147,30 @@ func (p whenPlace) holds(t *model.Task, today model.ThingsDate) bool {
 	return p.bucket < 0 || t.StartBucket == p.bucket
 }
 
-// carriedOver reports whether t is still in Today from a day before today:
-// an Anytime row dated earlier, which db's todayScheduled lists under today.
-// Things keeps a row it filed under today at that start and date until its
-// own day-change pass, which had not run by 00:04 on 9 Oct 2026; until then
-// the app shows it in Today. A row Things has not moved into today yet
-// (unmoved) reads as Anytime too, and is in Today the same way. What Things
-// does with --when on such a row is carriedMeasured and unmovedKeeps.
+// carriedOver reports whether t is in Today from a day before today: an
+// open, untrashed Anytime row dated earlier, which db's todayScheduled lists
+// under today. An item in Today from an earlier day keeps that day as its
+// start date; Things does not move it forward. Daily backups from 6 to 9 Oct
+// 2026 held one such to-do at start 1 dated 5 Oct throughout, and the live
+// database held 19 open ones dated 5 to 7 Oct. A row Things has not moved
+// into today yet (unmoved) reads as Anytime too, and is in Today the same
+// way. A closed or trashed row is not in Today however it is dated. What
+// Things does with --when on a carried-over row is carriedMeasured and
+// unmovedKeeps.
 func carriedOver(t *model.Task, today model.ThingsDate) bool {
-	return t.Start == model.StartAnytime && t.StartDate != nil && *t.StartDate < today
+	return t.Status == model.StatusOpen && !t.Trashed &&
+		t.Start == model.StartAnytime && t.StartDate != nil && *t.StartDate < today
 }
 
-// carriedMeasured reports whether value on task, a carriedOver row, is the
-// case measured on 9 Oct 2026 just after midnight: a to-do in the day part,
-// sent today, which Things left as it was. On such a row with no reminder
-// that is a certain no-op. On the same night today's date on such a row with
-// a reminder cleared the reminder and kept the earlier date; without one it
-// was not measured, so it is sent and read back like the other cases
-// (unmovedKeeps).
-func carriedMeasured(value string, task *model.Task) bool {
-	v, err := things.NormalizeWhen(value)
-	return err == nil && v == "today" && task.Type == model.TypeTask && task.StartBucket == 0
+// carriedMeasured reports whether v, a --when value normalised by
+// things.NormalizeWhen, on task, a carriedOver row, is the case measured on 9
+// Oct 2026: a to-do in the day part, sent today, which Things left as it
+// was. On such a row with no reminder that is a certain no-op. The same day,
+// today's date on such a row with a reminder cleared the reminder and kept
+// the earlier date; without one it was not measured, so it is sent and read
+// back like the other cases (unmovedKeeps).
+func carriedMeasured(v string, task *model.Task) bool {
+	return v == "today" && task.Type == model.TypeTask && task.StartBucket == 0
 }
 
 // whenReads reads what whenUnchanged needs beyond the item as listed, each
@@ -197,22 +200,28 @@ func readWhen(database *db.DB, uuid string) whenReads {
 // whenUnchanged reports whether value leaves the item where it is, so Things
 // records no change for it (see whenPlace). The reminder is read only when
 // the value sets or clears one. On a row Things has not moved into today yet
-// (unmoved), or one still in Today from an earlier day (carriedOver), only
-// the case measured is certain; the others are sent and read back
-// (unmovedKeeps).
+// (unmoved), or one in Today from an earlier day (carriedOver), only the case
+// measured is certain; the others are sent and read back (unmovedKeeps). So
+// is a row of either shape whose stored start cannot be read.
 func whenUnchanged(value string, task *model.Task, now time.Time, reads whenReads) bool {
 	p, ok := placeWhen(value, now)
 	if !ok {
 		return false
 	}
-	today := model.ThingsDateFromTime(now)
-	if unmoved(task, now, reads.stored) && !unmovedMeasured(value, task, now) {
+	v, _ := things.NormalizeWhen(value) // placeWhen has accepted it
+	switch heldIn(task, now, reads.stored) {
+	case heldUnmoved:
+		if !unmovedMeasured(v, task, now) {
+			return false
+		}
+	case heldCarried:
+		if !carriedMeasured(v, task) {
+			return false
+		}
+	case heldUnknown:
 		return false
 	}
-	if carriedOver(task, today) && !carriedMeasured(value, task) {
-		return false
-	}
-	if !p.holds(task, today) {
+	if !p.holds(task, model.ThingsDateFromTime(now)) {
 		return false
 	}
 	if p.reminder == reminderKept {
@@ -222,27 +231,57 @@ func whenUnchanged(value string, task *model.Task, now time.Time, reads whenRead
 	return err == nil && r == p.reminder
 }
 
-// unmoved reports whether task is a row Things has not moved into today yet:
-// one db's shownStart reports as Anytime while it is stored as Someday. That
-// rewrite already limits it to open, untrashed rows outside a repeating
-// template that are dated today or earlier; the date is checked against now
-// as well, in case the day turned since the row was read. A start that cannot
-// be read counts as moved, which leaves the stricter check in place.
-func unmoved(task *model.Task, now time.Time, stored func() (model.Start, error)) bool {
-	if task.Start != model.StartAnytime || task.StartDate == nil || *task.StartDate > model.ThingsDateFromTime(now) {
-		return false
+// held is which kind of row in Today by its start date heldIn finds: one
+// whose --when outcome was measured only in part, so the rest is read back.
+type held int
+
+const (
+	heldNone    held = iota // any other row
+	heldUnmoved             // a row Things has not moved into today yet
+	heldCarried             // a row in Today from an earlier day (carriedOver)
+	heldUnknown             // a row dated before today whose stored start cannot be read
+)
+
+// heldIn reports which kind of row task is, read at now.
+//
+// An unmoved row is one db's shownStart reports as Anytime while it is stored
+// as Someday. That rewrite already limits it to open, untrashed rows outside
+// a repeating template that are dated today or earlier; the date is checked
+// against now as well, in case the day turned since the row was read. A
+// carried-over row is stored as Anytime and dated before today. Both report
+// Anytime, so only the stored start tells them apart. It is read last, after
+// the checks that need no query, and only for a row that passes them. A row
+// dated today whose start cannot be read counts as moved, which leaves the
+// stricter check in place; one dated earlier is heldUnknown, which is never
+// a certain no-op.
+func heldIn(task *model.Task, now time.Time, stored func() (model.Start, error)) held {
+	today := model.ThingsDateFromTime(now)
+	if task.Start != model.StartAnytime || task.StartDate == nil || *task.StartDate > today {
+		return heldNone
+	}
+	carried := carriedOver(task, today)
+	if !carried && *task.StartDate != today {
+		return heldNone // closed or trashed, so in no list by its start date
 	}
 	s, err := stored()
-	return err == nil && s == model.StartSomeday
+	switch {
+	case err == nil && s == model.StartSomeday:
+		return heldUnmoved
+	case !carried:
+		return heldNone
+	case err != nil:
+		return heldUnknown
+	}
+	return heldCarried
 }
 
-// unmovedMeasured reports whether value on task, an unmoved row, is the case
-// measured on 8 Oct 2026 at 00:00: a to-do dated today, in the day part, sent
-// today or today's date, which Things left as it was. On such a row with no
-// reminder that is a certain no-op. evening moved the same row.
-func unmovedMeasured(value string, task *model.Task, now time.Time) bool {
-	v, err := things.NormalizeWhen(value)
-	if err != nil || v != "today" && v != now.Format("2006-01-02") {
+// unmovedMeasured reports whether v, a --when value normalised by
+// things.NormalizeWhen, on task, an unmoved row, is the case measured on 8
+// Oct 2026 at 00:00: a to-do dated today, in the day part, sent today or
+// today's date, which Things left as it was. On such a row with no reminder
+// that is a certain no-op. evening moved the same row.
+func unmovedMeasured(v string, task *model.Task, now time.Time) bool {
+	if v != "today" && v != now.Format("2006-01-02") {
 		return false
 	}
 	return task.Type == model.TypeTask && task.StartDate != nil &&
@@ -250,7 +289,7 @@ func unmovedMeasured(value string, task *model.Task, now time.Time) bool {
 }
 
 // unmovedKeeps reports whether p, a value read at now, may leave an unmoved
-// row (see unmoved) such as task where it is, or a carriedOver row, which is
+// row (see heldIn) such as task where it is, or a carriedOver row, which is
 // read back the same way outside carriedMeasured. Outside unmovedMeasured these
 // are unmeasured: a row with a reminder, a row dated before today that Things
 // has not moved for days, a project, and a row in the evening part, sent
@@ -270,14 +309,15 @@ func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
 
 // whenCheck is the --when part of a read-back: the value sent and when it was
 // sent. before is the item as read before the write when it was a row Things
-// had not moved into today yet (unmoved) or one still in Today from an
-// earlier day (carriedOver), nil otherwise. whenOnly says the
-// edit changes nothing but --when, so an unmoved row Things left as it was,
-// with nothing recorded, is the edit applied (unmovedKeeps).
+// had not moved into today yet or one in Today from an earlier day (heldIn),
+// nil otherwise; carried says it was the second. whenOnly says the edit
+// changes nothing but --when, so such a row Things left as it was, with
+// nothing recorded, is the edit applied (unmovedKeeps).
 type whenCheck struct {
 	value    string
 	sent     time.Time
 	before   *model.Task
+	carried  bool
 	whenOnly bool
 }
 
@@ -308,11 +348,17 @@ func (c *whenCheck) landed(p whenPlace, now time.Time, t *model.Task) bool {
 	return p.holds(t, model.ThingsDateFromTime(now)) || c.kept(p, now, t)
 }
 
-// kept reports whether t, an unmoved row before the write, is still where it
-// was, for a value p, read at now, that may leave it there (unmovedKeeps).
+// kept reports whether t, an unmoved or carried-over row before the write, is
+// still where it was, for a value p, read at now, that may leave it there
+// (unmovedKeeps). Every such value clears a reminder, and on a carried-over
+// row Things was measured clearing it, so one that still has its reminder
+// was not given the write: it is not kept.
 func (c *whenCheck) kept(p whenPlace, now time.Time, t *model.Task) bool {
 	b := c.before
-	return b != nil && unmovedKeeps(p, now, b) && t.StartDate != nil && b.StartDate != nil &&
+	if b == nil || !unmovedKeeps(p, now, b) || c.carried && t.ReminderTime != nil {
+		return false
+	}
+	return t.StartDate != nil && b.StartDate != nil &&
 		*t.StartDate == *b.StartDate && t.StartBucket == b.StartBucket
 }
 

@@ -387,9 +387,8 @@ func TestEditUnmovedRowWithOtherFieldsNeedsAChange(t *testing.T) {
 }
 
 // A row Things filed under today on an earlier day keeps start = 1 and that
-// day's date until Things runs its day-change pass, and the app shows it in
-// Today until then. Measured just after midnight on 9 Oct 2026: --when today
-// on such a row was a no-op, and today's date on one with a reminder cleared
+// day's date; Things does not move it forward, and the app shows it in
+// Today. Measured on 9 Oct 2026: --when today on such a row was a no-op, and today's date on one with a reminder cleared
 // the reminder and kept the earlier date. Both are filed today, so the edit
 // is confirmed, not a dropped or misfiled one. A no-op still sends the URL;
 // the dropping stub fails it unless the edit skips the read-back wait.
@@ -418,7 +417,7 @@ func TestEditCarriedOverRow(t *testing.T) {
 	}
 
 	t.Run("today is a no-op", func(t *testing.T) {
-		fastVerify(t)
+		failOnWait(t)
 		database, sqlDB := seedWritable(t)
 		seed(t, sqlDB, 1, yesterday, 0, nil)
 		calls := stubExecDropping(t)
@@ -464,12 +463,11 @@ func TestEditCarriedOverRow(t *testing.T) {
 
 	// The cases not measured are sent and read back, and confirmed whether
 	// Things moves the row to today or leaves it where it was, with nothing
-	// recorded. --when today on a row with a reminder is one of them.
+	// recorded.
 	for _, tc := range []struct {
 		name, value string
 		reminder    any
 	}{
-		{"today with a reminder", "today", reminder},
 		{"today's date", todayDate, nil},
 		{"past date", testNow.AddDate(0, 0, -2).Format("2006-01-02"), nil},
 	} {
@@ -494,6 +492,53 @@ func TestEditCarriedOverRow(t *testing.T) {
 				}
 			})
 		}
+	}
+
+	// Every value that files the row today clears its reminder, and Things
+	// was measured clearing it on such a row, so a row that still has its
+	// reminder with nothing recorded was not given the write: the edit did
+	// not apply. With the reminder cleared it is confirmed.
+	for _, value := range []string{"today", todayDate, testNow.AddDate(0, 0, -2).Format("2006-01-02")} {
+		t.Run("reminder kept with "+value, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			seed(t, sqlDB, 1, yesterday, 0, reminder)
+			stubExecDropping(t)
+			_, err := runOut(t, database, "--json", "edit", "co-1", "--when", value)
+			if err == nil || !strings.Contains(err.Error(), "edit did not apply:") {
+				t.Fatalf("edit = %v, want a dropped-edit error", err)
+			}
+		})
+	}
+	t.Run("reminder cleared with today", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		seed(t, sqlDB, 1, yesterday, 0, reminder)
+		stubExecEditing(t, sqlDB, `UPDATE TMTask SET reminderTime = NULL WHERE uuid = 'co-1'`)
+		if _, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today"); err != nil {
+			t.Fatalf("edit: %v", err)
+		}
+	})
+
+	// A closed or trashed row is in no list by its start date, so its
+	// earlier date is not today: --when today on it is a change that waits.
+	for _, tc := range []struct{ name, set string }{
+		{"completed", "status = 3"},
+		{"trashed", "trashed = 1"},
+	} {
+		t.Run(tc.name+" is not a no-op", func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			seed(t, sqlDB, 1, yesterday, 0, nil)
+			if _, err := sqlDB.Exec(`UPDATE TMTask SET ` + tc.set + ` WHERE uuid = 'co-1'`); err != nil {
+				t.Fatal(err)
+			}
+			stubExecDropping(t)
+			_, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today")
+			if err == nil || !strings.Contains(err.Error(), "did not apply") {
+				t.Fatalf("edit = %v, want the read-back to wait and fail", err)
+			}
+		})
 	}
 
 	// Filed anywhere but today is still misfiled: the earlier date counts
@@ -521,7 +566,7 @@ func TestEditCarriedOverRow(t *testing.T) {
 	// the unmoved-row rules: no reminder is a no-op, and with one the edit is
 	// sent and confirmed when Things leaves the row as it was.
 	t.Run("unmoved today no-op", func(t *testing.T) {
-		fastVerify(t)
+		failOnWait(t)
 		database, sqlDB := seedWritable(t)
 		seed(t, sqlDB, 2, today, 0, nil)
 		calls := stubExecDropping(t)
@@ -573,6 +618,16 @@ func TestWhenPlaceHoldsCarriedOver(t *testing.T) {
 			t.Errorf("%s: holds = %v, want %v", tc.name, got, tc.want)
 		}
 	}
+	day := yesterday
+	for _, task := range []*model.Task{
+		{Status: model.StatusCompleted, Start: model.StartAnytime, StartDate: &day},
+		{Status: model.StatusCancelled, Start: model.StartAnytime, StartDate: &day},
+		{Trashed: true, Start: model.StartAnytime, StartDate: &day},
+	} {
+		if (whenPlace{day: today, bucket: 0}).holds(task, today) {
+			t.Errorf("holds a closed or trashed row dated yesterday (%+v) as filed today", task)
+		}
+	}
 }
 
 // On a row carried over from an earlier day, only the case measured is a
@@ -606,4 +661,25 @@ func TestWhenUnchangedCarriedOver(t *testing.T) {
 			t.Errorf("%s: whenUnchanged(%q) = %v, want %v", tc.name, tc.value, got, tc.want)
 		}
 	}
+
+	// A start that cannot be read leaves an unmoved row dated before today
+	// looking carried over; neither is a certain no-op then.
+	day := yesterday
+	task := &model.Task{Type: model.TypeTask, Start: model.StartAnytime, StartDate: &day}
+	unreadable := whenReads{reminder: noReminder, stored: func() (model.Start, error) { return 0, errors.New("busy") }}
+	if whenUnchanged("today", task, testNow, unreadable) {
+		t.Error("whenUnchanged(today) on a row whose stored start cannot be read = true, want false")
+	}
+}
+
+// failOnWait fails the test if the edit polls for a read-back. The budget is
+// long enough that the first round never expires, so any read-back pauses,
+// and the pause stops the test. A certain no-op prints the item without
+// polling.
+func failOnWait(t *testing.T) {
+	t.Helper()
+	timeout, sleep := verifyTimeout, verifySleep
+	verifyTimeout = time.Hour
+	verifySleep = func(time.Duration) { t.Fatal("the edit polled for a read-back; a certain no-op prints at once") }
+	t.Cleanup(func() { verifyTimeout, verifySleep = timeout, sleep })
 }
