@@ -143,6 +143,10 @@ things cancel TZqGIhgJebgtOF3DqsYQNp              # mark it cancelled
 the status did not change, so a zero exit means it landed.
 ````
 
+The `When` line is the scheduled date, followed by the reminder time when
+there is one (`- When: 2026-09-05 09:00`). An unscheduled item shows the
+list it sits in instead.
+
 A few things about the brief are deliberate:
 
 - **Every command names the UUID.** A title can match several tasks and a

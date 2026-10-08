@@ -121,6 +121,27 @@ func TestPrintAgentBriefWhenFallsBackToBucket(t *testing.T) {
 	}
 }
 
+// The When line carries the reminder after the date, in the HH:MM form JSON
+// uses. Without a start date there is nothing to put it beside.
+func TestPrintAgentBriefWhenCarriesReminder(t *testing.T) {
+	date := model.ThingsDateFromTime(time.Date(2026, 10, 9, 0, 0, 0, 0, time.Local))
+	reminder := "09:00"
+	cases := []struct {
+		name string
+		task model.Task
+		want string
+	}{
+		{"dated", model.Task{UUID: "u", Title: "T", StartDate: &date, ReminderTime: &reminder}, "- When: 2026-10-09 09:00\n"},
+		{"no reminder", model.Task{UUID: "u", Title: "T", StartDate: &date}, "- When: 2026-10-09\n"},
+		{"undated", model.Task{UUID: "u", Title: "T", Start: model.StartAnytime, ReminderTime: &reminder}, "- When: anytime\n"},
+	}
+	for _, tc := range cases {
+		if got := briefText(t, AgentBrief{Task: &tc.task}); !strings.Contains(got, tc.want) {
+			t.Errorf("%s: brief does not contain %q\n%s", tc.name, tc.want, got)
+		}
+	}
+}
+
 func TestPrintAgentBriefRepeating(t *testing.T) {
 	task := &model.Task{UUID: "task-uuid", Title: "Water plants", Repeating: true}
 	got := briefText(t, AgentBrief{Task: task})
