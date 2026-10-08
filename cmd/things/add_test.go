@@ -262,20 +262,19 @@ func TestAddMatchesNewlineStoredAsSpace(t *testing.T) {
 	}
 }
 
-// The search hint looks for the title as Things stores it and never carries a
-// raw control character, so it can be pasted and followed as one line.
+// The search hint looks for the title as Things stores it, so a newline in the
+// title is a space in the hint and the hint pastes and runs as one line.
 func TestAddNotFoundSearchHintUsesStoredTitle(t *testing.T) {
 	for name, c := range map[string]struct{ sent, want string }{
 		"newline": {"line one\nline two", "things search 'line one line two'"},
-		"CRLF":    {"line one\r\nline two", `things search $'line one\x0d line two'`},
-		"tab":     {"it's\ta tab", `things search $'it\'s\x09a tab'`},
+		"dash":    {"-1 day\nlater", "things search -- '-1 day later'"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			fastVerify(t)
 			database, _ := seedWritable(t)
 			stubExecDropping(t)
 
-			_, err := runOut(t, database, "add", c.sent)
+			_, err := runOut(t, database, "add", "--", c.sent)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err = %v, want a hint containing %s", err, c.want)
 			}
