@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -213,6 +214,75 @@ func TestNewCreatedKeyKeepsCase(t *testing.T) {
 	}
 	if newCreatedKey(model.TypeTask, "Buy milk") == newCreatedKey(model.TypeTask, "buy milk") {
 		t.Error("titles differing in case are the same key")
+	}
+}
+
+// storedTitle turns each line feed into a space, as Things does, and leaves
+// every other character alone, as Things does.
+func TestStoredTitle(t *testing.T) {
+	for _, c := range []struct{ name, sent, want string }{
+		{"newline", "line one\nline two", "line one line two"},
+		{"two newlines", "a\n\nb", "a  b"},
+		{"CRLF keeps the CR", "a\r\nb", "a\r b"},
+		{"lone CR", "a\rb", "a\rb"},
+		{"tab", "a\tb", "a\tb"},
+		{"spaces", "  a  b  ", "  a  b  "},
+		{"line separator", "a b", "a b"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := storedTitle(c.sent); got != c.want {
+				t.Errorf("storedTitle(%q) = %q, want %q", c.sent, got, c.want)
+			}
+		})
+	}
+}
+
+// A to-do added with a newline in its title is confirmed by the row Things
+// saves with a space in its place.
+func TestAddMatchesNewlineStoredAsSpace(t *testing.T) {
+	for name, c := range map[string]struct{ sent, stored string }{
+		"newline":      {"line one\nline two", "line one line two"},
+		"CRLF":         {"line one\r\nline two", "line one\r line two"},
+		"trailing":     {"line one\n", "line one "},
+		"two newlines": {"line one\n\nline two", "line one  line two"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: c.stored})
+
+			out, err := runOut(t, database, "add", c.sent)
+			if err != nil {
+				t.Fatalf("add: %v", err)
+			}
+			if !strings.Contains(out, "new-1") {
+				t.Errorf("output = %q, want the new item", out)
+			}
+		})
+	}
+}
+
+// The search hint looks for the title as Things stores it and never carries a
+// raw control character, so it can be pasted and followed as one line.
+func TestAddNotFoundSearchHintUsesStoredTitle(t *testing.T) {
+	for name, c := range map[string]struct{ sent, want string }{
+		"newline": {"line one\nline two", "things search 'line one line two'"},
+		"CRLF":    {"line one\r\nline two", `things search $'line one\x0d line two'`},
+		"tab":     {"it's\ta tab", `things search $'it\'s\x09a tab'`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fastVerify(t)
+			database, _ := seedWritable(t)
+			stubExecDropping(t)
+
+			_, err := runOut(t, database, "add", c.sent)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("err = %v, want a hint containing %s", err, c.want)
+			}
+			if hint := err.Error()[strings.Index(err.Error(), "Run `"):]; strings.ContainsFunc(hint, unicode.IsControl) {
+				t.Errorf("hint %q holds a control character", hint)
+			}
+		})
 	}
 }
 
