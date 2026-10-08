@@ -1002,7 +1002,7 @@ func TestImportNotesTargets(t *testing.T) {
 	fx := dbtest.NewFixture(t, sqlDB)
 	fx.Project("proj-a", "Tools", 5)
 	fx.Project("proj-b", "TOOLS", 6)
-	fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 	fx.Project("proj-bin", "Bin", 8, dbtest.Trashed())
 	fx.Area("area-1", "Home", 1)
 	fx.Area("area-2", "home", 2)
@@ -1176,7 +1176,7 @@ func TestImportNestedIgnoresOwnDestination(t *testing.T) {
 func TestImportNotesHeadingIDAndClosedItems(t *testing.T) {
 	database, sqlDB := seedWritable(t)
 	fx := dbtest.NewFixture(t, sqlDB)
-	fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(time.Now().Add(-48*time.Hour))))
+	fx.Project("proj-done", "Done", 7, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 	fx.Project("proj-bin", "Bin", 8, dbtest.Trashed())
 	fx.Heading("head-done", "Setup", 1, dbtest.InProject("proj-done"))
 	fx.Heading("head-bin", "Shelf", 2, dbtest.InProject("proj-bin"))

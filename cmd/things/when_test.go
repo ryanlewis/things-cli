@@ -291,7 +291,7 @@ func TestPlaceWhenNearOffsetChange(t *testing.T) {
 // nothing recorded, once the budget runs out. The edit never prints the row
 // before Things has had the write.
 func TestEditUnmovedRowAcceptsEitherOutcome(t *testing.T) {
-	now := time.Now()
+	now := testNow
 	today := int(model.ThingsDateFromTime(now))
 	old := int(model.ThingsDateFromTime(now.AddDate(0, 0, -3)))
 	past := now.AddDate(0, 0, -1).Format("2006-01-02")
@@ -371,7 +371,7 @@ func TestEditUnmovedRowAcceptsEitherOutcome(t *testing.T) {
 func TestEditUnmovedRowWithOtherFieldsNeedsAChange(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	old := int(model.ThingsDateFromTime(time.Now().AddDate(0, 0, -3)))
+	old := int(model.ThingsDateFromTime(testNow.AddDate(0, 0, -3)))
 	if _, err := sqlDB.Exec(`UPDATE TMTask SET start = 2, startDate = ?, startBucket = 0 WHERE uuid = 'one-1'`, old); err != nil {
 		t.Fatal(err)
 	}
