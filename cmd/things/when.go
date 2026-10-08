@@ -125,17 +125,38 @@ func nearOffsetChange(now time.Time) bool {
 }
 
 // holds reports whether t is filed where p says, by its start, start date and
-// part of the day. A row Things has not moved into today yet reads as Anytime
-// (db's shownStart), so a dated place is checked by its date alone; what
-// Things does with such a row is unmovedKeeps.
-func (p whenPlace) holds(t *model.Task) bool {
+// part of the day, with p read on the day today. A row Things has not moved
+// into today yet reads as Anytime (db's shownStart), so a dated place is
+// checked by its date alone; what Things does with such a row is
+// unmovedKeeps. A row still in Today from an earlier day (carriedOver) is
+// filed today.
+func (p whenPlace) holds(t *model.Task, today model.ThingsDate) bool {
 	if p.day == 0 {
 		return t.StartDate == nil && t.Start == p.start
 	}
-	if t.StartDate == nil || *t.StartDate != p.day {
+	if t.StartDate == nil {
+		return false
+	}
+	day := *t.StartDate
+	if p.day == today && carriedOver(t, today) {
+		day = today
+	}
+	if day != p.day {
 		return false
 	}
 	return p.bucket < 0 || t.StartBucket == p.bucket
+}
+
+// carriedOver reports whether t is still in Today from a day before today:
+// an Anytime row dated earlier, which db's todayScheduled lists under today.
+// Things keeps a row it filed under today at that start and date until its
+// own day-change pass, which had not run by 00:04 on 9 Oct 2026; until then
+// the app shows it in Today, and --when today on it is a no-op. Measured
+// that night, --when with today's date on such a row with a reminder cleared
+// the reminder and kept the earlier date. A row Things has not moved into
+// today yet (unmoved) reads as Anytime too, and is in Today the same way.
+func carriedOver(t *model.Task, today model.ThingsDate) bool {
+	return t.Start == model.StartAnytime && t.StartDate != nil && *t.StartDate < today
 }
 
 // whenReads reads what whenUnchanged needs beyond the item as listed, each
@@ -175,7 +196,7 @@ func whenUnchanged(value string, task *model.Task, now time.Time, reads whenRead
 	if unmoved(task, now, reads.stored) && !unmovedMeasured(value, task, now) {
 		return false
 	}
-	if !p.holds(task) {
+	if !p.holds(task, model.ThingsDateFromTime(now)) {
 		return false
 	}
 	if p.reminder == reminderKept {
@@ -266,7 +287,7 @@ func (c *whenCheck) holds(t *model.Task, now time.Time) bool {
 
 // landed reports whether t is where p, read at now, puts it.
 func (c *whenCheck) landed(p whenPlace, now time.Time, t *model.Task) bool {
-	return p.holds(t) || c.kept(p, now, t)
+	return p.holds(t, model.ThingsDateFromTime(now)) || c.kept(p, now, t)
 }
 
 // kept reports whether t, an unmoved row before the write, is still where it

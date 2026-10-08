@@ -385,3 +385,158 @@ func TestEditUnmovedRowWithOtherFieldsNeedsAChange(t *testing.T) {
 		t.Fatalf("edit with the title recorded and the row kept: %v", err)
 	}
 }
+
+// A row Things filed under today on an earlier day keeps start = 1 and that
+// day's date until Things runs its day-change pass, and the app shows it in
+// Today until then. Measured just after midnight on 9 Oct 2026: --when today
+// on such a row was a no-op, and today's date on one with a reminder cleared
+// the reminder and kept the earlier date. Both are filed today, so the edit
+// is confirmed, not a dropped or misfiled one. A no-op still sends the URL;
+// the dropping stub fails it unless the edit skips the read-back wait.
+func TestEditCarriedOverRow(t *testing.T) {
+	today := int(model.ThingsDateFromTime(testNow))
+	yesterday := int(model.ThingsDateFromTime(testNow.AddDate(0, 0, -1)))
+	todayDate := testNow.Format("2006-01-02")
+	const reminder = 1207959552
+	seed := func(t *testing.T, sqlDB *sql.DB, start, date, bucket int, reminder any) {
+		t.Helper()
+		if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start, startDate, startBucket, reminderTime, userModificationDate) VALUES ('co-1', 'Carried over', 0, 0, 0, ?, ?, ?, ?, 1)`,
+			start, date, bucket, reminder); err != nil {
+			t.Fatal(err)
+		}
+	}
+	startDate := func(t *testing.T, out string) int {
+		t.Helper()
+		var got model.Task
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatalf("unmarshal %q: %v", out, err)
+		}
+		if got.StartDate == nil {
+			t.Fatalf("printed no start date: %s", out)
+		}
+		return int(*got.StartDate)
+	}
+
+	t.Run("today is a no-op", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		seed(t, sqlDB, 1, yesterday, 0, nil)
+		calls := stubExecDropping(t)
+		out, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today")
+		if err != nil {
+			t.Fatalf("edit: %v", err)
+		}
+		if *calls != 1 {
+			t.Errorf("issued %d writes, want one", *calls)
+		}
+		if got := startDate(t, out); got != yesterday {
+			t.Errorf("printed start date %v, want %v", got, yesterday)
+		}
+	})
+
+	for _, tc := range []struct {
+		name  string
+		moves bool
+	}{{"today's date keeps the date", false}, {"today's date moves the date", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			seed(t, sqlDB, 1, yesterday, 0, reminder)
+			want := yesterday
+			apply := `UPDATE TMTask SET reminderTime = NULL WHERE uuid = 'co-1'`
+			if tc.moves {
+				want = today
+				apply = fmt.Sprintf(`UPDATE TMTask SET startDate = %d, reminderTime = NULL WHERE uuid = 'co-1'`, today)
+			}
+			calls := stubExecEditing(t, sqlDB, apply)
+			out, err := runOut(t, database, "--json", "edit", "co-1", "--when", todayDate)
+			if err != nil {
+				t.Fatalf("edit: %v", err)
+			}
+			if *calls != 1 {
+				t.Errorf("issued %d writes, want one", *calls)
+			}
+			if got := startDate(t, out); got != want {
+				t.Errorf("printed start date %v, want %v", got, want)
+			}
+		})
+	}
+
+	// Filed anywhere but today is still misfiled: the earlier date counts
+	// as today only for a value that files the row today.
+	for _, tc := range []struct {
+		name, value, apply string
+	}{
+		{"today filed in Someday", "today", `UPDATE TMTask SET start = 2, startDate = NULL, reminderTime = NULL WHERE uuid = 'co-1'`},
+		{"tomorrow kept in today", "tomorrow", ``},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			seed(t, sqlDB, 1, yesterday, 0, reminder)
+			stubExecEditing(t, sqlDB, tc.apply)
+			_, err := runOut(t, database, "--json", "edit", "co-1", "--when", tc.value)
+			var misfiled *misfiledError
+			if !errors.As(err, &misfiled) {
+				t.Fatalf("edit = %v, want a misfiled error", err)
+			}
+		})
+	}
+
+	// A start = 2 row dated today, which Things has not moved yet, keeps
+	// the unmoved-row rules: no reminder is a no-op, and with one the edit is
+	// sent and confirmed when Things leaves the row as it was.
+	t.Run("unmoved today no-op", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		seed(t, sqlDB, 2, today, 0, nil)
+		calls := stubExecDropping(t)
+		if _, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today"); err != nil {
+			t.Fatalf("edit: %v", err)
+		}
+		if *calls != 1 {
+			t.Errorf("issued %d writes, want one", *calls)
+		}
+	})
+	t.Run("unmoved today with a reminder", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		seed(t, sqlDB, 2, today, 0, reminder)
+		calls := stubExecDropping(t)
+		if _, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today"); err != nil {
+			t.Fatalf("edit: %v", err)
+		}
+		if *calls != 1 {
+			t.Errorf("issued %d writes, want one", *calls)
+		}
+	})
+}
+
+// holds files a row carried over from an earlier day under today, in its
+// part of the day, only for a place that is today.
+func TestWhenPlaceHoldsCarriedOver(t *testing.T) {
+	today := model.ThingsDateFromTime(testNow)
+	yesterday := model.ThingsDateFromTime(testNow.AddDate(0, 0, -1))
+	tomorrow := model.ThingsDateFromTime(testNow.AddDate(0, 0, 1))
+	for _, tc := range []struct {
+		name   string
+		place  whenPlace
+		start  model.Start
+		bucket int
+		want   bool
+	}{
+		{"today on day part", whenPlace{day: today, bucket: 0}, model.StartAnytime, 0, true},
+		{"today's date on day part", whenPlace{day: today, bucket: -1}, model.StartAnytime, 0, true},
+		{"today on evening", whenPlace{day: today, bucket: 0}, model.StartAnytime, 1, false},
+		{"evening on day part", whenPlace{day: today, bucket: 1}, model.StartAnytime, 0, false},
+		{"evening on evening", whenPlace{day: today, bucket: 1}, model.StartAnytime, 1, true},
+		{"tomorrow", whenPlace{day: tomorrow, bucket: -1}, model.StartAnytime, 0, false},
+		{"someday row", whenPlace{day: today, bucket: -1}, model.StartSomeday, 0, false},
+	} {
+		day := yesterday
+		task := &model.Task{Start: tc.start, StartDate: &day, StartBucket: tc.bucket}
+		if got := tc.place.holds(task, today); got != tc.want {
+			t.Errorf("%s: holds = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
