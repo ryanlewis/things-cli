@@ -602,7 +602,11 @@ it too. Other such rows (with a reminder, dated before today, a project, or
 in the evening) were not measured: `--when today`, today's date, a past
 date, or `evening` on an evening row is sent and read back, and the edit
 is confirmed whether Things moves the row or leaves it where it was. When
-Things leaves it, that takes the full read-back wait. Tags that do
+Things leaves it, that takes the full read-back wait. An item still in
+Today from an earlier day, which Things keeps there until its own day
+change just after midnight, counts as filed today: `--when today` on it is
+no change, and today's date or a past date is confirmed whether Things
+moves its date to today or keeps the earlier one. Tags that do
 not exist in Things count as no change, since Things drops them, unless
 `--create-tags` creates them first. So does a move the warnings above say
 will leave the item where it is. It then prints the item straight away.

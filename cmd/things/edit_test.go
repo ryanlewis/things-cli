@@ -375,8 +375,10 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"whenEveningOnUnmoved", []string{"edit", "unmoved-1", "--when", "evening"}, false},
 		{"whenEveningOnUnmovedOld", []string{"edit", "unmoved-old", "--when", "evening"}, false},
 		{"whenTimeOnUnmoved", []string{"edit", "unmoved-1", "--when", day(0) + "@08:00"}, false},
-		// A moved row with an older date still moves to today.
-		{"whenTodayOnMovedOld", []string{"edit", "past-1", "--when", "today"}, false},
+		// A moved row with an older date is still in Today until Things
+		// runs its day-change pass. Measured on 9 Oct 2026 just after
+		// midnight, --when today left such a row as it was.
+		{"whenTodayOnMovedOld", []string{"edit", "past-1", "--when", "today"}, true},
 		{"whenTodayDateOnEvening", []string{"edit", "eve-1", "--when", day(0)}, true},
 		{"whenTodayOnEvening", []string{"edit", "eve-1", "--when", "today"}, false},
 		// Things clears a reminder on a --when for today without a time.
@@ -391,7 +393,7 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"whenTomorrowKeepsReminder", []string{"edit", "tom-1", "--when", "tomorrow"}, true},
 		{"whenTomorrowDate", []string{"edit", "tom-1", "--when", day(1)}, true},
 		{"whenOtherDate", []string{"edit", "tom-1", "--when", day(2)}, false},
-		{"whenPastDate", []string{"edit", "past-1", "--when", day(-1)}, false},
+		{"whenPastDate", []string{"edit", "past-1", "--when", day(-1)}, true},
 		// A past date files the item under today, not the evening.
 		{"whenPastDateOnToday", []string{"edit", "one-1", "--when", day(-3)}, true},
 		{"whenPastDateOnEvening", []string{"edit", "eve-1", "--when", day(-3)}, false},
