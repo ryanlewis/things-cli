@@ -155,8 +155,9 @@ func taskCells(n int, t *model.Task, tty bool) []cell {
 		title = titleDimStyle.Render(title)
 	}
 	// Things shows a to-do's reminder time on its row, ahead of the title. A
-	// row without one is printed as before.
-	if t.ReminderTime != nil {
+	// reminder is a time on the start date, so it needs one to print. A row
+	// without one is printed as before.
+	if t.ReminderTime != nil && t.StartDate != nil {
 		title = dimStyle.Render(*t.ReminderTime) + " " + title
 	}
 	if t.Start == model.StartAnytime && t.StartBucket == 0 && t.StartDate != nil {
@@ -319,15 +320,14 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem, la
 	if len(t.Tags) > 0 {
 		field("Tags:", tagStyle.Render(strings.Join(t.Tags, ", ")))
 	}
-	// The reminder is a time on the start date, so it goes on the Start line
-	// in the same "2006-01-02 15:04" shape as Created and Stopped.
-	switch {
-	case t.StartDate != nil && t.ReminderTime != nil:
-		field("Start:", styledDate(t.StartDate, false)+" "+dimStyle.Render(*t.ReminderTime))
-	case t.StartDate != nil:
-		field("Start:", styledDate(t.StartDate, false))
-	case t.ReminderTime != nil:
-		field("Reminder:", dimStyle.Render(*t.ReminderTime))
+	if t.StartDate != nil {
+		start := styledDate(t.StartDate, false)
+		// The reminder is a time on the start date, so it goes on the Start
+		// line in the same "2006-01-02 15:04" shape as Created and Stopped.
+		if t.ReminderTime != nil {
+			start += " " + dimStyle.Render(*t.ReminderTime)
+		}
+		field("Start:", start)
 	}
 	if t.Deadline != nil {
 		field("Deadline:", styledDate(t.Deadline, false))

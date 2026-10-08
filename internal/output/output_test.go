@@ -778,8 +778,8 @@ func TestPrintTasksReminderTime(t *testing.T) {
 	}
 }
 
-// show puts the reminder on the Start line, or on a line of its own when
-// there is no start date to put it beside.
+// show puts the reminder on the Start line. A reminder is a time on the start
+// date, so without one there is nothing to print it beside.
 func TestPrintTaskDetailReminderTime(t *testing.T) {
 	pinLayout(t, 120, false)
 	for _, tc := range []struct {
@@ -788,7 +788,6 @@ func TestPrintTaskDetailReminderTime(t *testing.T) {
 		want string
 	}{
 		{"with start", model.Task{UUID: "u1", Title: "T", StartDate: mustDate(2026, 10, 9), ReminderTime: strPtr("09:00")}, "Start:    2026-10-09 09:00\n"},
-		{"without start", model.Task{UUID: "u1", Title: "T", ReminderTime: strPtr("21:30")}, "Reminder: 21:30\n"},
 		{"none", model.Task{UUID: "u1", Title: "T", StartDate: mustDate(2026, 10, 9)}, "Start:    2026-10-09\n"},
 	} {
 		var buf bytes.Buffer
@@ -798,5 +797,14 @@ func TestPrintTaskDetailReminderTime(t *testing.T) {
 		if !strings.Contains(buf.String(), tc.want) {
 			t.Errorf("%s: detail missing %q:\n%s", tc.name, tc.want, buf.String())
 		}
+	}
+
+	var buf bytes.Buffer
+	undated := model.Task{UUID: "u1", Title: "T", ReminderTime: strPtr("21:30")}
+	if err := PrintTaskWithChecklist(&buf, &undated, nil, false); err != nil {
+		t.Fatalf("undated: %v", err)
+	}
+	if strings.Contains(buf.String(), "21:30") {
+		t.Errorf("undated: detail prints the reminder:\n%s", buf.String())
 	}
 }
