@@ -4782,7 +4782,7 @@ func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
 // row Things has not moved into today yet; a missing item reads as the Inbox.
 func TestStoredStart(t *testing.T) {
 	d, fx := newFixture(t)
-	today := model.ThingsDateFromTime(time.Now())
+	today := model.ThingsDateFromTime(testNow)
 	fx.Todo("unmoved-1", "Not moved yet", 1)
 	if _, err := d.db.Exec(`UPDATE TMTask SET start = 2, startDate = ? WHERE uuid = 'unmoved-1'`, int64(today)); err != nil {
 		t.Fatalf("seed: %v", err)

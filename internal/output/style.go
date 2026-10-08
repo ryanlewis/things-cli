@@ -157,8 +157,11 @@ func styledCompactDate(d *model.ThingsDate, deadline bool) string {
 // daylight-saving change, which puts two midnights 23 or 25 hours apart, does
 // not shift a day.
 func daysFromToday(d *model.ThingsDate, now time.Time) int {
-	today := startOfDay(now)
-	target := startOfDay(d.ToTime())
+	today := clock.DayStart(now)
+	// Noon on d's date, read from the encoding rather than through ToTime,
+	// whose midnight can be skipped and land on the day before.
+	noon := time.Date(int(*d>>16), time.Month((int(*d)>>12)&0xF), (int(*d)>>7)&0x1F, 12, 0, 0, 0, time.Local)
+	target := clock.DayStart(noon)
 	return int(math.Round(target.Sub(today).Hours() / 24))
 }
 
@@ -178,10 +181,6 @@ func styleDate(text string, deadline bool, days int) string {
 	default:
 		return dimStyle.Render(text)
 	}
-}
-
-func startOfDay(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
 func styledTags(tags []string) string {

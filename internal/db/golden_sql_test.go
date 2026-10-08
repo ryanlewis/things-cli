@@ -8,7 +8,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -55,8 +57,13 @@ func goldenFilterCases() []struct {
 // The views come from the view table rather than a list written out here, so
 // a view added later cannot quietly escape the golden file: it shows up as an
 // unreviewed block the moment it exists.
+//
+// Each query is rendered as it runs, through withToday, under a clock pinned
+// to a fixed instant in a fixed zone, so the today_clock prefix and its three
+// arguments are pinned too and do not depend on the day or zone of the run.
 func renderGoldenSQL(t *testing.T, d *DB) string {
 	t.Helper()
+	t.Cleanup(clock.Pin(time.Date(2026, 6, 15, 12, 0, 0, 0, time.FixedZone("UTC+1", 60*60))))
 	names := make([]string, 0, len(views))
 	for v := range views {
 		names = append(names, v)
@@ -74,6 +81,7 @@ func renderGoldenSQL(t *testing.T, d *DB) string {
 				if err != nil {
 					t.Fatalf("buildListQuery(%s, %+v): %v", view, opts, err)
 				}
+				query, args = withToday(query, args)
 				fmt.Fprintf(&b, "### view=%s includeCompleted=%v filters=%s\n", view, includeCompleted, fc.name)
 				fmt.Fprintf(&b, "ARGS: %#v\n", args)
 				fmt.Fprintf(&b, "%s\n\n", query)

@@ -228,8 +228,8 @@ const todoOrProject = "t.type IN (0, 1)"
 const closedTodayUnlogged = `CASE COALESCE((SELECT logInterval FROM TMSettings LIMIT 1), 1)` +
 	` WHEN 0 THEN 0` +
 	` WHEN 4 THEN ` + closedAfterManualLog +
-	` ELSE ` + closedAfterManualLog + ` AND COALESCE(t.stopDate, 0) >= (SELECT start FROM today_clock)` +
-	` AND COALESCE(t.stopDate, 0) < (SELECT finish FROM today_clock) END`
+	` ELSE ` + closedAfterManualLog + ` AND COALESCE(t.stopDate, 0) >= (SELECT start FROM ` + todayClock + `)` +
+	` AND COALESCE(t.stopDate, 0) < (SELECT finish FROM ` + todayClock + `) END`
 
 // closedAfterManualLog is true for a row closed after the last "Log Completed
 // Now", the condition the daily and manual choices share.
@@ -293,7 +293,7 @@ const todayDate = "COALESCE(t.startDate, " + thingsToday + ")"
 // thingsToday is today's local date in the ThingsDate encoding
 // (year<<16 | month<<12 | day<<7), so it compares directly with startDate and
 // deadline. It comes from today_clock, as closedTodayUnlogged's day does.
-const thingsToday = `(SELECT day FROM today_clock)`
+const thingsToday = `(SELECT day FROM ` + todayClock + `)`
 
 // heldInPlace is the set the Logbook withholds: every closed row Things has
 // not yet logged, wherever it sits. It used to be the union of what the Inbox,
@@ -1229,7 +1229,7 @@ func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 // item reads as the Inbox.
 func (d *DB) StoredStart(uuid string) (model.Start, error) {
 	var start int
-	err := d.db.QueryRow(`SELECT COALESCE(start, 0) FROM TMTask WHERE uuid = ?`, uuid).Scan(&start)
+	err := d.queryRow(`SELECT COALESCE(start, 0) FROM TMTask WHERE uuid = ?`, uuid).Scan(&start)
 	if err != nil && err != sql.ErrNoRows {
 		return 0, fmt.Errorf("reading start: %w", err)
 	}
