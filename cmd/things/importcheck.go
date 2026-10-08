@@ -504,7 +504,10 @@ func (c importCreate) kind() string {
 // that is not an `operation: update`, at any depth: a project's `items`, and
 // the `items` of a project the payload updates, create to-dos too.
 // prepareImport refuses a to-do or project with no title, or one whose type
-// or operation Things does not take, so every one Things creates is here.
+// or operation Things does not take, so every one Things creates in the
+// places importShapes checks is here. This walk visits every object, though,
+// not only those places, so it can also collect a to-do nested where Things
+// creates nothing.
 func importCreates(payload []any) []importCreate {
 	var creates []importCreate
 	// parents maps the path of each item in a project's items to that
@@ -1263,9 +1266,13 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			// one of the new items they share. When there are enough for
 			// every item that could claim them, all are there, and only
 			// which is which is unknown.
-			rows, claimants := sharedRows(c, creates, found, matches)
-			for _, dst := range dated[c.key()] {
-				if slices.ContainsFunc(rows, dst.fits) {
+			rows, claimants := sharedRows(c, creates, found)
+			// A dated item can hold one of the rows only when its
+			// creation-date is inside the window the rows were read from:
+			// datedSlack lets an earlier one mark this item, but its row
+			// is never among them.
+			for _, other := range creates {
+				if other.dated && other.key() == c.key() && !other.datedAt.Before(snap.since) && slices.ContainsFunc(rows, other.dest.fits) {
 					claimants++
 				}
 			}
@@ -1298,29 +1305,43 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 	return out
 }
 
-// sharedRows returns the new items that c, an item without a creation-date
-// whose new items are matches, competes for with the other items without one
-// of its type and title: matches, and the new items of each such item whose
-// own new items include one of matches. It also returns how many items
-// without a creation-date compete for them, c included.
-func sharedRows(c importCreate, creates []importCreate, found map[createdWant][]model.Task, matches []model.Task) ([]model.Task, int) {
-	rows := slices.Clone(matches)
-	claimants := 0
-	for _, other := range creates {
-		if other.dated || other.key() != c.key() {
-			continue
-		}
-		theirs := found[other.want()]
-		if other.want() != c.want() && !slices.ContainsFunc(theirs, func(t model.Task) bool {
-			return slices.ContainsFunc(matches, func(m model.Task) bool { return m.UUID == t.UUID })
-		}) {
-			continue
-		}
-		claimants++
-		for _, t := range theirs {
-			if !slices.ContainsFunc(rows, func(r model.Task) bool { return r.UUID == t.UUID }) {
+// sharedRows returns the new items that c, an item without a creation-date,
+// competes for with the other items without one of its type and title, and
+// how many such items compete for them, c included. An item competes when
+// its new items overlap the ones gathered so far, which brings its own new
+// items in, so the sets grow until nothing more overlaps: when A shares a
+// row with B, and B with C, all three compete for the rows of all three.
+func sharedRows(c importCreate, creates []importCreate, found map[createdWant][]model.Task) ([]model.Task, int) {
+	var rows []model.Task
+	inRows := map[string]bool{}
+	add := func(tasks []model.Task) {
+		for _, t := range tasks {
+			if !inRows[t.UUID] {
+				inRows[t.UUID] = true
 				rows = append(rows, t)
 			}
+		}
+	}
+	add(found[c.want()])
+	competes := make([]bool, len(creates))
+	for grew := true; grew; {
+		grew = false
+		for j, other := range creates {
+			if competes[j] || other.dated || other.key() != c.key() {
+				continue
+			}
+			theirs := found[other.want()]
+			if other.want() != c.want() && !slices.ContainsFunc(theirs, func(t model.Task) bool { return inRows[t.UUID] }) {
+				continue
+			}
+			competes[j], grew = true, true
+			add(theirs)
+		}
+	}
+	claimants := 0
+	for _, ok := range competes {
+		if ok {
+			claimants++
 		}
 	}
 	return rows, claimants
@@ -1583,6 +1604,7 @@ func (e *importVerifyError) jsonItems() []jsonErrorItem {
 			Confirmed:  new(bool),
 			Reason:     it.Reason,
 			Candidates: append([]string(nil), it.Candidates...),
+			Present:    it.Present,
 		})
 	}
 	return out

@@ -789,9 +789,11 @@ sent. Every to-do, project and heading it creates counts, nested ones
 included. Update items and checklist items do not count. With 300
 to-dos Things stops to ask "Is this what you intended?" and creates nothing
 until someone answers, long after the read-back has given up; 200 went
-through without the question. Split a bigger payload into several imports.
+through without the question. Split a bigger payload into several imports,
+and leave a pause between them: Things' URL scheme documentation is
+believed to allow about 250 items per 10 seconds (not verified).
 Under `--json` the error carries `"reason": "too-many-items"` beside
-`"error": "import refused"`.
+`"error": "import refused"`. A refusal for size alone has no `items`.
 
 All of these refusals are one: a run names every refused item, whichever
 the reason. Under `--json` it is `import refused`, with one entry per item:
