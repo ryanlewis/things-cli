@@ -1431,6 +1431,31 @@ func TestLogbookListsLoggedChildrenOfUnloggedProject(t *testing.T) {
 	}
 }
 
+// A closed repeating project template is logged at once, so it still folds
+// the to-dos it logged on an earlier day even when it closed today: the
+// unlogged half of the fold is the parent's heldInPlace, which leaves
+// templates out.
+func TestLogbookFoldsClosedTemplateProjectChildren(t *testing.T) {
+	d := newTestDB(t)
+
+	stopToday := model.TimeToUnix(testNow)
+	stopEarlier := model.TimeToUnix(testNow.Add(-26 * time.Hour))
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, stopDate, rt1_recurrenceRule, "index") VALUES
+		('proj-template', 'Repeating project', 1, 3, 0, 1, 0, ?, x'00', 1)`, stopToday)
+	mustExec(t, d, `INSERT INTO TMTask
+		(uuid, title, type, status, trashed, start, startBucket, stopDate, project, "index") VALUES
+		('inside-template', 'Step', 0, 3, 0, 1, 0, ?, 'proj-template', 2)`, stopEarlier)
+
+	got, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameSet(uuidsOf(got), []string{"proj-template"}) {
+		t.Errorf("logbook: got %v, want [proj-template]", uuidsOf(got))
+	}
+}
+
 // Naming a closed or trashed project returns its contents whatever their
 // status — otherwise the rows the Logbook and Trash now fold away would be
 // reachable nowhere. It is what the app answers for `to dos of project id`:
