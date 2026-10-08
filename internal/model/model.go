@@ -214,6 +214,13 @@ func ReminderClock(raw int64) (hour, minute int) {
 	return int(raw>>26) & 0x1F, int(raw>>20) & 0x3F
 }
 
+// ReminderText renders a raw reminderTime as the local "HH:MM" clock time
+// Things shows on the row.
+func ReminderText(raw int64) string {
+	hour, minute := ReminderClock(raw)
+	return fmt.Sprintf("%02d:%02d", hour, minute)
+}
+
 // MarshalJSON renders the date as YYYY-MM-DD so jq/agents/scripts see a real
 // date rather than the bit-encoded int.
 func (d ThingsDate) MarshalJSON() ([]byte, error) {
@@ -262,7 +269,13 @@ type Task struct {
 	// token on every row that is not an evening row (issue #241).
 	StartBucket int `json:"startBucket"`
 
-	StartDate    *ThingsDate `json:"startDate,omitempty"`
+	StartDate *ThingsDate `json:"startDate,omitempty"`
+
+	// ReminderTime is the to-do's reminder as a local "HH:MM" clock time on
+	// its start date, as `--when 2026-10-09@09:00` sets it. Nil when there
+	// is none.
+	ReminderTime *string `json:"reminderTime,omitempty"`
+
 	Deadline     *ThingsDate `json:"deadline,omitempty"`
 	StopDate     *time.Time  `json:"stopDate,omitempty"`
 	CreationDate *time.Time  `json:"creationDate,omitempty"`

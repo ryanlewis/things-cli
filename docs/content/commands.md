@@ -310,6 +310,12 @@ out. `things show` lists the items themselves.
 things list today -j | jq '.[] | select(.checklistProgress.open > 0) | .title'
 ```
 
+A task with a reminder, as `--when 2026-10-09@09:00` sets one, carries
+`reminderTime`: the local `"HH:MM"` clock time on its `startDate`. A task
+without one leaves the field out. Plain output puts the time before the
+title on a listing row, where the app shows it, and on the `Start:` line of
+`things show`, as in `Start:    2026-10-09 09:00`.
+
 ## Inspecting a task
 
 ```sh

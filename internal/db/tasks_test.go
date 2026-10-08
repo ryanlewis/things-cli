@@ -4821,3 +4821,36 @@ func TestReminderTime(t *testing.T) {
 		}
 	}
 }
+
+// The task query carries reminderTime, decoded to the "HH:MM" Things shows,
+// on a lookup and on a listing alike. A to-do without one has none.
+func TestTaskQueryDecodesReminderTime(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Todo("rem-1", "Reminded", 1, inbox())
+	fx.Todo("plain-1", "Plain", 2, inbox())
+	// 09:30 is 9<<26 | 30<<20.
+	mustExec(t, d, `UPDATE TMTask SET reminderTime = ? WHERE uuid = 'rem-1'`, int64(9<<26|30<<20))
+
+	got, err := d.GetTaskByUUID("rem-1")
+	if err != nil || got == nil {
+		t.Fatalf("GetTaskByUUID(rem-1) = %v, %v", got, err)
+	}
+	if got.ReminderTime == nil || *got.ReminderTime != "09:30" {
+		t.Errorf("rem-1 ReminderTime = %v, want 09:30", got.ReminderTime)
+	}
+
+	tasks, err := d.ListTasks("inbox", TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks(inbox): %v", err)
+	}
+	seen := map[string]*string{}
+	for i := range tasks {
+		seen[tasks[i].UUID] = tasks[i].ReminderTime
+	}
+	if r, ok := seen["rem-1"]; !ok || r == nil || *r != "09:30" {
+		t.Errorf("listed rem-1 ReminderTime = %v (listed %v), want 09:30", r, ok)
+	}
+	if r, ok := seen["plain-1"]; !ok || r != nil {
+		t.Errorf("listed plain-1 ReminderTime = %v (listed %v), want nil", r, ok)
+	}
+}

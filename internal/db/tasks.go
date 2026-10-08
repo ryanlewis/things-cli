@@ -121,6 +121,7 @@ SELECT
 	` + shownStart + `,
 	COALESCE(t.startBucket, 0),
 	t.startDate,
+	t.reminderTime,
 	t.deadline,
 	t.stopDate,
 	t.creationDate,
@@ -150,13 +151,14 @@ LEFT JOIN TMTag tag ON tt.tags = tag.uuid
 func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	var t model.Task
 	var startDate, deadline, stopDate, creationDate, modificationDate sql.NullFloat64
+	var reminder sql.NullInt64
 	var tagsStr string
 	var trashed, repeating, checklistTotal, checklistOpen int
 
 	err := row.Scan(
 		&t.UUID, &t.Title, &t.Notes,
 		&t.Type, &t.Status, &t.Start, &t.StartBucket,
-		&startDate, &deadline, &stopDate, &creationDate,
+		&startDate, &reminder, &deadline, &stopDate, &creationDate,
 		&trashed,
 		&t.ProjectUUID, &t.ProjectTitle,
 		&t.HeadingUUID, &t.HeadingTitle,
@@ -174,6 +176,10 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	t.Trashed = trashed != 0
 	t.Repeating = repeating != 0
 	t.StartDate = thingsDate(startDate)
+	if reminder.Valid {
+		text := model.ReminderText(reminder.Int64)
+		t.ReminderTime = &text
+	}
 	t.Deadline = thingsDate(deadline)
 	t.StopDate = unixTime(stopDate)
 	t.CreationDate = unixTime(creationDate)
@@ -1239,7 +1245,7 @@ func (d *DB) StoredStart(uuid string) (model.Start, error) {
 // ReminderTime returns the item's raw reminder time (model.ReminderClock
 // decodes it), and whether it has one. Things sets it from a --when time and
 // clears it when a --when for today arrives without one, so the edit no-op
-// check needs it; nothing prints it. A missing item has none.
+// check needs it. Listings read it through the task query instead. A missing item has none.
 func (d *DB) ReminderTime(uuid string) (int64, bool, error) {
 	var raw sql.NullInt64
 	err := d.queryRow(`SELECT reminderTime FROM TMTask WHERE uuid = ?`, uuid).Scan(&raw)
