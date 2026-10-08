@@ -207,6 +207,10 @@ func TestCompleteCancelOnClosedItemSendsNothing(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Errorf("error = %v, want it to say %q", err, tc.wantErr)
 				}
+				// --json names the refusal rather than the generic token.
+				if p := errorPayload(err); p.Error != "already closed" || p.UUID != "one-1" || p.Kind != "task" {
+					t.Errorf("payload = %+v, want error \"already closed\" on task one-1", p)
+				}
 			} else {
 				if err != nil {
 					t.Errorf("run %v: %v", tc.args, err)
@@ -255,6 +259,13 @@ func TestEditStatusOnClosedItemSendsNothing(t *testing.T) {
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Errorf("error = %v, want it to say %q", err, tc.wantErr)
+				}
+				wantKind := "task"
+				if tc.uuid == "proj-1" {
+					wantKind = "project"
+				}
+				if p := errorPayload(err); p.Error != "already closed" || p.UUID != tc.uuid || p.Kind != wantKind {
+					t.Errorf("payload = %+v, want error \"already closed\" on %s %s", p, wantKind, tc.uuid)
 				}
 			} else {
 				if err != nil {

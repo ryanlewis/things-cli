@@ -123,8 +123,10 @@ var Keys = []Key{
 		Comment: []string{
 			"Path to the Things3 SQLite database. Same as --db.",
 			"Leave unset to let things-cli find it. The file must exist.",
+			"The path is used as written, with no wildcards: replace XXXXX with the",
+			"name of your ThingsData- folder, which differs on every Mac.",
 		},
-		Example: `db = "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite"`,
+		Example: `db = "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-XXXXX/Things Database.thingsdatabase/main.sqlite"`,
 	},
 	{
 		Name:    "no_verify",

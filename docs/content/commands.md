@@ -121,8 +121,11 @@ To make it the default, set `open_only = true` in the
 [config file](/configuration/); `--open-only=false` then lists the closed
 items for one call, and `logbook` and `trash` ignore the setting.
 `--include-completed`, which used to be how to ask for the closed items, is
-still accepted. It has no effect except to override `open_only`, as
-`--open-only=false` does.
+still accepted on `inbox`, `today`, `anytime`, `upcoming` and `someday`, and on
+a `--project` or `--area` listing with no view named. It has no effect except
+to override `open_only`, as `--open-only=false` does. Anywhere else
+(`deadlines`, `repeating`, `logbook`, `trash`, a bare `--tag` sweep) it is an
+error.
 
 `logbook` holds nothing Things has not logged yet, wherever it was closed, as
 the app's Logbook does. A closed item is therefore either in `logbook` or
@@ -714,7 +717,8 @@ not confirmed (under `--json`, `{"uuid", "title", "confirmed": false,
 Listings number the items closed today alongside the open ones, so a ref can
 land on one. Completing an item that is already completed, or cancelling one
 already cancelled, sends nothing and exits 0 with a note. Completing a
-cancelled item, or cancelling a completed one, is refused and sends nothing.
+cancelled item, or cancelling a completed one, is refused and sends nothing;
+under `--json` the error token is `already closed`.
 
 An item in the Trash is refused and nothing is sent. A row number can point
 at one when the item was trashed in Things after the listing was printed,

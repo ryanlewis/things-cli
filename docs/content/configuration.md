@@ -91,6 +91,13 @@ Three constraints the CLI enforces:
   rather than as a puzzling flag error — and the commands that never read
   the database keep working, which is how you find out the path is stale.
 
+With `db` unset, things-cli looks for the database under `$HOME`, at
+`$HOME/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-*/Things Database.thingsdatabase/main.sqlite`,
+and stops with an error if it finds none or more than one. A run with a
+different `$HOME` looks in that home instead. `--db` and the `db` key are the
+only ways to point it somewhere else; there is no environment variable for
+the database path.
+
 `strict_tags` and `create_tags` also override each other from the command
 line: `--create-tags` on a run whose file says `strict_tags = true` is
 the override it looks like, not a "can't be used together" error.
@@ -143,7 +150,9 @@ commented out. Uncomment a line to change that default.
 
 # Path to the Things3 SQLite database. Same as --db.
 # Leave unset to let things-cli find it. The file must exist.
-# db = "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite"
+# The path is used as written, with no wildcards: replace XXXXX with the
+# name of your ThingsData- folder, which differs on every Mac.
+# db = "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-XXXXX/Things Database.thingsdatabase/main.sqlite"
 
 # Skip the read-back that confirms an add, a complete/cancel, an edit, tag
 # creation, or an import's new items and status changes actually landed.

@@ -287,8 +287,12 @@ reads as an ambiguity rather than resolving to one of them, and the `type` of
 the uuid you pick tells you whether to retry with `edit` or `project edit`.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
-`trashed`, `stale list cache`, `import refused`, `import partially applied`, and `error`
-for everything else.
+`trashed`, `stale list cache`, `already closed`, `import refused`, `import
+partially applied`, and `error` for everything else.
+`already closed` is `cancel` on a completed item or `complete` on a cancelled
+one (the `edit` and `project edit` flags included): nothing is sent, and the
+object names the item's `kind`, `uuid` and `title`. Closing an item the way it
+is already closed is not an error; it exits 0 with a note.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
 to `project edit`; both refuse before anything is written and name the command
 to retry with. `trashed` is a row number or uuid that named an item in the
@@ -337,8 +341,10 @@ wants only the work still to do passes `--open-only`, or filters on
 `status == "open"`. `open_only = true` in the config file makes that the
 default, as it was before v0.10.0; `--open-only=false` overrides it for one
 call. `--include-completed`, which used to be how to ask for
-the closed items, is still accepted and now has no effect beyond overriding
-`open_only` the same way. A task closed today inside
+the closed items, is still accepted on those same lists (the five views and a
+`--project` or `--area` listing with no view) and now has no effect beyond
+overriding `open_only` the same way. On `deadlines`, `repeating`, `logbook`,
+`trash` and a bare `--tag` sweep it is an error, so drop it there. A task closed today inside
 a project in Someday or scheduled for later is in no list, as in the app, so
 only its project listing has it. A closed Anytime project with no area is in
 no list or area either; `things projects --completed -j` lists it. The tasks
@@ -432,6 +438,9 @@ space. Use `--json` for every field, exactly as written.
 ## What can and cannot go wrong
 
 The database is opened read-only, so nothing an agent runs can corrupt it.
+It is found under `$HOME` (see [Configuration](/configuration/)), and
+`--db` or the `db` config key is the only override; no environment variable
+sets it.
 Reads (`list`, `show`, `search`, `projects`, `areas`, `tags`) are safe to run
 freely. The writes are `add`, `project add`, `edit`, `project edit`,
 `complete`, `cancel`, `tag add`, `log`, and `import`, and the skill tells
