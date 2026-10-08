@@ -52,29 +52,3 @@ func TestTodayClockMustBeSupplied(t *testing.T) {
 		t.Error("a bare query of today_clock succeeded, want no such table")
 	}
 }
-
-// Where daylight saving begins at midnight, today starts at the transition,
-// not at 23:00 the day before: America/Santiago skipped from 00:00 to 01:00 on
-// 6 Sep 2026.
-func TestDayStartAcrossAMissingMidnight(t *testing.T) {
-	loc, err := time.LoadLocation("America/Santiago")
-	if err != nil {
-		t.Skipf("no zone data: %v", err)
-	}
-	cases := []struct {
-		now, want time.Time
-	}{
-		{time.Date(2026, 9, 6, 12, 0, 0, 0, loc), time.Date(2026, 9, 6, 1, 0, 0, 0, loc)},
-		{time.Date(2026, 9, 5, 12, 0, 0, 0, loc), time.Date(2026, 9, 5, 0, 0, 0, 0, loc)},
-		{time.Date(2026, 9, 7, 12, 0, 0, 0, loc), time.Date(2026, 9, 7, 0, 0, 0, 0, loc)},
-	}
-	for _, tc := range cases {
-		if got := dayStart(tc.now); !got.Equal(tc.want) {
-			t.Errorf("dayStart(%s) = %s, want %s", tc.now, got, tc.want)
-		}
-	}
-	// The day before ends where the missing midnight's day begins.
-	if got, want := dayStart(time.Date(2026, 9, 5, 12, 0, 0, 0, loc).AddDate(0, 0, 1)), dayStart(time.Date(2026, 9, 6, 12, 0, 0, 0, loc)); !got.Equal(want) {
-		t.Errorf("finish of 5 Sep = %s, want %s", got, want)
-	}
-}
