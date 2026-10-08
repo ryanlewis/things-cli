@@ -192,7 +192,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # Trashing a project leaves its tasks untrashed in the database; every
     # view hides them unless you name that project. A closed project is one
     # logbook row and a trashed one is a single trash row — their tasks are
-    # folded into the project row, not listed separately. To read them, name
+    # folded into the project row, not listed separately. A closed project
+    # folds only once it is logged: until then its tasks logged on an earlier
+    # day keep their own logbook rows, as in the app. To read them, name
     # the project: --project <uuid> on a closed or trashed project returns its
     # contents whatever their status, and `things show <uuid> --agent` marks
     # each row [x]/[~]/[ ]. A task thrown away out of a trashed project is

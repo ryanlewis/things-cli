@@ -59,8 +59,10 @@ how to sweep projects on their own. The bundled agent skill states the rule
 and the reasoning in full — `things skill show`.
 
 `today`, `anytime` and `someday` are arranged the way the app arranges them —
-unfiled items first, then areas, and inside an area its own loose tasks before
-its projects' — so plain output prints each project name once as a group header
+items with no area first, then areas, and inside each group its own loose tasks
+before its projects' — so a project with no area leads the list with the
+unfiled tasks rather than following every area, and plain output prints each
+project name once as a group header
 above its tasks. `anytime` carries no project rows of its own because every
 active project is trivially "anytime": listing them all would bury the tasks,
 so the app uses each project as a group header instead. Like the app, it
@@ -155,7 +157,10 @@ ones too: `things today -t urgent`.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none
-of them separately (and so do the other lists, once the project is logged), and `trash` does the same for a trashed project. To reach
+of them separately (and so do the other lists, once the project is logged), and `trash` does the same for a trashed project. The fold
+waits for the project to be logged here too: a task logged on an earlier day
+inside a project closed today keeps its own `logbook` row until then, as in
+the app. To reach
 those tasks, name the project: `things --project <uuid>` on a closed or
 trashed project returns its contents whatever their status, which is what the
 app answers for the same question. Naming the project works inside a view as

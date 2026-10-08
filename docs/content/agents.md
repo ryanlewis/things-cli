@@ -368,7 +368,8 @@ into the project row and so does the CLI. An agent counting what got done from
 `logbook` counts projects once, not once plus every task inside them — which
 also means the day sweep above reports the project rather than the tasks
 `things complete <project> --yes` closed along with it, once the project is
-logged. Until then those tasks stay in place in
+logged. Until then a task logged on an earlier day inside that project keeps
+its own `logbook` row, as in the app, and the tasks closed with it stay in place in
 `today`, `anytime` and `upcoming`, struck through, as the app shows them; an
 area's listing folds them into the project row straight away, as the app's
 area page does. To read

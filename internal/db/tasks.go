@@ -335,10 +335,11 @@ const parentClosed = "COALESCE(p.status, 0) IN (2, 3)"
 // parentNotClosed is the fold issue #229 measured: a closed project is one row
 // in the Logbook and its to-dos are not listed beside it, because the app
 // folds them into the project's row. It keeps an unparented row in the view.
-// The views that show unlogged rows fold only once the project is logged; see
-// parentCloseLogged.
+// The Logbook and the views that show unlogged rows fold only once the
+// project is logged; see parentNotClosedOrUnlogged. An area's page folds as
+// soon as the project closes, and is this constant's caller.
 //
-// Trash is the deliberate exception rather than a third caller: it folds a
+// Trash is the deliberate exception rather than another caller: it folds a
 // trashed parent's children only, for the reason its own entry in the view
 // table gives.
 const parentNotClosed = "NOT (" + parentClosed + ")"
@@ -351,6 +352,12 @@ var parentCloseUnlogged = strings.ReplaceAll(closedTodayUnlogged, "t.stopDate", 
 // project itself is logged, and only then folds into it (issue #249). Measured
 // on 4 Oct 2026, the app's Anytime, Today and Upcoming each kept the to-dos
 // of a project closed that day where they were.
+//
+// The Logbook takes it too. A to-do closed and logged on an earlier day,
+// inside a project completed today and not yet logged, has no logged row to
+// fold into, and the app lists it in its Logbook. Measured on 8 Oct 2026:
+// seven such to-dos were in the app's Logbook and missing from the CLI's, and
+// both agreed once the day change logged the project.
 var parentNotClosedOrUnlogged = "(" + parentNotClosed + " OR (" + parentCloseUnlogged + "))"
 
 // openOrJustClosed is the status test for the views that show unlogged rows.
@@ -459,8 +466,8 @@ const (
 	// stay (issue #363). COALESCE keeps an unparented to-do.
 	parentNotDeferred = "NOT (COALESCE(p.start, 1) = 2 AND (p.startDate IS NULL OR p.startDate > " + thingsToday + "))"
 	// notHeldInPlace is the Logbook's complement of what Things has not yet
-	// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosed, which it shares with the
-	// views that show unlogged rows since #252, so it is defined with its pair.
+	// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosedOrUnlogged, which it shares
+	// with the views that show unlogged rows, so it is defined with its pair.
 	notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
 	// notTodayDue is the Inbox's half of todayDue: an undated Inbox to-do
 	// whose deadline has come leaves the Inbox for Today, and goes back when
@@ -774,11 +781,14 @@ var views = map[string]viewSpec{
 	// the to-dos of a closed project into the project's own Logbook row and
 	// lists none of them separately. Measured on 10 Sep 2026, the app's Logbook
 	// held no to-do at all whose parent project was closed, against 328 such
-	// rows in the CLI (issue #229). The trashed-parent half of the fold is the
+	// rows in the CLI (issue #229). The fold waits for the project itself to
+	// be logged: until then there is no logged row to fold into, and the app
+	// lists the project's already-logged to-dos on their own (see
+	// parentNotClosedOrUnlogged). The trashed-parent half of the fold is the
 	// clause buildListQuery appends for every view.
 	ViewLogbook: {
 		status: closedRows, trashed: untrashedRows,
-		extra:             []string{notHeldInPlace, parentNotClosed},
+		extra:             []string{notHeldInPlace, parentNotClosedOrUnlogged},
 		includesProjects:  true,
 		includesTemplates: true,
 		orderBy:           "ORDER BY t.stopDate DESC, t.\"index\" ASC" + uuidTiebreak,
@@ -903,24 +913,25 @@ const uuidTiebreak = `, t.uuid ASC`
 // because Things' own indexes are negative, so the COALESCE default of 0 that
 // stands for "not filed here" would sort last where the app puts it first:
 //
-//  1. the items filed nowhere at all — no project and no area — lead the list;
+//  1. the items with no area lead the list: loose to-dos filed nowhere, and
+//     the to-dos of a project that carries no area;
 //  2. then areas, in area order;
-//  3. and inside an area its own loose to-dos come before those of its
+//  3. and inside a group its own loose to-dos come before those of its
 //     projects, which then follow project by project.
 //
-// A to-do inside a project that carries no area is the case these keys do not
-// separate: the area key takes its COALESCE default of 0 and so lands the row
-// after every area. Sorting it where the app does would mean comparing a
-// TMArea."index" with a TMTask."index", which are different spaces, so the
-// app's sidebar order between a standalone project and an area cannot be
-// reconstructed from either alone.
+// The first key reads the area off the row and off its project, so an
+// area-less project's to-dos join the no-area group rather than taking the
+// area key's COALESCE default of 0 and landing after every area, which real
+// areas' negative indexes made them do. Checked against the app on 8 Oct
+// 2026: it listed an area-less project's to-dos at the top, beside the loose
+// ones, where the CLI had them near the end.
 //
 // The caller adds its own within-group key after these — t."index" for anytime
 // and someday, todayIndexReferenceDate then todayIndex for today — and the
 // uuid tiebreak last. Together they put a project's to-dos in one contiguous block, so the
 // rendered group header prints once above them, which is the app's own
 // presentation of a project in these lists.
-const listGrouping = `CASE WHEN p.uuid IS NULL AND t.area IS NULL THEN 0 ELSE 1 END, ` +
+const listGrouping = `CASE WHEN t.area IS NULL AND p.area IS NULL THEN 0 ELSE 1 END, ` +
 	`COALESCE(a."index", pa."index", 0), ` +
 	`CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, ` +
 	`COALESCE(p."index", 0)`

@@ -1379,6 +1379,34 @@ func TestLogbookFoldsClosedProjectChildren(t *testing.T) {
 	}
 }
 
+// A to-do logged on an earlier day inside a project closed today and not
+// yet logged is in the Logbook on its own: there is no logged project row to
+// fold it into yet. Measured on 8 Oct 2026, the app's Logbook held seven such
+// to-dos the CLI left out, and both agreed once the day change logged the
+// project. A project logged on an earlier day still folds its children.
+func TestLogbookListsLoggedChildrenOfUnloggedProject(t *testing.T) {
+	d, fx := newFixture(t)
+
+	stopToday := model.TimeToUnix(testNow)
+	stopEarlier := model.TimeToUnix(testNow.Add(-26 * time.Hour))
+	fx.Project("proj-unlogged", "Closed today", 1, completed(stopToday))
+	fx.Project("proj-logged", "Closed before", 2, completed(stopEarlier))
+
+	fx.Todo("unlogged-old", "Logged child", 3, anytime(), inProject("proj-unlogged"), completed(stopEarlier))
+	fx.Todo("unlogged-new", "Held child", 4, anytime(), inProject("proj-unlogged"), cancelled(stopToday))
+	fx.Todo("logged-old", "Folded child", 5, anytime(), inProject("proj-logged"), completed(stopEarlier))
+
+	got, err := d.ListTasks("logbook", TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// proj-unlogged and unlogged-new are still held in place, not logged.
+	// logged-old folds into proj-logged as before.
+	if !sameSet(uuidsOf(got), []string{"proj-logged", "unlogged-old"}) {
+		t.Errorf("logbook: got %v, want [proj-logged unlogged-old]", uuidsOf(got))
+	}
+}
+
 // Naming a closed or trashed project returns its contents whatever their
 // status — otherwise the rows the Logbook and Trash now fold away would be
 // reachable nowhere. It is what the app answers for `to dos of project id`:
@@ -2505,6 +2533,49 @@ func TestAnytimeGroupsByAreaThenProject(t *testing.T) {
 	want := []string{"unfiled", "loose-1", "a1", "a2", "b1", "home-todo"}
 	if got := uuidsOf(got); !slices.Equal(got, want) {
 		t.Errorf("anytime order: got %v, want %v", got, want)
+	}
+}
+
+// A project with no area is grouped with the other no-area items at the top
+// of the list, not after every area. Measured on 8 Oct 2026, the app listed an
+// area-less project's to-do near the top of Anytime while the CLI put it near
+// the end, because the area key fell back to 0 and real area indexes are
+// negative. Within the no-area group the loose to-dos come first, then the
+// area-less projects in project order, the same shape an area's group has.
+func TestAreaLessProjectToDosLeadTheList(t *testing.T) {
+	today := int64(model.ThingsDateFromTime(testNow))
+
+	for _, view := range []string{"anytime", "today"} {
+		t.Run(view, func(t *testing.T) {
+			d := newTestDB(t)
+			mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
+				('ar-work', 'Work', 1, -2005)`)
+			// The projects carry no start date, so none is a Today row of its
+			// own and both views list only the to-dos.
+			mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, start, startBucket, area, "index") VALUES
+				('proj-work',  'Work project', 1, 0, 0, 1, 1, 'ar-work', -500),
+				('proj-free2', 'Free two',     1, 0, 0, 1, 1, NULL,      -100),
+				('proj-free1', 'Free one',     1, 0, 0, 1, 1, NULL,      -700)`)
+			// Indexes and todayIndexes run against the wanted order so neither
+			// within-group key can produce it alone.
+			mustExec(t, d, `INSERT INTO TMTask
+				(uuid, title, type, status, trashed, start, startBucket, startDate, todayIndex, project, area, "index") VALUES
+				('work-todo',  'Work',      0, 0, 0, 1, 0, ?, 1, 'proj-work',  NULL,      1),
+				('work-loose', 'Work loose',0, 0, 0, 1, 0, ?, 2, NULL,         'ar-work', 2),
+				('free2-todo', 'Free two',  0, 0, 0, 1, 0, ?, 3, 'proj-free2', NULL,      3),
+				('free1-todo', 'Free one',  0, 0, 0, 1, 0, ?, 4, 'proj-free1', NULL,      4),
+				('unfiled',    'Unfiled',   0, 0, 0, 1, 0, ?, 5, NULL,         NULL,      5)`,
+				today, today, today, today, today)
+
+			got, err := d.ListTasks(view, TaskFilter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"unfiled", "free1-todo", "free2-todo", "work-loose", "work-todo"}
+			if got := uuidsOf(got); !slices.Equal(got, want) {
+				t.Errorf("%s order: got %v, want %v", view, got, want)
+			}
+		})
 	}
 }
 
