@@ -520,26 +520,40 @@ func TestEditCarriedOverRow(t *testing.T) {
 		}
 	})
 
-	// A closed or trashed row is in no list by its start date, so its
-	// earlier date is not today: --when today on it is a change that waits.
-	for _, tc := range []struct{ name, set string }{
-		{"completed", "status = 3"},
-		{"trashed", "trashed = 1"},
-	} {
-		t.Run(tc.name+" is not a no-op", func(t *testing.T) {
-			fastVerify(t)
-			database, sqlDB := seedWritable(t)
-			seed(t, sqlDB, 1, yesterday, 0, nil)
-			if _, err := sqlDB.Exec(`UPDATE TMTask SET ` + tc.set + ` WHERE uuid = 'co-1'`); err != nil {
-				t.Fatal(err)
-			}
-			stubExecDropping(t)
-			_, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today")
-			if err == nil || !strings.Contains(err.Error(), "did not apply") {
-				t.Fatalf("edit = %v, want the read-back to wait and fail", err)
-			}
-		})
-	}
+	// A completed row is in no list by its start date, so its earlier date
+	// is not today: --when today on it is a change that waits.
+	t.Run("completed is not a no-op", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		seed(t, sqlDB, 1, yesterday, 0, nil)
+		if _, err := sqlDB.Exec(`UPDATE TMTask SET status = 3 WHERE uuid = 'co-1'`); err != nil {
+			t.Fatal(err)
+		}
+		stubExecDropping(t)
+		_, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today")
+		if err == nil || !strings.Contains(err.Error(), "did not apply") {
+			t.Fatalf("edit = %v, want the read-back to wait and fail", err)
+		}
+	})
+	// A trashed row is refused before anything is sent, so it never reaches
+	// the no-op check or the read-back.
+	t.Run("trashed is refused", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		seed(t, sqlDB, 1, yesterday, 0, nil)
+		if _, err := sqlDB.Exec(`UPDATE TMTask SET trashed = 1 WHERE uuid = 'co-1'`); err != nil {
+			t.Fatal(err)
+		}
+		calls := stubExecDropping(t)
+		_, err := runOut(t, database, "--json", "edit", "co-1", "--when", "today")
+		var trashed *trashedError
+		if !errors.As(err, &trashed) || !strings.Contains(err.Error(), "is in the Trash") {
+			t.Fatalf("edit = %v, want the trashed refusal", err)
+		}
+		if *calls != 0 {
+			t.Errorf("issued %d writes, want none", *calls)
+		}
+	})
 
 	// Filed anywhere but today is still misfiled: the earlier date counts
 	// as today only for a value that files the row today.
