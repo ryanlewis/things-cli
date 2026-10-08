@@ -464,7 +464,7 @@ func TestVerifyStatusTaskDisappeared(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 
-	err = verifyStatus(database, task, 3, verifyTimeout)
+	_, err = verifyStatus(database, task, 3, verifyTimeout)
 	if err == nil || !strings.Contains(err.Error(), "no longer exists") {
 		t.Fatalf("verifyStatus after delete = %v, want a not-found error", err)
 	}
@@ -494,7 +494,7 @@ func TestVerifyStatusRowMissingThenReturns(t *testing.T) {
 
 	// A generous budget: success returns as soon as the row is back, so it
 	// only matters if the clock runs ahead of the test under -race.
-	if err := verifyStatus(database, task, 3, 5*time.Second); err != nil {
+	if _, err := verifyStatus(database, task, 3, 5*time.Second); err != nil {
 		t.Fatalf("verifyStatus with the row back after one pause = %v, want nil", err)
 	}
 	if sleeps != 1 {
@@ -520,7 +520,7 @@ func TestVerifyStatusRowNeverReturnsPausesBeforeError(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	err = verifyStatus(database, task, 3, 200*time.Millisecond)
+	_, err = verifyStatus(database, task, 3, 200*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "no longer exists") {
 		t.Fatalf("verifyStatus for a row that never returns = %v, want a not-found error", err)
 	}
@@ -542,7 +542,7 @@ func TestVerifyStatusPersistentReadErrorSurfaces(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	err = verifyStatus(database, task, 3, verifyTimeout)
+	_, err = verifyStatus(database, task, 3, verifyTimeout)
 	if err == nil || !strings.Contains(err.Error(), "verifying status change") {
 		t.Fatalf("verifyStatus with an unreadable database = %v, want a read error", err)
 	}
@@ -632,7 +632,7 @@ func TestVerifyStatusReportsTheItemThatDidNotChange(t *testing.T) {
 	if err != nil || task == nil {
 		t.Fatalf("seed lookup: %v", err)
 	}
-	err = verifyStatus(database, task, model.StatusCompleted, verifyTimeout)
+	_, err = verifyStatus(database, task, model.StatusCompleted, verifyTimeout)
 	if err == nil {
 		t.Fatal("expected a failure, got nil")
 	}

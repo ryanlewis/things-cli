@@ -292,9 +292,10 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 }
 
 // verifyStatus re-reads a single item until its status matches want, and
-// reports an error if it never does.
-func verifyStatus(database *db.DB, task *model.Task, want model.Status, budget time.Duration) error {
-	return verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, budget)[0].err
+// returns the item as last read, or an error if it never does.
+func verifyStatus(database *db.DB, task *model.Task, want model.Status, budget time.Duration) (*model.Task, error) {
+	res := verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, budget)[0]
+	return res.task, res.err
 }
 
 // applyStatusWrite runs a status-changing write, confirms it landed, and
@@ -308,11 +309,10 @@ func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Sta
 	if d.NoVerify {
 		return printUnconfirmedEdit(d, task, "no-verify", "Sent to Things, not confirmed (--no-verify)")
 	}
-	res := verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, d.readBackTimeout())[0]
-	if res.err != nil {
-		return res.err
+	current, err := verifyStatus(database, task, want, d.readBackTimeout())
+	if err != nil {
+		return err
 	}
-	current := res.task
 	if current == nil {
 		current = task
 	}
