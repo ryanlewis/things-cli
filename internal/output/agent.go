@@ -246,7 +246,8 @@ func codeBlock(cmds []command) string {
 }
 
 // whenText renders the schedule as one value: the scheduled date if there is
-// one, otherwise the list the item sits in. The list names come from
+// one, with the reminder time after it when there is one, otherwise the list
+// the item sits in. The list names come from
 // model.Start, the same map that names the field in JSON, so renaming one
 // renames both.
 //
@@ -255,6 +256,9 @@ func codeBlock(cmds []command) string {
 // renders it "unknown", there being nothing to round-trip in a brief.
 func whenText(t *model.Task) string {
 	if t.StartDate != nil {
+		if t.ReminderTime != nil {
+			return t.StartDate.String() + " " + *t.ReminderTime
+		}
 		return t.StartDate.String()
 	}
 	return t.Start.String()
