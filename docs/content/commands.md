@@ -751,17 +751,52 @@ that Things dropped are reported one per line with a non-zero exit.
 
 A `creation-date` or `completion-date` on a to-do or project the payload
 creates or updates, or on a heading or checklist item, must be a date and time with seconds and a UTC offset,
-such as `2026-10-05T10:30:00Z` or `2026-10-05T10:30:00+02:00` (`+0200` and
-`+02` work too). Things rejects the whole payload over a date on its own, a
-time with no seconds or no offset, a lowercase `t` or `z`, or a comma before
-the fraction of a second, so `import` refuses it before anything is sent
-(tags included) and names each item, with the id of an update item. A
-`null` creation-date is no date: Things saves the item as created now.
+such as `2026-10-05T10:30:00Z` or `2026-10-05T10:30:00+02:00` (`+0200`,
+`+02` and `+01:00:00` work too, and trailing spaces are ignored). Things
+rejects the whole payload over a date on its own, a time with no seconds or
+no offset, a lowercase `t` or `z`, a comma before the fraction of a second,
+a leading space, a month outside 1 to 12, or an offset such as `+200`, so
+`import` refuses these before anything is sent (tags included) and names
+each item, with the id of an update item. It also refuses a day outside 1 to
+31 and an offset wider than 18 hours, which were not measured. An hour past
+23 is taken: Things rolls it into the next day. A `null` creation-date is no
+date: Things saves the item as created now.
 
-Both refusals are one: a run names every refused item, whichever the
-reason. Under `--json` it is `import refused`, with one entry per item:
+Things also rejects the whole payload, showing an error and creating
+nothing, over an item it does not take, so `import` refuses these too:
+
+- An item that is not an object, or whose `type` is not exactly `to-do`,
+  `project`, `heading` or `checklist-item` (Things does not trim it, so
+  `"to-do "` is rejected), or whose `operation` is not exactly `create` or
+  `update`. Reason `invalid-item`.
+- A created item in a place Things does not allow it: only a to-do or
+  project at the top level, a to-do or heading in a project's `items`, and
+  a checklist item in a to-do's `checklist-items`. Reason `invalid-item`.
+- A created item with no `attributes`. Reason `invalid-item`.
+- A created item whose `attributes` is not an object, or with an attribute
+  of the wrong JSON type: `title`, `notes`, `when` and `deadline` must be
+  strings, `tags` an array of strings, `completed` and `canceled` `true` or
+  `false`, and `items` and `checklist-items` arrays. Each may be `null`.
+  Reason `invalid-type`. The attributes of update items are not checked.
+
+A to-do or project created with no `title`, or one that is only
+whitespace, is refused with reason `blank-title`. Things would create it
+as an untitled item, which is almost never what was meant.
+
+A payload with more than 200 items is refused before anything is sent.
+Every item counts, nested ones included, except checklist items. With 300
+to-dos Things stops to ask "Is this what you intended?" and creates nothing
+until someone answers, long after the read-back has given up; 200 went
+through without the question. Split a bigger payload into several imports.
+Under `--json` the error carries `"reason": "too-many-items"` beside
+`"error": "import refused"`.
+
+All of these refusals are one: a run names every refused item, whichever
+the reason. Under `--json` it is `import refused`, with one entry per item:
 `blocked` names every attribute refused on it, and `reason` says why,
-`repeating`, `invalid-date` or `invalid-type`, several separated by a space.
+`repeating`, `invalid-date`, `invalid-type`, `invalid-item` or
+`blank-title`, several separated by a space. An item that is not an object
+has no `blocked`.
 
 Every to-do and project the payload creates is read back too, the way
 `add` finds its item: a new item of that kind with that title (surrounding
@@ -809,7 +844,8 @@ heading before it, and ignores any `list`, `list-id`, `heading-id` or
 `heading` it gives, which `import` warns about. A to-do inside the `items`
 of a project the payload updates is checked too: Things drops those
 without saying so, and the read-back reports it as `not-found`. Headings
-and checklist items are not read back, and nor is an item with no title.
+and checklist items are not read back. Every to-do and project the payload
+creates gets a line, since one Things would not read is refused first.
 `import` prints one line per created item:
 
 ```text
@@ -847,7 +883,10 @@ an unconfirmed `add` does, and no `uuid` unless the reason is
   the database cannot be read, any recent dated item with the same kind
   and title counts. The line says `not confirmed (a dated item has the
   same title)`. An older `creation-date` cannot be mistaken for a new item,
-  so it does not stop the read-back.
+  so it does not stop the read-back. When a new item appeared for this item
+  and for each dated item that could hold one of them, every one of them is
+  there, so the import exits 0. When fewer appeared, the item may still
+  exist, but one of them has not appeared, so the import fails.
 - `not-found`: no new item with that title appeared within the read-back
   wait, or fewer than the payload created, or fewer than the created items
   that could each be filed where they appeared (when one of them has a
@@ -861,10 +900,13 @@ an unconfirmed `add` does, and no `uuid` unless the reason is
   than importing the item again. A `completion-date` on an item the payload
   does not complete or cancel is ignored by Things and not checked.
 
-The first four exit 0 with the list printed. Any `not-found` or
-`shares-dated-title` item makes the import exit non-zero with `import
-partially applied`, the same error a dropped status change gives. The error
-names those items, and under `--json` they are in `items`. Search for each
+The first four exit 0 with the list printed. Any `not-found` item, or a
+`shares-dated-title` item with too few new items to account for it, makes
+the import exit non-zero with `import partially applied`, the same error a
+dropped status change gives. The error names those items, and under
+`--json` they are in `items`. When none of the created items appeared at
+all, the error says Things may have rejected the whole payload: look for an
+error in the Things window before running anything again. Search for each
 of them with `things search` before running the import again with only
 those items. Otherwise a retry can create duplicates. The verdict on every
 other created item follows under "The other created items", and under `--json` the error's
