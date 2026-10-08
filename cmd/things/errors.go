@@ -48,6 +48,10 @@ type jsonErrorPayload struct {
 	// created, in the shape a successful import prints, so the confirmed
 	// ones keep their uuids.
 	Created []importCreated `json:"created,omitempty"`
+	// Reason is why a whole import was refused, beside the per-item reasons
+	// in Items: "too-many-items" for a payload over the size Things takes
+	// without asking.
+	Reason string `json:"reason,omitempty"`
 }
 
 // jsonErrorItem is one item of a batch failure. An import acts on many items
@@ -60,8 +64,9 @@ type jsonErrorPayload struct {
 // payload asked for and the one the item is still in. Got is empty when there
 // was nothing to observe — the row could not be read, or no longer exists. A
 // created item that never appeared, or that a dated item's row could pass
-// for, sets Confirmed (always false), Reason ("not-found" or
-// "shares-dated-title") and Candidates, as an unconfirmed add does; one saved
+// for when too few new items appeared to account for both, sets Confirmed
+// (always false), Reason ("not-found" or "shares-dated-title") and
+// Candidates, as an unconfirmed add does; one saved
 // without the completion-date the payload gives it sets Confirmed (false),
 // Reason ("completion-date-dropped") and ID, its uuid, since it is there.
 type jsonErrorItem struct {
@@ -309,6 +314,9 @@ func errorPayload(err error) jsonErrorPayload {
 	if errors.As(err, &refused) {
 		payload.Error = "import refused"
 		payload.Items = refused.jsonItems()
+		if refused.oversize() {
+			payload.Reason = tooManyItems
+		}
 		return payload
 	}
 

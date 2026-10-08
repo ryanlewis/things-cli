@@ -491,7 +491,7 @@ func TestImportSharesDatedTitleListsCandidates(t *testing.T) {
 	if len(items) != 1 || items[0].Reason != "shares-dated-title" || strings.Join(items[0].Candidates, ",") != "new-1" {
 		t.Errorf("items = %+v, want [1] shares-dated-title with candidates [new-1]", items)
 	}
-	if !strings.Contains(err.Error(), "may be either (new-1)") {
+	if !strings.Contains(err.Error(), "cannot be confirmed (new-1)") {
 		t.Errorf("error does not name the candidate:\n%v", err)
 	}
 }
@@ -555,8 +555,8 @@ func TestImportCreationDateRefusalWritesNothing(t *testing.T) {
 
 // The date and repeating refusals are one: an item refused for both is one
 // entry naming every blocked attribute and both reasons, an update item
-// carries its id and the title the database has, and the item type is read
-// trimmed, as the rest of the import reads it.
+// carries its id and the title the database has. Things does not trim an
+// item type, so a padded one is refused too.
 func TestImportRefusesDatesAndRepeatingTogether(t *testing.T) {
 	database, _ := seedWritable(t)
 	calls := stubExecDropping(t)
@@ -577,7 +577,7 @@ func TestImportRefusesDatesAndRepeatingTogether(t *testing.T) {
 	want := []jsonErrorItem{
 		{Path: "[0]", ID: "rep-1", Title: "Water plants", Blocked: []string{"when", "creation-date"}, Reason: "repeating invalid-date"},
 		{Path: "[1]", ID: "one-1", Title: "Post letter", Blocked: []string{"completion-date"}, Reason: "invalid-date"},
-		{Path: "[2]", Title: "Padded", Blocked: []string{"creation-date"}, Reason: "invalid-date"},
+		{Path: "[2]", Title: "Padded", Blocked: []string{"creation-date", "type"}, Reason: "invalid-date invalid-item"},
 	}
 	for i, w := range want {
 		got := p.Items[i]
@@ -607,7 +607,7 @@ func TestImportSharesDatedTitleWhenUnreadable(t *testing.T) {
 		{path: "[1]", typ: model.TypeTask, title: "Weekly review"},
 	}
 	got := readBackCreates(d, database, creates, createdSnapshot{since: time.Now()}, errors.New("database is locked"), time.Millisecond)
-	if got[1].Reason != "shares-dated-title" || !failsImport(got[1].Reason) {
+	if got[1].Reason != "shares-dated-title" || !got[1].fails() {
 		t.Errorf("[1] = %+v, want shares-dated-title", got[1])
 	}
 }

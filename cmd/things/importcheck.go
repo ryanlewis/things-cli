@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -88,8 +89,7 @@ type importCreate struct {
 	// Things saves it with that date, so it is not read back: one in the
 	// past never shows up among the items created since the write.
 	dated bool
-	// datedAt is that creation-date, or zero when Things takes it but the
-	// CLI cannot read it, which leaves when Things saves it unknown.
+	// datedAt is that creation-date (see parseThingsDate).
 	datedAt time.Time
 	// closedAt is the completion-date of an item the payload completes or
 	// cancels, zero when there is none or the CLI cannot read it. Measured in
@@ -138,45 +138,111 @@ const datedSlack = time.Minute
 
 // landsInWindow reports whether c, a dated item, may be saved inside the
 // read-back window that starts at since, where its row could pass for a new
-// undated item with the same type and title. A creation-date the CLI cannot
-// read might be anything, so it may.
+// undated item with the same type and title. A zero datedAt might be
+// anything, so it may.
 func (c importCreate) landsInWindow(since time.Time) bool {
 	return c.datedAt.IsZero() || !c.datedAt.Before(since.Add(-datedSlack))
 }
 
 // creationDateShape is the shape of every `creation-date` Things was seen to
 // take: a date, T, a time to the second with an optional fraction, and a UTC
-// offset. Things takes one-digit fields and offsets such as +2 or +02:0 too,
-// and rejects the whole payload over a value without this shape: a date with
-// no time, a time with no seconds or no offset, a lowercase t or z, a comma
-// before the fraction, or a number. It also rejects some values with the
-// shape, such as month 13 or offset +200, which are sent and left to Things.
-var creationDateShape = regexp.MustCompile(`^\d+-\d+-\d+T\d+:\d+:\d+(\.\d+)?(Z|[+-]\d+(:\d+)?)$`)
+// offset. Things takes one-digit fields and offsets such as +2, +02:0 or
+// +01:00:00 (read as +01:00) too, and trailing spaces, and rejects the whole
+// payload over a value without this shape: a date with no time, a time with
+// no seconds or no offset, a lowercase t or z, a comma before the fraction, a
+// leading space, or a number. The groups are the year, month, day, hour,
+// minute, second, fraction, and the offset's sign, hours, minutes and
+// seconds.
+var creationDateShape = regexp.MustCompile(`^(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)(?:\.(\d+))?(?:Z|([+-])(\d+)(?::(\d+))?(?::(\d+))?)$`)
 
-// creationDateLayouts read the usual forms of a creation-date with that
-// shape, with the offset written as Z, +02:00, +0200 or +02.
-var creationDateLayouts = []string{
-	"2006-01-02T15:04:05Z07:00",
-	"2006-01-02T15:04:05Z0700",
-	"2006-01-02T15:04:05Z07",
-}
+// maxDateOffset is the largest UTC offset parseThingsDate takes. Things was
+// not measured between +14 and +200; 18 hours is the widest offset Foundation
+// time zones allow, so nothing a real zone uses is refused.
+const maxDateOffset = 18 * time.Hour
 
 // parseThingsDate reads a `creation-date` or `completion-date`, reporting
-// false for a value
-// Things rejects the payload over. A value Things may take that none of
-// creationDateLayouts reads, such as one with an hour of 25, which Things
-// rolls into the next day, gives a zero time.
+// false for a value Things rejects the whole payload over: one without the
+// creationDateShape shape, or one with the shape that names no real instant.
+//
+// Measured in Things 3 (8 Oct 2026): month 13 and offset +200 are rejected,
+// while hour 25 is taken and rolled into the next day. So the month must be
+// 1 to 12, the day 1 to 31, and the offset written as one or two digits of
+// hours, four digits of hours and minutes, or hours, minutes and seconds
+// separated by colons, no wider than maxDateOffset. An hour, minute or second
+// past its range rolls over, as Things does with the hour. A day past the end
+// of a shorter month was not measured, and rolls over the same way.
 func parseThingsDate(raw any) (time.Time, bool) {
 	str, ok := raw.(string)
-	if !ok || !creationDateShape.MatchString(str) {
+	if !ok {
 		return time.Time{}, false
 	}
-	for _, layout := range creationDateLayouts {
-		if t, err := time.Parse(layout, str); err == nil {
-			return t, true
+	m := creationDateShape.FindStringSubmatch(strings.TrimRight(str, " "))
+	if m == nil {
+		return time.Time{}, false
+	}
+	var n [6]int
+	for i := range n {
+		v, err := strconv.Atoi(m[i+1])
+		if err != nil {
+			return time.Time{}, false
+		}
+		n[i] = v
+	}
+	year, month, day, hour, minute, second := n[0], n[1], n[2], n[3], n[4], n[5]
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return time.Time{}, false
+	}
+	var nsec int
+	if frac := m[7]; frac != "" {
+		frac = (frac + "000000000")[:9]
+		nsec, _ = strconv.Atoi(frac)
+	}
+	zone := time.UTC
+	if sign := m[8]; sign != "" {
+		offset, ok := dateOffset(m[9], m[10], m[11])
+		if !ok {
+			return time.Time{}, false
+		}
+		if sign == "-" {
+			offset = -offset
+		}
+		zone = time.FixedZone("", int(offset/time.Second))
+	}
+	return time.Date(year, time.Month(month), day, hour, minute, second, nsec, zone), true
+}
+
+// dateOffset reads the hours, minutes and seconds of a creation-date's UTC
+// offset, as creationDateShape splits them, reporting false for a form or a
+// size parseThingsDate does not take.
+func dateOffset(hours, minutes, seconds string) (time.Duration, bool) {
+	if minutes == "" {
+		switch len(hours) {
+		case 1, 2:
+		case 4:
+			hours, minutes = hours[:2], hours[2:]
+		default:
+			return 0, false
 		}
 	}
-	return time.Time{}, true
+	if len(hours) > 2 || len(minutes) > 2 || len(seconds) > 2 {
+		return 0, false
+	}
+	var parts [3]int
+	for i, s := range []string{hours, minutes, seconds} {
+		if s == "" {
+			continue
+		}
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, false
+		}
+		parts[i] = v
+	}
+	if parts[1] > 59 || parts[2] > 59 {
+		return 0, false
+	}
+	offset := time.Duration(parts[0])*time.Hour + time.Duration(parts[1])*time.Minute + time.Duration(parts[2])*time.Second
+	return offset, offset <= maxDateOffset
 }
 
 func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
@@ -434,8 +500,9 @@ func (c importCreate) kind() string {
 
 // importCreates collects every to-do and project in a Things JSON payload
 // that is not an `operation: update`, at any depth: a project's `items`, and
-// the `items` of a project the payload updates, create to-dos too. An item
-// with no title is left out, since there is nothing to find it by.
+// the `items` of a project the payload updates, create to-dos too.
+// prepareImport refuses a to-do or project with no title, or one whose type
+// or operation Things does not take, so every one Things creates is here.
 func importCreates(payload []any) []importCreate {
 	var creates []importCreate
 	// parents maps the path of each item in a project's items to that
@@ -594,9 +661,19 @@ var importTaskTypes = map[string]bool{"to-do": true, "project": true}
 // payload with the path that locates it. Items nest — a project carries
 // `items`, a to-do carries `checklist-items` — so this walks the whole tree.
 func walkImportNode(node any, path string, visit func(path string, item map[string]any)) {
+	walkImportValues(node, path, func(path string, v any) {
+		if item, ok := v.(map[string]any); ok {
+			visit(path, item)
+		}
+	})
+}
+
+// walkImportValues is walkImportNode for every value in the payload, not
+// only objects, so an item that is not an object is reached too.
+func walkImportValues(node any, path string, visit func(path string, v any)) {
+	visit(path, node)
 	switch v := node.(type) {
 	case map[string]any:
-		visit(path, v)
 		// Walk keys in a fixed order: Go randomises map iteration, and the
 		// order items are discovered in decides the order they are reported.
 		keys := make([]string, 0, len(v))
@@ -605,11 +682,11 @@ func walkImportNode(node any, path string, visit func(path string, item map[stri
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			walkImportNode(v[key], path+"."+key, visit)
+			walkImportValues(v[key], path+"."+key, visit)
 		}
 	case []any:
 		for i, child := range v {
-			walkImportNode(child, fmt.Sprintf("%s[%d]", path, i), visit)
+			walkImportValues(child, fmt.Sprintf("%s[%d]", path, i), visit)
 		}
 	}
 }
@@ -693,16 +770,21 @@ type importRefusalItem struct {
 	Kind string
 	// Blocked is every attribute refused on the item: the ones Things does
 	// not allow on a repeating item, then the dates it rejects, then the
-	// destinations that are not strings.
+	// attributes of the wrong JSON kind, then the type, operation or
+	// attributes that make it an item Things does not take, then the title
+	// when it is blank.
 	Blocked []string
 
 	restricted []string // the attributes a repeating item does not allow
 	dates      []string // each date Things rejects, as `name: value`
-	types      []string // each destination that is not a string, as `name: value`
+	types      []string // each attribute of the wrong JSON kind, as `name: value`
+	shape      []string // each way it is not an item Things takes, as `name: why`
+	blank      bool     // a to-do or project created with a blank title
 }
 
 // reason is why the item is refused: "repeating", "invalid-date",
-// "invalid-type", or several of them, space-separated.
+// "invalid-type", "invalid-item", "blank-title", or several of them,
+// space-separated.
 func (it importRefusalItem) reason() string {
 	var reasons []string
 	if len(it.restricted) > 0 {
@@ -714,8 +796,18 @@ func (it importRefusalItem) reason() string {
 	if len(it.types) > 0 {
 		reasons = append(reasons, "invalid-type")
 	}
+	if len(it.shape) > 0 {
+		reasons = append(reasons, "invalid-item")
+	}
+	if it.blank {
+		reasons = append(reasons, "blank-title")
+	}
 	return strings.Join(reasons, " ")
 }
+
+// tooManyItems is the reason a payload with more than maxImportItems items
+// is refused, given as the reason of the whole --json error.
+const tooManyItems = "too-many-items"
 
 // importRefusalError is the whole-payload refusal. It carries the offending
 // items, one entry each, so --json can hand them over one by one instead of a
@@ -723,10 +815,14 @@ func (it importRefusalItem) reason() string {
 type importRefusalError struct {
 	items []importRefusalItem
 	total int // update items in the payload, offending or not
+	size  int // items counting towards maxImportItems
 }
 
+// oversize reports whether the payload is refused for its size.
+func (e *importRefusalError) oversize() bool { return e.size > maxImportItems }
+
 func (e *importRefusalError) Error() string {
-	var repeating, dates, types []string
+	var repeating, dates, types, shapes, blanks []string
 	for _, it := range e.items {
 		id := ""
 		if it.ID != "" {
@@ -742,8 +838,18 @@ func (e *importRefusalError) Error() string {
 		if len(it.types) > 0 {
 			types = append(types, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.types, ", ")))
 		}
+		if len(it.shape) > 0 {
+			shapes = append(shapes, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.shape, ", ")))
+		}
+		if it.blank {
+			blanks = append(blanks, "  "+it.Path)
+		}
 	}
 	var parts []string
+	if e.oversize() {
+		parts = append(parts, fmt.Sprintf("The payload has %d items (checklist items not counted). Above %d, Things stops to ask \"Is this what you intended?\" and creates nothing until someone answers, so the import cannot be read back. Split it into imports of at most %d items each.",
+			e.size, maxImportItems, maxImportItems))
+	}
 	if len(repeating) > 0 {
 		parts = append(parts, fmt.Sprintf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s):\n%s",
 			len(repeating), e.total, repeatingDocsURL, strings.Join(repeating, "\n")))
@@ -753,8 +859,16 @@ func (e *importRefusalError) Error() string {
 			strings.Join(dates, "\n")))
 	}
 	if len(types) > 0 {
-		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over a list, list-id, heading, heading-id, area or area-id that is not a string or null:\n%s",
+		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over an attribute of the wrong JSON type. title, notes, when, deadline, list, list-id, heading, heading-id, area and area-id must be strings, tags an array of strings, completed and canceled true or false, items and checklist-items arrays (each may be null), and attributes an object:\n%s",
 			strings.Join(types, "\n")))
+	}
+	if len(shapes) > 0 {
+		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over an item it does not take: one that is not an object, has no attributes, or whose type or operation it does not know or does not allow there, written exactly (to-do or project at the top level, to-do or heading in a project's items, checklist-item in a to-do's checklist-items; operation create or update):\n%s",
+			strings.Join(shapes, "\n")))
+	}
+	if len(blanks) > 0 {
+		parts = append(parts, fmt.Sprintf("Things creates a to-do or project with no title, or only whitespace, as an untitled item, so these are refused; give each a title:\n%s",
+			strings.Join(blanks, "\n")))
 	}
 	parts = append(parts, "Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app.")
 	return strings.Join(parts, "\n")
@@ -787,18 +901,21 @@ type importVerifyError struct {
 	search  string // the `things search` command, with the flags this run needs
 }
 
-// failsImport reports whether reason, a created item's verdict, makes the
-// import fail: the item may be missing (see missingReason), or it was saved
-// without its completion-date.
-func failsImport(reason string) bool {
-	return missingReason(reason) || reason == dateDropped
+// fails reports whether c, a created item's verdict, makes the import fail:
+// the item may be missing (see mayBeMissing), or it was saved without its
+// completion-date.
+func (c importCreated) fails() bool {
+	return c.mayBeMissing() || c.Reason == dateDropped
 }
 
-// missingReason reports whether reason says a created item may not be there:
-// it never appeared, or a dated item's row could pass for it. These are the
-// items to search for, and re-run if they are missing.
-func missingReason(reason string) bool {
-	return reason == "not-found" || reason == "shares-dated-title"
+// mayBeMissing reports whether c says a created item may not be there: it
+// never appeared, or a dated item's row could pass for it and fewer new items
+// appeared than the items that could claim them. These are the items to
+// search for, and re-run if they are missing. A shares-dated-title item with
+// enough new items for every claimant is there, though which of them it is
+// cannot be told, so it does not fail the import.
+func (c importCreated) mayBeMissing() bool {
+	return c.Reason == "not-found" || (c.Reason == "shares-dated-title" && !c.present)
 }
 
 // dateDropped is the verdict on a created item saved without the
@@ -811,7 +928,7 @@ const dateDropped = "completion-date-dropped"
 func (e *importVerifyError) missing() []importCreated {
 	var out []importCreated
 	for _, c := range e.created {
-		if missingReason(c.Reason) {
+		if c.mayBeMissing() {
 			out = append(out, c)
 		}
 	}
@@ -834,8 +951,14 @@ func (e *importVerifyError) Error() string {
 		for i, it := range missing {
 			lines[i] = fmt.Sprintf("  %s: %s", it.Path, it.detail)
 		}
-		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed (each line says why). The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save. Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
-			len(missing), len(e.created), e.search, strings.Join(lines, "\n")))
+		cause := "The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save."
+		if len(missing) == len(e.created) && !slices.ContainsFunc(missing, func(c importCreated) bool { return c.Reason != "not-found" || len(c.Candidates) > 0 }) {
+			// Nothing the payload creates appeared, which is also what a
+			// payload Things rejected with an error looks like.
+			cause = "None of them appeared: Things may have rejected the whole payload (look for an error in the Things window), may not be running, or may be slow to save."
+		}
+		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed (each line says why). %s Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
+			len(missing), len(e.created), cause, e.search, strings.Join(lines, "\n")))
 	}
 	var dropped []string
 	for _, it := range e.created {
@@ -850,7 +973,7 @@ func (e *importVerifyError) Error() string {
 	if len(e.created) > len(missing)+len(dropped) {
 		lines := []string{"The other created items:"}
 		for _, it := range e.created {
-			if !failsImport(it.Reason) {
+			if !it.fails() {
 				lines = append(lines, "  "+it.line())
 			}
 		}
@@ -882,14 +1005,18 @@ type importCreated struct {
 	Candidates []string `json:"candidates,omitempty"`
 
 	detail string // why a failing item is missing or unconfirmed, for the plain-text error
+	// present is set on a shares-dated-title item when as many new items
+	// appeared as the items that could claim them, so it is there.
+	present bool
 }
 
 // prepareImport is the pre-write pass over an import payload. It refuses the
 // whole import when any `operation: update` item would change an attribute
 // Things drops silently on a repeating to-do or project — the same check
-// `edit`, `complete` and `cancel` make, applied per item — or when any to-do
-// or project gives a date or destination Things rejects the whole payload
-// over.
+// `edit`, `complete` and `cancel` make, applied per item — when any item
+// gives a date, attribute or shape Things rejects the whole payload over
+// (see importShapes), when a to-do or project is created with a blank title,
+// or when the payload has more than maxImportItems items.
 //
 // The refusal is all-or-nothing on purpose: the URL scheme takes one payload
 // and gives no per-item result, so there is no way to send the rest and report
@@ -938,12 +1065,18 @@ func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
 			Path: u.path, ID: u.id, Title: task.Title, Kind: taskKind(task), Blocked: blocked, restricted: blocked,
 		}
 	}
+	shapes, size := importShapes(payload)
 	var refusals []importRefusalItem
-	walkImportNode(payload, "", func(path string, v map[string]any) {
+	walkImportValues(payload, "", func(path string, raw any) {
 		it, refused := repeating[path]
-		dateLines, dateNames := badImportDates(v)
-		typeLines, typeNames := badImportTypes(v)
-		if len(dateLines) > 0 || len(typeLines) > 0 {
+		shape := shapes[path]
+		v, _ := raw.(map[string]any)
+		var dateLines, dateNames, typeLines, typeNames []string
+		if v != nil {
+			dateLines, dateNames = badImportDates(v)
+			typeLines, typeNames = badImportTypes(v)
+		}
+		if len(dateLines) > 0 || len(typeLines) > 0 || !shape.empty() {
 			if !refused {
 				it = importRefusalItem{Path: path, Kind: "task"}
 				if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
@@ -961,16 +1094,20 @@ func prepareImport(database *db.DB, payload []any) (*importPlan, error) {
 					}
 				}
 			}
-			it.Blocked = append(append(slices.Clip(it.Blocked), dateNames...), typeNames...)
-			it.dates, it.types = dateLines, typeLines
+			it.Blocked = append(append(append(append(slices.Clip(it.Blocked), dateNames...), typeNames...), shape.typeNames...), shape.itemNames...)
+			if shape.blank {
+				it.Blocked = append(it.Blocked, "title")
+			}
+			it.dates, it.types = dateLines, append(typeLines, shape.types...)
+			it.shape, it.blank = shape.items, shape.blank
 			refused = true
 		}
 		if refused {
 			refusals = append(refusals, it)
 		}
 	})
-	if len(refusals) > 0 {
-		return nil, &importRefusalError{items: refusals, total: len(plan.updates)}
+	if len(refusals) > 0 || size > maxImportItems {
+		return nil, &importRefusalError{items: refusals, total: len(plan.updates), size: size}
 	}
 	return plan, nil
 }
@@ -1038,7 +1175,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	// pointing at a list printed elsewhere would name detail the consumer
 	// cannot see. Every created item's verdict goes in with them, since the
 	// success list is not printed beside an error.
-	if len(failures) > 0 || slices.ContainsFunc(created, func(c importCreated) bool { return failsImport(c.Reason) }) {
+	if len(failures) > 0 || slices.ContainsFunc(created, importCreated.fails) {
 		return &importVerifyError{
 			items: failures, total: total, created: created,
 			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
@@ -1061,8 +1198,9 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 // checked. When that date is inside the read-back window its row can land
 // among the new items, so an item without one whose new items include one
 // that also fits where a dated item with its type and title is filed is not
-// confirmed: it fails the import, rather than risk confirming it with the
-// dated item's row, and names the new items it could be.
+// confirmed, rather than risk confirming it with the dated item's row, and
+// names the new items it could be. It fails the import unless a new item
+// appeared for each item that could claim one, when all of them are there.
 func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, budget time.Duration) []importCreated {
 	if len(creates) == 0 {
 		return nil
@@ -1112,13 +1250,23 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			// With no rows to see where the dated item went, it may be
 			// any new item with the title.
 			out[i].Reason = "shares-dated-title"
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, so a new item with that title may be either", c.kind(), c.title)
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and the database could not be read to count the new items with that title, so the item may exist but cannot be confirmed", c.kind(), c.title)
 		case err != nil:
 			out[i].Reason = "unreadable"
 		case sharesDated:
 			out[i].Reason, out[i].Candidates = "shares-dated-title", uuids
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, so a new item with that title may be either", c.kind(), c.title)
-			out[i].detail += " (" + strings.Join(uuids, ", ") + ")"
+			// Each dated item that fits one of the new items may hold one
+			// of them. When there are enough for every item that could
+			// claim them, all are there, and only which is which is
+			// unknown.
+			claimants := n
+			for _, dst := range dated[c.key()] {
+				if slices.ContainsFunc(matches, dst.fits) {
+					claimants++
+				}
+			}
+			out[i].present = len(matches) >= claimants
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and only %s with that title appeared for the %d items that could be filed there, so this item may exist as one of them but cannot be confirmed (%s)", c.kind(), c.title, plural(len(matches), "new item"), claimants, strings.Join(uuids, ", "))
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
 			// Two saved at the same instant cannot be paired with the
 			// payload's items by order, so neither is confirmed.

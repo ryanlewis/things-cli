@@ -472,6 +472,10 @@ instead of assuming:
   `import` does the same for every to-do and project it creates, and
   prints one verdict per item, with its `path` in the payload. It exits
   non-zero with `import partially applied` if any of them never appeared.
+  Before sending, `import` refuses a payload Things would reject with an
+  error, one that creates an untitled to-do or project, and one with more
+  than 200 items, which makes Things stop to ask before creating anything.
+  The refusal is `import refused` and nothing is sent.
   An item listed there with reason `completion-date-dropped` did appear,
   without its completion date: set the date in Things rather than import
   it again.
