@@ -5,8 +5,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"
 
@@ -410,7 +408,8 @@ func newCreatedKey(typ model.TaskType, title string) createdKey {
 }
 
 // storedTitle is title as Things saves it. Measured against Things 3 on
-// 9 Oct 2026: each line feed in a title becomes one space, so "a\nb" is
+// 9 Oct 2026, for to-dos and projects sent by add (things:///add) and by
+// import (things:///json): each line feed in a title becomes one space, so "a\nb" is
 // stored as "a b", "a\n\nb" as "a  b" and "a\r\nb" as "a\r b". Everything
 // else was stored verbatim: carriage returns, tabs, vertical tabs, form feeds,
 // NEL, U+2028, U+2029 and leading or trailing spaces.
@@ -677,47 +676,19 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 
 // searchCommand renders the `things search` command that looks for title in
 // the database this run reads, quoted for the shell. It searches for the title
-// as Things stores it, since a line feed sent is a space saved, and a title
-// still holding a non-printing character is written with that character
-// escaped, so the command can be read and pasted as one line.
+// as Things stores it, since a line feed sent is a space saved, so the command
+// finds the item and pastes as one line.
 func searchCommand(d *Deps, title string) string {
-	search := append(append([]string{"things"}, globalFlags(d)...), "search", searchQuote(strings.TrimSpace(storedTitle(title))))
+	query := strings.TrimSpace(storedTitle(title))
+	search := append(append([]string{"things"}, globalFlags(d)...), "search")
+	// A title that starts with a dash would be read as a flag, so the
+	// command ends flag parsing first, as tagAddHint does.
+	if strings.HasPrefix(query, "-") {
+		search = append(search, "--")
+	}
+	search = append(search, shellQuote(query))
 	return strings.Join(search, " ")
 }
-
-// searchQuote is shellQuote, except that a value holding a non-printing
-// character other than a space is written in ANSI-C quotes ($'...') with every
-// byte of that character as \xHH, which bash (3.2 on) and zsh both read back
-// as the same bytes. A raw carriage return or tab inside plain quotes is
-// invisible on screen and can end the line when pasted.
-func searchQuote(s string) string {
-	if !strings.ContainsFunc(s, unprintable) {
-		return shellQuote(s)
-	}
-	var b strings.Builder
-	b.WriteString("$'")
-	for i := 0; i < len(s); {
-		r, size := utf8.DecodeRuneInString(s[i:])
-		switch {
-		case r == utf8.RuneError && size == 1, unprintable(r):
-			for _, c := range []byte(s[i : i+size]) {
-				fmt.Fprintf(&b, "\\x%02x", c)
-			}
-		case r == '\'' || r == '\\':
-			b.WriteByte('\\')
-			b.WriteRune(r)
-		default:
-			b.WriteString(s[i : i+size])
-		}
-		i += size
-	}
-	b.WriteByte('\'')
-	return b.String()
-}
-
-// unprintable reports whether r would be invisible or move the cursor if
-// printed: controls, line and paragraph separators, and non-ASCII spaces.
-func unprintable(r rune) bool { return r != ' ' && !unicode.IsPrint(r) }
 
 // unconfirmedAdd is the --json output for an add that was sent but not read
 // back. There is no uuid: the add returns none, and finding it is the
