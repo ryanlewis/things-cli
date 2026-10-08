@@ -475,7 +475,10 @@ instead of assuming:
   Before sending, `import` refuses a payload Things would reject with an
   error, one that creates an untitled to-do or project, and one with more
   than 200 items to create, which makes Things stop to ask before creating
-  anything. The refusal is `import refused` and nothing is sent.
+  anything. The refusal is `import refused` and nothing is sent. A refusal
+  for size alone carries `"reason": "too-many-items"` and no `items`; split
+  the payload and pause between imports (Things is believed to allow about
+  250 items per 10 seconds, not verified).
   A created item reported with reason `shares-dated-title` carries
   `"present"`: `true` means a new item appeared for it and for every other
   item that could claim one, so it is there and the import exits 0;

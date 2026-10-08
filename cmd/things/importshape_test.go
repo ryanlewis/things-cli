@@ -403,8 +403,79 @@ func TestSharedRowsCountsOtherDestinations(t *testing.T) {
 		loose.want():  {datedRow, listRow},
 		inList.want(): {listRow},
 	}
-	rows, claimants := sharedRows(loose, creates, found, found[loose.want()])
+	rows, claimants := sharedRows(loose, creates, found)
 	if len(rows) != 2 || claimants != 2 {
 		t.Errorf("rows = %d, claimants = %d, want 2 rows for 2 undated claimants", len(rows), claimants)
+	}
+}
+
+// Overlap is followed to its end: A shares a row with B and B one with C, so
+// C competes for A's rows too, and its rows count only with C counted.
+func TestSharedRowsFollowsChains(t *testing.T) {
+	a := importCreate{path: "[0]", typ: model.TypeTask, title: "Weekly review", dest: createdDest{checked: true, list: "proj-a"}}
+	b := importCreate{path: "[1]", typ: model.TypeTask, title: "Weekly review"}
+	c := importCreate{path: "[2]", typ: model.TypeTask, title: "Weekly review", dest: createdDest{checked: true, list: "proj-c"}}
+	other := importCreate{path: "[3]", typ: model.TypeTask, title: "Weekly review", dest: createdDest{checked: true, list: "proj-x"}}
+	creates := []importCreate{a, b, c, other}
+	ab, bc, x := model.Task{UUID: "ab"}, model.Task{UUID: "bc"}, model.Task{UUID: "x"}
+	found := map[createdWant][]model.Task{
+		a.want():     {ab},
+		b.want():     {ab, bc},
+		c.want():     {bc},
+		other.want(): {x},
+	}
+	for _, start := range []importCreate{a, b, c} {
+		rows, claimants := sharedRows(start, creates, found)
+		if len(rows) != 2 || claimants != 3 {
+			t.Errorf("from %s: rows = %d, claimants = %d, want 2 rows for 3 claimants", start.path, len(rows), claimants)
+		}
+	}
+}
+
+// A dated item whose creation-date is just before the read-back window can
+// still mark a same-titled item shares-dated-title, but its row is never
+// among the new items read back, so it does not count as a claimant: the
+// undated item's row is enough, and the import exits 0.
+func TestImportSharesDatedTitleDatedBeforeWindow(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	datedAt := time.Now().Add(-30 * time.Second).UTC().Truncate(time.Second)
+	stubExecAdding(t, sqlDB,
+		createdRow{uuid: "dated-1", title: "Weekly review", extra: fmt.Sprintf("creationDate = %f", model.TimeToUnix(datedAt))},
+		createdRow{uuid: "new-1", title: "Weekly review"})
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + datedAt.Format(time.RFC3339) + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review"}}
+	]`
+	out, _, err := runImportOut(t, database, payload, "--json")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	got := decodeCreated(t, out)
+	if len(got) != 2 || got[1].Reason != "shares-dated-title" || got[1].Present == nil || !*got[1].Present {
+		t.Errorf("got %+v, want [1] shares-dated-title and present", got)
+	}
+}
+
+// A failing shares-dated-title item carries present false in the error's
+// items too, not only in created.
+func TestImportSharesDatedTitleErrorItemCarriesPresent(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + time.Now().UTC().Format(time.RFC3339) + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review"}}
+	]`
+	_, _, err := runImportOut(t, database, payload, "--json")
+	if err == nil {
+		t.Fatal("expected the import to fail")
+	}
+	p, raw := decodePayload(t, err)
+	if len(p.Items) != 1 || p.Items[0].Present == nil || *p.Items[0].Present {
+		t.Errorf("items = %+v, want one item with present false (%s)", p.Items, raw)
+	}
+	if !strings.Contains(raw, `"present": false`) {
+		t.Errorf("rendered error lacks \"present\": false: %s", raw)
 	}
 }

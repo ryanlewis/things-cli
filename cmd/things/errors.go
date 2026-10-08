@@ -79,6 +79,9 @@ type jsonErrorItem struct {
 	Confirmed  *bool    `json:"confirmed,omitempty"`
 	Reason     string   `json:"reason,omitempty"`
 	Candidates []string `json:"candidates,omitempty"`
+	// Present is given on a shares-dated-title item only, as on the
+	// created record (see importCreated).
+	Present *bool `json:"present,omitempty"`
 }
 
 // jsonErrorMatch is one candidate of an ambiguous reference — enough for a
