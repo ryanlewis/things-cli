@@ -358,7 +358,12 @@ var parentCloseUnlogged = strings.ReplaceAll(closedTodayUnlogged, "t.stopDate", 
 // fold into, and the app lists it in its Logbook. Measured on 8 Oct 2026:
 // seven such to-dos were in the app's Logbook and missing from the CLI's, and
 // both agreed once the day change logged the project.
-var parentNotClosedOrUnlogged = "(" + parentNotClosed + " OR (" + parentCloseUnlogged + "))"
+//
+// The unlogged half is the parent's heldInPlace, not bare parentCloseUnlogged:
+// a closed repeating project template is logged at once (heldInPlace leaves
+// templates out), so its Logbook row is there for its to-dos to fold into.
+var parentNotClosedOrUnlogged = "(" + parentNotClosed + " OR (" + parentCloseUnlogged +
+	" AND " + repeatingParentPlaceholder + " IS NULL))"
 
 // openOrJustClosed is the status test for the views that show unlogged rows.
 // Under OpenOnly only open rows; by default, also the rows the app
@@ -922,16 +927,18 @@ const uuidTiebreak = `, t.uuid ASC`
 // The first key reads the area off the row and off its project, so an
 // area-less project's to-dos join the no-area group rather than taking the
 // area key's COALESCE default of 0 and landing after every area, which real
-// areas' negative indexes made them do. Checked against the app on 8 Oct
-// 2026: it listed an area-less project's to-dos at the top, beside the loose
-// ones, where the CLI had them near the end.
+// areas' negative indexes made them do. It reads the joined areas, as the
+// rendered row does, so an area uuid that names no area counts as no area.
+// Checked against the app on 8 Oct 2026: it listed an area-less project's
+// to-dos at the top, beside the loose ones, where the CLI had them near the
+// end.
 //
 // The caller adds its own within-group key after these — t."index" for anytime
 // and someday, todayIndexReferenceDate then todayIndex for today — and the
 // uuid tiebreak last. Together they put a project's to-dos in one contiguous block, so the
 // rendered group header prints once above them, which is the app's own
 // presentation of a project in these lists.
-const listGrouping = `CASE WHEN t.area IS NULL AND p.area IS NULL THEN 0 ELSE 1 END, ` +
+const listGrouping = `CASE WHEN a.uuid IS NULL AND pa.uuid IS NULL THEN 0 ELSE 1 END, ` +
 	`COALESCE(a."index", pa."index", 0), ` +
 	`CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, ` +
 	`COALESCE(p."index", 0)`
