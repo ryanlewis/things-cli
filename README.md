@@ -66,9 +66,9 @@ how a project completes under `--json`.
 
 A failing command prints a single JSON object to stdout and exits non-zero, so
 a consumer parsing stdout gets a structured failure either way. `error` is a
-stable token — `ambiguous task`, `not found`, `not a task`, `not a project`,
-`stale list cache`, `already closed`, `import refused`, `import partially applied`, or `error`
-for anything else —
+stable token — `ambiguous task`, `not found`, `not a task`, `not a project`, `trashed`,
+`stale list cache`, `already closed`, `misfiled`, `import refused`,
+`import partially applied`, or `error` for anything else —
 and `message` carries the same text plain-text mode prints.
 
 ```console
@@ -332,8 +332,8 @@ or `--area` listing, show the items you ticked off in that list which Things
 still keeps there, marked `[x]` or `[~]`, unless you pass `--open-only`; a
 bare `--tag` sweep lists open tasks only. `--include-completed`, which used to
 turn this on, is accepted on those same lists and does nothing beyond
-overriding `open_only` in the config file; anywhere else it is an error. `logbook` holds every other closed
-item, today's closes outside those lists included, so a closed
+overriding `open_only` in the config file; anywhere else it is an error.
+`logbook` holds every other closed item, today's closes outside those lists included, so a closed
 item whose project is still open is either logged or still listed, never both.
 The lists do overlap each other — a task scheduled for today is in the Anytime
 bucket too, and an undated one due later is in Anytime and Upcoming — so

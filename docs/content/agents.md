@@ -287,11 +287,12 @@ reads as an ambiguity rather than resolving to one of them, and the `type` of
 the uuid you pick tells you whether to retry with `edit` or `project edit`.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
-`trashed`, `stale list cache`, `already closed`, `import refused`, `import
+`trashed`, `stale list cache`, `already closed`, `misfiled`, `import refused`, `import
 partially applied`, and `error` for everything else.
 `already closed` is `cancel` on a completed item or `complete` on a cancelled
-one (the `edit` and `project edit` flags included): nothing is sent, and the
-object names the item's `kind`, `uuid` and `title`. Closing an item the way it
+one (the `edit` and `project edit` flags included, unless `--duplicate` sends
+the status to a copy): nothing is sent, and the object names the item's
+`kind`, `uuid` and `title`. Closing an item the way it
 is already closed is not an error; it exits 0 with a note.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
 to `project edit`; both refuse before anything is written and name the command

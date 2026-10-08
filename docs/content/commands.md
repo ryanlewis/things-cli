@@ -630,7 +630,8 @@ status, as `things complete` and `things cancel` do.
 and the rest of the edit is handled as above, with a note. When nothing
 else would change the item and there is no `--reveal`, nothing is sent and
 the item is printed. Completing a cancelled item, or cancelling a completed
-one, refuses the whole edit and sends nothing. With `--duplicate` the status
+one, refuses the whole edit and sends nothing; under `--json` the error token
+is `already closed`. With `--duplicate` the status
 is sent as asked, since it applies to the copy and the item stays as it is.
 
 Two cases are not read back, and say so instead of printing the item:

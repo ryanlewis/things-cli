@@ -22,8 +22,9 @@ import (
 // created, and import a verdict per item it created.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
-// "not a project", "trashed", "stale list cache", "already closed", or "error"
-// for a failure with no structure worth naming.
+// "not a project", "trashed", "stale list cache", "already closed",
+// "misfiled", "import refused", "import partially applied", or "error" for a
+// failure with no structure worth naming.
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
