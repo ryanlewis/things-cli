@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ryanlewis/things-cli/internal/model"
 )
 
 // Every payload shape Things was seen to reject with an error sheet, creating
@@ -247,6 +249,8 @@ func TestImportRefusesTooManyItems(t *testing.T) {
 		{"300", manyTodos(300), true, 300},
 		{"nested over", nested(maxImportItems, 0), true, maxImportItems + 1},
 		{"checklist items not counted", nested(maxImportItems-1, 3), false, 0},
+		{"update items not counted", strings.TrimSuffix(manyTodos(maxImportItems), "]") + `,{"type":"to-do","operation":"update","id":"one-1","attributes":{"notes":"x"}}]`, false, 0},
+		{"headings counted", strings.Replace(nested(maxImportItems-1, 0), `"items":[`, `"items":[{"type":"heading","attributes":{"title":"H"}},`, 1), true, maxImportItems + 1},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -263,7 +267,7 @@ func TestImportRefusesTooManyItems(t *testing.T) {
 			if !errors.As(err, &refused) || refused.size != c.size || len(refused.items) != 0 {
 				t.Fatalf("err = %v, want a size refusal for %d items", err, c.size)
 			}
-			msg := fmt.Sprintf("The payload has %d items", c.size)
+			msg := fmt.Sprintf("The payload creates %d items", c.size)
 			if !strings.Contains(err.Error(), msg) || !strings.Contains(err.Error(), "Split it into imports of at most 200 items") {
 				t.Errorf("message missing %q:\n%v", msg, err)
 			}
@@ -312,8 +316,15 @@ func TestImportSharesDatedTitleWithBothPresent(t *testing.T) {
 			t.Fatalf("import: %v", err)
 		}
 		got := decodeCreated(t, out)
-		if len(got) != 2 || got[1].Confirmed || got[1].Reason != "shares-dated-title" || strings.Join(got[1].Candidates, ",") != "new-1,new-2" {
-			t.Errorf("got %+v, want [1] unconfirmed shares-dated-title with both candidates", got)
+		if len(got) != 2 || got[1].Confirmed || got[1].Reason != "shares-dated-title" || strings.Join(got[1].Candidates, ",") != "new-1,new-2" ||
+			got[1].Present == nil || !*got[1].Present {
+			t.Errorf("got %+v, want [1] unconfirmed shares-dated-title, present, with both candidates", got)
+		}
+		if got[0].Present != nil {
+			t.Errorf("[0] carries present, want it only on shares-dated-title items: %+v", got[0])
+		}
+		if !strings.Contains(out, `"present": true`) {
+			t.Errorf("--json output lacks \"present\": true:\n%s", out)
 		}
 	})
 
@@ -328,6 +339,9 @@ func TestImportSharesDatedTitleWithBothPresent(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "only 1 new item with that title appeared for the 2 items that could be filed there, so this item may exist as one of them") {
 			t.Errorf("error does not say the item may exist:\n%v", err)
+		}
+		if c := verr.created[1]; c.Present == nil || *c.Present {
+			t.Errorf("[1] = %+v, want present false", c)
 		}
 	})
 }
@@ -373,5 +387,24 @@ func TestImportShapeRefusalIsOneJSONObject(t *testing.T) {
 	}
 	if n != 1 || stderr.Len() != 0 {
 		t.Errorf("rendered %d JSON values and stderr %q, want one value and no stderr", n, stderr.String())
+	}
+}
+
+// An undated item with another destination whose new items overlap this
+// one's competes for them too, so a dated item's row plus another item's row
+// do not count as this item being there.
+func TestSharedRowsCountsOtherDestinations(t *testing.T) {
+	loose := importCreate{path: "[1]", typ: model.TypeTask, title: "Weekly review"}
+	inList := importCreate{path: "[2]", typ: model.TypeTask, title: "Weekly review", dest: createdDest{checked: true, list: "proj-1"}}
+	dated := importCreate{path: "[0]", typ: model.TypeTask, title: "Weekly review", dated: true}
+	creates := []importCreate{dated, loose, inList}
+	datedRow, listRow := model.Task{UUID: "dated-row"}, model.Task{UUID: "list-row"}
+	found := map[createdWant][]model.Task{
+		loose.want():  {datedRow, listRow},
+		inList.want(): {listRow},
+	}
+	rows, claimants := sharedRows(loose, creates, found, found[loose.want()])
+	if len(rows) != 2 || claimants != 2 {
+		t.Errorf("rows = %d, claimants = %d, want 2 rows for 2 undated claimants", len(rows), claimants)
 	}
 }
