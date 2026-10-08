@@ -559,7 +559,7 @@ func checkClosed(task *model.Task, want model.Status) (bool, error) {
 	case want:
 		return true, nil
 	case model.StatusCompleted, model.StatusCancelled:
-		return false, fmt.Errorf("%q is already %s, so it was not %s; nothing sent", task.Title, task.Status, want)
+		return false, &closedSwitchError{task: task, want: want}
 	}
 	return false, nil
 }

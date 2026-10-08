@@ -22,8 +22,8 @@ import (
 // created, and import a verdict per item it created.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
-// "not a project", "trashed", "stale list cache", or "error" for a failure
-// with no structure worth naming.
+// "not a project", "trashed", "stale list cache", "already closed", or "error"
+// for a failure with no structure worth naming.
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
@@ -149,6 +149,19 @@ type trashedError struct {
 
 func (e *trashedError) Error() string {
 	return fmt.Sprintf("%q (%s) is in the Trash, so it was not %s; nothing sent. Put it back from the Trash in Things first if you meant this %s", e.Title, e.UUID, e.Done, e.Kind)
+}
+
+// closedSwitchError is a status change refused because the item is already
+// closed the other way: `cancel` on a completed item, or `complete` on a
+// cancelled one (see checkClosed). Nothing was sent, so a caller that meant
+// the switch has to make it in Things itself.
+type closedSwitchError struct {
+	task *model.Task
+	want model.Status
+}
+
+func (e *closedSwitchError) Error() string {
+	return fmt.Sprintf("%q is already %s, so it was not %s; nothing sent", e.task.Title, e.task.Status, e.want)
 }
 
 // ambiguousRefError carries a *db.AmbiguousTaskError alongside the multi-line
@@ -356,6 +369,15 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Error = "stale list cache"
 		payload.Kind = "task"
 		payload.Query = otherDB.Query
+		return payload
+	}
+
+	var closedSwitch *closedSwitchError
+	if errors.As(err, &closedSwitch) {
+		payload.Error = "already closed"
+		payload.Kind = closedSwitch.task.Type.String()
+		payload.UUID = closedSwitch.task.UUID
+		payload.Title = closedSwitch.task.Title
 		return payload
 	}
 

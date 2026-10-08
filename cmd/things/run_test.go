@@ -310,6 +310,10 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, inbox, someday, today and upcoming views") {
 		t.Fatalf("tag filter: expected view-rejection error, got: %v", err)
 	}
+	// It names what was typed, not the internal catch-all view.
+	if !strings.Contains(err.Error(), "not a bare --tag listing") || strings.Contains(err.Error(), `"project"`) {
+		t.Fatalf("tag filter: error should name a bare --tag listing, got: %v", err)
+	}
 
 	// A named area lists its contents, which the app's area page keeps a
 	// to-do closed today in, as a project's page does.

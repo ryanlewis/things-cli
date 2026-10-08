@@ -62,10 +62,12 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
  "kind": "task", "query": "Post letter", "uuid": "...", "title": "Post letter"}
 {"error": "trashed", "message": "\"Post letter\" (...) is in the Trash, so it was not completed; nothing sent. ...",
  "kind": "task", "query": "2", "uuid": "...", "title": "Post letter"}
+{"error": "already closed", "message": "\"Post letter\" is already completed, so it was not cancelled; nothing sent",
+ "kind": "task", "uuid": "...", "title": "Post letter"}
 {"error": "error", "message": "..."}
 ```
 
-On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries its `type`, and a title a project and a to-do share is reported this way rather than resolving to one of them, so `type` tells you whether the uuid you picked wants `things edit` or `things project edit`. On `stale list cache` a row number was used past its four hours or against a different database; re-list and use the `uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. On `trashed` the row number or uuid named an item in the Trash (often one trashed in Things after the listing was printed); `complete`, `cancel`, `edit` and `project edit` refuse it and send nothing. Re-list and check you have the item you meant: do not retry with the same reference. `show` still reaches a trashed item and says so (`"trashed": true`, or `Status: Open (in Trash)` in plain output). This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
+On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries its `type`, and a title a project and a to-do share is reported this way rather than resolving to one of them, so `type` tells you whether the uuid you picked wants `things edit` or `things project edit`. On `stale list cache` a row number was used past its four hours or against a different database; re-list and use the `uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. On `trashed` the row number or uuid named an item in the Trash (often one trashed in Things after the listing was printed); `complete`, `cancel`, `edit` and `project edit` refuse it and send nothing. Re-list and check you have the item you meant: do not retry with the same reference. `show` still reaches a trashed item and says so (`"trashed": true`, or `Status: Open (in Trash)` in plain output). On `already closed` you asked to cancel a completed item or complete a cancelled one; nothing was sent, and switching it is for the user to do in Things (closing it the way it already is exits 0 with a note instead). This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
 
 `import` fails per item, so its two failures add an `items` array — act on that rather than parsing `message`:
 
@@ -160,7 +162,7 @@ The rest of that import is already applied — re-run with only the failed items
 
 ## The config file changes the defaults
 
-The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CONFIG_HOME/things-cli/config.toml`; `--config PATH` or `$THINGS_CLI_CONFIG` overrides) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `hints`, `db`, `no_verify`, `verify_timeout`, `strict_tags`, `create_tags`, `assume_yes`.
+The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CONFIG_HOME/things-cli/config.toml`; `--config PATH` or `$THINGS_CLI_CONFIG` overrides) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `hints`, `open_only`, `db`, `no_verify`, `verify_timeout`, `strict_tags`, `create_tags`, `assume_yes`.
 
 **The defaults you would otherwise assume may not hold.** `json = true` makes every command emit JSON; `no_verify = true` turns off rule 3 and the tag read-back in rule 1; `assume_yes = true` removes the confirmation in rule 4 (on `complete` and `cancel` only — never on `skill install`/`uninstall`).
 
@@ -246,7 +248,10 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # a no-op on views that list only open tasks and an error on logbook and
     # trash. open_only = true in the config file makes --open-only the
     # default (logbook and trash ignore it); --open-only=false overrides it.
-    # --include-completed is accepted and does nothing beyond that override.
+    # --include-completed does nothing beyond that override, and is accepted
+    # only on inbox, today, anytime, upcoming, someday and a --project or
+    # --area listing with no view; it is an error on deadlines, repeating,
+    # logbook, trash and a bare --tag sweep.
     # upcoming keeps only what was in it while open (a task closed ahead of
     # its date, or an undated one due later). logbook holds nothing Things
     # hasn't logged, wherever it was closed, as in the app, so a closed item

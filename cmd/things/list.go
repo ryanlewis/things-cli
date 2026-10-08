@@ -63,8 +63,14 @@ func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
 	// included), as it was, so a script that ran before runs the same.
 	if c.IncludeCompleted && !db.CompletableView(view, project != "", c.Area != "") {
 		names := db.CompletableViewNames()
-		return fmt.Errorf("--include-completed is only supported on the %s and %s views and on a --project or --area listing with no view, not %q; it has no effect now, since those list the closed items Things still shows by default, so drop it",
-			strings.Join(names[:len(names)-1], ", "), names[len(names)-1], view)
+		// A bare --tag sweep runs through the catch-all view, whose internal
+		// name the user never typed, so name what they did type instead.
+		got := fmt.Sprintf("%q", view)
+		if !explicitView && view == db.ViewProject {
+			got = "a bare --tag listing"
+		}
+		return fmt.Errorf("--include-completed is only supported on the %s and %s views and on a --project or --area listing with no view, not %s; it has no effect now, since those list the closed items Things still shows by default, so drop it",
+			strings.Join(names[:len(names)-1], ", "), names[len(names)-1], got)
 	}
 	// --open-only is a no-op on the views that list only open rows anyway,
 	// so an agent can pass it everywhere. logbook and trash are the two that
