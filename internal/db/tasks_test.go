@@ -832,6 +832,30 @@ func TestGetTaskByUUID(t *testing.T) {
 	}
 }
 
+// A uuid still reaches a trashed item, flagged as trashed, while a title does
+// not. `show` relies on the first, and the writes refuse the item on the flag
+// rather than reporting it missing, so the reader learns where it went.
+func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Todo("t-bin", "Binned errand", 1, dbtest.Trashed())
+
+	got, err := d.GetTaskByUUID("t-bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || !got.Trashed {
+		t.Fatalf("GetTaskByUUID(trashed) = %+v, want the item with Trashed set", got)
+	}
+	if exact, err := d.GetTaskExact("t-bin"); err != nil || !exact.Trashed {
+		t.Errorf("GetTaskExact(uuid) = %+v, %v, want the trashed item", exact, err)
+	}
+
+	var nf *TaskNotFoundError
+	if _, err := d.GetTask("Binned errand"); !errors.As(err, &nf) {
+		t.Errorf("GetTask(title of trashed item) = %v, want a TaskNotFoundError", err)
+	}
+}
+
 func TestGetTaskExactTitle(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)

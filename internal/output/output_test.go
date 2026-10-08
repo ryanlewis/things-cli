@@ -158,6 +158,27 @@ func TestPrintTags(t *testing.T) {
 	}
 }
 
+// The plain block marks an item in the Trash on its status line; JSON has the
+// "trashed" field for it.
+func TestPrintTaskDetailMarksTrash(t *testing.T) {
+	for _, tc := range []struct {
+		trashed bool
+		want    string
+	}{
+		{true, "Status:   Open (in Trash)"},
+		{false, "Status:   Open\n"},
+	} {
+		var buf bytes.Buffer
+		task := &model.Task{UUID: "u1", Title: "T1", Status: model.StatusOpen, Trashed: tc.trashed}
+		if err := PrintTaskWithChecklist(&buf, task, nil, false); err != nil {
+			t.Fatalf("PrintTaskWithChecklist: %v", err)
+		}
+		if !strings.Contains(buf.String(), tc.want) {
+			t.Errorf("trashed=%v: output = %q, want it to contain %q", tc.trashed, buf.String(), tc.want)
+		}
+	}
+}
+
 func TestPrintTaskDetail(t *testing.T) {
 	created := time.Date(2026, 4, 10, 9, 30, 0, 0, time.Local)
 	stopped := time.Date(2026, 4, 14, 17, 0, 0, 0, time.Local)

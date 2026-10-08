@@ -287,11 +287,12 @@ reads as an ambiguity rather than resolving to one of them, and the `type` of
 the uuid you pick tells you whether to retry with `edit` or `project edit`.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
-`stale list cache`, `import refused`, `import partially applied`, and `error`
+`trashed`, `stale list cache`, `import refused`, `import partially applied`, and `error`
 for everything else.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
 to `project edit`; both refuse before anything is written and name the command
-to retry with. The two import failures carry an `items` array naming which
+to retry with. `trashed` is a row number or uuid that named an item in the
+Trash; the write is refused before anything is sent. The two import failures carry an `items` array naming which
 payload items were blocked or did not land; the [Commands](/commands/) page
 has the detail.
 
@@ -441,7 +442,14 @@ instead of assuming:
 - **Status changes are read back.** After `complete`, `cancel`, or an
   `import` that sets a status, the CLI re-reads the item and exits non-zero
   if the status never changed. A non-zero exit means "still open", not
-  "done".
+  "done". On success `complete` and `cancel` print the item as
+  `things show` would, so the agent sees what it closed; with
+  `--no-verify` the output says the change is unconfirmed.
+- **Items in the Trash are refused.** A row number or uuid that lands on
+  an item in the Trash, often one trashed in Things after the listing was
+  printed, makes `complete`, `cancel`, `edit` and `project edit` exit
+  non-zero with the `trashed` token and send nothing. `show` still reads
+  such an item and marks it as in the Trash.
 - **New items are read back.** `add` and `project add` find the item they
   created, by kind, title and where it was sent (when several projects, or
   areas, share the title it named, the one Things picks), and print it as `things show` would, so the agent has its UUID without a `things search`. Agents
