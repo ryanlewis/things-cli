@@ -151,12 +151,23 @@ func (p whenPlace) holds(t *model.Task, today model.ThingsDate) bool {
 // an Anytime row dated earlier, which db's todayScheduled lists under today.
 // Things keeps a row it filed under today at that start and date until its
 // own day-change pass, which had not run by 00:04 on 9 Oct 2026; until then
-// the app shows it in Today, and --when today on it is a no-op. Measured
-// that night, --when with today's date on such a row with a reminder cleared
-// the reminder and kept the earlier date. A row Things has not moved into
-// today yet (unmoved) reads as Anytime too, and is in Today the same way.
+// the app shows it in Today. A row Things has not moved into today yet
+// (unmoved) reads as Anytime too, and is in Today the same way. What Things
+// does with --when on such a row is carriedMeasured and unmovedKeeps.
 func carriedOver(t *model.Task, today model.ThingsDate) bool {
 	return t.Start == model.StartAnytime && t.StartDate != nil && *t.StartDate < today
+}
+
+// carriedMeasured reports whether value on task, a carriedOver row, is the
+// case measured on 9 Oct 2026 just after midnight: a to-do in the day part,
+// sent today, which Things left as it was. On such a row with no reminder
+// that is a certain no-op. On the same night today's date on such a row with
+// a reminder cleared the reminder and kept the earlier date; without one it
+// was not measured, so it is sent and read back like the other cases
+// (unmovedKeeps).
+func carriedMeasured(value string, task *model.Task) bool {
+	v, err := things.NormalizeWhen(value)
+	return err == nil && v == "today" && task.Type == model.TypeTask && task.StartBucket == 0
 }
 
 // whenReads reads what whenUnchanged needs beyond the item as listed, each
@@ -186,17 +197,22 @@ func readWhen(database *db.DB, uuid string) whenReads {
 // whenUnchanged reports whether value leaves the item where it is, so Things
 // records no change for it (see whenPlace). The reminder is read only when
 // the value sets or clears one. On a row Things has not moved into today yet
-// (unmoved), only the case measured is certain; the others are sent and read
-// back (unmovedKeeps).
+// (unmoved), or one still in Today from an earlier day (carriedOver), only
+// the case measured is certain; the others are sent and read back
+// (unmovedKeeps).
 func whenUnchanged(value string, task *model.Task, now time.Time, reads whenReads) bool {
 	p, ok := placeWhen(value, now)
 	if !ok {
 		return false
 	}
+	today := model.ThingsDateFromTime(now)
 	if unmoved(task, now, reads.stored) && !unmovedMeasured(value, task, now) {
 		return false
 	}
-	if !p.holds(task, model.ThingsDateFromTime(now)) {
+	if carriedOver(task, today) && !carriedMeasured(value, task) {
+		return false
+	}
+	if !p.holds(task, today) {
 		return false
 	}
 	if p.reminder == reminderKept {
@@ -234,7 +250,8 @@ func unmovedMeasured(value string, task *model.Task, now time.Time) bool {
 }
 
 // unmovedKeeps reports whether p, a value read at now, may leave an unmoved
-// row (see unmoved) such as task where it is. Outside unmovedMeasured these
+// row (see unmoved) such as task where it is, or a carriedOver row, which is
+// read back the same way outside carriedMeasured. Outside unmovedMeasured these
 // are unmeasured: a row with a reminder, a row dated before today that Things
 // has not moved for days, a project, and a row in the evening part, sent
 // today, today's date, a past date, or evening on an evening row. Such an
@@ -253,7 +270,8 @@ func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
 
 // whenCheck is the --when part of a read-back: the value sent and when it was
 // sent. before is the item as read before the write when it was a row Things
-// had not moved into today yet (unmoved), nil otherwise. whenOnly says the
+// had not moved into today yet (unmoved) or one still in Today from an
+// earlier day (carriedOver), nil otherwise. whenOnly says the
 // edit changes nothing but --when, so an unmoved row Things left as it was,
 // with nothing recorded, is the edit applied (unmovedKeeps).
 type whenCheck struct {

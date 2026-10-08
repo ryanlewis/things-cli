@@ -462,6 +462,40 @@ func TestEditCarriedOverRow(t *testing.T) {
 		})
 	}
 
+	// The cases not measured are sent and read back, and confirmed whether
+	// Things moves the row to today or leaves it where it was, with nothing
+	// recorded. --when today on a row with a reminder is one of them.
+	for _, tc := range []struct {
+		name, value string
+		reminder    any
+	}{
+		{"today with a reminder", "today", reminder},
+		{"today's date", todayDate, nil},
+		{"past date", testNow.AddDate(0, 0, -2).Format("2006-01-02"), nil},
+	} {
+		for _, moves := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s moves=%v", tc.name, moves), func(t *testing.T) {
+				fastVerify(t)
+				database, sqlDB := seedWritable(t)
+				seed(t, sqlDB, 1, yesterday, 0, tc.reminder)
+				want := yesterday
+				if moves {
+					want = today
+					stubExecEditing(t, sqlDB, fmt.Sprintf(`UPDATE TMTask SET startDate = %d, reminderTime = NULL WHERE uuid = 'co-1'`, today))
+				} else {
+					stubExecDropping(t)
+				}
+				out, err := runOut(t, database, "--json", "edit", "co-1", "--when", tc.value)
+				if err != nil {
+					t.Fatalf("edit: %v", err)
+				}
+				if got := startDate(t, out); got != want {
+					t.Errorf("printed start date %v, want %v", got, want)
+				}
+			})
+		}
+	}
+
 	// Filed anywhere but today is still misfiled: the earlier date counts
 	// as today only for a value that files the row today.
 	for _, tc := range []struct {
@@ -537,6 +571,39 @@ func TestWhenPlaceHoldsCarriedOver(t *testing.T) {
 		task := &model.Task{Start: tc.start, StartDate: &day, StartBucket: tc.bucket}
 		if got := tc.place.holds(task, today); got != tc.want {
 			t.Errorf("%s: holds = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// On a row carried over from an earlier day, only the case measured is a
+// certain no-op: --when today on a to-do in the day part with no reminder.
+// The rest are sent and read back.
+func TestWhenUnchangedCarriedOver(t *testing.T) {
+	yesterday := model.ThingsDateFromTime(testNow.AddDate(0, 0, -1))
+	noReminder := func() (int, error) { return reminderNone, nil }
+	at := func(min int) func() (int, error) { return func() (int, error) { return min, nil } }
+	later := testNow.Add(2 * time.Hour)
+	for _, tc := range []struct {
+		name     string
+		value    string
+		typ      model.TaskType
+		bucket   int
+		reminder func() (int, error)
+		want     bool
+	}{
+		{"today", "today", model.TypeTask, 0, noReminder, true},
+		{"today with a reminder", "today", model.TypeTask, 0, at(9 * 60), false},
+		{"today's date", testNow.Format("2006-01-02"), model.TypeTask, 0, noReminder, false},
+		{"past date", testNow.AddDate(0, 0, -2).Format("2006-01-02"), model.TypeTask, 0, noReminder, false},
+		{"evening on evening", "evening", model.TypeTask, 1, noReminder, false},
+		{"today on a project", "today", model.TypeProject, 0, noReminder, false},
+		{"same reminder time", later.Format("15:04"), model.TypeTask, 0, at(later.Hour()*60 + later.Minute()), false},
+	} {
+		day := yesterday
+		task := &model.Task{Type: tc.typ, Start: model.StartAnytime, StartDate: &day, StartBucket: tc.bucket}
+		reads := whenReads{reminder: tc.reminder, stored: func() (model.Start, error) { return model.StartAnytime, nil }}
+		if got := whenUnchanged(tc.value, task, testNow, reads); got != tc.want {
+			t.Errorf("%s: whenUnchanged(%q) = %v, want %v", tc.name, tc.value, got, tc.want)
 		}
 	}
 }
