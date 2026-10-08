@@ -474,8 +474,13 @@ instead of assuming:
   non-zero with `import partially applied` if any of them never appeared.
   Before sending, `import` refuses a payload Things would reject with an
   error, one that creates an untitled to-do or project, and one with more
-  than 200 items, which makes Things stop to ask before creating anything.
-  The refusal is `import refused` and nothing is sent.
+  than 200 items to create, which makes Things stop to ask before creating
+  anything. The refusal is `import refused` and nothing is sent.
+  A created item reported with reason `shares-dated-title` carries
+  `"present"`: `true` means a new item appeared for it and for every other
+  item that could claim one, so it is there and the import exits 0;
+  `false` means one of them has not appeared, and the import fails. Search
+  before re-running it.
   An item listed there with reason `completion-date-dropped` did appear,
   without its completion date: set the date in Things rather than import
   it again.

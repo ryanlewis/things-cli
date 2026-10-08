@@ -12,9 +12,11 @@ import (
 // while 300 made Things ask "Is this what you intended?" and create nothing
 // until someone answered, long after the read-back gave up. The threshold is
 // somewhere from 201 to 300 and was not measured more closely, so 200 is the
-// largest size known to be safe. Only top-level to-dos were measured; every
-// item at any depth counts towards the limit except checklist items, which
-// are part of their to-do.
+// largest size known to be safe. Only top-level to-dos were measured, so
+// the limit counts the items that create something, at any depth: to-dos,
+// projects, and headings in a project's items. Update items, which create
+// nothing, do not count, and nor do checklist items, which are part of their
+// to-do.
 const maxImportItems = 200
 
 // importSlot is where an item sits in a payload, which decides the types
@@ -43,9 +45,18 @@ var importSlotNames = map[importSlot]string{
 	slotChecklist:    "in a to-do's checklist-items",
 }
 
-// importItemTypes are every item type Things knows, by the format's word for
-// it. Things does not trim a type: "to-do " is rejected.
-var importItemTypes = map[string]bool{"to-do": true, "project": true, "heading": true, "checklist-item": true}
+// importItemTypeNames are every item type Things knows, by the format's word
+// for it. Things does not trim a type: "to-do " is rejected.
+var importItemTypeNames = []string{"to-do", "project", "heading", "checklist-item"}
+
+// importItemTypes is importItemTypeNames as a set.
+var importItemTypes = func() map[string]bool {
+	set := map[string]bool{}
+	for _, name := range importItemTypeNames {
+		set[name] = true
+	}
+	return set
+}()
 
 // importAttrKinds is the JSON kind each attribute of a created item must
 // have, null aside, besides the destinations badImportTypes checks. Measured
@@ -87,7 +98,8 @@ func (s importShape) empty() bool {
 // importShapes walks the items of payload where Things reads them: the top
 // level, a project's items, and a to-do's checklist-items. It returns what is
 // wrong with each item that has a problem, by path, and the number of items
-// that count towards maxImportItems.
+// that count towards maxImportItems: every object that is not an update item
+// or a checklist item.
 func importShapes(payload []any) (map[string]importShape, int) {
 	shapes := map[string]importShape{}
 	count := 0
@@ -95,10 +107,10 @@ func importShapes(payload []any) (map[string]importShape, int) {
 	walk = func(items []any, prefix string, slot importSlot) {
 		for i, raw := range items {
 			path := fmt.Sprintf("%s[%d]", prefix, i)
-			if slot != slotChecklist {
+			item, ok := raw.(map[string]any)
+			if ok && slot != slotChecklist && item["operation"] != "update" {
 				count++
 			}
-			item, ok := raw.(map[string]any)
 			if !ok {
 				shown, _ := json.Marshal(raw)
 				shapes[path] = importShape{items: []string{fmt.Sprintf("not an object: %s", shown)}}
@@ -162,7 +174,7 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 	case !importItemTypes[itemType]:
 		allowed := importSlotTypes[slot]
 		if !create {
-			allowed = []string{"to-do", "project", "heading", "checklist-item"}
+			allowed = importItemTypeNames
 		}
 		bad("type", "%s is not %s", shown(item["type"]), strings.Join(allowed, " or "))
 	case create && !slices.Contains(importSlotTypes[slot], itemType):

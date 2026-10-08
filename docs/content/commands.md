@@ -758,7 +758,8 @@ no offset, a lowercase `t` or `z`, a comma before the fraction of a second,
 a leading space, a month outside 1 to 12, or an offset such as `+200`, so
 `import` refuses these before anything is sent (tags included) and names
 each item, with the id of an update item. It also refuses a day outside 1 to
-31 and an offset wider than 18 hours, which were not measured. An hour past
+31, an offset wider than 18 hours, and a year of more than four digits or
+another date or time field of more than two, none of which were measured. An hour past
 23 is taken: Things rolls it into the next day. A `null` creation-date is no
 date: Things saves the item as created now.
 
@@ -783,8 +784,9 @@ A to-do or project created with no `title`, or one that is only
 whitespace, is refused with reason `blank-title`. Things would create it
 as an untitled item, which is almost never what was meant.
 
-A payload with more than 200 items is refused before anything is sent.
-Every item counts, nested ones included, except checklist items. With 300
+A payload that creates more than 200 items is refused before anything is
+sent. Every to-do, project and heading it creates counts, nested ones
+included. Update items and checklist items do not count. With 300
 to-dos Things stops to ask "Is this what you intended?" and creates nothing
 until someone answers, long after the read-back has given up; 200 went
 through without the question. Split a bigger payload into several imports.
@@ -886,7 +888,9 @@ an unconfirmed `add` does, and no `uuid` unless the reason is
   so it does not stop the read-back. When a new item appeared for this item
   and for each dated item that could hold one of them, every one of them is
   there, so the import exits 0. When fewer appeared, the item may still
-  exist, but one of them has not appeared, so the import fails.
+  exist, but one of them has not appeared, so the import fails. Under
+  `--json` the item carries `"present": true` in the first case and
+  `"present": false` in the second. No other item carries `present`.
 - `not-found`: no new item with that title appeared within the read-back
   wait, or fewer than the payload created, or fewer than the created items
   that could each be filed where they appeared (when one of them has a

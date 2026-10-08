@@ -152,8 +152,10 @@ func (c importCreate) landsInWindow(since time.Time) bool {
 // no seconds or no offset, a lowercase t or z, a comma before the fraction, a
 // leading space, or a number. The groups are the year, month, day, hour,
 // minute, second, fraction, and the offset's sign, hours, minutes and
-// seconds.
-var creationDateShape = regexp.MustCompile(`^(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)(?:\.(\d+))?(?:Z|([+-])(\d+)(?::(\d+))?(?::(\d+))?)$`)
+// seconds. The year is held to four digits and the other date and time
+// fields to two, so no field can overflow; wider ones were not measured and
+// are refused.
+var creationDateShape = regexp.MustCompile(`^(\d{1,4})-(\d{1,2})-(\d{1,2})T(\d{1,2}):(\d{1,2}):(\d{1,2})(?:\.(\d+))?(?:Z|([+-])(\d+)(?::(\d+))?(?::(\d+))?)$`)
 
 // maxDateOffset is the largest UTC offset parseThingsDate takes. Things was
 // not measured between +14 and +200; 18 hours is the widest offset Foundation
@@ -607,7 +609,7 @@ var importDateAttrs = []string{"creation-date", "completion-date"}
 // Things 3: a bad date on a heading or a checklist item rejects the payload
 // as one on a to-do or project does.
 func badImportDates(item map[string]any) (lines, names []string) {
-	if itemType, _ := item["type"].(string); !importDatedTypes[strings.TrimSpace(itemType)] {
+	if itemType, _ := item["type"].(string); !importItemTypes[strings.TrimSpace(itemType)] {
 		return nil, nil
 	}
 	attrs, _ := item["attributes"].(map[string]any)
@@ -648,10 +650,6 @@ func badImportTypes(item map[string]any) (lines, names []string) {
 	}
 	return lines, names
 }
-
-// importDatedTypes are the payload item types that carry a creation-date or
-// completion-date.
-var importDatedTypes = map[string]bool{"to-do": true, "project": true, "heading": true, "checklist-item": true}
 
 // importTaskTypes are the payload item types that are to-dos or projects,
 // by the format's word for them.
@@ -847,7 +845,7 @@ func (e *importRefusalError) Error() string {
 	}
 	var parts []string
 	if e.oversize() {
-		parts = append(parts, fmt.Sprintf("The payload has %d items (checklist items not counted). Above %d, Things stops to ask \"Is this what you intended?\" and creates nothing until someone answers, so the import cannot be read back. Split it into imports of at most %d items each.",
+		parts = append(parts, fmt.Sprintf("The payload creates %d items (update items and checklist items not counted). Above %d, Things stops to ask \"Is this what you intended?\" and creates nothing until someone answers, so the import cannot be read back. Split it into imports of at most %d items each.",
 			e.size, maxImportItems, maxImportItems))
 	}
 	if len(repeating) > 0 {
@@ -915,7 +913,7 @@ func (c importCreated) fails() bool {
 // enough new items for every claimant is there, though which of them it is
 // cannot be told, so it does not fail the import.
 func (c importCreated) mayBeMissing() bool {
-	return c.Reason == "not-found" || (c.Reason == "shares-dated-title" && !c.present)
+	return c.Reason == "not-found" || (c.Reason == "shares-dated-title" && (c.Present == nil || !*c.Present))
 }
 
 // dateDropped is the verdict on a created item saved without the
@@ -952,8 +950,12 @@ func (e *importVerifyError) Error() string {
 			lines[i] = fmt.Sprintf("  %s: %s", it.Path, it.detail)
 		}
 		cause := "The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save."
-		if len(missing) == len(e.created) && !slices.ContainsFunc(missing, func(c importCreated) bool { return c.Reason != "not-found" || len(c.Candidates) > 0 }) {
-			// Nothing the payload creates appeared, which is also what a
+		if len(e.items) == e.total && !slices.ContainsFunc(e.created, func(c importCreated) bool {
+			return c.Reason != "creation-date" && (c.Reason != "not-found" || len(c.Candidates) > 0)
+		}) {
+			// Nothing the payload creates appeared (an item given a
+			// creation-date is not looked for, so it says nothing either
+			// way) and no status change applied, which is also what a
 			// payload Things rejected with an error looks like.
 			cause = "None of them appeared: Things may have rejected the whole payload (look for an error in the Things window), may not be running, or may be slow to save."
 		}
@@ -1003,11 +1005,12 @@ type importCreated struct {
 	Confirmed  bool     `json:"confirmed"`
 	Reason     string   `json:"reason,omitempty"`
 	Candidates []string `json:"candidates,omitempty"`
+	// Present is given on a shares-dated-title item only: true when as many
+	// new items appeared as the items that could claim them, so it is there
+	// (the import does not fail over it), false when it may be missing.
+	Present *bool `json:"present,omitempty"`
 
 	detail string // why a failing item is missing or unconfirmed, for the plain-text error
-	// present is set on a shares-dated-title item when as many new items
-	// appeared as the items that could claim them, so it is there.
-	present bool
 }
 
 // prepareImport is the pre-write pass over an import payload. It refuses the
@@ -1249,24 +1252,26 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		case err != nil && len(dated[c.key()]) > 0:
 			// With no rows to see where the dated item went, it may be
 			// any new item with the title.
-			out[i].Reason = "shares-dated-title"
+			out[i].Reason, out[i].Present = "shares-dated-title", new(bool)
 			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and the database could not be read to count the new items with that title, so the item may exist but cannot be confirmed", c.kind(), c.title)
 		case err != nil:
 			out[i].Reason = "unreadable"
 		case sharesDated:
 			out[i].Reason, out[i].Candidates = "shares-dated-title", uuids
-			// Each dated item that fits one of the new items may hold one
-			// of them. When there are enough for every item that could
-			// claim them, all are there, and only which is which is
-			// unknown.
-			claimants := n
+			// Each item without a creation-date whose new items overlap
+			// these, and each dated item that fits one of them, may hold
+			// one of the new items they share. When there are enough for
+			// every item that could claim them, all are there, and only
+			// which is which is unknown.
+			rows, claimants := sharedRows(c, creates, found, matches)
 			for _, dst := range dated[c.key()] {
-				if slices.ContainsFunc(matches, dst.fits) {
+				if slices.ContainsFunc(rows, dst.fits) {
 					claimants++
 				}
 			}
-			out[i].present = len(matches) >= claimants
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and only %s with that title appeared for the %d items that could be filed there, so this item may exist as one of them but cannot be confirmed (%s)", c.kind(), c.title, plural(len(matches), "new item"), claimants, strings.Join(uuids, ", "))
+			present := len(rows) >= claimants
+			out[i].Present = &present
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and only %s with that title appeared for the %d items that could be filed there, so this item may exist as one of them but cannot be confirmed (%s)", c.kind(), c.title, plural(len(rows), "new item"), claimants, strings.Join(uuids, ", "))
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
 			// Two saved at the same instant cannot be paired with the
 			// payload's items by order, so neither is confirmed.
@@ -1291,6 +1296,34 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
 	return out
+}
+
+// sharedRows returns the new items that c, an item without a creation-date
+// whose new items are matches, competes for with the other items without one
+// of its type and title: matches, and the new items of each such item whose
+// own new items include one of matches. It also returns how many items
+// without a creation-date compete for them, c included.
+func sharedRows(c importCreate, creates []importCreate, found map[createdWant][]model.Task, matches []model.Task) ([]model.Task, int) {
+	rows := slices.Clone(matches)
+	claimants := 0
+	for _, other := range creates {
+		if other.dated || other.key() != c.key() {
+			continue
+		}
+		theirs := found[other.want()]
+		if other.want() != c.want() && !slices.ContainsFunc(theirs, func(t model.Task) bool {
+			return slices.ContainsFunc(matches, func(m model.Task) bool { return m.UUID == t.UUID })
+		}) {
+			continue
+		}
+		claimants++
+		for _, t := range theirs {
+			if !slices.ContainsFunc(rows, func(r model.Task) bool { return r.UUID == t.UUID }) {
+				rows = append(rows, t)
+			}
+		}
+	}
+	return rows, claimants
 }
 
 // unconfirmShared turns back every confirmation whose new item another
