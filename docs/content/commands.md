@@ -371,6 +371,11 @@ or another symbol, such as `2026-10-07`, `12:30`, `$100` or `1.2.3`, still
 matches part of a title. Space around a number or a marked ref is not part of
 the title: ` 2026 ` finds a task titled "2026".
 
+`show` still reaches an item in the Trash by row number or uuid. Its
+status line says so, as in `Status: Open (in Trash)`, and `--json` has
+`"trashed": true`. The writes refuse such an item; see
+[Completing and cancelling](#completing-and-cancelling).
+
 A `--json` listing is the exception: it prints no numbers and records
 none, so it leaves your indices pointing where they did. That keeps a
 script or an agent running `--json` in another window from renumbering
@@ -695,10 +700,22 @@ question up front, which is how project completion works from a script.
 `assume_yes = true` in the config file sets it every time, and `--yes`
 still decides each run.
 
+On success both print the item as `things show` would, the same object
+under `--json`, once the read-back sees the new status. With `--no-verify`
+nothing is read back, and they print a line saying the change was sent but
+not confirmed (under `--json`, `{"uuid", "title", "confirmed": false,
+"reason": "no-verify"}`).
+
 Listings number the items closed today alongside the open ones, so a ref can
 land on one. Completing an item that is already completed, or cancelling one
 already cancelled, sends nothing and exits 0 with a note. Completing a
 cancelled item, or cancelling a completed one, is refused and sends nothing.
+
+An item in the Trash is refused and nothing is sent. A row number can point
+at one when the item was trashed in Things after the listing was printed,
+and a uuid can name one; a title never matches it. The error names the item
+and says it is in the Trash; under `--json` its token is `trashed`. `edit`
+and `project edit` refuse a trashed item the same way.
 
 Both go through AppleScript so Things3 records the change in its
 activity log. Task creation (`add`) and edits go through the

@@ -49,7 +49,7 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
 - `things projects` also reports `taskCount` and `openCount`. `taskCount` is every untrashed task in the project; `openCount` is the ones still open. The difference is the ones that are no longer open, which means completed or cancelled. Tasks filed under a project heading count towards both; the heading rows themselves never do, and neither do trashed tasks or checklist items. Both numbers are Things' own bookkeeping, read straight from the database rather than recounted by the CLI.
 - Human output is styled and column-aligned; colour auto-disables when piping or under `NO_COLOR`. `--color=always|never` overrides. JSON is unaffected.
 
-**A failure under `--json` prints one JSON object to stdout and exits non-zero.** Branch on the exit status and read the failure off stdout — not stderr. On success the read commands print their result there. Of the write commands, `add`, `project add`, `edit` and `project edit` print the item (rule 3), `tag add` reports what it created and what it skipped, and the rest print nothing. `error` is a stable token; `message` is the human text.
+**A failure under `--json` prints one JSON object to stdout and exits non-zero.** Branch on the exit status and read the failure off stdout — not stderr. On success the read commands print their result there. Of the write commands, `add`, `project add`, `edit`, `project edit`, `complete` and `cancel` print the item (rule 3), `tag add` reports what it created and what it skipped, and the rest print nothing. `error` is a stable token; `message` is the human text.
 
 ```json
 {"error": "ambiguous task", "message": "...", "kind": "task", "query": "milk",
@@ -60,10 +60,12 @@ Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees
  "kind": "project", "query": "Chores", "uuid": "...", "title": "Chores"}
 {"error": "not a project", "message": "\"Post letter\" is a task; use things edit",
  "kind": "task", "query": "Post letter", "uuid": "...", "title": "Post letter"}
+{"error": "trashed", "message": "\"Post letter\" (...) is in the Trash, so it was not completed; nothing sent. ...",
+ "kind": "task", "query": "2", "uuid": "...", "title": "Post letter"}
 {"error": "error", "message": "..."}
 ```
 
-On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries its `type`, and a title a project and a to-do share is reported this way rather than resolving to one of them, so `type` tells you whether the uuid you picked wants `things edit` or `things project edit`. On `stale list cache` a row number was used past its four hours or against a different database; re-list and use the `uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
+On `ambiguous task`, retry with one of `matches[].uuid`; each candidate carries its `type`, and a title a project and a to-do share is reported this way rather than resolving to one of them, so `type` tells you whether the uuid you picked wants `things edit` or `things project edit`. On `stale list cache` a row number was used past its four hours or against a different database; re-list and use the `uuid`. On `not a task` the reference resolved to a project, `edit` wrote nothing, and the retry is `things project edit <uuid>`; `not a project` is the same mistake the other way round, and the retry is `things edit <uuid>`. On `trashed` the row number or uuid named an item in the Trash (often one trashed in Things after the listing was printed); `complete`, `cancel`, `edit` and `project edit` refuse it and send nothing. Re-list and check you have the item you meant: do not retry with the same reference. `show` still reaches a trashed item and says so (`"trashed": true`, or `Status: Open (in Trash)` in plain output). This covers argument and flag errors too — `things --json show` with no argument returns the object, not a usage block. Without `--json`, errors stay a plain `Error: ...` line on stderr.
 
 `import` fails per item, so its two failures add an `items` array — act on that rather than parsing `message`:
 
@@ -131,7 +133,7 @@ A template and its generated task share a title, so a title lookup resolves to t
 
 ### 3. Every status change, edit and new item is read back
 
-After a `complete`, a `cancel`, or an `import` item setting `completed`/`canceled`, the CLI re-reads the item and exits non-zero if the status never changed. **Treat a non-zero exit as "still open" — do not report it as done.** Setting either field to `false` asks for incomplete and is read back too; `canceled` wins when both are set. An import checks every such item under one shared timeout budget, and the per-item detail is part of the error, so it survives `--json`:
+After a `complete`, a `cancel`, or an `import` item setting `completed`/`canceled`, the CLI re-reads the item and exits non-zero if the status never changed. **Treat a non-zero exit as "still open" — do not report it as done.** On success `complete` and `cancel` print the item as `things show` would, the same object under `--json`; under `--no-verify` they print a line saying the change was sent but not confirmed (`{"uuid", "title", "confirmed": false, "reason": "no-verify"}`). An item already closed the same way prints a note on stderr and nothing on stdout. Setting either field to `false` asks for incomplete and is read back too; `canceled` wins when both are set. An import checks every such item under one shared timeout budget, and the per-item detail is part of the error, so it survives `--json`:
 
 ```
 Error: 1 of 2 requested status changes did not apply. …:

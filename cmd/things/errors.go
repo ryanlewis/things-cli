@@ -18,12 +18,12 @@ import (
 // so a consumer reading stdout sees a JSON failure rather than English prose,
 // and can branch on the "error" token (issue #152). On success the read
 // commands print their result; add, project add, edit and project edit print
-// the item, tag add what it created, and import a verdict per item it
-// created.
+// the item, complete and cancel the item they closed, tag add what it
+// created, and import a verdict per item it created.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
-// "not a project", "stale list cache", or "error" for a failure with no
-// structure worth naming.
+// "not a project", "trashed", "stale list cache", or "error" for a failure
+// with no structure worth naming.
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
@@ -129,6 +129,26 @@ type wrongKindError struct {
 
 func (e *wrongKindError) Error() string {
 	return fmt.Sprintf("%q is a %s; use %s", e.Title, e.Kind, e.Retry)
+}
+
+// trashedError is a write refused because its target is in the Trash. Only a
+// row number or a uuid can reach a trashed item, since the title lookups skip
+// the Trash, and a row number can point at one when the item was trashed in
+// Things after the listing was printed. Acting on it would change an item the
+// user can no longer see, so `complete`, `cancel`, `edit` and `project edit`
+// refuse it and send nothing.
+type trashedError struct {
+	Kind  string // "task" or "project"
+	Query string
+	UUID  string
+	Title string
+	// Done is what the refused write would have made of the item, as in
+	// "so it was not completed".
+	Done string
+}
+
+func (e *trashedError) Error() string {
+	return fmt.Sprintf("%q (%s) is in the Trash, so it was not %s; nothing sent. Put it back from the Trash in Things first if you meant this %s", e.Title, e.UUID, e.Done, e.Kind)
 }
 
 // ambiguousRefError carries a *db.AmbiguousTaskError alongside the multi-line
@@ -298,6 +318,16 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Query = wrongKind.Query
 		payload.UUID = wrongKind.UUID
 		payload.Title = wrongKind.Title
+		return payload
+	}
+
+	var trashed *trashedError
+	if errors.As(err, &trashed) {
+		payload.Error = "trashed"
+		payload.Kind = trashed.Kind
+		payload.Query = trashed.Query
+		payload.UUID = trashed.UUID
+		payload.Title = trashed.Title
 		return payload
 	}
 

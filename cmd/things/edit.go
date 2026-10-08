@@ -258,6 +258,9 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	if err != nil {
 		return err
 	}
+	if err := refuseTrashed(ref, task, "edited"); err != nil {
+		return err
+	}
 	if (task.Type == model.TypeProject) != kind.project {
 		return &wrongKindError{
 			Token: kind.token,
@@ -497,7 +500,8 @@ var statusChanges = map[model.Status]statusChange{
 }
 
 // runStatusChange resolves ref and moves it to want, asking first when it is
-// a project, then confirms the change landed.
+// a project, then confirms the change landed and prints the item. An item in
+// the Trash is refused.
 func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 	sc := statusChanges[want]
 	database, err := d.Database()
@@ -506,6 +510,9 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 	}
 	task, err := resolveTask(d, ref, database)
 	if err != nil {
+		return err
+	}
+	if err := refuseTrashed(ref, task, want.String()); err != nil {
 		return err
 	}
 	same, err := checkClosed(task, want)
@@ -527,6 +534,17 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 		write = func() error { return sc.projectWrite(task.UUID) }
 	}
 	return applyStatusWrite(d, database, task, want, write)
+}
+
+// refuseTrashed refuses a write to an item in the Trash (trashedError). It
+// runs before checkClosed, so a trashed item that is already closed is
+// refused too rather than noted: the reference most likely meant some other
+// item. done is what the write would have made of the item.
+func refuseTrashed(ref string, task *model.Task, done string) error {
+	if !task.Trashed {
+		return nil
+	}
+	return &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done}
 }
 
 // checkClosed reports whether task already has the closed status want, and

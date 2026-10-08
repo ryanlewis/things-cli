@@ -300,7 +300,13 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem, la
 
 	field("Title:", t.Title)
 	field("UUID:", t.UUID)
-	field("Status:", statusText(t.Status))
+	// JSON carries "trashed"; the plain block says it on the status line, so
+	// an item in the Trash never reads as an ordinary open one.
+	status := statusText(t.Status)
+	if t.Trashed {
+		status += " (in Trash)"
+	}
+	field("Status:", status)
 	// A lookup resolves projects as well as to-dos, and `things repeating`
 	// hands out indexes for project templates, so say when the thing being
 	// shown is a project rather than leaving its detail block reading as a

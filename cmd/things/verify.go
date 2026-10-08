@@ -297,16 +297,26 @@ func verifyStatus(database *db.DB, task *model.Task, want model.Status, budget t
 	return verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, budget)[0].err
 }
 
-// applyStatusWrite runs a status-changing write and confirms it landed, unless
-// verification is switched off with --no-verify.
+// applyStatusWrite runs a status-changing write, confirms it landed, and
+// prints the item as Things now holds it, as `edit --complete` does, so exit
+// 0 with nothing printed is never the answer. Under --no-verify nothing is
+// read back and the output says the change is unconfirmed.
 func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Status, write func() error) error {
 	if err := write(); err != nil {
 		return err
 	}
 	if d.NoVerify {
-		return nil
+		return printUnconfirmedEdit(d, task, "no-verify", "Sent to Things, not confirmed (--no-verify)")
 	}
-	return verifyStatus(database, task, want, d.readBackTimeout())
+	res := verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, d.readBackTimeout())[0]
+	if res.err != nil {
+		return res.err
+	}
+	current := res.task
+	if current == nil {
+		current = task
+	}
+	return printItem(d, database, current)
 }
 
 // applyEdit runs an `edit` / `project edit` update, waits for it to land, and
