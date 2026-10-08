@@ -1245,7 +1245,8 @@ func (d *DB) StoredStart(uuid string) (model.Start, error) {
 // ReminderTime returns the item's raw reminder time (model.ReminderClock
 // decodes it), and whether it has one. Things sets it from a --when time and
 // clears it when a --when for today arrives without one, so the edit no-op
-// check needs it. Listings read it through the task query instead. A missing item has none.
+// check needs it. Listings read it through the task query instead. A missing
+// item has none.
 func (d *DB) ReminderTime(uuid string) (int64, bool, error) {
 	var raw sql.NullInt64
 	err := d.queryRow(`SELECT reminderTime FROM TMTask WHERE uuid = ?`, uuid).Scan(&raw)
