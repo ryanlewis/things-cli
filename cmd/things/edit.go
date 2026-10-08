@@ -319,7 +319,8 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	var when *whenCheck
 	if f.When != nil && changed {
 		when = &whenCheck{value: *f.When}
-		if !s.Duplicate && !d.NoVerify && unmoved(task, clock.Now(), reads.stored) {
+		now := clock.Now()
+		if !s.Duplicate && !d.NoVerify && (unmoved(task, now, reads.stored) || carriedOver(task, model.ThingsDateFromTime(now))) {
 			when.before = task
 			when.whenOnly = !uncovered && f.onlyWhen()
 		}
