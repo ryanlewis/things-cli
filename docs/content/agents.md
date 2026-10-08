@@ -258,6 +258,10 @@ Every command accepts `-j` / `--json`, and it changes more than the format:
   reports `checklistProgress`: `total`, every item, and `open`, the ones
   still open, so the difference is the ones completed or cancelled. A row
   without a checklist leaves the field out. `things show` lists the items.
+- **Tasks carry their reminder.** A task with a reminder, as
+  `--when 2026-10-09@09:00` sets one, reports `reminderTime` as a local
+  `"HH:MM"` clock time on its `startDate`. A task without one leaves the
+  field out.
 
 ```console
 $ things show milk --json; echo "exit=$?"

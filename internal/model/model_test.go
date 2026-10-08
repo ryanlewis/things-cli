@@ -518,3 +518,16 @@ func TestReminderClock(t *testing.T) {
 		}
 	}
 }
+
+// ReminderText pads both parts, so an early reminder reads 07:05, not 7:5.
+func TestReminderText(t *testing.T) {
+	for raw, want := range map[int64]string{
+		469762048:     "07:00",
+		7<<26 | 5<<20: "07:05",
+		1603272704:    "23:57",
+	} {
+		if got := ReminderText(raw); got != want {
+			t.Errorf("ReminderText(%d) = %q, want %q", raw, got, want)
+		}
+	}
+}

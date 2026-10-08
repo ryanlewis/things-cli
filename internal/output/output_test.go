@@ -731,3 +731,72 @@ func TestOneLine(t *testing.T) {
 		}
 	}
 }
+
+func strPtr(s string) *string { return &s }
+
+// A reminder prints in JSON only when the to-do has one.
+func TestPrintTasksJSONReminderTime(t *testing.T) {
+	tasks := []model.Task{
+		{UUID: "u1", Title: "Reminded", StartDate: mustDate(2026, 10, 9), ReminderTime: strPtr("09:00")},
+		{UUID: "u2", Title: "Plain", StartDate: mustDate(2026, 10, 9)},
+	}
+	var buf bytes.Buffer
+	if err := PrintTaskList(&buf, tasks, true, ""); err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("parse: %v\n%s", err, buf.String())
+	}
+	if r, ok := got[0]["reminderTime"]; !ok || r != "09:00" {
+		t.Errorf("reminded: reminderTime = %v (present %v), want 09:00", r, ok)
+	}
+	if r, ok := got[1]["reminderTime"]; ok {
+		t.Errorf("plain: reminderTime = %v, want absent", r)
+	}
+}
+
+// The list row puts the reminder ahead of the title, as the app does, and a
+// row without one prints exactly as before.
+func TestPrintTasksReminderTime(t *testing.T) {
+	pinClock(t, time.Date(2026, 10, 9, 8, 0, 0, 0, time.Local), nil)
+	pinLayout(t, 120, false)
+	tasks := []model.Task{
+		{UUID: "u1", Title: "Reminded", Status: model.StatusOpen, Start: model.StartAnytime, StartDate: mustDate(2026, 10, 9), ReminderTime: strPtr("09:00")},
+		{UUID: "u2", Title: "Plain", Status: model.StatusOpen},
+	}
+	var buf bytes.Buffer
+	if err := PrintTaskList(&buf, tasks, false, ""); err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+	lines := strings.Split(buf.String(), "\n")
+	if !strings.Contains(lines[0], "★ 09:00 Reminded") {
+		t.Errorf("reminded row = %q, want the time before the title", lines[0])
+	}
+	if strings.Contains(lines[1], ":") {
+		t.Errorf("plain row = %q, want no time", lines[1])
+	}
+}
+
+// show puts the reminder on the Start line, or on a line of its own when
+// there is no start date to put it beside.
+func TestPrintTaskDetailReminderTime(t *testing.T) {
+	pinLayout(t, 120, false)
+	for _, tc := range []struct {
+		name string
+		task model.Task
+		want string
+	}{
+		{"with start", model.Task{UUID: "u1", Title: "T", StartDate: mustDate(2026, 10, 9), ReminderTime: strPtr("09:00")}, "Start:    2026-10-09 09:00\n"},
+		{"without start", model.Task{UUID: "u1", Title: "T", ReminderTime: strPtr("21:30")}, "Reminder: 21:30\n"},
+		{"none", model.Task{UUID: "u1", Title: "T", StartDate: mustDate(2026, 10, 9)}, "Start:    2026-10-09\n"},
+	} {
+		var buf bytes.Buffer
+		if err := PrintTaskWithChecklist(&buf, &tc.task, nil, false); err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if !strings.Contains(buf.String(), tc.want) {
+			t.Errorf("%s: detail missing %q:\n%s", tc.name, tc.want, buf.String())
+		}
+	}
+}
