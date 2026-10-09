@@ -231,10 +231,34 @@ type UpdateCommon struct {
 	Reveal       bool
 }
 
-// values checks the id and auth token, returns invalid if the caller's
-// validation failed, normalises When and Deadline, and sets the shared
-// keys. command prefixes the guard errors; kind names the item ("task",
-// "project").
+// normalized returns invalid if the caller's validation failed, and
+// otherwise c with When and Deadline normalised. It checks the fields only,
+// not the id or auth token, so it can run before the CLI knows whether the
+// edit will be sent at all.
+func (c UpdateCommon) normalized(invalid error) (UpdateCommon, error) {
+	if invalid != nil {
+		return c, invalid
+	}
+	if c.When != nil {
+		v, err := NormalizeWhen(*c.When)
+		if err != nil {
+			return c, err
+		}
+		c.When = &v
+	}
+	if c.Deadline != nil {
+		v, err := NormalizeDeadline(*c.Deadline)
+		if err != nil {
+			return c, err
+		}
+		c.Deadline = &v
+	}
+	return c, nil
+}
+
+// values checks the id and auth token, then the fields (normalized), and
+// sets the shared keys. command prefixes the guard errors; kind names the
+// item ("task", "project").
 func (c UpdateCommon) values(command, kind string, invalid error) (url.Values, error) {
 	if c.ID == "" {
 		return nil, fmt.Errorf("%s: %s id is required", command, kind)
@@ -242,22 +266,9 @@ func (c UpdateCommon) values(command, kind string, invalid error) (url.Values, e
 	if c.AuthToken == "" {
 		return nil, fmt.Errorf("%s: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once", command)
 	}
-	if invalid != nil {
-		return nil, invalid
-	}
-	if c.When != nil {
-		v, err := NormalizeWhen(*c.When)
-		if err != nil {
-			return nil, err
-		}
-		c.When = &v
-	}
-	if c.Deadline != nil {
-		v, err := NormalizeDeadline(*c.Deadline)
-		if err != nil {
-			return nil, err
-		}
-		c.Deadline = &v
+	c, err := c.normalized(invalid)
+	if err != nil {
+		return nil, err
 	}
 
 	v := url.Values{}
@@ -291,19 +302,17 @@ type UpdateParams struct {
 	HeadingID        *string
 }
 
-// Validate returns the error UpdateTask would refuse p with, so a caller can
-// refuse p before doing anything else, such as creating tags.
+// Validate returns the error UpdateTask would refuse p's fields with, so a
+// caller can refuse p before doing anything else, such as creating tags. It
+// leaves out the id and auth token checks: an edit the CLI ends up not
+// sending needs neither.
 func (p UpdateParams) Validate() error {
-	_, err := p.checked()
+	_, err := p.normalized(validateUpdate(p))
 	return err
 }
 
-func (p UpdateParams) checked() (url.Values, error) {
-	return p.values("update", "task", validateUpdate(p))
-}
-
 func UpdateTask(params UpdateParams) error {
-	v, err := params.checked()
+	v, err := params.values("update", "task", validateUpdate(params))
 	if err != nil {
 		return err
 	}
@@ -345,19 +354,16 @@ type UpdateProjectParams struct {
 	AreaID *string
 }
 
-// Validate returns the error UpdateProject would refuse p with, so a caller
-// can refuse p before doing anything else, such as creating tags.
+// Validate returns the error UpdateProject would refuse p's fields with, so
+// a caller can refuse p before doing anything else, such as creating tags.
+// It leaves out the id and auth token checks, as UpdateParams.Validate does.
 func (p UpdateProjectParams) Validate() error {
-	_, err := p.checked()
+	_, err := p.normalized(validateUpdateProject(p))
 	return err
 }
 
-func (p UpdateProjectParams) checked() (url.Values, error) {
-	return p.values("update-project", "project", validateUpdateProject(p))
-}
-
 func UpdateProject(params UpdateProjectParams) error {
-	v, err := params.checked()
+	v, err := params.values("update-project", "project", validateUpdateProject(params))
 	if err != nil {
 		return err
 	}

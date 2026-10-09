@@ -234,3 +234,18 @@ func TestRejectsBeforeOpen(t *testing.T) {
 		})
 	}
 }
+
+// Validate checks the fields only: an update with no id or auth token, which
+// UpdateTask and UpdateProject refuse, passes, and a bad field still fails.
+func TestValidateUpdateSkipsIDAndToken(t *testing.T) {
+	if err := (UpdateParams{}).Validate(); err != nil {
+		t.Errorf("UpdateParams{}.Validate() = %v, want nil", err)
+	}
+	if err := (UpdateProjectParams{}).Validate(); err != nil {
+		t.Errorf("UpdateProjectParams{}.Validate() = %v, want nil", err)
+	}
+	today := "today"
+	if err := (UpdateParams{UpdateCommon: UpdateCommon{Deadline: &today}}).Validate(); err == nil {
+		t.Error("Validate passed a keyword deadline")
+	}
+}
