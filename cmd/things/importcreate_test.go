@@ -915,8 +915,8 @@ func TestImportWarnsAboutDestinations(t *testing.T) {
 		`[6]: Things finds no area with id "nope"; it will create the project in no area`,
 		`[8]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list "Garden"`,
 		`[9]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list-id`,
-		`[10]: list "proj-1" is an id, and Things matches list by title only`,
-		`[11]: Things finds no project or area called " shed"`,
+		`[10]: list "proj-1" is an id, and Things matches list by title only; it will put the to-do in the Inbox (use list-id)`,
+		`[11]: Things finds no project or area called " shed"; it will put the to-do in the Inbox`,
 		`[15]: heading-id "head-1" is in another project; Things will file the to-do there and ignore list "Shed"`,
 		`[16]: Things will file the to-do under the heading heading-id "head-1" names and ignore heading "Other"`,
 	} {
