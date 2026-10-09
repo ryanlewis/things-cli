@@ -117,13 +117,13 @@ Notes:|
 |
 
 ### case=print/projects color=never
-○  Empty project|
-◔  Just started   Work  [urgent]|
-◑  Half done      Work|
-◕  Nearly there|
-●  All done       Home|
-●  Completed|
-◌  Cancelled|
+○    Empty project|
+◔    Just started   Work  [urgent]|
+◑    Half done      Work|
+◕    Nearly there|
+●    All done       Home|
+[x]  Completed|
+[~]  Cancelled|
 |
 
 ### case=print/projects-json color=never
@@ -900,33 +900,33 @@ the status did not change, so a zero exit means it landed.|
 |
 
 ### case=print/projects@30 color=never
-○  Empty project|
-◔  Just started   Work|
-◑  Half done      Work|
-◕  Nearly there|
-●  All done       Home|
-●  Completed|
-◌  Cancelled|
+○    Empty project|
+◔    Just started   Work|
+◑    Half done      Work|
+◕    Nearly there|
+●    All done       Home|
+[x]  Completed|
+[~]  Cancelled|
 |
 
 ### case=print/projects@20 color=never
-○  Empty project|
-◔  Just started|
-◑  Half done|
-◕  Nearly there|
-●  All done|
-●  Completed|
-◌  Cancelled|
+○    Empty project|
+◔    Just started|
+◑    Half done|
+◕    Nearly there|
+●    All done|
+[x]  Completed|
+[~]  Cancelled|
 |
 
 ### case=print/projects@14 color=never
-○  Empty proj…|
-◔  Just start…|
-◑  Half done|
-◕  Nearly the…|
-●  All done|
-●  Completed|
-◌  Cancelled|
+○    Empty pro…|
+◔    Just star…|
+◑    Half done|
+◕    Nearly th…|
+●    All done|
+[x]  Completed|
+[~]  Cancelled|
 |
 
 ### case=print/projects-long@60 color=never
@@ -1096,13 +1096,13 @@ file)|
 |
 
 ### case=print/projects@piped color=never
-○  Empty project|
-◔  Just started   Work  [urgent]|
-◑  Half done      Work|
-◕  Nearly there|
-●  All done       Home|
-●  Completed|
-◌  Cancelled|
+○    Empty project|
+◔    Just started   Work  [urgent]|
+◑    Half done      Work|
+◕    Nearly there|
+●    All done       Home|
+[x]  Completed|
+[~]  Cancelled|
 |
 
 ### case=print/projects-long@piped color=never
@@ -1284,13 +1284,13 @@ tab tag  (t)|
 |
 
 ### case=print/projects color=always
-\e[36m○\e[m  Empty project|
-\e[36m◔\e[m  Just started   \e[2;36mWork\e[m  \e[33m[urgent]\e[m|
-\e[36m◑\e[m  Half done      \e[2;36mWork\e[m|
-\e[36m◕\e[m  Nearly there|
-\e[36m●\e[m  All done       \e[2;36mHome\e[m|
-\e[2;32m●\e[m  Completed|
-\e[2;31m◌\e[m  Cancelled|
+\e[36m○\e[m    Empty project|
+\e[36m◔\e[m    Just started   \e[2;36mWork\e[m  \e[33m[urgent]\e[m|
+\e[36m◑\e[m    Half done      \e[2;36mWork\e[m|
+\e[36m◕\e[m    Nearly there|
+\e[36m●\e[m    All done       \e[2;36mHome\e[m|
+\e[2;32m[x]\e[m  \e[2;9mC\e[m\e[2;9mo\e[m\e[2;9mm\e[m\e[2;9mp\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9md\e[m|
+\e[2;31m[~]\e[m  \e[2;9mC\e[m\e[2;9ma\e[m\e[2;9mn\e[m\e[2;9mc\e[m\e[2;9me\e[m\e[2;9ml\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9md\e[m|
 |
 
 ### case=print/projects-json color=always
@@ -2067,33 +2067,33 @@ the status did not change, so a zero exit means it landed.|
 |
 
 ### case=print/projects@30 color=always
-\e[36m○\e[m  Empty project|
-\e[36m◔\e[m  Just started   \e[2;36mWork\e[m|
-\e[36m◑\e[m  Half done      \e[2;36mWork\e[m|
-\e[36m◕\e[m  Nearly there|
-\e[36m●\e[m  All done       \e[2;36mHome\e[m|
-\e[2;32m●\e[m  Completed|
-\e[2;31m◌\e[m  Cancelled|
+\e[36m○\e[m    Empty project|
+\e[36m◔\e[m    Just started   \e[2;36mWork\e[m|
+\e[36m◑\e[m    Half done      \e[2;36mWork\e[m|
+\e[36m◕\e[m    Nearly there|
+\e[36m●\e[m    All done       \e[2;36mHome\e[m|
+\e[2;32m[x]\e[m  \e[2;9mC\e[m\e[2;9mo\e[m\e[2;9mm\e[m\e[2;9mp\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9md\e[m|
+\e[2;31m[~]\e[m  \e[2;9mC\e[m\e[2;9ma\e[m\e[2;9mn\e[m\e[2;9mc\e[m\e[2;9me\e[m\e[2;9ml\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9md\e[m|
 |
 
 ### case=print/projects@20 color=always
-\e[36m○\e[m  Empty project|
-\e[36m◔\e[m  Just started|
-\e[36m◑\e[m  Half done|
-\e[36m◕\e[m  Nearly there|
-\e[36m●\e[m  All done|
-\e[2;32m●\e[m  Completed|
-\e[2;31m◌\e[m  Cancelled|
+\e[36m○\e[m    Empty project|
+\e[36m◔\e[m    Just started|
+\e[36m◑\e[m    Half done|
+\e[36m◕\e[m    Nearly there|
+\e[36m●\e[m    All done|
+\e[2;32m[x]\e[m  \e[2;9mC\e[m\e[2;9mo\e[m\e[2;9mm\e[m\e[2;9mp\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9md\e[m|
+\e[2;31m[~]\e[m  \e[2;9mC\e[m\e[2;9ma\e[m\e[2;9mn\e[m\e[2;9mc\e[m\e[2;9me\e[m\e[2;9ml\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9md\e[m|
 |
 
 ### case=print/projects@14 color=always
-\e[36m○\e[m  Empty proj…|
-\e[36m◔\e[m  Just start…|
-\e[36m◑\e[m  Half done|
-\e[36m◕\e[m  Nearly the…|
-\e[36m●\e[m  All done|
-\e[2;32m●\e[m  Completed|
-\e[2;31m◌\e[m  Cancelled|
+\e[36m○\e[m    Empty pro…|
+\e[36m◔\e[m    Just star…|
+\e[36m◑\e[m    Half done|
+\e[36m◕\e[m    Nearly th…|
+\e[36m●\e[m    All done|
+\e[2;32m[x]\e[m  \e[2;9mC\e[m\e[2;9mo\e[m\e[2;9mm\e[m\e[2;9mp\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9md\e[m|
+\e[2;31m[~]\e[m  \e[2;9mC\e[m\e[2;9ma\e[m\e[2;9mn\e[m\e[2;9mc\e[m\e[2;9me\e[m\e[2;9ml\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9md\e[m|
 |
 
 ### case=print/projects-long@60 color=always
@@ -2263,13 +2263,13 @@ the status did not change, so a zero exit means it landed.|
 |
 
 ### case=print/projects@piped color=always
-\e[36m○\e[m  Empty project|
-\e[36m◔\e[m  Just started   \e[2;36mWork\e[m  \e[33m[urgent]\e[m|
-\e[36m◑\e[m  Half done      \e[2;36mWork\e[m|
-\e[36m◕\e[m  Nearly there|
-\e[36m●\e[m  All done       \e[2;36mHome\e[m|
-\e[2;32m●\e[m  Completed|
-\e[2;31m◌\e[m  Cancelled|
+\e[36m○\e[m    Empty project|
+\e[36m◔\e[m    Just started   \e[2;36mWork\e[m  \e[33m[urgent]\e[m|
+\e[36m◑\e[m    Half done      \e[2;36mWork\e[m|
+\e[36m◕\e[m    Nearly there|
+\e[36m●\e[m    All done       \e[2;36mHome\e[m|
+\e[2;32m[x]\e[m  \e[2;9mC\e[m\e[2;9mo\e[m\e[2;9mm\e[m\e[2;9mp\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9mt\e[m\e[2;9me\e[m\e[2;9md\e[m|
+\e[2;31m[~]\e[m  \e[2;9mC\e[m\e[2;9ma\e[m\e[2;9mn\e[m\e[2;9mc\e[m\e[2;9me\e[m\e[2;9ml\e[m\e[2;9ml\e[m\e[2;9me\e[m\e[2;9md\e[m|
 |
 
 ### case=print/projects-long@piped color=always

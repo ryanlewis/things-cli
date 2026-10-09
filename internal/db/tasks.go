@@ -321,7 +321,7 @@ const thingsToday = `(SELECT day FROM ` + todayClock + `)`
 // project with no area that no list shows at all. The CLI lists each such
 // row by default in a view (someday included), its project, or its area,
 // unless --open-only is passed. A closed Anytime project with no area is the
-// one exception, and `things projects --completed` lists it.
+// one exception, and `things projects` lists it until it is logged.
 //
 // notATemplate is the other half of the test. today, anytime, upcoming and
 // someday all drop repeating templates and the contents of repeating project
@@ -457,7 +457,10 @@ const (
 	//
 	// Someday is where this differs from todayDue, deliberately: the same
 	// Someday row due today is not in the app's Today. A row with a start date
-	// as well is upcomingScheduled's, and was not measured here.
+	// as well is upcomingScheduled's, and was not measured here. A Someday
+	// to-do inside a project with a later deadline is in Upcoming too:
+	// measured on 9 Oct 2026, under an open parent project and under a
+	// Someday one alike, while the app's Someday list left both out.
 	upcomingDue = "t.start IN (1, 2) AND t.startDate IS NULL AND t.deadline > " + thingsToday
 	// upcomingScope is Upcoming's whole scope: the two ways in, either of
 	// which is enough.
@@ -803,8 +806,8 @@ var views = map[string]viewSpec{
 	// never both: Things moves an item out of its list and into the Logbook
 	// at the same moment (issues #230, #238, #293). An item still in place is
 	// listed by default by its view, its project or its area,
-	// and a closed Anytime project with no area by `things projects
-	// --completed`. Those listings overlap each other, so a sweep across them
+	// and a closed Anytime project with no area by `things projects` until
+	// it is logged. Those listings overlap each other, so a sweep across them
 	// dedupes by uuid.
 	//
 	// A closed project is one row, not a row plus its contents: the app folds

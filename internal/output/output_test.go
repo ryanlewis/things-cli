@@ -333,13 +333,14 @@ func TestProjectIconBuckets(t *testing.T) {
 		want string
 	}{
 		{model.Project{TaskCount: 0}, "○"},
-		{model.Project{TaskCount: 10, OpenCount: 10}, "○"},                // 0%
-		{model.Project{TaskCount: 10, OpenCount: 8}, "◔"},                 // 20%
-		{model.Project{TaskCount: 10, OpenCount: 5}, "◑"},                 // 50%
-		{model.Project{TaskCount: 10, OpenCount: 2}, "◕"},                 // 80%
-		{model.Project{TaskCount: 10, OpenCount: 0}, "●"},                 // 100%
-		{model.Project{Status: model.StatusCompleted, TaskCount: 5}, "●"}, // explicit completed
-		{model.Project{Status: model.StatusCancelled, TaskCount: 5}, "◌"}, // explicit cancelled
+		{model.Project{TaskCount: 10, OpenCount: 10}, "○"},                                // 0%
+		{model.Project{TaskCount: 10, OpenCount: 8}, "◔"},                                 // 20%
+		{model.Project{TaskCount: 10, OpenCount: 5}, "◑"},                                 // 50%
+		{model.Project{TaskCount: 10, OpenCount: 2}, "◕"},                                 // 80%
+		{model.Project{TaskCount: 10, OpenCount: 0}, "●"},                                 // 100%
+		{model.Project{Status: model.StatusCompleted, TaskCount: 5}, "[x]"},               // explicit completed
+		{model.Project{Status: model.StatusCompleted, TaskCount: 5, OpenCount: 0}, "[x]"}, // closed, not the all-done circle
+		{model.Project{Status: model.StatusCancelled, TaskCount: 5}, "[~]"},               // explicit cancelled
 	}
 	for _, tc := range cases {
 		if got := projectIcon(tc.p); got != tc.want {

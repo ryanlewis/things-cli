@@ -245,7 +245,7 @@ nothing on success. Their errors are still JSON.
   is in Upcoming too, under the deadline's day, as well as in Anytime or
   Someday, so a sweep across them merges on `uuid`. An undated
   `"anytime"` task whose deadline is today or past is in Today as well as
-  in Anytime, an undated `"anytime"` project is in Today, and an undated
+  in Anytime, an undated `"anytime"` project of that shape is in Today, and an undated
   `"inbox"` one is in Today and Anytime instead of the Inbox, unless it was
   taken out of Today for that deadline. A `"someday"` one due today is not
   in Today. In v0.7.0 and earlier this field was the
@@ -430,9 +430,8 @@ things projects -j | jq -r '.[] | select(.openCount == 0 and .taskCount > 0) | .
 than everything done. It does not tell done from cancelled: a project
 whose tasks were all cancelled matches too, so confirm before offering
 to close one. Plain output marks the same projects with a filled `●`
-progress icon, so an agent reading plain output is not blind to them —
-under `--completed` that icon also marks every completed project,
-including empty ones. A project holding a repeating task never appears
+progress icon, so an agent reading plain output is not blind to them; a
+closed project is marked `[x]` or `[~]` instead, as a closed task is. A project holding a repeating task never appears
 while the repeat is live: Things counts the hidden template row itself as
 an open task, and a template never completes. `things list -p <project>`
 hides that template, so it can report no open tasks for a project whose
