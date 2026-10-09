@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -362,5 +363,30 @@ func TestCreateTagsRefusesWithoutTheDatabase(t *testing.T) {
 	_, err := verifyTags(deps, TagFlags{CreateTags: true}, []string{"anything"})
 	if err == nil || !strings.Contains(err.Error(), "--create-tags") {
 		t.Fatalf("expected a --create-tags failure, got %v", err)
+	}
+}
+
+// A case twin of a name earlier in the same call is the same tag in Things,
+// so it is reported as skipped rather than left out of both lists.
+func TestTagAddReportsCaseTwinAsSkipped(t *testing.T) {
+	database, sqlDB := seedTagDB(t)
+	calls := stubExecCreatingTags(t, sqlDB)
+
+	out, err := runOut(t, database, "--json", "tag", "add", "focus", "Work", "FOCUS", "work", "focus")
+	if err != nil {
+		t.Fatalf("tag add: %v", err)
+	}
+	var got tagAddResult
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if !slices.Equal(got.Created, []string{"focus"}) {
+		t.Errorf("created = %v, want [focus]", got.Created)
+	}
+	if want := []string{"Work", "FOCUS", "work"}; !slices.Equal(got.Skipped, want) {
+		t.Errorf("skipped = %v, want %v", got.Skipped, want)
+	}
+	if names := osascriptTagNames(*calls); !slices.Equal(names, []string{"focus"}) {
+		t.Errorf("created %v in Things, want [focus] once", names)
 	}
 }

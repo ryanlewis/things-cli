@@ -27,6 +27,9 @@ type ProjectAddCmd struct {
 }
 
 func (c *ProjectAddCmd) Run(d *Deps) error {
+	if err := refuseBlankTitle(c.Title, "project", "added"); err != nil {
+		return err
+	}
 	if _, err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
 		return err
 	}

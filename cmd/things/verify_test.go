@@ -218,6 +218,22 @@ func TestCompleteCancelOnClosedItemSendsNothing(t *testing.T) {
 				if !strings.Contains(stderr, tc.note) {
 					t.Errorf("stderr = %q, want a note saying %q", stderr, tc.note)
 				}
+				// Plain output stays empty; --json prints the item as
+				// `edit --complete` does on the same item.
+				if out, err := runOut(t, database, tc.args...); err != nil || out != "" {
+					t.Errorf("plain stdout = %q, %v; want nothing", out, err)
+				}
+				got, err := runOut(t, database, append([]string{"--json"}, tc.args...)...)
+				if err != nil {
+					t.Fatalf("--json %v: %v", tc.args, err)
+				}
+				want, err := runOut(t, database, "--json", "show", "one-1")
+				if err != nil {
+					t.Fatalf("show --json: %v", err)
+				}
+				if got != want {
+					t.Errorf("--json stdout = %q, want the show --json object %q", got, want)
+				}
 			}
 			if *calls != 0 {
 				t.Errorf("issued %d write(s); a closed item must not reach Things", *calls)

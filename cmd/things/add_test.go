@@ -939,6 +939,41 @@ func TestEditNoClosedNoteInPlace(t *testing.T) {
 	}
 }
 
+// A completed project reached by uuid gets the "is completed" note whichever
+// flag carries the uuid, --list-id alone or beside a --list title, which
+// Things passes over for the list-id.
+func TestEditClosedNoteOnListID(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		note bool
+	}{
+		{"listUUID", []string{"edit", "one-1", "--list", "proj-done"}, true},
+		{"listID", []string{"edit", "one-1", "--list-id", "proj-done"}, true},
+		{"listAndListID", []string{"edit", "one-1", "--list", "Elsewhere", "--list-id", "proj-done"}, true},
+		{"listAndListIDInPlace", []string{"edit", "in-done", "--list", "Elsewhere", "--list-id", "proj-done"}, false},
+		{"listAndListIDWithHeadingID", []string{"edit", "one-1", "--list", "Elsewhere", "--list-id", "proj-done", "--heading-id", "head-1"}, false},
+		{"listAndOpenListID", []string{"edit", "one-1", "--list", "Elsewhere", "--list-id", "proj-1"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Project("proj-done", "Shelved", 5, dbtest.Completed(model.TimeToUnix(testNow)))
+			fx.Todo("in-done", "Sweep", 6, dbtest.Anytime(), dbtest.InProject("proj-done"))
+			fx.Project("proj-1", "Tools", 7)
+			fx.Heading("head-1", "Setup", 8, dbtest.InProject("proj-1"))
+			stubExecDropping(t)
+
+			_, stderr, _ := runStreams(t, database, append([]string{"--no-verify"}, tc.args...)...)
+			const want = `note: "Shelved" is completed; Things will file into it and reopen it`
+			if got := strings.Contains(stderr, want); got != tc.note {
+				t.Errorf("stderr = %q, want the note %v", stderr, tc.note)
+			}
+		})
+	}
+}
+
 // When the areas cannot be read, project edit --area cannot rule a move out,
 // so it waits for the change rather than calling the edit a no-op.
 func TestProjectEditAreaUnreadable(t *testing.T) {
@@ -962,5 +997,51 @@ func TestProjectEditAreaUnreadable(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("stderr = %q, want no warning", stderr.String())
+	}
+}
+
+// A blank title is refused before anything is sent, with the token import
+// gives the same title, on add and edit alike. An edit without --title is
+// not affected.
+func TestBlankTitleRefused(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		kind string
+	}{
+		{"addEmpty", []string{"add", ""}, "task"},
+		{"addSpaces", []string{"add", "   "}, "task"},
+		{"addTab", []string{"add", "\t\n"}, "task"},
+		{"projectAdd", []string{"project", "add", " "}, "project"},
+		{"editEmpty", []string{"edit", "one-1", "--title", ""}, "task"},
+		{"editSpaces", []string{"edit", "one-1", "--title", "  "}, "task"},
+		{"projectEdit", []string{"project", "edit", "repproj-1", "--title", ""}, "project"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, _ := seedWritable(t)
+			calls := stubExecDropping(t)
+
+			_, _, err := runStreams(t, database, append([]string{"--json"}, tc.args...)...)
+			if err == nil || !strings.Contains(err.Error(), "title is blank") {
+				t.Fatalf("%v = %v, want the blank title refused", tc.args, err)
+			}
+			if *calls != 0 {
+				t.Errorf("issued %d write(s), want none", *calls)
+			}
+			if p := errorPayload(err); p.Error != "blank-title" || p.Kind != tc.kind {
+				t.Errorf("payload = %+v, want error blank-title on a %s", p, tc.kind)
+			}
+		})
+	}
+}
+
+func TestEditWithoutTitleKeepsTitle(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecEditing(t, sqlDB, `UPDATE TMTask SET notes = 'x' WHERE uuid = 'one-1'`)
+	if _, err := runOut(t, database, "edit", "one-1", "--notes", "x"); err != nil {
+		t.Fatalf("edit --notes: %v", err)
 	}
 }

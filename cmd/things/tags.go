@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,6 +31,14 @@ type TagFlags struct {
 // needs them does not read the tag list a second time. When the tag list
 // cannot be read, none is returned.
 func verifyTags(d *Deps, flags TagFlags, names []string) ([]string, error) {
+	return checkTags(d, flags, names, func(unknown []string) {
+		fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things and will be ignored: %s\n", strings.Join(unknown, ", "))
+	})
+}
+
+// checkTags is verifyTags with the first line of the default warning given
+// by warn, which is passed the names Things will drop.
+func checkTags(d *Deps, flags TagFlags, names []string, warn func(unknown []string)) ([]string, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -67,7 +76,7 @@ func verifyTags(d *Deps, flags TagFlags, names []string) ([]string, error) {
 	if flags.StrictTags {
 		return nil, fmt.Errorf("these tags do not exist in Things: %s — create them in Things first, run `%s`, or drop --strict-tags to write anyway", list, tagAddHint(unknown))
 	}
-	fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things and will be ignored: %s\n", list)
+	warn(unknown)
 	fmt.Fprintf(d.errOut(), "warning: Things only applies tags that already exist — create them with --create-tags or `things tag add`, or use --strict-tags to fail instead of dropping them\n")
 	return unknown, nil
 }
@@ -117,6 +126,43 @@ func createTags(d *Deps, names []string) error {
 // --add-tags). nil pointers and empty strings contribute nothing.
 func verifyTagStrings(d *Deps, flags TagFlags, values ...*string) ([]string, error) {
 	return verifyTags(d, flags, splitTagValues(values...))
+}
+
+// verifyEditTags is verifyTagStrings for an edit, given its --tags and
+// --add-tags. The URL sends --tags as given, unknown names included, and
+// Things replaces the item's tags with the ones it has, so an unknown name
+// is not simply ignored: the item loses every tag the known ones do not
+// restore, and all of them when none is known. The warning says so. item is
+// "task" or "project".
+func verifyEditTags(d *Deps, flags TagFlags, tags, addTags *string, item string) ([]string, error) {
+	if tags == nil {
+		return verifyTagStrings(d, flags, addTags)
+	}
+	names := splitTagValues(tags, addTags)
+	return checkTags(d, flags, names, func(unknown []string) {
+		drop := make(map[string]struct{}, len(unknown))
+		for _, n := range unknown {
+			drop[db.FoldTag(n)] = struct{}{}
+		}
+		var known []string
+		seen := make(map[string]struct{})
+		for _, n := range names {
+			key := db.FoldTag(n)
+			if _, ok := drop[key]; ok {
+				continue
+			}
+			if _, ok := seen[key]; !ok {
+				seen[key] = struct{}{}
+				known = append(known, n)
+			}
+		}
+		list := strings.Join(unknown, ", ")
+		if len(known) == 0 {
+			fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things: %s; --tags replaces the %s's tags with the ones that exist, and none does, so Things will leave the %s with no tags\n", list, item, item)
+			return
+		}
+		fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things: %s; --tags replaces the %s's tags with the ones that exist, so Things will leave it tagged %s only\n", list, item, strings.Join(known, ", "))
+	})
 }
 
 // splitTagValues splits comma-separated tag values into names, skipping nil
@@ -192,7 +238,7 @@ func (c *TagAddCmd) Run(d *Deps) error {
 	// Validate the arguments before opening the database, so a blank name
 	// reports itself rather than surfacing as "cannot find the Things
 	// database" on a machine where the database is missing.
-	names := dedupeTagNames(c.Names)
+	names, twins := dedupeTagNames(c.Names)
 	if len(names) == 0 {
 		return fmt.Errorf("tag add: no tag names given")
 	}
@@ -219,6 +265,9 @@ func (c *TagAddCmd) Run(d *Deps) error {
 			skipped = append(skipped, n)
 		}
 	}
+	// A case twin of an earlier name is the same tag in Things, which this
+	// run either finds or creates once, so it is skipped too.
+	skipped = append(skipped, twins...)
 
 	created := []string{}
 	for _, name := range missing {
@@ -276,21 +325,25 @@ func verifyTagsCreated(database *db.DB, names []string, budget time.Duration) er
 }
 
 // dedupeTagNames trims the requested names, drops empties, and collapses ones
-// that differ only in case — Things treats those as the same tag.
-func dedupeTagNames(names []string) []string {
-	var out []string
-	seen := make(map[string]struct{}, len(names))
+// that differ only in case — Things treats those as the same tag. twins are
+// the later spellings dropped that way, each once, so the caller can report
+// them; a repeat of the exact name kept is not one.
+func dedupeTagNames(names []string) (out, twins []string) {
+	seen := make(map[string]string, len(names))
 	for _, n := range names {
 		n = strings.TrimSpace(n)
 		if n == "" {
 			continue
 		}
 		key := db.FoldTag(n)
-		if _, dup := seen[key]; dup {
+		if kept, dup := seen[key]; dup {
+			if n != kept && !slices.Contains(twins, n) {
+				twins = append(twins, n)
+			}
 			continue
 		}
-		seen[key] = struct{}{}
+		seen[key] = n
 		out = append(out, n)
 	}
-	return out
+	return out, twins
 }

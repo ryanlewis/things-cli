@@ -639,6 +639,19 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"headingOnlyUnknown", []string{"edit", "tool-1", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will leave the to-do where it is`, true},
 		{"headingOnlyNoProject", []string{"edit", "one-1", "--heading", "Setup"}, `--heading "Setup" needs --list: the to-do is not in a project, so Things will leave it where it is`, true},
 		{"headingID", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "head-1"}, "", false},
+		// Measured in Things 3: an empty heading alone clears the heading,
+		// and an empty list unfiles the to-do into Anytime. Both are sent
+		// and read back; only a to-do already there is left alone.
+		{"emptyHeading", []string{"edit", "head-todo", "--heading", ""}, "", false},
+		{"emptyHeadingNoHeading", []string{"edit", "tool-1", "--heading", ""}, "", true},
+		{"emptyHeadingNoProject", []string{"edit", "one-1", "--heading", ""}, "", true},
+		{"emptyHeadingInList", []string{"edit", "head-todo", "--list", "Tools", "--heading", ""}, "", false},
+		{"emptyList", []string{"edit", "tool-1", "--list", ""}, "", false},
+		{"emptyListFromHeading", []string{"edit", "head-todo", "--list", ""}, "", false},
+		{"emptyListFromArea", []string{"edit", "area-todo", "--list", ""}, "", false},
+		{"emptyListFromSomeday", []string{"edit", "one-1", "--list", ""}, "", false},
+		{"emptyListWithHeading", []string{"edit", "head-todo", "--list", "", "--heading", ""}, "", false},
+		{"emptyListUnfiled", []string{"edit", "loose-todo", "--list", ""}, "", true},
 		{"projectKnownArea", []string{"project", "edit", "repproj-1", "--area", "personal"}, "", false},
 		{"projectAreaUUID", []string{"project", "edit", "repproj-1", "--area", "area-1"}, "", false},
 		{"projectUnknownArea", []string{"project", "edit", "repproj-1", "--area", "Nowhere"}, `no area called "Nowhere"; the project will stay where it is`, true},
@@ -689,6 +702,7 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Project("proj-logged", "Shipped", 15, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 			fx.Heading("head-logged", "Setup", 16, dbtest.InProject("proj-logged"))
 			fx.Todo("logged-todo", "Write notes", 17, dbtest.Anytime(), dbtest.InProject("proj-logged"))
+			fx.Todo("loose-todo", "Fold towels", 18, dbtest.Anytime())
 			calls := stubExecDropping(t)
 
 			_, stderr, err := runStreams(t, database, tc.args...)
@@ -758,6 +772,115 @@ func TestEditSendsUUIDAsListID(t *testing.T) {
 						t.Errorf("url = %q, want no %s title beside %s-id", url, key, key)
 					}
 				}
+			}
+		})
+	}
+}
+
+// An empty --heading or --list goes to Things as it is, and the edit prints
+// the item once the move is read back, not the place it was in before.
+func TestEditEmptyMoveSendsAndReadsBack(t *testing.T) {
+	cases := []struct {
+		name  string
+		args  []string
+		param string
+		apply string
+		check func(map[string]any) bool
+	}{
+		{
+			"heading", []string{"edit", "head-todo", "--heading", ""}, "heading=",
+			`UPDATE TMTask SET heading = NULL, project = 'proj-1' WHERE uuid = 'head-todo'`,
+			func(m map[string]any) bool { return m["headingUUID"] == nil && m["projectUUID"] == "proj-1" },
+		},
+		{
+			"list", []string{"edit", "head-todo", "--list", ""}, "list=",
+			`UPDATE TMTask SET heading = NULL, project = NULL, area = NULL, start = 1 WHERE uuid = 'head-todo'`,
+			func(m map[string]any) bool {
+				return m["headingUUID"] == nil && m["projectUUID"] == nil && m["areaUUID"] == nil
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Project("proj-1", "Tools", 5)
+			fx.Heading("head-1", "Setup", 6, dbtest.InProject("proj-1"))
+			fx.Todo("head-todo", "Buy oil", 7, dbtest.Anytime(), dbtest.UnderHeading("head-1"))
+			var url string
+			prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+				url = args[len(args)-1]
+				if _, err := sqlDB.Exec(tc.apply); err != nil {
+					t.Errorf("simulating Things write: %v", err)
+				}
+				bumpModificationDates(t, sqlDB)
+				return exec.Command("true")
+			})
+			t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+			stdout, stderr, err := runStreams(t, database, append([]string{"--json"}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("%v: %v", tc.args, err)
+			}
+			if strings.Contains(stderr, "warning: ") {
+				t.Errorf("stderr = %q, want no warning", stderr)
+			}
+			params := strings.Split(url[strings.Index(url, "?")+1:], "&")
+			if !slices.Contains(params, tc.param) {
+				t.Errorf("url = %q, want %s sent", url, tc.param)
+			}
+			var item map[string]any
+			if err := json.Unmarshal([]byte(stdout), &item); err != nil {
+				t.Fatalf("decode %s: %v", stdout, err)
+			}
+			if !tc.check(item) {
+				t.Errorf("printed %s, want the item as read back after the move", stdout)
+			}
+		})
+	}
+}
+
+// --tags is sent as given, unknown names included, and Things replaces the
+// item's tags with the ones it has. The warning says what the item ends up
+// with rather than that the unknown names are simply ignored.
+func TestEditTagsWarnsWhatReplacementLeaves(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"noneKnown", []string{"edit", "one-1", "--tags", "Nope"}, `these tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, and none does, so Things will leave the task with no tags`},
+		{"someKnown", []string{"edit", "one-1", "--tags", "Nope, errand"}, `these tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, so Things will leave it tagged errand only`},
+		{"withAddTags", []string{"edit", "one-1", "--tags", "Nope", "--add-tags", "Home"}, `so Things will leave it tagged Home only`},
+		{"addTagsOnly", []string{"edit", "one-1", "--add-tags", "Nope"}, `these tags do not exist in Things and will be ignored: Nope`},
+		{"project", []string{"project", "edit", "repproj-1", "--title", "Plan", "--tags", "Nope"}, `leave the project with no tags`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Tag("tag-1", "Errand", 1)
+			fx.Tag("tag-2", "Home", 2)
+			fx.Tagged("one-1", "tag-1", "tag-2")
+			var url string
+			prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+				url = args[len(args)-1]
+				return exec.Command("true")
+			})
+			t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+
+			_, stderr, _ := runStreams(t, database, append([]string{"--no-verify"}, tc.args...)...)
+			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
+			}
+			if tc.name != "addTagsOnly" && strings.Contains(stderr, "will be ignored") {
+				t.Errorf("stderr = %q, want no claim that the tags are simply ignored", stderr)
+			}
+			// The unknown name goes to Things as given; Things drops it.
+			if !strings.Contains(url, "Nope") {
+				t.Errorf("url = %q, want the tags sent as given", url)
 			}
 		})
 	}

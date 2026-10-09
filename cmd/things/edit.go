@@ -103,8 +103,10 @@ func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 // no heading. A heading alone is looked up in the to-do's own project, and
 // left out when it is not there. A heading-id moves the to-do under that
 // heading, whatever list or heading title comes with it, and one Things cannot
-// find is ignored. A move to where the to-do already is changes nothing, and
-// Things does not record it. Each of those is reported as no change. Of
+// find is ignored. An empty list unfiles the to-do into Anytime, and an
+// empty heading alone takes it out of its heading. A move to where the to-do
+// already is changes nothing, and Things does not record it. Each of those
+// is reported as no change. Of
 // headings whose titles differ only in case, Things picks one, and so does
 // the check (db.HeadingTarget). A database that cannot be read gives no
 // warning here, and the move counts as a change.
@@ -112,10 +114,29 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	switch {
 	case !anySet(c.List, c.ListID, c.Heading, c.HeadingID):
 		return false
-	case c.List != nil && c.ListID != nil, emptyID(c.ListID), emptyID(c.HeadingID):
-		// Which list Things prefers, and what it does with an empty id,
-		// were not checked.
+	case c.List != nil && c.ListID != nil:
+		// Seen in Things 3: given both, Things files into the list-id, and
+		// reopens a closed project there, so that list's notes are given.
+		// The rest of what it does with the pair was not checked.
+		if !emptyID(c.ListID) && !emptyID(c.HeadingID) {
+			c.noteListID(d, database, task)
+		}
 		return true
+	case emptyID(c.ListID), emptyID(c.HeadingID):
+		// What Things does with an empty id was not checked.
+		return true
+	case c.List != nil && *c.List == "":
+		// Checked in Things 3: an empty list takes the to-do out of its
+		// project, heading and area, and files it in Anytime. Only a to-do
+		// that is there already, unfiled in Anytime with no start date, is
+		// left as it is.
+		return task.ProjectUUID != "" || task.AreaUUID != "" || task.HeadingUUID != "" ||
+			task.Start != model.StartAnytime || task.StartDate != nil
+	case c.Heading != nil && *c.Heading == "" && c.List == nil && c.ListID == nil && c.HeadingID == nil:
+		// Checked in Things 3: an empty heading alone takes the to-do out of
+		// its heading and leaves it in its project. A to-do under no heading
+		// stays where it is.
+		return task.HeadingUUID != ""
 	}
 	heading := ""
 	if c.Heading != nil {
@@ -183,7 +204,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	case target.UUID != "" && found:
 		return !inList || task.HeadingUUID != target.Heading
 	case target.UUID != "":
-		if c.Heading != nil {
+		if heading != "" {
 			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
 		}
 		return task.HeadingUUID != "" || !inList
@@ -205,6 +226,26 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		return false
 	}
 	return task.HeadingUUID != t.Heading
+}
+
+// noteListID gives the notes for a move into the list --list-id names
+// (targetNotes), as checkMove does for a list it resolves, when the id is a
+// project or area the to-do is not in already. A heading-id Things can find
+// wins over the list, so no note is given then.
+func (c *EditCmd) noteListID(d *Deps, database *db.DB, task *model.Task) {
+	if c.HeadingID != nil {
+		if _, _, found, trashed, err := database.HeadingProject(strings.TrimSpace(*c.HeadingID)); err != nil || found && !trashed {
+			return
+		}
+	}
+	t, _, err := database.AddTarget(*c.ListID, "")
+	if err != nil || !t.ByUUID {
+		return
+	}
+	if task.ProjectUUID == t.UUID || task.ProjectUUID == "" && task.AreaUUID == t.UUID {
+		return
+	}
+	noteTarget(d, *c.ListID, "lists", t)
 }
 
 // emptyID reports whether an id flag was given as blank.
@@ -250,6 +291,15 @@ var (
 // has. write sends the update, given the shared params with the item's id and
 // the auth token filled in.
 func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, checkOwn func(*Deps, *db.DB, *model.Task) bool, checklist bool, write func(things.UpdateCommon) error) error {
+	item := "task"
+	if kind.project {
+		item = "project"
+	}
+	if f.Title != nil {
+		if err := refuseBlankTitle(*f.Title, item, "edited"); err != nil {
+			return err
+		}
+	}
 	database, err := d.Database()
 	if err != nil {
 		return err
@@ -289,7 +339,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	}
 	// After checkRepeating: no point warning about tags on an edit Things
 	// is going to refuse anyway.
-	unknown, err := verifyTagStrings(d, s.TagFlags, f.Tags, f.AddTags)
+	unknown, err := verifyEditTags(d, s.TagFlags, f.Tags, f.AddTags, item)
 	if err != nil {
 		return err
 	}
@@ -528,6 +578,12 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 	}
 	if same {
 		noteAlreadyClosed(d, task)
+		// --json prints the item, as `edit --complete` does on the same
+		// item, so a caller always gets an object back. Plain output stays
+		// empty: the note has said it all.
+		if d.JSON {
+			return printItem(d, database, task)
+		}
 		return nil
 	}
 	if err := checkRepeating(task, []string{sc.blockedWord}); err != nil {
