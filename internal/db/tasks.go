@@ -1491,13 +1491,22 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	}
 
 	// Exact titles compare case and space as typed, while the substring
-	// match below ignores case. So before it runs, a closed or trashed row
-	// whose title equals the reference once case and surrounding space are
-	// set aside stops the lookup too: `complete "pay rent"` with "Pay rent"
-	// completed must not close the open "Re: Pay rent deposit".
-	closed, err := d.findClosedTasksByFoldedTitle(uuidOrTitle)
+	// match below ignores case. So before it runs, the title is matched
+	// once more with case and surrounding space set aside. An open row
+	// matching that way is the task meant, as the substring match would
+	// have found it; failing that, a closed or trashed row stops the lookup:
+	// `complete "pay rent"` with "Pay rent" completed must not close the
+	// open "Re: Pay rent deposit".
+	folded, err := d.findTasksByFoldedTitle(uuidOrTitle)
 	if err != nil {
 		return nil, err
+	}
+	open, closed := splitOpen(folded)
+	if candidates := preferInstances(open); len(candidates) > 0 {
+		if len(candidates) == 1 {
+			return &candidates[0], nil
+		}
+		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
 	}
 	if candidates := preferInstances(closed); len(candidates) > 0 {
 		return nil, &ClosedTitleError{Query: uuidOrTitle, Matches: candidates}
@@ -1542,14 +1551,7 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	var open, closed []model.Task
-	for _, m := range all {
-		if m.Status == model.StatusOpen && !m.Trashed && !m.ProjectTrashed {
-			open = append(open, m)
-		} else {
-			closed = append(closed, m)
-		}
-	}
+	open, closed := splitOpen(all)
 	if candidates := preferInstances(open); len(candidates) > 0 {
 		if len(candidates) == 1 {
 			return &candidates[0], nil
@@ -1595,17 +1597,31 @@ func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
 	return d.collectTasks(query, normName(title))
 }
 
-// findClosedTasksByFoldedTitle returns the closed or trashed tasks, and the
-// to-dos in a trashed project, whose title equals title under FoldCase once
-// surrounding space is trimmed from both. The SQL narrows the rows to those
-// whose folded title contains the folded key; the comparison itself is made
-// in Go, so space trims the same way on both sides.
-func (d *DB) findClosedTasksByFoldedTitle(title string) ([]model.Task, error) {
+// splitOpen separates the open rows outside the Trash from the rest: closed
+// rows, trashed rows, and to-dos whose project is in the Trash, which Things
+// shows only there.
+func splitOpen(rows []model.Task) (open, closed []model.Task) {
+	for _, m := range rows {
+		if m.Status == model.StatusOpen && !m.Trashed && !m.ProjectTrashed {
+			open = append(open, m)
+		} else {
+			closed = append(closed, m)
+		}
+	}
+	return open, closed
+}
+
+// findTasksByFoldedTitle returns the tasks of any status, in the Trash or
+// not, whose title equals title under FoldCase once surrounding space is
+// trimmed from both. The SQL narrows the rows to those whose folded title
+// contains the folded key; the comparison itself is made in Go, so space
+// trims the same way on both sides.
+func (d *DB) findTasksByFoldedTitle(title string) ([]model.Task, error) {
 	key := FoldCase(strings.TrimSpace(title))
 	if key == "" {
 		return nil, nil
 	}
-	query := d.taskQuery() + " WHERE NOT (t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0) AND " + notHeading +
+	query := d.taskQuery() + " WHERE " + notHeading +
 		" AND fold(t.title) LIKE ?" + escapeClause + " GROUP BY t.uuid " + d.templatesLastOrder()
 	rows, err := d.collectTasks(query, containsLike(strings.TrimSpace(title)))
 	if err != nil {
