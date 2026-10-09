@@ -102,13 +102,15 @@ type ProjectEditCmd struct {
 }
 
 func (c *ProjectEditCmd) Run(d *Deps) error {
-	return runEdit(d, c.Project, projectEdit, &c.commonEditFlags, &c.editStatusFlags, c.checkOwn, false, func(u things.UpdateCommon) error {
-		return things.UpdateProject(things.UpdateProjectParams{
-			UpdateCommon: u,
-			Area:         c.Area,
-			AreaID:       c.AreaID,
-		})
-	})
+	return runEdit(d, c.Project, projectEdit, &c.commonEditFlags, &c.editStatusFlags, c.checkOwn, false, c.params, things.UpdateProject)
+}
+
+func (c *ProjectEditCmd) params(u things.UpdateCommon) things.UpdateProjectParams {
+	return things.UpdateProjectParams{
+		UpdateCommon: u,
+		Area:         c.Area,
+		AreaID:       c.AreaID,
+	}
 }
 
 // checkOwn reports whether any of this command's own field flags may change

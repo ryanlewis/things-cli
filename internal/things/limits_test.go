@@ -157,6 +157,15 @@ func TestValidateAdd(t *testing.T) {
 	}
 }
 
+func TestValidateAddProjectTodos(t *testing.T) {
+	if err := (AddProjectParams{Todos: "ok\n" + repeat(MaxStringLen+1)}).Validate(); err == nil || !strings.HasPrefix(err.Error(), "todos: item ") {
+		t.Fatalf("Validate = %v, want the long to-do refused", err)
+	}
+	if err := (AddProjectParams{Todos: checklist(MaxChecklistItems + 1)}).Validate(); err != nil {
+		t.Fatalf("Validate = %v, want no item count limit on todos", err)
+	}
+}
+
 func TestValidateUpdate(t *testing.T) {
 	big := repeat(MaxNotesLen + 1)
 	if err := validateUpdate(UpdateParams{UpdateCommon: UpdateCommon{ID: "x", AuthToken: "t", Notes: &big}}); err == nil {

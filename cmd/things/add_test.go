@@ -1096,6 +1096,7 @@ func TestAddInvalidRefusedBeforeTagsCreated(t *testing.T) {
 		{[]string{"add", "Post letter", "--deadline", "today"}, "--deadline does not accept keywords"},
 		{[]string{"project", "add", long}, "title: "},
 		{[]string{"project", "add", "Launch", "--area", long}, "area: "},
+		{[]string{"project", "add", "Launch", "--todos", "ok\\n" + long}, "todos: item "},
 		{[]string{"project", "add", "Launch", "--deadline", "tomorrow"}, "--deadline does not accept keywords"},
 		// --when is checked first, then the lengths, then --deadline.
 		{[]string{"add", long, "--when", "2026-13-01", "--deadline", "today"}, "invalid --when value"},
@@ -1103,6 +1104,41 @@ func TestAddInvalidRefusedBeforeTagsCreated(t *testing.T) {
 	} {
 		fastVerify(t)
 		database, _ := seedWritable(t)
+		calls := stubExecDropping(t)
+		args := append(slices.Clone(tc.args), tags...)
+		_, _, err := runStreams(t, database, args...)
+		if err == nil || !strings.HasPrefix(err.Error(), tc.want) {
+			t.Errorf("%.60v = %v, want an error starting %q", args, err, tc.want)
+		}
+		if *calls != 0 {
+			t.Errorf("%.60v issued %d commands, want none", args, *calls)
+		}
+	}
+}
+
+// An edit whose fields the URL scheme would refuse, a value over a length
+// limit or a keyword deadline, is refused before --create-tags creates the
+// unknown tag over AppleScript: no command runs at all.
+func TestEditInvalidRefusedBeforeTagsCreated(t *testing.T) {
+	long := strings.Repeat("a", things.MaxStringLen+1)
+	longNotes := strings.Repeat("a", things.MaxNotesLen+1)
+	tags := []string{"--create-tags", "--tags", "Brandnew"}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"edit", "one-1", "--title", long}, "title: "},
+		{[]string{"edit", "one-1", "--append-notes", longNotes}, "append-notes: "},
+		{[]string{"edit", "one-1", "--checklist", long}, "checklist: "},
+		{[]string{"edit", "one-1", "--heading", long}, "heading: "},
+		{[]string{"edit", "one-1", "--deadline", "today"}, "--deadline does not accept keywords"},
+		{[]string{"project", "edit", "proj-1", "--title", long}, "title: "},
+		{[]string{"project", "edit", "proj-1", "--area", long}, "area: "},
+		{[]string{"project", "edit", "proj-1", "--deadline", "tomorrow"}, "--deadline does not accept keywords"},
+	} {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		dbtest.NewFixture(t, sqlDB).Project("proj-1", "Launch", 4)
 		calls := stubExecDropping(t)
 		args := append(slices.Clone(tc.args), tags...)
 		_, _, err := runStreams(t, database, args...)
