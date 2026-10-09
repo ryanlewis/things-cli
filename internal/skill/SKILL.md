@@ -237,9 +237,8 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # today likewise lists any undated task or project, inbox, anytime or
     # someday, once its deadline is today or past (unless it was taken out of
     # Today for that deadline).
-    # An inbox or anytime task of that shape also comes back from anytime, as
-    # in the app; an inbox one
-    # leaves inbox while today holds it. --on/--from/--to on today match it
+    # Any task of that shape also comes back from anytime, as in the app; an
+    # inbox or someday one leaves inbox or someday while today holds it. --on/--from/--to on today match it
     # on today, not on its deadline.
     # inbox, today, anytime, upcoming and someday list, by default, the items
     # ticked off in that list which Things hasn't logged out yet (by day, or

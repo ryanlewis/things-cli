@@ -88,10 +88,10 @@ Like the app, it also lists an undated Anytime or Someday task or project
 whose deadline is still to come, under the deadline's day, and
 `--on`/`--from`/`--to` match it on that day. `today` likewise lists any
 undated task or project once its deadline is today or past, from the Inbox,
-Anytime or Someday, unless it was taken out of Today for that deadline. An
-Inbox or Anytime task of that shape also comes back from `anytime`, as in the
-app, so merge a sweep on `uuid`. One from the Inbox
-leaves `inbox` while Today holds it, as it leaves the app's Inbox. `--on`/`--from`/`--to` match it on today, the day Today
+Anytime or Someday, unless it was taken out of Today for that deadline. A
+task of that shape also comes back from `anytime`, as in the app, so merge a
+sweep on `uuid`. One from the Inbox or Someday leaves `inbox` or `someday`
+while Today holds it, as it leaves the app's Inbox or Someday. `--on`/`--from`/`--to` match it on today, the day Today
 shows it.
 
 A bare `--project` lists the project the way its page in the app does: the

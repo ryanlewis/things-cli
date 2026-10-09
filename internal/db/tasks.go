@@ -286,8 +286,9 @@ const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + notATemplat
 // and does. A row with a start date as well is todayScheduled's question,
 // and was not measured here.
 //
-// Anytime and the Inbox read only the Inbox half of this test (see
-// anytimeScope and notTodayDue), and carry to-dos only (todoOnly).
+// A row this test takes is promoted out of its bucket, not only into Today:
+// it is in Anytime as well (anytimeScope), and out of the Inbox and Someday
+// (notTodayDue). Anytime and the Inbox carry to-dos only (todoOnly).
 //
 // The test is IS NULL rather than "differs from the deadline" because no write
 // measured leaves a stale suppression behind. On 4 Oct 2026, suppressed test
@@ -437,16 +438,16 @@ const (
 	inboxBucket   = "t.start = 0"
 	anytimeBucket = "t.start = 1"
 	// anytimeScope is Anytime's whole scope: its bucket, and the undated
-	// Inbox to-dos whose deadline has come (inboxDue). Whether a Someday to-do
-	// due today, which Today holds, is in Anytime too was not measured, so it
-	// is left out. Measured on 3 Oct 2026, the app's
-	// Anytime held an Inbox to-do due that day and one overdue, the same two
-	// its Today held, and no Inbox to-do due later or taken out of Today for
-	// its deadline. A start = 2 to-do whose day has come is in Anytime too,
-	// as it is in Today (scheduledArrived).
-	anytimeScope = "(" + anytimeBucket + " OR (" + scheduledArrived + ") OR (" + inboxDue + "))"
-	// inboxDue is the Inbox half of todayDue.
-	inboxDue = inboxBucket + " AND " + todayDue
+	// Inbox and Someday to-dos whose deadline has come. todayDue covers every
+	// bucket, so joining it adds only those two. Measured on 3 Oct 2026, the
+	// app's Anytime held an Inbox to-do due that day and one overdue, the same
+	// two its Today held, and no Inbox to-do due later or taken out of Today
+	// for its deadline. Measured on 9 Oct 2026, it held a loose Someday to-do
+	// due today, as Today did, and the app's Someday did not: a deadline
+	// promotes a Someday row out of Someday the way it promotes an Inbox one
+	// out of the Inbox. A start = 2 to-do whose day has come is in Anytime
+	// too, as it is in Today (scheduledArrived).
+	anytimeScope = "(" + anytimeBucket + " OR (" + scheduledArrived + ") OR (" + todayDue + "))"
 	// upcomingScheduled and somedayDeferred split the one Things code between
 	// them. start = 2 is both lists: the app shows a deferred item in Upcoming
 	// once it carries a date and in Someday while it does not. A dated one
@@ -499,12 +500,16 @@ const (
 	// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosedOrUnlogged, which it shares
 	// with the views that show unlogged rows, so it is defined with its pair.
 	notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
-	// notTodayDue is the Inbox's half of todayDue: an undated Inbox to-do
-	// whose deadline has come leaves the Inbox for Today, and goes back when
-	// it is taken out of Today for that deadline. Measured on 3 Oct 2026, the
-	// app's Inbox held neither a to-do due that day nor one overdue, and held
-	// the overdue one again once its deadlineSuppressionDate was set (issue
-	// #345). COALESCE keeps a to-do with no deadline, where todayDue is NULL.
+	// notTodayDue is todayDue's other half, for the Inbox and Someday: an
+	// undated row whose deadline has come leaves its bucket for Today and
+	// Anytime, and goes back when it is taken out of Today for that deadline.
+	// Measured on 3 Oct 2026, the app's Inbox held neither a to-do due that
+	// day nor one overdue, and held the overdue one again once its
+	// deadlineSuppressionDate was set (issue #345). Measured on 9 Oct 2026,
+	// the app's Someday did not hold a loose Someday to-do due today. A
+	// Someday project due today is in the app's Today; that it leaves Someday
+	// too is inferred from the to-do, not measured. COALESCE keeps a row with
+	// no deadline, where todayDue is NULL.
 	notTodayDue = "COALESCE(" + todayDue + ", 0) = 0"
 )
 
@@ -783,7 +788,7 @@ var views = map[string]viewSpec{
 	// project, not left looking unparented.
 	ViewSomeday: {
 		scope: somedayDeferred, status: openRows, trashed: untrashedRows,
-		extra:                []string{unparented},
+		extra:                []string{unparented, notTodayDue},
 		includesProjects:     true,
 		rejectsProjectFilter: true,
 		showsUnlogged:        true,
