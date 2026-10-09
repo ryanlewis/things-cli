@@ -809,8 +809,13 @@ no deadline. `import` makes the checks `add` makes for `--when` and
 deadline are refused. The Things JSON format is narrower than the URL
 `add` uses: its documentation names only the keywords, a date and a date
 and time. So a value that starts with a digit must be a real date,
-`YYYY-MM-DD`, or for `when` a date and time, `YYYY-MM-DD@HH:MM`. A bare
-time and an RFC 3339 timestamp are refused. The keywords, weekday names
+`YYYY-MM-DD`, and a `deadline` has no time. A `when` with an `@` must
+have `today`, `tomorrow`, `evening` or a real `YYYY-MM-DD` before it and a
+real time of day, such as `18:00`, `9:30PM` or `6pm`, after it: Things
+files `tomorrow@25:00` tomorrow with no reminder, and ignores the time in
+`someday@18:00` and `anytime@…`, so these are refused, as is a phrase
+with a time such as `next friday@18:00`. A bare time and an RFC 3339
+timestamp are refused. The keywords, weekday names
 and English phrases such as `next week` are sent as they are, as `add`
 sends them; how Things reads a phrase in a payload was not measured. Update
 items are checked too.
