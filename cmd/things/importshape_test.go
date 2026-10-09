@@ -9,8 +9,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
+
+// shapeNow is the instant the shape tests pin the clock to, so a date
+// counts as in the future or the past whenever they run.
+var shapeNow = time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+
+// pinShapeClock pins the clock to shapeNow for the rest of the test.
+func pinShapeClock(t *testing.T) {
+	t.Helper()
+	t.Cleanup(clock.Pin(shapeNow))
+}
 
 // Every payload shape Things was seen to reject with an error sheet, creating
 // nothing, or to save as an untitled to-do, is refused before anything is
@@ -91,9 +102,73 @@ func TestImportRefusesShapesThingsRejects(t *testing.T) {
 			"[0].attributes.items[0]", "type", "invalid-item", `type: "todo" is not to-do or heading`},
 		{"update with a padded type", `[{"type":"to-do ","operation":"update","id":"one-1","attributes":{"title":"x"}}]`,
 			"[0]", "type", "invalid-item", `[0] (id one-1) type: "to-do " is not to-do or project or heading or checklist-item`},
+
+		// A key given twice: Things keeps the first, the CLI's decoder the
+		// last, so the read-back would look for a title Things never saved.
+		{"title twice", `[{"type":"to-do","attributes":{"title":"first","title":"second"}}]`,
+			"[0]", "title", "duplicate-key", `[0] title: given twice`},
+		{"type twice", `[{"type":"to-do","type":"project","attributes":{"title":"a"}}]`,
+			"[0]", "type", "duplicate-key", `[0] type: given twice`},
+		{"notes twice in a project's items", `[{"type":"project","attributes":{"title":"P","items":[{"type":"to-do","attributes":{"title":"a","notes":"x","notes":"y"}}]}}]`,
+			"[0].attributes.items[0]", "notes", "duplicate-key", `[0].attributes.items[0] notes: given twice`},
+		{"title three times", `[{"type":"to-do","attributes":{"title":"a","title":"b","title":"c"}}]`,
+			"[0]", "title", "duplicate-key", `[0] title: given twice`},
+
+		// Longer than Things keeps: it cuts a title to 4000 characters.
+		{"title over 4000", `[{"type":"to-do","attributes":{"title":"` + strings.Repeat("a", 4001) + `"}}]`,
+			"[0]", "title", "too-long", `[0] title: 4001 characters, over 4000`},
+		{"project title over 4000", `[{"type":"project","attributes":{"title":"` + strings.Repeat("é", 4001) + `"}}]`,
+			"[0]", "title", "too-long", `[0] title: 4001 characters, over 4000`},
+		{"heading title over 4000", `[{"type":"project","attributes":{"title":"P","items":[{"type":"heading","attributes":{"title":"` + strings.Repeat("a", 4001) + `"}}]}}]`,
+			"[0].attributes.items[0]", "title", "too-long", `[0].attributes.items[0] title: 4001 characters, over 4000`},
+		{"notes over 10000", `[{"type":"to-do","attributes":{"title":"a","notes":"` + strings.Repeat("a", 10001) + `"}}]`,
+			"[0]", "notes", "too-long", `[0] notes: 10001 characters, over 10000`},
+
+		// Attributes Things takes on another type and ignores on this one.
+		{"items on a to-do", `[{"type":"to-do","attributes":{"title":"T","items":[{"type":"to-do","attributes":{"title":"child"}}]}}]`,
+			"[0]", "items", "invalid-item", `[0] items: Things takes items only on a project, and ignores them on a to-do`},
+		{"items a string on a to-do", `[{"type":"to-do","attributes":{"title":"T","items":"x"}}]`,
+			"[0]", "items", "invalid-item", `[0] items: Things takes items only on a project, and ignores them on a to-do`},
+		{"checklist-items a string on a project", `[{"type":"project","attributes":{"title":"P","checklist-items":"x"}}]`,
+			"[0]", "checklist-items", "invalid-item", `[0] checklist-items: Things takes checklist-items only on a to-do, and ignores them on a project`},
+		{"checklist-items on a project", `[{"type":"project","attributes":{"title":"P","checklist-items":[{"type":"checklist-item","attributes":{"title":"c"}}]}}]`,
+			"[0]", "checklist-items", "invalid-item", `[0] checklist-items: Things takes checklist-items only on a to-do, and ignores them on a project`},
+
+		// Dates in the future, which Things saves as now.
+		{"future creation-date", `[{"type":"to-do","attributes":{"title":"a","creation-date":"2026-10-10T10:00:00Z"}}]`,
+			"[0]", "creation-date", "future-date", `[0] creation-date: "2026-10-10T10:00:00Z" (2026-10-10T10:00:00Z)`},
+		{"hour 25 today", `[{"type":"to-do","attributes":{"title":"a","creation-date":"2026-10-09T25:00:00Z"}}]`,
+			"[0]", "creation-date", "future-date", `[0] creation-date: "2026-10-09T25:00:00Z" (2026-10-10T01:00:00Z)`},
+		{"future completion-date", `[{"type":"to-do","attributes":{"title":"a","completed":true,"completion-date":"2027-01-01T00:00:00Z"}}]`,
+			"[0]", "completion-date", "future-date", `[0] completion-date: "2027-01-01T00:00:00Z" (2027-01-01T00:00:00Z)`},
+		{"future creation-date on a project", `[{"type":"project","attributes":{"title":"P","creation-date":"2026-10-09T14:00:00+01:00"}}]`,
+			"[0]", "creation-date", "future-date", `[0] creation-date: "2026-10-09T14:00:00+01:00" (2026-10-09T13:00:00Z)`},
+
+		// A when or deadline Things would read as something else.
+		{"when month 13", `[{"type":"to-do","attributes":{"title":"a","when":"2026-13-01"}}]`,
+			"[0]", "when", "invalid-date", `[0] when: "2026-13-01" (not a real date)`},
+		{"when 30 February", `[{"type":"to-do","attributes":{"title":"a","when":"2026-02-30"}}]`,
+			"[0]", "when", "invalid-date", `[0] when: "2026-02-30" (not a real date)`},
+		{"when a bare time", `[{"type":"to-do","attributes":{"title":"a","when":"18:00"}}]`,
+			"[0]", "when", "invalid-date", `[0] when: "18:00" (not a date as YYYY-MM-DD, or a date and time as YYYY-MM-DD@HH:MM)`},
+		{"when hour 25", `[{"type":"to-do","attributes":{"title":"a","when":"2026-10-10@25:00"}}]`,
+			"[0]", "when", "invalid-date", `[0] when: "2026-10-10@25:00" (not a real time of day)`},
+		{"when RFC 3339", `[{"type":"to-do","attributes":{"title":"a","when":"2026-10-10T18:00:00Z"}}]`,
+			"[0]", "when", "invalid-date", `[0] when: "2026-10-10T18:00:00Z" (not a date as YYYY-MM-DD`},
+		{"when a typo", `[{"type":"project","attributes":{"title":"P","when":"tommorow"}}]`,
+			"[0]", "when", "invalid-date", `[0] when: "tommorow" (unrecognised when value "tommorow" (did you mean "tomorrow"?`},
+		{"deadline month 13", `[{"type":"to-do","attributes":{"title":"a","deadline":"2026-13-01"}}]`,
+			"[0]", "deadline", "invalid-date", `[0] deadline: "2026-13-01" (not a real date)`},
+		{"deadline someday", `[{"type":"to-do","attributes":{"title":"a","deadline":"someday"}}]`,
+			"[0]", "deadline", "invalid-date", `[0] deadline: "someday" (deadline does not accept keywords like "someday"; pass a YYYY-MM-DD date)`},
+		{"deadline with a time", `[{"type":"to-do","attributes":{"title":"a","deadline":"2026-10-10@18:00"}}]`,
+			"[0]", "deadline", "invalid-date", `[0] deadline: "2026-10-10@18:00" (not a date as YYYY-MM-DD)`},
+		{"when on an update", `[{"type":"to-do","operation":"update","id":"one-1","attributes":{"when":"2026-13-01"}}]`,
+			"[0]", "when", "invalid-date", `[0] (id one-1) when: "2026-13-01" (not a real date)`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			pinShapeClock(t)
 			database, _ := seedWritable(t)
 			calls := stubExecDropping(t)
 
@@ -175,12 +250,41 @@ func TestImportAcceptedShapesAreAllReadBack(t *testing.T) {
 		  {"type":"to-do","attributes":{"title":"b"}}
 		]`},
 		{"many", manyTodos(maxImportItems)},
+		{"lowercase z", `[{"type":"to-do","attributes":{"title":"a","creation-date":"2026-10-08T10:00:00z"}}]`},
+		{"hour 25 rolling into the past", `[{"type":"to-do","attributes":{"title":"a","creation-date":"2026-10-01T25:00:00Z"}}]`},
+		{"creation-date a moment ahead", `[{"type":"to-do","attributes":{"title":"a","creation-date":"2026-10-09T12:00:30Z"}}]`},
+		{"completion-date in the past", `[{"type":"to-do","attributes":{"title":"a","completed":true,"completion-date":"2026-10-09T11:59:00Z"}}]`},
+		{"title of 4000", `[{"type":"to-do","attributes":{"title":"` + strings.Repeat("a", 4000) + `"}}]`},
+		{"notes of 10000", `[{"type":"to-do","attributes":{"title":"a","notes":"` + strings.Repeat("a", 10000) + `"}}]`},
+		{"checklist-items on a to-do", `[{"type":"to-do","attributes":{"title":"a","checklist-items":[{"type":"checklist-item","attributes":{"title":"c"}}]}}]`},
+		{"same key in sibling items", `[{"type":"to-do","attributes":{"title":"a"}},{"type":"to-do","attributes":{"title":"b"}}]`},
+		{"when keywords", `[
+		  {"type":"to-do","attributes":{"title":"a","when":"today"}},
+		  {"type":"to-do","attributes":{"title":"b","when":"Evening"}},
+		  {"type":"to-do","attributes":{"title":"c","when":"someday"}},
+		  {"type":"to-do","attributes":{"title":"d","when":"anytime"}},
+		  {"type":"project","attributes":{"title":"e","when":"tomorrow"}}
+		]`},
+		{"when dates", `[
+		  {"type":"to-do","attributes":{"title":"a","when":"2026-10-10"}},
+		  {"type":"to-do","attributes":{"title":"b","when":"2026-10-10@18:00"}},
+		  {"type":"to-do","attributes":{"title":"c","when":"2026-10-10@9:30"}},
+		  {"type":"to-do","attributes":{"title":"d","when":"friday"}},
+		  {"type":"to-do","attributes":{"title":"e","when":"next week"}},
+		  {"type":"to-do","attributes":{"title":"f","when":""}}
+		]`},
+		{"deadlines", `[
+		  {"type":"to-do","attributes":{"title":"a","deadline":"2026-10-31"}},
+		  {"type":"project","attributes":{"title":"b","deadline":"friday"}},
+		  {"type":"to-do","attributes":{"title":"c","deadline":"2024-02-29"}}
+		]`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			pinShapeClock(t)
 			database, _ := seedWritable(t)
 			payload := decodeImport(t, c.payload)
-			plan, err := prepareImport(database, payload)
+			plan, err := prepareImport(database, payload, importDuplicateKeys([]byte(c.payload)))
 			if err != nil {
 				t.Fatalf("prepareImport: %v", err)
 			}
@@ -256,7 +360,7 @@ func TestImportRefusesTooManyItems(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			database, _ := seedWritable(t)
 			calls := stubExecDropping(t)
-			_, err := prepareImport(database, decodeImport(t, c.payload))
+			_, err := prepareImport(database, decodeImport(t, c.payload), nil)
 			if !c.refused {
 				if err != nil {
 					t.Fatalf("prepareImport: %v", err)
@@ -487,4 +591,68 @@ func TestImportSharesDatedTitleErrorItemCarriesPresent(t *testing.T) {
 // ahead keeps it inside however the test is timed.
 func recentCreationDate() string {
 	return time.Now().Add(5 * time.Second).UTC().Format(time.RFC3339)
+}
+
+// Every key given twice is found by the path of the item it belongs to,
+// at any depth, and a key given once in each of two objects is not.
+func TestImportDuplicateKeys(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+		want    map[string][]string
+	}{
+		{"none", `[{"type":"to-do","attributes":{"title":"a"}},{"type":"to-do","attributes":{"title":"b"}}]`, map[string][]string{}},
+		{"in attributes", `[{"type":"to-do","attributes":{"title":"a","title":"b","notes":"x","notes":"y"}}]`,
+			map[string][]string{"[0]": {"title", "notes"}}},
+		{"on the item", `[{"type":"to-do","attributes":{"title":"a"},"attributes":{"title":"b"}}]`,
+			map[string][]string{"[0]": {"attributes"}}},
+		{"in a checklist item", `[{"type":"to-do","attributes":{"title":"a","checklist-items":[{"type":"checklist-item","attributes":{"title":"c","title":"d"}}]}}]`,
+			map[string][]string{"[0].attributes.checklist-items[0]": {"title"}}},
+		{"three times", `[{"type":"to-do","attributes":{"title":"a","title":"b","title":"c"}}]`,
+			map[string][]string{"[0]": {"title"}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := importDuplicateKeys([]byte(c.payload))
+			if fmt.Sprint(got) != fmt.Sprint(c.want) {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// The new reasons combine with the old ones on one item, in the order the
+// --json reason lists them, and the plain-text refusal explains each.
+func TestImportNewRefusalsCombine(t *testing.T) {
+	pinShapeClock(t)
+	database, _ := seedWritable(t)
+	calls := stubExecDropping(t)
+	payload := `[{"type":"to-do","attributes":{"title":"a","title":"b","when":"18:00","creation-date":"2027-01-01T00:00:00Z","items":[],"notes":"` + strings.Repeat("n", 10001) + `"}}]`
+
+	err := runWith(t, database, "import", "--file", importPayload(t, payload))
+	if *calls != 0 {
+		t.Errorf("payload was sent to Things (%d calls)", *calls)
+	}
+	var refused *importRefusalError
+	if !errors.As(err, &refused) || len(refused.items) != 1 {
+		t.Fatalf("err = %v, want one refused item", err)
+	}
+	it := refused.items[0]
+	if got, want := it.reason(), "invalid-date future-date invalid-item duplicate-key too-long"; got != want {
+		t.Errorf("reason = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(it.Blocked, ","), "when,creation-date,items,title,notes"; got != want {
+		t.Errorf("blocked = %s, want %s", got, want)
+	}
+	for _, line := range []string{
+		"Things saves a when or deadline it cannot read as something else",
+		"Things saves a creation-date or completion-date in the future as now",
+		"Things ignores these attributes on this type of item",
+		"These items give an attribute twice. Things keeps the first value",
+		"Things cuts a title to 4000 characters",
+	} {
+		if !strings.Contains(err.Error(), line) {
+			t.Errorf("message missing %q:\n%v", line, err)
+		}
+	}
 }

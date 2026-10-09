@@ -145,6 +145,15 @@ func TestParseCreationDate(t *testing.T) {
 		{"2026-10-05T10:30Z", "", true},
 		{"2026-10-05 10:30:00Z", "", true},
 		{"2026-10-05t10:30:00z", "", true},
+		{"2026-10-05t10:30:00Z", "", true},
+		// Things takes a lowercase z, as it takes Z.
+		{"2026-10-05T10:30:00z", "2026-10-05T10:30:00Z", false},
+		// Things guesses at these or drops the date; the CLI refuses them.
+		{"2026-10-05T10:30:00+012", "", true},
+		{"2026-10-05T10:30:00ZZ", "", true},
+		{"20260-10-05T10:30:00Z", "", true},
+		{"2026-10-05T100:00:00Z", "", true},
+		{"2026-10-05T10:30:00+100", "", true},
 		{"2026-10-05T10:30:00,5Z", "", true},
 		{"2026-10-05T10:30:00.Z", "", true},
 		{"+2026-10-05T10:30:00Z", "", true},

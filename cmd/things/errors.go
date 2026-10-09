@@ -60,8 +60,11 @@ type jsonErrorPayload struct {
 //
 // Three failures share the shape, and each fills the part that applies:
 // a refusal sets Blocked, naming the attributes Things will not accept on that
-// item; a status read-back failure sets Wanted and Got, naming the status the
-// payload asked for and the one the item is still in. Got is empty when there
+// item, and Reason, why: "repeating", "invalid-date", "future-date",
+// "invalid-type", "invalid-item", "duplicate-key", "too-long" or
+// "blank-title", several separated by a space; a status read-back failure
+// sets Wanted and Got, naming the status the payload asked for and the one
+// the item is still in. Got is empty when there
 // was nothing to observe — the row could not be read, or no longer exists. A
 // created item that never appeared, or that a dated item's row could pass
 // for when too few new items appeared to account for both, sets Confirmed

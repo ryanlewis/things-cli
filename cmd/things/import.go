@@ -48,7 +48,7 @@ func (c *ImportCmd) Run(d *Deps) error {
 	// --create-tags: a date Things rejects, or an `operation: update` item
 	// that would change an attribute Things drops silently on a repeating
 	// item.
-	plan, err := prepareImport(database, payload)
+	plan, err := prepareImport(database, payload, importDuplicateKeys(data))
 	if err != nil {
 		return err
 	}
