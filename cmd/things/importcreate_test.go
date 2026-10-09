@@ -444,6 +444,7 @@ Created and confirmed: [1] "Buy oat milk" (new-1)
 // update and saves only the dated one, at the top level: its row must not
 // confirm the dropped item, and the import fails naming it as not found.
 func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
+	pinWallClock(t)
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
 	stubExecAdding(t, sqlDB, createdRow{uuid: "dated-1", title: "Weekly review"})
@@ -476,6 +477,7 @@ func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
 // A to-do sharing a dated item's title is not confirmed, but names the new
 // items it could be, as an ambiguous one does, in the error and under --json.
 func TestImportSharesDatedTitleListsCandidates(t *testing.T) {
+	pinWallClock(t)
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
 	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
@@ -686,6 +688,7 @@ func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
 // item stops the read-back of an undated one with its title only where its
 // row could be filed.
 func TestImportCreatedChecksDestination(t *testing.T) {
+	pinWallClock(t)
 	now := time.Now().UTC().Format(time.RFC3339)
 	cases := []struct {
 		name, payload string
@@ -1235,7 +1238,7 @@ func TestImportNestedInUpdateNotWarned(t *testing.T) {
 // Things files it in the Inbox with no start date.
 func TestImportChecksWhen(t *testing.T) {
 	past := time.Now().AddDate(0, 0, -4).Format("2006-01-02")
-	today := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(time.Now())))
+	today := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow)))
 	for _, tc := range []struct {
 		name    string
 		attrs   string
