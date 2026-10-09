@@ -175,3 +175,20 @@ func TestNormalizeWhenRejectsImpossibleDatesAndTimes(t *testing.T) {
 		}
 	}
 }
+
+// Every date and time form NormalizeWhen passes is told apart from a phrase,
+// a single-digit hour and an am/pm time included.
+func TestWhenDateOrTime(t *testing.T) {
+	for _, in := range []string{"2026-05-01", "2026-5-1", "2026-05-01@09:30", "2026-05-01@9:30", "09:30", "9:30", "9:30pm", "9:30 PM", "2026-05-01@9:30pm"} {
+		v, err := NormalizeWhen(in)
+		if err != nil || !WhenDateOrTime(v) {
+			t.Errorf("WhenDateOrTime(%q) = false (err %v), want true", in, err)
+		}
+	}
+	for _, in := range []string{"friday", "blorp", "in 3 days", "next friday", "2026-05-01 tonight", "today"} {
+		v, _ := NormalizeWhen(in)
+		if WhenDateOrTime(v) {
+			t.Errorf("WhenDateOrTime(%q) = true, want false", in)
+		}
+	}
+}

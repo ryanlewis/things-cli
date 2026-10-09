@@ -654,6 +654,11 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"emptyListFromSomeday", []string{"edit", "one-1", "--list", ""}, "", false},
 		{"emptyListWithHeading", []string{"edit", "head-todo", "--list", "", "--heading", ""}, "", false},
 		{"emptyListUnfiled", []string{"edit", "loose-todo", "--list", ""}, "", true},
+		// A heading-id sent with an empty list may still move the to-do.
+		{"emptyListUnfiledWithHeadingID", []string{"edit", "loose-todo", "--list", "", "--heading-id", "head-1"}, "", false},
+		// An unknown list is ignored, and an empty heading then acts alone.
+		{"emptyHeadingUnknownList", []string{"edit", "head-todo", "--list", "Nowhere", "--heading", ""}, `finds no project or area called "Nowhere"`, false},
+		{"emptyHeadingUnknownListNoHeading", []string{"edit", "tool-1", "--list", "Nowhere", "--heading", ""}, `finds no project or area called "Nowhere"`, true},
 		{"projectKnownArea", []string{"project", "edit", "repproj-1", "--area", "personal"}, "", false},
 		{"projectAreaUUID", []string{"project", "edit", "repproj-1", "--area", "area-1"}, "", false},
 		{"projectUnknownArea", []string{"project", "edit", "repproj-1", "--area", "Nowhere"}, `no area called "Nowhere"; the project will stay where it is`, true},
