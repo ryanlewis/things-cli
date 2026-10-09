@@ -101,6 +101,10 @@ func checkWhenShape(v string) error {
 		if month < 1 || month > 12 || day < 1 || day > time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
 			return fmt.Errorf("invalid --when value %q: %s-%s-%s is not a date (use YYYY-MM-DD)", v, m[1], m[2], m[3])
 		}
+		if strings.HasPrefix(m[4], "T") {
+			// parseISO8601 has turned it down already.
+			return fmt.Errorf("invalid --when value %q: not an RFC3339 timestamp (use YYYY-MM-DDTHH:MM:SSZ or an offset such as +01:00)", v)
+		}
 		rest, ok := strings.CutPrefix(m[4], "@")
 		if !ok {
 			return nil

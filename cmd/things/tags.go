@@ -131,37 +131,54 @@ func verifyTagStrings(d *Deps, flags TagFlags, values ...*string) ([]string, err
 // verifyEditTags is verifyTagStrings for an edit, given its --tags and
 // --add-tags. The URL sends --tags as given, unknown names included, and
 // Things replaces the item's tags with the ones it has, so an unknown name
-// is not simply ignored: the item loses every tag the known ones do not
-// restore, and all of them when none is known. The warning says so. item is
-// "task" or "project".
+// in --tags is not simply ignored: the item loses every tag the known ones
+// do not restore, and all of them when none is known. The warning says so.
+// An unknown name in --add-tags only is ignored, and its warning names that
+// flag. item is "task" or "project".
 func verifyEditTags(d *Deps, flags TagFlags, tags, addTags *string, item string) ([]string, error) {
 	if tags == nil {
 		return verifyTagStrings(d, flags, addTags)
 	}
 	names := splitTagValues(tags, addTags)
+	inTags := make(map[string]struct{})
+	for _, n := range splitTagValues(tags) {
+		inTags[db.FoldTag(n)] = struct{}{}
+	}
 	return checkTags(d, flags, names, func(unknown []string) {
 		drop := make(map[string]struct{}, len(unknown))
+		var fromTags, fromAdd []string
 		for _, n := range unknown {
-			drop[db.FoldTag(n)] = struct{}{}
-		}
-		var known []string
-		seen := make(map[string]struct{})
-		for _, n := range names {
 			key := db.FoldTag(n)
-			if _, ok := drop[key]; ok {
-				continue
-			}
-			if _, ok := seen[key]; !ok {
-				seen[key] = struct{}{}
-				known = append(known, n)
+			drop[key] = struct{}{}
+			if _, ok := inTags[key]; ok {
+				fromTags = append(fromTags, n)
+			} else {
+				fromAdd = append(fromAdd, n)
 			}
 		}
-		list := strings.Join(unknown, ", ")
-		if len(known) == 0 {
-			fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things: %s; --tags replaces the %s's tags with the ones that exist, and none does, so Things will leave the %s with no tags\n", list, item, item)
-			return
+		if len(fromTags) > 0 {
+			var known []string
+			seen := make(map[string]struct{})
+			for _, n := range names {
+				key := db.FoldTag(n)
+				if _, ok := drop[key]; ok {
+					continue
+				}
+				if _, ok := seen[key]; !ok {
+					seen[key] = struct{}{}
+					known = append(known, n)
+				}
+			}
+			list := strings.Join(fromTags, ", ")
+			if len(known) == 0 {
+				fmt.Fprintf(d.errOut(), "warning: these --tags do not exist in Things: %s; --tags replaces the %s's tags with the ones that exist, and none does, so Things will leave the %s with no tags\n", list, item, item)
+			} else {
+				fmt.Fprintf(d.errOut(), "warning: these --tags do not exist in Things: %s; --tags replaces the %s's tags with the ones that exist, so Things will leave it tagged %s only\n", list, item, strings.Join(known, ", "))
+			}
 		}
-		fmt.Fprintf(d.errOut(), "warning: these tags do not exist in Things: %s; --tags replaces the %s's tags with the ones that exist, so Things will leave it tagged %s only\n", list, item, strings.Join(known, ", "))
+		if len(fromAdd) > 0 {
+			fmt.Fprintf(d.errOut(), "warning: these --add-tags do not exist in Things and will be ignored: %s\n", strings.Join(fromAdd, ", "))
+		}
 	})
 }
 
@@ -267,7 +284,9 @@ func (c *TagAddCmd) Run(d *Deps) error {
 	}
 	// A case twin of an earlier name is the same tag in Things, which this
 	// run either finds or creates once, so it is skipped too.
-	skipped = append(skipped, twins...)
+	for _, tw := range twins {
+		skipped = append(skipped, tw.name)
+	}
 
 	created := []string{}
 	for _, name := range missing {
@@ -295,8 +314,13 @@ func (c *TagAddCmd) Run(d *Deps) error {
 	if len(created) > 0 {
 		fmt.Fprintf(d.Stdout, "created: %s\n", strings.Join(created, ", "))
 	}
-	if len(skipped) > 0 {
-		fmt.Fprintf(d.Stdout, "already exists: %s\n", strings.Join(skipped, ", "))
+	// The plain lines keep the twins apart: a twin of a name this run
+	// created did not exist before it.
+	if exists := skipped[:len(skipped)-len(twins)]; len(exists) > 0 {
+		fmt.Fprintf(d.Stdout, "already exists: %s\n", strings.Join(exists, ", "))
+	}
+	for _, tw := range twins {
+		fmt.Fprintf(d.Stdout, "skipped: %s, same name as %s\n", tw.name, tw.of)
 	}
 	return nil
 }
@@ -328,7 +352,7 @@ func verifyTagsCreated(database *db.DB, names []string, budget time.Duration) er
 // that differ only in case — Things treats those as the same tag. twins are
 // the later spellings dropped that way, each once, so the caller can report
 // them; a repeat of the exact name kept is not one.
-func dedupeTagNames(names []string) (out, twins []string) {
+func dedupeTagNames(names []string) (out []string, twins []tagTwin) {
 	seen := make(map[string]string, len(names))
 	for _, n := range names {
 		n = strings.TrimSpace(n)
@@ -337,8 +361,8 @@ func dedupeTagNames(names []string) (out, twins []string) {
 		}
 		key := db.FoldTag(n)
 		if kept, dup := seen[key]; dup {
-			if n != kept && !slices.Contains(twins, n) {
-				twins = append(twins, n)
+			if n != kept && !slices.ContainsFunc(twins, func(t tagTwin) bool { return t.name == n }) {
+				twins = append(twins, tagTwin{name: n, of: kept})
 			}
 			continue
 		}
@@ -346,4 +370,11 @@ func dedupeTagNames(names []string) (out, twins []string) {
 		out = append(out, n)
 	}
 	return out, twins
+}
+
+// tagTwin is a tag name given after another that differs from it only in
+// case, which Things takes as the same tag.
+type tagTwin struct {
+	name string // as given
+	of   string // the earlier name it repeats
 }

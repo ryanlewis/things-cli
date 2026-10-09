@@ -857,8 +857,9 @@ func TestEditTagsWarnsWhatReplacementLeaves(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"noneKnown", []string{"edit", "one-1", "--tags", "Nope"}, `these tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, and none does, so Things will leave the task with no tags`},
-		{"someKnown", []string{"edit", "one-1", "--tags", "Nope, errand"}, `these tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, so Things will leave it tagged errand only`},
+		{"noneKnown", []string{"edit", "one-1", "--tags", "Nope"}, `these --tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, and none does, so Things will leave the task with no tags`},
+		{"addTagsUnknownBesideTags", []string{"edit", "one-1", "--tags", "errand", "--add-tags", "Nope"}, `these --add-tags do not exist in Things and will be ignored: Nope`},
+		{"someKnown", []string{"edit", "one-1", "--tags", "Nope, errand"}, `these --tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, so Things will leave it tagged errand only`},
 		{"withAddTags", []string{"edit", "one-1", "--tags", "Nope", "--add-tags", "Home"}, `so Things will leave it tagged Home only`},
 		{"addTagsOnly", []string{"edit", "one-1", "--add-tags", "Nope"}, `these tags do not exist in Things and will be ignored: Nope`},
 		{"project", []string{"project", "edit", "repproj-1", "--title", "Plan", "--tags", "Nope"}, `leave the project with no tags`},
@@ -882,8 +883,15 @@ func TestEditTagsWarnsWhatReplacementLeaves(t *testing.T) {
 			if !strings.Contains(stderr, "warning: ") || !strings.Contains(stderr, tc.want) {
 				t.Errorf("stderr = %q, want a warning containing %q", stderr, tc.want)
 			}
-			if tc.name != "addTagsOnly" && strings.Contains(stderr, "will be ignored") {
-				t.Errorf("stderr = %q, want no claim that the tags are simply ignored", stderr)
+			switch tc.name {
+			case "addTagsOnly", "addTagsUnknownBesideTags":
+				if strings.Contains(stderr, "--tags replaces") {
+					t.Errorf("stderr = %q, want unknown --add-tags not blamed on --tags", stderr)
+				}
+			default:
+				if strings.Contains(stderr, "will be ignored") {
+					t.Errorf("stderr = %q, want no claim that the tags are simply ignored", stderr)
+				}
 			}
 			// The unknown name goes to Things as given; Things drops it.
 			if !strings.Contains(url, "Nope") {

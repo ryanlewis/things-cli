@@ -164,7 +164,7 @@ func TestNormalizeDeadlineRejects(t *testing.T) {
 // so add and edit give the same error before anything is sent. Phrases and
 // valid dates and times still pass.
 func TestNormalizeWhenRejectsImpossibleDatesAndTimes(t *testing.T) {
-	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am"} {
+	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am", "2026-10-09T25:00:00Z", "2026-10-09T10:00", "2026-10-09T10:00:00+200"} {
 		if _, err := NormalizeWhen(in); err == nil || !strings.Contains(err.Error(), "invalid --when value") {
 			t.Errorf("NormalizeWhen(%q) = %v, want it refused", in, err)
 		}
