@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -61,15 +63,39 @@ func TestReadMissingReturnsError(t *testing.T) {
 	}
 }
 
-func TestReadEmptyFile(t *testing.T) {
-	writeRaw(t, "")
+// A cache file that exists but holds no listing is unreadable, not a missing
+// cache: a row number must not be resolved as if no listing had run.
+func TestReadUnreadableFile(t *testing.T) {
+	for name, content := range map[string]string{
+		"empty":           "",
+		"blank":           " \n\n",
+		"truncated JSON":  `{"written_at":"2026-10-09T10:00:00Z","uuids":["a","b`,
+		"garbage":         "not a listing at all",
+		"binary":          "\x00\x01\x02",
+		"wrong JSON type": `{"uuids":"abc"}`,
+		"gap in legacy":   "a\n\nb",
+	} {
+		t.Run(name, func(t *testing.T) {
+			writeRaw(t, content)
+			_, err := ReadLastList()
+			if !errors.Is(err, ErrUnreadable) {
+				t.Fatalf("ReadLastList = %v, want ErrUnreadable", err)
+			}
+			if errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("ReadLastList = %v, reads as a missing file", err)
+			}
+		})
+	}
+}
 
-	got, err := ReadLastList()
-	if err != nil {
+// A cache path that cannot be read as a file is unreadable too.
+func TestReadUnreadableDirectory(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := os.MkdirAll(path(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got.UUIDs != nil {
-		t.Fatalf("got %v, want nil", got.UUIDs)
+	if _, err := ReadLastList(); !errors.Is(err, ErrUnreadable) {
+		t.Fatalf("ReadLastList = %v, want ErrUnreadable", err)
 	}
 }
 

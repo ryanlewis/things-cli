@@ -154,9 +154,11 @@ func TestWritesRefuseToDoInTrashedProject(t *testing.T) {
 	}
 }
 
-// A title skips a to-do in a trashed project, as it skips a trashed row. With
-// the same title in a live project the title is not ambiguous: it names the
-// live one, the only one Things shows outside the Trash.
+// An exact title that only a to-do in a trashed project carries reaches that
+// to-do, and the write refuses it as trashed, as it would by uuid. A fragment
+// of the title skips it, as it skips a trashed row. With the same title in a
+// live project the title is not ambiguous: it names the live one, the only
+// one Things shows outside the Trash.
 func TestTitleSkipsToDoInTrashedProject(t *testing.T) {
 	t.Run("only match", func(t *testing.T) {
 		fastVerify(t)
@@ -165,7 +167,21 @@ func TestTitleSkipsToDoInTrashedProject(t *testing.T) {
 
 		_, _, err := runStreams(t, database, "complete", "Book van")
 		if err == nil || *calls != 0 {
-			t.Fatalf("complete \"Book van\" = %v with %d write(s), want not found and nothing sent", err, *calls)
+			t.Fatalf("complete \"Book van\" = %v with %d write(s), want a trashed refusal and nothing sent", err, *calls)
+		}
+		payload, raw := decodePayload(t, err)
+		if payload.Error != "trashed" || payload.UUID != "binchild-1" {
+			t.Errorf("JSON error = %q, want %q on binchild-1 (%s)", payload.Error, "trashed", raw)
+		}
+	})
+	t.Run("fragment", func(t *testing.T) {
+		fastVerify(t)
+		database, _ := seedTrashedProject(t)
+		calls := stubExecDropping(t)
+
+		_, _, err := runStreams(t, database, "complete", "Book")
+		if err == nil || *calls != 0 {
+			t.Fatalf("complete \"Book\" = %v with %d write(s), want not found and nothing sent", err, *calls)
 		}
 		payload, raw := decodePayload(t, err)
 		if payload.Error != "not found" {

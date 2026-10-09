@@ -1474,10 +1474,15 @@ func (d *DB) GetTasksByUUIDs(uuids []string) (map[string]*model.Task, error) {
 	return found, nil
 }
 
-// GetTask resolves a reference to one open task: a uuid, then an exact title,
+// GetTask resolves a reference to one task: a uuid, then an exact title,
 // then a substring of a title. Both title paths report an AmbiguousTaskError
 // when the reference leaves more than one candidate standing, so the caller
 // picks by uuid rather than being handed a row this package chose for it.
+//
+// The substring path only sees open rows outside the Trash, and it is only
+// tried when no row of any status carries the exact title (see GetTaskExact):
+// `complete "zz base"` with "zz base" completed must not close the open
+// "zz base extra" instead.
 func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	t, err := d.GetTaskExact(uuidOrTitle)
 	var notFound *TaskNotFoundError
@@ -1504,6 +1509,13 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 // that is exactly the reference, and a *TaskNotFoundError otherwise. A
 // reference that must not be guessed at, such as an all-digit one that was not
 // a list row, resolves through this (issue #375).
+//
+// An exact title is looked for among open rows outside the Trash first, and
+// any such row wins, as `add` treats a title that also exists completed. Only
+// when there is none does a closed or trashed row with the title count: it is
+// returned (or reported as ambiguous with its twins) so the caller refuses it
+// as it would refuse the same row reached by uuid, rather than the lookup
+// falling through to a substring match on some other, open, task.
 func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 	t, err := d.GetTaskByUUID(uuidOrTitle)
 	if err != nil {
@@ -1518,6 +1530,17 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 		return nil, err
 	}
 	if candidates := preferInstances(exact); len(candidates) > 0 {
+		if len(candidates) == 1 {
+			return &candidates[0], nil
+		}
+		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
+	}
+
+	closed, err := d.findClosedTasksByExactTitle(uuidOrTitle)
+	if err != nil {
+		return nil, err
+	}
+	if candidates := preferInstances(closed); len(candidates) > 0 {
 		if len(candidates) == 1 {
 			return &candidates[0], nil
 		}
@@ -1538,6 +1561,16 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 // uses.
 func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
 	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0 AND " + notHeading +
+		" GROUP BY t.uuid " + d.templatesLastOrder()
+	return d.collectTasks(query, normName(title))
+}
+
+// findClosedTasksByExactTitle returns the tasks carrying exactly this title
+// that findTasksByExactTitle leaves out: closed rows, rows in the Trash, and
+// to-dos whose project is in the Trash. GetTaskExact reads it only when no
+// open row has the title.
+func (d *DB) findClosedTasksByExactTitle(title string) ([]model.Task, error) {
+	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND NOT (t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0) AND " + notHeading +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, normName(title))
 }

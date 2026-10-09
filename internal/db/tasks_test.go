@@ -832,9 +832,10 @@ func TestGetTaskByUUID(t *testing.T) {
 	}
 }
 
-// A uuid still reaches a trashed item, flagged as trashed, while a title does
-// not. `show` relies on the first, and the writes refuse the item on the flag
-// rather than reporting it missing, so the reader learns where it went.
+// A uuid reaches a trashed item, flagged as trashed, and so does its exact
+// title when no open row carries it. `show` relies on that, and the writes
+// refuse the item on the flag rather than reporting it missing, so the reader
+// learns where it went. A substring still never reaches it.
 func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
 	d, fx := newFixture(t)
 	fx.Todo("t-bin", "Binned errand", 1, dbtest.Trashed())
@@ -850,9 +851,12 @@ func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
 		t.Errorf("GetTaskExact(uuid) = %+v, %v, want the trashed item", exact, err)
 	}
 
+	if got, err := d.GetTask("Binned errand"); err != nil || got.UUID != "t-bin" || !got.Trashed {
+		t.Errorf("GetTask(title of trashed item) = %+v, %v, want the trashed item", got, err)
+	}
 	var nf *TaskNotFoundError
-	if _, err := d.GetTask("Binned errand"); !errors.As(err, &nf) {
-		t.Errorf("GetTask(title of trashed item) = %v, want a TaskNotFoundError", err)
+	if _, err := d.GetTask("Binned"); !errors.As(err, &nf) {
+		t.Errorf("GetTask(fragment of trashed item) = %v, want a TaskNotFoundError", err)
 	}
 }
 

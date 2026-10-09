@@ -387,6 +387,14 @@ case wins over titles that differ from it only by case: with to-dos `Water`
 and `water`, `things show water` finds the second, while `things show WATER`
 matches both.
 
+A title fragment only matches open items outside the Trash, and it is only
+tried when no item has exactly that title. An exact title can name a closed
+or trashed item too, when no open item has it: `things complete "Pay rent"`
+with "Pay rent" completed and "Pay rent deposit" open reports that "Pay
+rent" is already completed and leaves the deposit alone. An open item with
+the exact title wins over closed ones that share it, so a title you have
+completed before still reaches the open copy.
+
 A title matching more than one item is reported rather than guessed at: an
 interactive run prints the candidates and asks which one, and a non-TTY run
 returns them as an error. That holds for an exact title too — a project and a
@@ -405,7 +413,12 @@ part of a title: after a 10-row list, `things complete 12` does not complete
 says to re-run the list. A task whose title is exactly that number still
 resolves, as does a uuid.
 
-Only bare digits are row numbers. A reference shaped like one is not, even
+Only bare digits with no leading zero are row numbers. Listings never print
+`07`, so `07`, `00` and `0` are not rows: like the shapes below, they reach a
+task titled exactly that and nothing else, and the error suggests `7` when the
+last list has a row 7.
+
+A reference shaped like a row number is not one either, even
 when row 3 exists: `#3`, `+3`, `-3`, `# 3`, `3.`, `#3.`, `(3)`, `(#3)`, and
 `3` led by `No`, `Nr`, `Num`, `Number`, `N°`, `Nº` or `№` (with or without a
 dot). On the command line `-3` needs `--` before it, as in `things complete
@@ -417,7 +430,19 @@ or another symbol, such as `2026-10-07`, `12:30`, `$100` or `1.2.3`, still
 matches part of a title. Space around a number or a marked ref is not part of
 the title: ` 2026 ` finds a task titled "2026".
 
-`show` still reaches an item in the Trash by row number or uuid. Its
+A reference shaped like a uuid (21 or 22 letters and digits, or the
+36-character hex form with dashes) that is no item's uuid is not searched for
+as part of a title. uuids match exactly, case included, while titles ignore
+case, so a uuid typed in the wrong case could otherwise reach a task whose
+title merely contains it. A task titled exactly that string still resolves.
+
+An empty reference, or one that is only spaces, is refused before any
+lookup. Under `--json` its token is `empty reference`. Space inside or
+around a title is otherwise kept: `"Work "` and `"Work"` are different
+titles.
+
+`show` still reaches an item in the Trash by row number, uuid or an exact
+title no open item has. Its
 status line says so, as in `Status: Open (in Trash)`, and `--json` has
 `"trashed": true`. The writes refuse such an item; see
 [Completing and cancelling](#completing-and-cancelling).
@@ -779,15 +804,16 @@ under `--json` the error token is `already closed`.
 
 An item in the Trash is refused and nothing is sent. A row number can point
 at one when the item was trashed in Things after the listing was printed,
-and a uuid can name one; a title never matches it. The error names the item
+and a uuid can name one, as can its exact title when no open item has it; a
+title fragment never matches it. The error names the item
 and says it is in the Trash; under `--json` its token is `trashed`. `edit`
 and `project edit` refuse a trashed item the same way.
 
 A task whose project is in the Trash, directly or through a heading, is
 refused the same way, with the same `trashed` token, and the error names
 the project. Things shows such a task only in the Trash, so the CLI treats
-it as trashed: a title never matches it, and a uuid reaches it only to be
-refused. Restore the project in Things first.
+it as trashed: a title fragment never matches it, and a uuid or its exact
+title reaches it only to be refused. Restore the project in Things first.
 
 Both go through AppleScript so Things3 records the change in its
 activity log. Task creation (`add`) and edits go through the
@@ -1163,6 +1189,12 @@ path typed in a different case, counts as the same
 database. A cache file written before the database was recorded backs a
 row number only when no `--db` is in play (from the flag or the config
 file); with one, the reference is refused until you list again.
+
+A cache file that is there but cannot be read, because it is empty,
+truncated or garbled, refuses a row number rather than treating it as a
+title. Run a listing again to rewrite it, or use the task's title or uuid.
+Under `--json` the token is `stale list cache`. With no cache file at all, a
+number still resolves as an exact title, as described above.
 
 A `--json` listing never writes the cache. JSON output carries no row
 numbers, so it has nothing to record, and the file is one shared cache
