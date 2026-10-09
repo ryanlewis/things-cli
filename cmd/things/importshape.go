@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // maxImportItems is the most items one import sends. Measured in Things 3
@@ -85,6 +89,12 @@ type importShape struct {
 	items, itemNames []string
 	// types is each attribute with the wrong JSON kind, as `name: value`.
 	types, typeNames []string
+	// ignored is each attribute Things takes on another type of item and
+	// ignores on this one, as `name: why`.
+	ignored, ignoredNames []string
+	// long is each title or notes longer than Things keeps, as
+	// `name: N characters`.
+	long, longNames []string
 	// blank is set for a to-do or project created with no title, or only
 	// whitespace. Things creates it, untitled, which an agent almost never
 	// means.
@@ -92,7 +102,30 @@ type importShape struct {
 }
 
 func (s importShape) empty() bool {
-	return len(s.items) == 0 && len(s.types) == 0 && !s.blank
+	return len(s.items) == 0 && len(s.types) == 0 && len(s.ignored) == 0 && len(s.long) == 0 && !s.blank
+}
+
+// importIgnoredAttrs are the attributes Things takes on one type of created
+// item and ignores on another, by the type that ignores them. Measured in
+// Things 3 (9 Oct 2026): a to-do's items, whatever their kind, are dropped
+// and the to-do is created without them, and a project's checklist-items
+// given as a string are dropped too. A project has no checklist, so its
+// checklist-items are refused whatever their kind.
+var importIgnoredAttrs = map[string]struct{ name, why string }{
+	"to-do":   {"items", "Things takes items only on a project, and ignores them on a to-do"},
+	"project": {"checklist-items", "Things takes checklist-items only on a to-do, and ignores them on a project"},
+}
+
+// importLengthLimits are the longest title and notes a created item can
+// have, the limits `add` enforces. Measured in Things 3 (9 Oct 2026): a
+// title over 4000 characters is cut to 4000 and the item created. Notes over
+// 10000 characters were not measured; they are held to the limit `add` uses.
+var importLengthLimits = []struct {
+	name string
+	max  int
+}{
+	{"title", things.MaxStringLen},
+	{"notes", things.MaxNotesLen},
 }
 
 // importShapes walks the items of payload where Things reads them: the top
@@ -139,8 +172,9 @@ func importShapes(payload []any) (map[string]importShape, int) {
 // checkImportItem checks the shape of item, which sits in slot. Every item
 // must have a type Things knows and an operation of create or update, both
 // exactly as written. A created item must also have a type Things creates in
-// that slot, and attributes, each of the kind importAttrKinds gives, and a
-// created to-do or project a title. Update items were not measured past
+// that slot, and attributes, each of the kind importAttrKinds gives, none
+// Things ignores on its type (importIgnoredAttrs), and a title and notes
+// within importLengthLimits, and a created to-do or project a title. Update items were not measured past
 // their type, operation and attributes, so their attributes are not checked.
 // A null attribute counts as not given, as it does to Things for the
 // destinations.
@@ -197,13 +231,26 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 		return s
 	}
 
+	ignored, hasIgnored := importIgnoredAttrs[itemType]
+	if hasIgnored && attrs[ignored.name] != nil {
+		s.ignored = append(s.ignored, fmt.Sprintf("%s: %s", ignored.name, ignored.why))
+		s.ignoredNames = append(s.ignoredNames, ignored.name)
+	}
 	for _, a := range importAttrKinds {
 		raw := attrs[a.name]
-		if raw == nil || hasKind(raw, a.kind) {
+		if raw == nil || hasKind(raw, a.kind) || (hasIgnored && a.name == ignored.name) {
 			continue
 		}
 		s.types = append(s.types, fmt.Sprintf("%s: %s", a.name, shown(raw)))
 		s.typeNames = append(s.typeNames, a.name)
+	}
+	for _, l := range importLengthLimits {
+		if v, ok := attrs[l.name].(string); ok {
+			if n := utf8.RuneCountInString(v); n > l.max {
+				s.long = append(s.long, fmt.Sprintf("%s: %d characters, over %d", l.name, n, l.max))
+				s.longNames = append(s.longNames, l.name)
+			}
+		}
 	}
 	if itemType == "to-do" || itemType == "project" {
 		if title, ok := attrs["title"].(string); (ok || attrs["title"] == nil) && strings.TrimSpace(title) == "" {
@@ -234,4 +281,60 @@ func hasKind(v any, kind string) bool {
 		})
 	}
 	return false
+}
+
+// importDuplicateKeys finds every object in data, a payload that decodes,
+// that gives one key twice, and returns the keys by the path of the item
+// they belong to: a key repeated in an item's attributes belongs to that
+// item, and any other to the object it is in. Paths are in the form
+// walkImportValues gives. Measured in Things 3 (9 Oct 2026): with title
+// given twice Things keeps the first, while encoding/json keeps the last, so
+// the read-back would look for a title Things never saved.
+func importDuplicateKeys(data []byte) map[string][]string {
+	dups := map[string][]string{}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var walk func(path string) error
+	walk = func(path string) error {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		delim, ok := tok.(json.Delim)
+		if !ok {
+			return nil
+		}
+		switch delim {
+		case '{':
+			seen := map[string]bool{}
+			for dec.More() {
+				keyTok, err := dec.Token()
+				if err != nil {
+					return err
+				}
+				key, _ := keyTok.(string)
+				if seen[key] {
+					item := strings.TrimSuffix(path, ".attributes")
+					if !slices.Contains(dups[item], key) {
+						dups[item] = append(dups[item], key)
+					}
+				}
+				seen[key] = true
+				if err := walk(path + "." + key); err != nil {
+					return err
+				}
+			}
+		case '[':
+			for i := 0; dec.More(); i++ {
+				if err := walk(fmt.Sprintf("%s[%d]", path, i)); err != nil {
+					return err
+				}
+			}
+		}
+		_, err = dec.Token() // the closing delimiter
+		return err
+	}
+	// The payload has decoded, so the walk does not fail.
+	_ = walk("")
+	return dups
 }

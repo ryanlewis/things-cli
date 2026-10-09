@@ -478,7 +478,10 @@ instead of assuming:
   Before sending, `import` refuses a payload Things would reject with an
   error, one that creates an untitled to-do or project, and one with more
   than 200 items to create, which makes Things stop to ask before creating
-  anything. The refusal is `import refused` and nothing is sent. A refusal
+  anything. It also refuses a payload Things would save differently from
+  what it says: a key given twice, a title over 4000 characters or notes
+  over 10000, `items` on a to-do or `checklist-items` on a project, a date
+  in the future, and a `when` or `deadline` Things would misread. The refusal is `import refused` and nothing is sent. A refusal
   for size alone carries `"reason": "too-many-items"` and no `items`; split
   the payload and pause between imports (Things is believed to allow about
   250 items per 10 seconds, not verified).

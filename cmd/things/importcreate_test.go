@@ -32,7 +32,8 @@ func decodeCreated(t *testing.T, out string) []importCreated {
 }
 
 // A project with a to-do and a heading inside it, beside a top-level to-do.
-// The heading is not read back; the rest are.
+// The heading is not read back; the rest are. Things keeps the padding on
+// " Book venue ", and the output reports the title as saved.
 const createPayload = `[
   {"type":"to-do","attributes":{"title":"Buy oat milk"}},
   {"type":"project","attributes":{"title":"Launch","items":[
@@ -46,7 +47,7 @@ const createPayload = `[
 var createRows = []createdRow{
 	{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask},
 	{uuid: "new-p", title: "Launch", typ: model.TypeProject},
-	{uuid: "new-2", title: "Book venue", typ: model.TypeTask, extra: `project = 'new-p'`},
+	{uuid: "new-2", title: " Book venue ", typ: model.TypeTask, extra: `project = 'new-p'`},
 }
 
 // Every created to-do and project is found and reported confirmed, nested
@@ -62,7 +63,7 @@ func TestImportConfirmsCreatedItems(t *testing.T) {
 	}
 	want := `Created and confirmed: [0] "Buy oat milk" (new-1)
 Created and confirmed: [1] "Launch" (new-p)
-Created and confirmed: [1].attributes.items[1] "Book venue" (new-2)
+Created and confirmed: [1].attributes.items[1] " Book venue " (new-2)
 `
 	if out != want {
 		t.Errorf("output =\n%s\nwant\n%s", out, want)
@@ -82,7 +83,7 @@ func TestImportConfirmsCreatedItemsJSON(t *testing.T) {
 	want := []importCreated{
 		{Path: "[0]", Kind: "task", Title: "Buy oat milk", UUID: "new-1", Confirmed: true},
 		{Path: "[1]", Kind: "project", Title: "Launch", UUID: "new-p", Confirmed: true},
-		{Path: "[1].attributes.items[1]", Kind: "task", Title: "Book venue", UUID: "new-2", Confirmed: true},
+		{Path: "[1].attributes.items[1]", Kind: "task", Title: " Book venue ", UUID: "new-2", Confirmed: true},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d items, want %d: %s", len(got), len(want), out)

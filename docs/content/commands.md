@@ -768,16 +768,41 @@ that Things dropped are reported one per line with a non-zero exit.
 A `creation-date` or `completion-date` on a to-do or project the payload
 creates or updates, or on a heading or checklist item, must be a date and time with seconds and a UTC offset,
 such as `2026-10-05T10:30:00Z` or `2026-10-05T10:30:00+02:00` (`+0200`,
-`+02` and `+01:00:00` work too, and trailing spaces are ignored). Things
-rejects the whole payload over a date on its own, a time with no seconds or
-no offset, a lowercase `t` or `z`, a comma before the fraction of a second,
-a leading space, a month outside 1 to 12, or an offset such as `+200`, so
-`import` refuses these before anything is sent (tags included) and names
-each item, with the id of an update item. It also refuses a day outside 1 to
-31, an offset wider than 18 hours, and a year of more than four digits or
-another date or time field of more than two, none of which were measured. An hour past
-23 is taken: Things rolls it into the next day. A `null` creation-date is no
-date: Things saves the item as created now.
+`+02` and `+01:00:00` work too, as do a lowercase `z` and trailing
+spaces). Things rejects the whole payload over a date on its own, a time
+with no seconds or no offset, a lowercase `t`, a comma before the fraction
+of a second, a leading space, a month outside 1 to 12, or an offset such as
+`+200`, so `import` refuses these before anything is sent (tags included)
+and names each item, with the id of an update item. Reason `invalid-date`.
+
+`import` is stricter than Things on malformed dates. Things takes `+012`,
+`ZZ`, a five-digit year, `T100:00:00` and `+100` by guessing at them or
+dropping the date, so the item is saved with a date the payload did not
+give, and nothing says so. `import` refuses them, along with a day outside
+1 to 31, an offset wider than 18 hours, and any year of more than four
+digits or other date or time field of more than two. A `null` creation-date
+is no date: Things saves the item as created now.
+
+A `creation-date` or `completion-date` in the future is refused too, with
+reason `future-date`: Things saves it as now, so the item would not get
+the date the payload gives. A date up to a minute ahead is allowed. An
+hour past 23 rolls into the next day, so `T25:00:00` on today's date is in
+the future and refused, while the same hour on an earlier day is taken.
+
+A `when` or `deadline` that Things would read as something else is
+refused with reason `invalid-date`. Things saves these with no warning: a
+`when` of `2026-13-01` or `18:00` lands in Today with no reminder, a
+`deadline` of `2026-13-01` on 1 January, and a `deadline` of `someday` as
+no deadline. `import` makes the checks `add` makes for `--when` and
+`--deadline`, so a misspelt keyword such as `tommorow` and a keyword as a
+deadline are refused. The Things JSON format is narrower than the URL
+`add` uses: its documentation names only the keywords, a date and a date
+and time. So a value that starts with a digit must be a real date,
+`YYYY-MM-DD`, or for `when` a date and time, `YYYY-MM-DD@HH:MM`. A bare
+time and an RFC 3339 timestamp are refused. The keywords, weekday names
+and English phrases such as `next week` are sent as they are, as `add`
+sends them; how Things reads a phrase in a payload was not measured. Update
+items are checked too.
 
 Things also rejects the whole payload, showing an error and creating
 nothing, over an item it does not take, so `import` refuses these too:
@@ -795,6 +820,21 @@ nothing, over an item it does not take, so `import` refuses these too:
   strings, `tags` an array of strings, `completed` and `canceled` `true` or
   `false`, and `items` and `checklist-items` arrays. Each may be `null`.
   Reason `invalid-type`. The attributes of update items are not checked.
+
+Things takes some payloads without an error but saves something other
+than what they say, so `import` refuses these too:
+
+- A created to-do with `items`, or a created project with
+  `checklist-items`, whatever their value. Things takes `items` only on a
+  project and `checklist-items` only on a to-do, ignores them elsewhere,
+  and creates the item without them. Reason `invalid-item`.
+- An object that gives a key twice, such as two `title`s. Things keeps the
+  first and the CLI would read back the last. Reason `duplicate-key`, with
+  the key in `blocked`. This is checked in every object of the payload,
+  update items included.
+- A created item with a `title` over 4000 characters, which Things cuts to
+  4000, or `notes` over 10000 characters. Notes that long were not
+  measured; the limit is the one `add` enforces. Reason `too-long`.
 
 A to-do or project created with no `title`, or one that is only
 whitespace, is refused with reason `blank-title`. Things would create it
@@ -814,14 +854,16 @@ Under `--json` the error carries `"reason": "too-many-items"` beside
 All of these refusals are one: a run names every refused item, whichever
 the reason. Under `--json` it is `import refused`, with one entry per item:
 `blocked` names every attribute refused on it, and `reason` says why,
-`repeating`, `invalid-date`, `invalid-type`, `invalid-item` or
-`blank-title`, several separated by a space. An item that is not an object
+`repeating`, `invalid-date`, `future-date`, `invalid-type`,
+`invalid-item`, `duplicate-key`, `too-long` or `blank-title`, several
+separated by a space. An item that is not an object
 has no `blocked`.
 
 Every to-do and project the payload creates is read back too, the way
 `add` finds its item: a new item of that kind with that title (surrounding
 whitespace trimmed) that was not there before the import, filed where the
-payload puts it, as Things files it:
+payload puts it, as Things files it. The title is reported as Things saves
+it, padding included:
 
 - A to-do with a `heading-id` goes under that heading, in its project,
   whatever list it names. Any `heading-id`, even an empty or unknown one,
