@@ -3,16 +3,32 @@ package main
 import (
 	"fmt"
 
+	"github.com/alecthomas/kong"
+
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
+// Help for --when and --deadline, which add, project add, edit and project
+// edit share. parserOptions hands them to kong as helpVars.
+const (
+	whenValues        = "today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM"
+	deadlineNoKeyword = "Keywords such as today and tomorrow are rejected."
+)
+
+var helpVars = kong.Vars{
+	"add_when_help":      "Schedule: " + whenValues + ", or RFC3339.",
+	"add_deadline_help":  `Deadline: a YYYY-MM-DD date or an English phrase such as "next friday". ` + deadlineNoKeyword,
+	"edit_when_help":     "Schedule: " + whenValues + ", RFC3339, or empty to clear.",
+	"edit_deadline_help": `Deadline: a YYYY-MM-DD date, an English phrase such as "next friday", or empty to clear. ` + deadlineNoKeyword,
+}
+
 type AddCmd struct {
 	Title     string `arg:"" required:"" help:"Task title."`
 	Notes     string `help:"Notes for the task."`
-	When      string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM, or RFC3339."`
-	Deadline  string `help:"Deadline: a YYYY-MM-DD date or an English phrase such as \"next friday\". Keywords such as today and tomorrow are rejected."`
+	When      string `help:"${add_when_help}"`
+	Deadline  string `help:"${add_deadline_help}"`
 	Tags      string `help:"Comma-separated tags."`
 	Checklist string `help:"Newline-separated checklist items."`
 	Project   string `help:"Project name or UUID."`
@@ -23,39 +39,48 @@ type AddCmd struct {
 }
 
 func (c *AddCmd) Run(d *Deps) error {
-	if err := refuseBlankTitle(c.Title, "task", "added"); err != nil {
-		return err
-	}
-	// Before --create-tags can create anything.
-	if _, err := things.NormalizeWhen(c.When); err != nil {
-		return err
-	}
-	if _, err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
-		return err
-	}
 	list := c.List
 	if list == "" {
 		list = c.Project
 	}
+	params := things.AddParams{
+		AddCommon: things.AddCommon{
+			Title:    c.Title,
+			Notes:    c.Notes,
+			When:     c.When,
+			Deadline: c.Deadline,
+			Tags:     c.Tags,
+		},
+		Checklist: expandNewlines(c.Checklist),
+		Heading:   c.Heading,
+		List:      list,
+	}
+	if err := preAdd(d, "task", params.AddCommon, params.Validate, c.TagFlags); err != nil {
+		return err
+	}
 	// Things matches list by title only; a uuid has to go as list-id.
-	var listID string
 	target, dest := resolveAddTarget(d, list, c.Heading)
 	if target.ByUUID {
-		list, listID = "", target.UUID
+		params.List, params.ListID = "", target.UUID
 	}
 	return applyAdd(d, model.TypeTask, c.Title, dest, c.When, func() error {
-		return things.AddTask(things.AddParams{
-			Title:     c.Title,
-			Notes:     c.Notes,
-			When:      c.When,
-			Deadline:  c.Deadline,
-			Tags:      c.Tags,
-			Checklist: expandNewlines(c.Checklist),
-			Heading:   c.Heading,
-			List:      list,
-			ListID:    listID,
-		})
+		return things.AddTask(params)
 	})
+}
+
+// preAdd refuses an add before anything is sent: a blank title, then
+// anything validate, the params' Validate, finds, then the tags. All of it
+// runs before --create-tags can create a tag, so an add that fails creates
+// none.
+func preAdd(d *Deps, kind string, c things.AddCommon, validate func() error, flags TagFlags) error {
+	if err := refuseBlankTitle(c.Title, kind, "added"); err != nil {
+		return err
+	}
+	if err := validate(); err != nil {
+		return err
+	}
+	_, err := verifyTagStrings(d, flags, &c.Tags)
+	return err
 }
 
 // resolveAddTarget returns the uuid of the project or area list names, and

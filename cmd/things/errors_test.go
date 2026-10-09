@@ -588,6 +588,7 @@ func TestKongBoolMatchesKong(t *testing.T) {
 				"builtin_lists": strings.Join(things.BuiltinLists, ", "),
 				"skill_agents":  skill.AgentNames(),
 			},
+			helpVars,
 		)
 		if err != nil {
 			t.Fatalf("kong.New: %v", err)
@@ -615,6 +616,7 @@ func TestBoolShortsMatchesGrammar(t *testing.T) {
 			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
 			"skill_agents":  skill.AgentNames(),
 		},
+		helpVars,
 	)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)

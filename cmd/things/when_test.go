@@ -242,7 +242,7 @@ func TestMisfiledAddHint(t *testing.T) {
 	d := &Deps{DB: database, DBPath: "/tmp/x.sqlite", Stdout: io.Discard, Stderr: io.Discard}
 
 	err := applyAdd(d, model.TypeProject, "Launch", createdDest{}, "someday", func() error {
-		return things.AddProject(things.AddProjectParams{Title: "Launch", When: "someday"})
+		return things.AddProject(things.AddProjectParams{AddCommon: things.AddCommon{Title: "Launch", When: "someday"}})
 	})
 	if err == nil {
 		t.Fatal("want a misfiled error")

@@ -115,6 +115,7 @@ func parseCLI(t *testing.T, args ...string) error {
 			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
 			"skill_agents":  skill.AgentNames(),
 		},
+		helpVars,
 	)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
