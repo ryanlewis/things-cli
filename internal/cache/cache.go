@@ -6,6 +6,9 @@ package cache
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,25 +73,56 @@ func WriteLastList(l LastList) error {
 	return os.WriteFile(path(), append(data, '\n'), 0o644)
 }
 
+// ErrUnreadable is wrapped by the error ReadLastList returns for a cache file
+// that exists but cannot be read as a listing: empty, truncated, garbled, or
+// not readable at all. It is kept apart from a missing file, which only means
+// no plain listing has run yet. A row number cannot be resolved against such a
+// file, and treating it as no listing would let `things complete 12` fall
+// through to a task titled "12" while the user meant row 12.
+var ErrUnreadable = errors.New("the last-list cache could not be read")
+
 // ReadLastList returns the cached listing. A file left by a things-cli older
 // than 0.8.0 is a bare list of UUIDs with no timestamp; it is read as one
 // rather than reported as corrupt, so those rows still resolve — as a stale
 // listing, since there is no time to judge them by.
+//
+// A missing file returns an error matching fs.ErrNotExist. Any other failure,
+// including an empty file and content that is neither format, wraps
+// ErrUnreadable.
 func ReadLastList() (LastList, error) {
 	data, err := os.ReadFile(path())
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		return LastList{}, err
+	}
+	if err != nil {
+		return LastList{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
 	}
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
-		return LastList{}, nil
+		return LastList{}, fmt.Errorf("%w: %s is empty", ErrUnreadable, path())
 	}
 	if trimmed[0] != '{' {
-		return LastList{UUIDs: strings.Split(string(trimmed), "\n")}, nil
+		lines := strings.Split(string(trimmed), "\n")
+		for _, line := range lines {
+			if !legacyUUID(line) {
+				return LastList{}, fmt.Errorf("%w: %s is not a listing", ErrUnreadable, path())
+			}
+		}
+		return LastList{UUIDs: lines}, nil
 	}
 	var l LastList
 	if err := json.Unmarshal(trimmed, &l); err != nil {
-		return LastList{}, err
+		return LastList{}, fmt.Errorf("%w: %s: %v", ErrUnreadable, path(), err)
 	}
 	return l, nil
+}
+
+// legacyUUID reports whether line can be one row of a pre-0.8.0 cache file:
+// a non-empty run of ASCII letters, digits and dashes, which covers every
+// uuid form Things uses.
+func legacyUUID(line string) bool {
+	if line == "" {
+		return false
+	}
+	return strings.Trim(line, "-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") == ""
 }

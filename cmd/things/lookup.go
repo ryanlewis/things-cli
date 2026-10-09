@@ -17,7 +17,27 @@ import (
 	"github.com/ryanlewis/things-cli/internal/output"
 )
 
+// resolveTask reads ref as a row of the last list, a uuid or a title, and
+// returns the one task it names. The order and the guards are in
+// docs/content/commands.md under "Inspecting a task"; in short:
+//
+//   - an empty or blank ref is refused (emptyRefError);
+//   - bare digits with no leading zero are a row of the last list, and a
+//     cache file that exists but cannot be read refuses them
+//     (unreadableCacheError);
+//   - a ref shaped like a row without being one (`#12`, `07`, `0`) and a ref
+//     shaped like a uuid resolve only by uuid or exact title, never by a
+//     title fragment;
+//   - anything else is a uuid, an exact title (closed or trashed rows count
+//     when no open row has it, so the write refuses them), then a fragment
+//     of an open task's title.
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
+	// A blank ref is a title fragment of every task, and an exact title of
+	// every untitled one: `show ''` must not pick one of those.
+	if strings.TrimSpace(ref) == "" {
+		return nil, &emptyRefError{Query: ref}
+	}
+
 	// Try numeric index from last list. Surrounding space does not stop a
 	// number from being one: ` 12` is row 12, or refused as not a row, and
 	// never a title fragment.
@@ -26,6 +46,12 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	var cacheErr error
 	if kind != refPlain {
 		last, cacheErr = cache.ReadLastList()
+	}
+	// A cache file that is there but cannot be read is not the same as no
+	// listing: the user may well have meant a row of it, so a bare number
+	// is refused rather than tried as a title.
+	if kind == refRow && errors.Is(cacheErr, cache.ErrUnreadable) {
+		return nil, &unreadableCacheError{Query: ref, Err: cacheErr}
 	}
 	if n, err := strconv.Atoi(digits); kind == refRow && err == nil && n >= 1 {
 		if cacheErr == nil && n <= len(last.UUIDs) {
@@ -61,8 +87,14 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// Nor is a ref shaped like a row number that is not one, such as `+12`,
 	// `#12.`, `(12)` or `No. 12`: as a fragment, `#12` would complete a task
 	// that mentions issue #12.
+	//
+	// A uuid-shaped ref that is no item's uuid is held to the same rule.
+	// uuids match byte for byte while titles ignore case, so a uuid typed
+	// in the wrong case would otherwise reach a task whose title merely
+	// contains it.
+	uuidShaped := kind == refPlain && looksLikeUUID(ref)
 	lookup := database.GetTask
-	if kind != refPlain {
+	if kind != refPlain || uuidShaped {
 		lookup = database.GetTaskExact
 	}
 	task, err := lookup(ref)
@@ -80,6 +112,12 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		return nil, notARowError(ref, last, cacheErr)
 	case kind == refRowLike && errors.As(err, &notFound):
 		return nil, markedRowError(ref, digits, last, cacheErr)
+	case uuidShaped && errors.As(err, &notFound):
+		return nil, &notFoundError{
+			Kind:  "task",
+			Query: ref,
+			msg:   fmt.Sprintf("no item has the uuid %q and no task has exactly that title; uuids are case-sensitive, so copy the uuid exactly as a listing prints it", ref),
+		}
 	}
 
 	var ambig *db.AmbiguousTaskError
@@ -141,6 +179,10 @@ var rowMarkers = []string{"no", "nr", "num", "number", "n°", "nº", "№"}
 // classifyRef reads ref, ignoring surrounding space, and returns its kind and,
 // for a row or row-like ref, its digits as a slice of ref.
 //
+// A row is bare digits with no leading zero. Listings never print `07.`, so
+// `07`, `00` and `0` are row-like: they reach a task titled exactly that, and
+// nothing else.
+//
 // A row-like ref is an optional `(`, then an optional marker (`#`, `+`, `-`
 // or one of rowMarkers), then one run of ASCII digits, then nothing but `.`,
 // `)` or space. Anything else stays plain, so a date, a time, an amount or a
@@ -149,6 +191,9 @@ func classifyRef(ref string) (refKind, string) {
 	s := strings.TrimSpace(ref)
 	start, end := digitRun(s)
 	if start == 0 && end == len(s) && end > 0 {
+		if s[0] == '0' {
+			return refRowLike, s
+		}
 		return refRow, s
 	}
 	if start < 0 || strings.TrimRight(s[end:], ". )") != "" {
@@ -158,6 +203,37 @@ func classifyRef(ref string) (refKind, string) {
 		return refPlain, ""
 	}
 	return refRowLike, s[start:end]
+}
+
+// looksLikeUUID reports whether ref, as typed, has the shape of a Things
+// uuid: 21 or 22 ASCII letters and digits, as Things 3 writes them, or the
+// 36-character hex form with dashes (8-4-4-4-12). Such a ref is never read as
+// a title fragment.
+func looksLikeUUID(ref string) bool {
+	switch len(ref) {
+	case 21, 22:
+		for _, r := range ref {
+			if !isASCIIAlnum(r) {
+				return false
+			}
+		}
+		return true
+	case 36:
+		for i, r := range ref {
+			switch i {
+			case 8, 13, 18, 23:
+				if r != '-' {
+					return false
+				}
+			default:
+				if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // digitRun returns the bounds of the first run of ASCII digits in s, or -1, -1
@@ -175,6 +251,10 @@ func digitRun(s string) (int, int) {
 }
 
 func isASCIIDigit(r rune) bool { return r >= '0' && r <= '9' }
+
+func isASCIIAlnum(r rune) bool {
+	return isASCIIDigit(r) || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+}
 
 // rowMarker reports whether prefix, the text before a row-like ref's digits
 // with the space around it trimmed, is an optional `(` and then at most one

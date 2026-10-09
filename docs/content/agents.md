@@ -82,8 +82,15 @@ that number resolves. A reference shaped like a row number is not one: `#N`,
 `+N`, `-N`, `# N`, `N.`, `#N.`, `(N)`, `(#N)`, and `N` led by `No`, `Nr`,
 `Num`, `Number`, `N°`, `Nº` or `№` (with or without a dot). It fails with `not
 found` the same way, never resolving to row N or to a title that mentions
-`#N`; only an exact title matches. `-N` needs `--` before it on the command
-line (`things complete -- -3`). This is a safety net for people, not a mode to code
+`#N`; only an exact title matches. Digits with a leading zero (`07`, `0`) are
+not a row either and behave the same way. A cache file that exists but cannot
+be read (empty, truncated, garbled) makes a bare number fail with `stale list
+cache` rather than fall through to a title. `-N` needs `--` before it on the command
+line (`things complete -- -3`). A title fragment only matches open items, and only when no item of any
+status has exactly that title: an exact title on a completed or trashed item
+is refused as `already closed`, a note, or `trashed`, rather than closing an
+open item whose title contains it. A uuid typed in the wrong case is not a
+title fragment either. This is a safety net for people, not a mode to code
 against: act on the `uuid` and it never applies.
 
 ## Hand a task to an agent
@@ -294,8 +301,10 @@ reads as an ambiguity rather than resolving to one of them, and the `type` of
 the uuid you pick tells you whether to retry with `edit` or `project edit`.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
-`trashed`, `stale list cache`, `already closed`, `misfiled`, `import refused`, `import
-partially applied`, and `error` for everything else.
+`trashed`, `stale list cache`, `already closed`, `empty reference`, `misfiled`,
+`import refused`, `import partially applied`, and `error` for everything else.
+`empty reference` is an empty or all-space `<task>` argument, refused before
+any lookup.
 `already closed` is `cancel` on a completed item or `complete` on a cancelled
 one (the `edit` and `project edit` flags included, unless `--duplicate` sends
 the status to a copy): nothing is sent, and the object names the item's
@@ -303,9 +312,9 @@ the status to a copy): nothing is sent, and the object names the item's
 is already closed is not an error; it exits 0 with a note.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
 to `project edit`; both refuse before anything is written and name the command
-to retry with. `trashed` is a row number or uuid that named an item in the
-Trash, or a uuid that named a task whose project is in the Trash (Things shows
-it only in the Trash); the write is refused before anything is sent. The two import failures carry an `items` array naming which
+to retry with. `trashed` is a row number, uuid or exact title that named an
+item in the Trash, or a task whose project is in the Trash (Things shows it
+only in the Trash); the write is refused before anything is sent. The two import failures carry an `items` array naming which
 payload items were blocked or did not land; the [Commands](/commands/) page
 has the detail.
 
@@ -473,7 +482,9 @@ instead of assuming:
   non-zero with the `trashed` token and send nothing. `show` still reads
   such an item and marks it as in the Trash. A task whose project is in
   the Trash is refused the same way, since Things shows it only in the
-  Trash; the error names the project, and a title never matches it.
+  Trash; the error names the project. An exact title reaches such an
+  item only when no open item has that title, and only to refuse it; a
+  title fragment never matches it.
 - **New items are read back.** `add` and `project add` find the item they
   created, by kind, title and where it was sent (when several projects, or
   areas, share the title it named, the one Things picks), and print it as `things show` would, so the agent has its UUID without a `things search`. Agents

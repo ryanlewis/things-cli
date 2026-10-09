@@ -23,8 +23,8 @@ import (
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
 // "not a project", "trashed", "stale list cache", "already closed",
-// "misfiled", "import refused", "import partially applied", or "error" for a
-// failure with no structure worth naming.
+// "empty reference", "misfiled", "import refused", "import partially
+// applied", or "error" for a failure with no structure worth naming.
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
@@ -143,17 +143,17 @@ func (e *wrongKindError) Error() string {
 	return fmt.Sprintf("%q is a %s; use %s", e.Title, e.Kind, e.Retry)
 }
 
-// trashedError is a write refused because its target is in the Trash. Only a
-// row number or a uuid can reach a trashed item, since the title lookups skip
-// the Trash, and a row number can point at one when the item was trashed in
-// Things after the listing was printed. Acting on it would change an item the
-// user can no longer see, so `complete`, `cancel`, `edit` and `project edit`
-// refuse it and send nothing.
+// trashedError is a write refused because its target is in the Trash. A row
+// number, a uuid or an exact title no open item carries can reach a trashed
+// item; a title fragment never does. A row number can point at one when the
+// item was trashed in Things after the listing was printed. Acting on it
+// would change an item the user can no longer see, so `complete`, `cancel`,
+// `edit` and `project edit` refuse it and send nothing.
 //
 // A to-do whose project is in the Trash is hidden in Things the same way, so
 // it gets the same refusal and the same "trashed" token, with Project naming
 // the trashed project. Things would accept the write; the refusal keeps the
-// CLI to what the user can see. A title never matches such a to-do either.
+// CLI to what the user can see.
 type trashedError struct {
 	Kind  string // "task" or "project"
 	Query string
@@ -227,6 +227,32 @@ func (e *staleCacheError) Error() string {
 	}
 	b.WriteString(" and use the new row number, or pass the task's uuid.")
 	return b.String()
+}
+
+// unreadableCacheError is a bare-number reference while the last-list cache
+// file exists but cannot be read (cache.ErrUnreadable). There is no telling
+// which row the number meant, and trying it as a title instead could close a
+// task titled with that number, so it is refused.
+type unreadableCacheError struct {
+	Query string // the reference as typed, e.g. "2"
+	Err   error
+}
+
+func (e *unreadableCacheError) Error() string {
+	return fmt.Sprintf("%q may be a row of the last list, but %v; run a listing again or use the task's title or uuid", e.Query, e.Err)
+}
+
+func (e *unreadableCacheError) Unwrap() error { return e.Err }
+
+// emptyRefError is a task reference that is empty or only space. As a title
+// it would match every task, or every untitled one, so it is refused before
+// any lookup.
+type emptyRefError struct {
+	Query string
+}
+
+func (e *emptyRefError) Error() string {
+	return "the task reference is empty; pass a row number, a uuid or a title"
 }
 
 // otherDBCacheError is a numeric reference to a listing that read a different
@@ -395,6 +421,23 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Error = "stale list cache"
 		payload.Kind = "task"
 		payload.Query = otherDB.Query
+		return payload
+	}
+
+	// The same token again: re-listing rewrites the cache file.
+	var unreadable *unreadableCacheError
+	if errors.As(err, &unreadable) {
+		payload.Error = "stale list cache"
+		payload.Kind = "task"
+		payload.Query = unreadable.Query
+		return payload
+	}
+
+	var empty *emptyRefError
+	if errors.As(err, &empty) {
+		payload.Error = "empty reference"
+		payload.Kind = "task"
+		payload.Query = empty.Query
 		return payload
 	}
 
