@@ -479,7 +479,7 @@ func TestImportSharesDatedTitleListsCandidates(t *testing.T) {
 	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
 
 	payload := `[
-	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + time.Now().UTC().Format(time.RFC3339) + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate() + `"}},
 	  {"type":"to-do","attributes":{"title":"Weekly review"}}
 	]`
 	_, _, err := runImportOut(t, database, payload, "--json")

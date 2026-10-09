@@ -303,7 +303,7 @@ func TestImportTooManyItemsWithBadItems(t *testing.T) {
 // saying the item may exist.
 func TestImportSharesDatedTitleWithBothPresent(t *testing.T) {
 	payload := `[
-	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + time.Now().UTC().Format(time.RFC3339) + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate() + `"}},
 	  {"type":"to-do","attributes":{"title":"Weekly review"}}
 	]`
 
@@ -464,7 +464,7 @@ func TestImportSharesDatedTitleErrorItemCarriesPresent(t *testing.T) {
 	database, sqlDB := seedWritable(t)
 	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
 	payload := `[
-	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + time.Now().UTC().Format(time.RFC3339) + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate() + `"}},
 	  {"type":"to-do","attributes":{"title":"Weekly review"}}
 	]`
 	_, _, err := runImportOut(t, database, payload, "--json")
@@ -478,4 +478,13 @@ func TestImportSharesDatedTitleErrorItemCarriesPresent(t *testing.T) {
 	if !strings.Contains(raw, `"present": false`) {
 		t.Errorf("rendered error lacks \"present\": false: %s", raw)
 	}
+}
+
+// recentCreationDate is a creation-date the read-back always counts as
+// inside its window. The window starts a moment before the import is sent,
+// and a date stamped with time.Now loses its fraction of a second, so once
+// the clock crosses a second it can fall before the start. Five seconds
+// ahead keeps it inside however the test is timed.
+func recentCreationDate() string {
+	return time.Now().Add(5 * time.Second).UTC().Format(time.RFC3339)
 }
