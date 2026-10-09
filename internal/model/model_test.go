@@ -45,6 +45,33 @@ func TestThingsDateEncoding(t *testing.T) {
 	}
 }
 
+func TestThingsDateAddDays(t *testing.T) {
+	date := func(y int, m time.Month, d int) ThingsDate {
+		return ThingsDateFromTime(time.Date(y, m, d, 0, 0, 0, 0, time.Local))
+	}
+	for _, tc := range []struct {
+		from ThingsDate
+		n    int
+		want ThingsDate
+	}{
+		{date(2026, 4, 14), 1, date(2026, 4, 15)},
+		{date(2026, 4, 14), 0, date(2026, 4, 14)},
+		{date(2026, 10, 31), 1, date(2026, 11, 1)},
+		{date(2026, 11, 30), 1, date(2026, 12, 1)},
+		{date(2026, 12, 31), 1, date(2027, 1, 1)},
+		{date(2026, 12, 31), 2, date(2027, 1, 2)},
+		{date(2027, 1, 1), -1, date(2026, 12, 31)},
+		{date(2028, 2, 28), 1, date(2028, 2, 29)},
+		{date(2028, 2, 29), 1, date(2028, 3, 1)},
+		{date(2027, 2, 28), 1, date(2027, 3, 1)},
+		{date(2028, 3, 1), -1, date(2028, 2, 29)},
+	} {
+		if got := tc.from.AddDays(tc.n); got != tc.want {
+			t.Errorf("%s.AddDays(%d) = %s (%d), want %s (%d)", tc.from, tc.n, got, got, tc.want, tc.want)
+		}
+	}
+}
+
 func TestThingsDateMarshalJSON(t *testing.T) {
 	d := ThingsDateFromTime(time.Date(2026, 5, 9, 0, 0, 0, 0, time.Local))
 	got, err := json.Marshal(d)
