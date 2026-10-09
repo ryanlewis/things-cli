@@ -99,8 +99,8 @@ func seedTrashedProject(t *testing.T) (*db.DB, *sql.DB) {
 }
 
 // A to-do whose project, directly or through its heading, is in the Trash is
-// refused like a trashed to-do: in Things it went into the Trash with the
-// project. Its own row is not trashed, so a title reaches it too.
+// refused by uuid like a trashed to-do: Things shows it only in the Trash,
+// with the project, though its own row is not trashed.
 func TestWritesRefuseToDoInTrashedProject(t *testing.T) {
 	cases := []struct {
 		name string
@@ -111,7 +111,6 @@ func TestWritesRefuseToDoInTrashedProject(t *testing.T) {
 	}{
 		{"complete in project", []string{"complete", "binchild-1"}, "binchild-1", "binchild-1", "completed"},
 		{"complete under heading", []string{"complete", "binchild-2"}, "binchild-2", "binchild-2", "completed"},
-		{"complete by title", []string{"complete", "Book van"}, "Book van", "binchild-1", "completed"},
 		{"cancel in project", []string{"cancel", "binchild-1"}, "binchild-1", "binchild-1", "cancelled"},
 		{"cancel under heading", []string{"cancel", "binchild-2"}, "binchild-2", "binchild-2", "cancelled"},
 		{"edit in project", []string{"edit", "binchild-1", "--title", "New"}, "binchild-1", "binchild-1", "edited"},
@@ -135,7 +134,7 @@ func TestWritesRefuseToDoInTrashedProject(t *testing.T) {
 			if stdout != "" {
 				t.Errorf("stdout = %q, want nothing on a refusal", stdout)
 			}
-			want := `is in project "Binned move", which is in the Trash, so it was not ` + tc.done
+			want := "was not " + tc.done + `: its project "Binned move" is in the Trash`
 			if !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), tc.uuid) {
 				t.Errorf("error = %v, want it to name %s and contain %q", err, tc.uuid, want)
 			}
@@ -153,6 +152,40 @@ func TestWritesRefuseToDoInTrashedProject(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A title skips a to-do in a trashed project, as it skips a trashed row. With
+// the same title in a live project the title is not ambiguous: it names the
+// live one, the only one Things shows outside the Trash.
+func TestTitleSkipsToDoInTrashedProject(t *testing.T) {
+	t.Run("only match", func(t *testing.T) {
+		fastVerify(t)
+		database, _ := seedTrashedProject(t)
+		calls := stubExecDropping(t)
+
+		_, _, err := runStreams(t, database, "complete", "Book van")
+		if err == nil || *calls != 0 {
+			t.Fatalf("complete \"Book van\" = %v with %d write(s), want not found and nothing sent", err, *calls)
+		}
+		payload, raw := decodePayload(t, err)
+		if payload.Error != "not found" {
+			t.Errorf("JSON error = %q, want %q (%s)", payload.Error, "not found", raw)
+		}
+	})
+	t.Run("shared with live", func(t *testing.T) {
+		fastVerify(t)
+		database, sqlDB := seedTrashedProject(t)
+		dbtest.NewFixture(t, sqlDB).Todo("livechild-2", "Book van", 11, dbtest.Anytime(), dbtest.InProject("liveproj-1"))
+		stubExecApplying(t, sqlDB, "livechild-2", 3)
+
+		out, err := runOut(t, database, "complete", "Book van")
+		if err != nil {
+			t.Fatalf("complete \"Book van\": %v, want the live to-do closed", err)
+		}
+		if !strings.Contains(out, "livechild-2") {
+			t.Errorf("stdout = %q, want the live to-do", out)
+		}
+	})
 }
 
 // The control: a to-do in a live project still closes and edits.

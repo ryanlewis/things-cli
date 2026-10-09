@@ -283,9 +283,10 @@ type Task struct {
 	ProjectUUID  string      `json:"projectUUID,omitempty"`
 	ProjectTitle string      `json:"projectTitle,omitempty"`
 	// ProjectTrashed says the to-do's project, reached directly or through
-	// its heading, is in the Trash. Things trashes a project's to-dos with
-	// it but leaves their own trashed column 0, so Trashed alone misses
-	// them. The writes refuse such a to-do; it is read but not printed.
+	// its heading, is in the Trash. Things then shows the to-do only in the
+	// Trash but leaves its own trashed column 0, so Trashed alone misses it.
+	// Title lookups skip such a to-do and the writes refuse it; it is read
+	// but not printed.
 	ProjectTrashed bool     `json:"-"`
 	AreaUUID       string   `json:"areaUUID,omitempty"`
 	AreaTitle      string   `json:"areaTitle,omitempty"`

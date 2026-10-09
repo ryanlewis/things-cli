@@ -147,10 +147,10 @@ func (e *wrongKindError) Error() string {
 // user can no longer see, so `complete`, `cancel`, `edit` and `project edit`
 // refuse it and send nothing.
 //
-// A to-do whose project is in the Trash is in the Trash too as far as the
-// user can see, so it gets the same refusal and the same "trashed" token,
-// with Project naming the trashed project. Its own row is not trashed, so a
-// title lookup can reach it as well.
+// A to-do whose project is in the Trash is hidden in Things the same way, so
+// it gets the same refusal and the same "trashed" token, with Project naming
+// the trashed project. Things would accept the write; the refusal keeps the
+// CLI to what the user can see. A title never matches such a to-do either.
 type trashedError struct {
 	Kind  string // "task" or "project"
 	Query string
@@ -166,7 +166,7 @@ type trashedError struct {
 
 func (e *trashedError) Error() string {
 	if e.Project != "" {
-		return fmt.Sprintf("%q (%s) is in project %q, which is in the Trash, so it was not %s; nothing sent. Put the project back from the Trash in Things first if you meant this %s", e.Title, e.UUID, e.Project, e.Done, e.Kind)
+		return fmt.Sprintf("%q (%s) was not %s: its project %q is in the Trash; nothing sent. Restore the project in Things first if you meant this %s", e.Title, e.UUID, e.Done, e.Project, e.Kind)
 	}
 	return fmt.Sprintf("%q (%s) is in the Trash, so it was not %s; nothing sent. Put it back from the Trash in Things first if you meant this %s", e.Title, e.UUID, e.Done, e.Kind)
 }
