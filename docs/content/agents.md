@@ -252,7 +252,8 @@ nothing on success. Their errors are still JSON.
   integer `0`, `1` or `2`, so a filter matching on `.start==2` has to
   become `.start=="someday"`. `startBucket` beside it
   is still an integer — `1` is the app's This Evening section, `0` is
-  everything else.
+  everything else. `today` lists the evening items after all the others,
+  as the app does.
 - **Projects carry scheduling too.** `things projects` reports `start`,
   `startBucket`, `startDate` and `deadline` under the same names and
   encodings a task uses, so a scheduled project reads the same way
