@@ -16,6 +16,20 @@ import (
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
+// Help for --when and --deadline, which add, project add, edit and project
+// edit share. parserOptions hands them to kong as helpVars.
+const (
+	whenValues        = "today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM"
+	deadlineNoKeyword = "Keywords such as today and tomorrow are rejected."
+)
+
+var helpVars = kong.Vars{
+	"add_when_help":      "Schedule: " + whenValues + ", or RFC3339.",
+	"add_deadline_help":  `Deadline: a YYYY-MM-DD date or an English phrase such as "next friday". ` + deadlineNoKeyword,
+	"edit_when_help":     "Schedule: " + whenValues + ", RFC3339, or empty to clear.",
+	"edit_deadline_help": `Deadline: a YYYY-MM-DD date, an English phrase such as "next friday", or empty to clear. ` + deadlineNoKeyword,
+}
+
 // parserOptions is the one place the kong parser is configured. main and the
 // test harness both build from it, so an option cannot be added to one and
 // forgotten in the other. A nil cfg leaves kong's built-in defaults alone.

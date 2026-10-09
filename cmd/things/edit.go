@@ -314,8 +314,12 @@ var (
 // checklist says whether the command set a checklist flag, which only `edit`
 // has. params builds the update from the shared params with the item's id
 // and the auth token filled in, and write sends it. The update is validated
-// before the tag check, so an edit that fails creates no tag.
-func runEdit[P interface{ Validate() error }](d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, checkOwn func(*Deps, *db.DB, *model.Task) bool, checklist bool, params func(things.UpdateCommon) P, write func(P) error) error {
+// before the tag check, and so is the auth token when the edit will be sent,
+// so an edit that fails creates no tag.
+func runEdit[P interface {
+	Validate() error
+	ValidateSend() error
+}](d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, checkOwn func(*Deps, *db.DB, *model.Task) bool, checklist bool, params func(things.UpdateCommon) P, write func(P) error) error {
 	item := kind.typ().String()
 	if f.Title != nil {
 		if err := refuseBlankTitle(*f.Title, item, "edited"); err != nil {
@@ -385,6 +389,13 @@ func runEdit[P interface{ Validate() error }](d *Deps, ref string, kind editKind
 	if err := params(common).Validate(); err != nil {
 		return err
 	}
+	// Only an already-closed item with no change goes unsent (see below),
+	// and a tag --create-tags makes is a change.
+	if !already || s.Reveal || createsTags(database, s.TagFlags, f.Tags, f.AddTags) {
+		if err := params(common).ValidateSend(); err != nil {
+			return err
+		}
+	}
 	// After checkRepeating: no point warning about tags on an edit Things
 	// is going to refuse anyway.
 	unknown, err := verifyEditTags(d, s.TagFlags, f.Tags, f.AddTags, item)
@@ -422,6 +433,21 @@ func runEdit[P interface{ Validate() error }](d *Deps, ref string, kind editKind
 		fmt.Fprintf(d.errOut(), "note: %q is already %s; the status is left out of the edit\n", task.Title, task.Status)
 	}
 	return applyEdit(d, database, task, changed, checklist, want, s.Duplicate, when, update)
+}
+
+// createsTags reports whether the tag check will create a tag: --create-tags
+// with a tag flag naming one Things does not have. A failed lookup reports
+// none, and the tag check then refuses the edit before creating anything.
+func createsTags(database *db.DB, flags TagFlags, tags, addTags *string) bool {
+	if !flags.CreateTags {
+		return false
+	}
+	names := splitTagValues(tags, addTags)
+	if len(names) == 0 {
+		return false
+	}
+	unknown, err := database.UnknownTags(names)
+	return err == nil && len(unknown) > 0
 }
 
 // certainNoOp reports whether every field flag set on the edit provably
