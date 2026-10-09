@@ -18,7 +18,7 @@ type ListCmd struct {
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
 
-	OpenOnly         bool   `help:"Leave out the closed items the inbox, today, anytime, upcoming and someday views, and a --project, --area or --tag listing, show by default: the ones Things hasn't logged out of the list yet, which under the app's default Daily logging means closed today. Not supported on logbook or trash. --open-only=false overrides open_only in the config file." xor:"closed"`
+	OpenOnly         bool   `help:"Leave out the closed items the inbox, today, anytime, upcoming and someday views, and a --project or --area listing, show by default: the ones Things hasn't logged out of the list yet, which under the app's default Daily logging means closed today. Not supported on logbook or trash. --open-only=false overrides open_only in the config file." xor:"closed"`
 	IncludeCompleted bool   `hidden:"" help:"No effect beyond overriding open_only in the config file: the closed items Things still shows are listed by default since --open-only was added. Accepted so existing scripts keep working." xor:"closed"`
 	On               string `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline. Mutually exclusive with --from/--to."`
 	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`

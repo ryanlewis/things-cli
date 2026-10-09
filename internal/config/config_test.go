@@ -402,6 +402,9 @@ func TestExpandPathFollowsHome(t *testing.T) {
 	if want := filepath.Join(home, "c.toml"); path != want {
 		t.Errorf("ResolvePath(~/c.toml) = %q, want %q", path, want)
 	}
+	if got := ExpandPath("~"); got != home {
+		t.Errorf("ExpandPath(~) = %q, want %q", got, home)
+	}
 	if got := ExpandPath("/abs/path"); got != "/abs/path" {
 		t.Errorf("ExpandPath(/abs/path) = %q, want it unchanged", got)
 	}

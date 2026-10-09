@@ -210,9 +210,8 @@ the CLI's own read-back tells it whether the write landed.
 Every command that reads or writes Things accepts `-j` / `--json`, as do
 `config path` and `config show`, and it changes more than the format. The
 rest print plain text whatever you pass: `version`, `completions`,
-`config init`, `update` and the `skill` commands. Their errors are still
-JSON.
-
+`config init`, `update` and the `skill` commands; `open` and `log` print
+nothing on success. Their errors are still JSON.
 
 - **It never prompts.** An ambiguous title returns an error listing the
   candidates instead of opening a picker. `complete` or `cancel` on a

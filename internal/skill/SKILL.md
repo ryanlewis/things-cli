@@ -33,7 +33,7 @@ A title can match several items. Under `--json` an ambiguous reference is an err
 
 ## Output and `--json`
 
-Every command that reads or writes Things accepts `--json` / `-j`; `version`, `completions`, `config init`, `update` and the `skill` commands print plain text regardless, though their errors are JSON. Prefer it when parsing. It also guarantees the command never blocks on a prompt.
+Every command that reads or writes Things accepts `--json` / `-j`; `version`, `completions`, `config init`, `update` and the `skill` commands print plain text regardless, and `open` and `log` print nothing on success, though their errors are JSON. Prefer it when parsing. It also guarantees the command never blocks on a prompt.
 
 - `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq '.[] | select(.status=="open")'`.
 - `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq '.[] | select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells it `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.

@@ -6,8 +6,11 @@ eyebrow: Commands
 description: "Full command reference for things-cli: listing, searching, capturing, editing, completing and the bundled agent skill."
 ---
 
-Read commands (`list`/views, `projects`, `areas`, `tags`, `show`, `search`)
-accept `-j` / `--json` for structured output. Run `things --help` or
+Every command that reads or writes Things accepts `-j` / `--json` for
+structured output, as do `config path` and `config show`; `open` and `log`
+print nothing on success. `version`, `completions`, `config init`, `update`
+and the `skill` commands print plain text whatever you pass, though their
+errors are JSON. Run `things --help` or
 `things <subcommand> --help` for the full flag list. The one flag it leaves
 out is `--include-completed` on the listings, which is retired and kept only
 so existing scripts keep working; it is described under

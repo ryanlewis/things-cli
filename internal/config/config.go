@@ -226,15 +226,15 @@ func DefaultPath() (string, error) {
 	return filepath.Join(base, dirName, fileName), nil
 }
 
-// ExpandPath makes path absolute, rewriting a leading "~/" to $HOME when it
+// ExpandPath makes path absolute, rewriting "~" or a leading "~/" to $HOME when it
 // is set. kong.ExpandPath, which it otherwise defers to, reads the account's
 // home from the user database instead, so with HOME pointed elsewhere a "~"
 // in --db, --config or the db key would ignore it while the default config
 // and database locations follow it.
 func ExpandPath(path string) string {
-	if rest, ok := strings.CutPrefix(path, "~/"); ok {
+	if path == "~" || strings.HasPrefix(path, "~/") {
 		if home := os.Getenv("HOME"); home != "" {
-			return filepath.Join(home, rest)
+			return filepath.Join(home, path[1:])
 		}
 	}
 	return kong.ExpandPath(path)
