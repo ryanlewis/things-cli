@@ -267,7 +267,7 @@ func TestListProjectsClosedUnlogged(t *testing.T) {
 	}
 
 	// "Log Completed Now" files them, and the listing drops them with it.
-	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, model.TimeToUnix(testNow.Add(time.Minute)))
+	fx.LogSettings(nil, model.TimeToUnix(testNow.Add(time.Minute)))
 	if got, want := uuids(false, false), []string{"p-open"}; !sameSet(got, want) {
 		t.Errorf("projects after log = %v, want %v", got, want)
 	}

@@ -160,6 +160,7 @@ var (
 	todayIndex    = dbtest.TodayIndex
 	todayIndexRef = dbtest.TodayIndexRef
 	repeats       = dbtest.Repeats
+	recurrence    = dbtest.Recurrence
 )
 
 // newFixture returns an empty test database and the builder that fills it.

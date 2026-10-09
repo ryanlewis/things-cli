@@ -93,13 +93,10 @@ func TestRepeatingViewHonoursFilters(t *testing.T) {
 // would outlive the project it lived in — the Repeating view needs the same
 // guard the today and project views apply.
 func TestRepeatingViewExcludesTrashedProject(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
-		('proj-gone', 'Trashed project', 1, 0, 1, 1)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, project, "index", rt1_recurrenceRule) VALUES
-		('rep-orphan', 'Water plants', 0, 0, 0, 2, 0, 'proj-gone', 1, x'0102')`)
+	fx.Project("proj-gone", "Trashed project", 1, trashed())
+	fx.Todo("rep-orphan", "Water plants", 1, someday(), inProject("proj-gone"), repeats())
 
 	got := mustList(t, d, "repeating", TaskFilter{})
 	if len(got) != 0 {
@@ -169,20 +166,16 @@ func TestTableColumnsUnknownTable(t *testing.T) {
 // the view is the one place that is not pinned to t.type = 0 (issue #165).
 // Ordering by type keeps to-dos and projects in contiguous blocks.
 func TestRepeatingViewIncludesProjectTemplates(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
 	// The project carries the lower "index", so index order alone would put it
 	// first: only the type-first ORDER BY yields the order asserted below.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, "index", rt1_recurrenceRule) VALUES
-		('p-tmpl',   'Weekly review', 1, 0, 0, 2, 0, 1, x'0102'),
-		('t-tmpl',   'Water plants',  0, 0, 0, 2, 0, 2, x'0102')`)
+	fx.Project("p-tmpl", "Weekly review", 1, someday(), repeats())
+	fx.Todo("t-tmpl", "Water plants", 2, someday(), repeats())
 
 	// Neither an ordinary project nor an ordinary to-do belongs here.
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
-		('p-plain', 'Ship it',    1, 0, 0, 1, 0, 3),
-		('t-plain', 'Post letter', 0, 0, 0, 2, 0, 4)`)
+	fx.Project("p-plain", "Ship it", 3, anytime())
+	fx.Todo("t-plain", "Post letter", 4, someday())
 
 	got := mustList(t, d, "repeating", TaskFilter{})
 	if want := []string{"t-tmpl", "p-tmpl"}; !slices.Equal(uuidsOf(got), want) {
@@ -199,11 +192,9 @@ func TestRepeatingViewIncludesProjectTemplates(t *testing.T) {
 // Headings carry no recurrence rule, but the view no longer pins t.type = 0,
 // so a heading must not be able to reach it.
 func TestRepeatingViewExcludesHeadings(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, "index", rt1_recurrenceRule) VALUES
-		('h-odd', 'A heading', 2, 0, 0, 1, 0, 1, x'0102')`)
+	fx.Heading("h-odd", "A heading", 1, anytime(), repeats())
 
 	got := mustList(t, d, "repeating", TaskFilter{})
 	if len(got) != 0 {
@@ -217,21 +208,13 @@ func TestRepeatingViewExcludesHeadings(t *testing.T) {
 // still has to hold is that the view is not simply empty: a top-level Someday
 // to-do, and a Someday project row, both list.
 func TestTemplateChildExcludedFromSomeday(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, "index", rt1_recurrenceRule) VALUES
-		('p-tmpl', 'Weekly review', 1, 0, 0, 2, 0, 1, x'0102')`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
-		('p-real', 'Ship it', 1, 0, 0, 2, 0, 2)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
-		('t-in-tmpl', 'Inside the template', 0, 0, 0, 2, 0, 'p-tmpl', 1),
-		('t-in-real', 'Inside a real one',   0, 0, 0, 2, 0, 'p-real', 2)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
-		('t-toplevel', 'Deferred on its own', 0, 0, 0, 2, 0, 3)`)
+	fx.Project("p-tmpl", "Weekly review", 1, someday(), repeats())
+	fx.Project("p-real", "Ship it", 2, someday())
+	fx.Todo("t-in-tmpl", "Inside the template", 1, someday(), inProject("p-tmpl"))
+	fx.Todo("t-in-real", "Inside a real one", 2, someday(), inProject("p-real"))
+	fx.Todo("t-toplevel", "Deferred on its own", 3, someday())
 
 	got := mustList(t, d, "someday", TaskFilter{})
 	// p-real is a Someday project and lists as a row of its own; p-tmpl is a
@@ -274,15 +257,11 @@ func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
-			d := newTestDB(t)
+			d, fx := newFixture(t)
 			// The child carries no recurrence rule — only its project does,
 			// which is why the template exclusion cannot see it.
-			mustExec(t, d, `INSERT INTO TMTask
-				(uuid, title, type, status, trashed, "index", rt1_recurrenceRule) VALUES
-				('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102')`)
-			mustExec(t, d, `INSERT INTO TMTask
-				(uuid, title, type, status, trashed, "index") VALUES
-				('p-real', 'Ship it', 1, 0, 0, 2)`)
+			fx.Project("p-tmpl", "Weekly review", 1, repeats())
+			fx.Project("p-real", "Ship it", 2)
 			mustExec(t, d, `INSERT INTO TMTask
 				(uuid, title, type, status, trashed, project, "index", `+tc.columns+`) VALUES
 				('t-child', 'Inside the template', 0, 0, 0, 'p-tmpl', 1, `+tc.values+`),
@@ -298,17 +277,11 @@ func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
 // The guard resolves the project through COALESCE(t.project, h.project), so a
 // to-do nested under a heading in a template project is caught too (#139).
 func TestTemplateProjectChildrenExcludedThroughHeading(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, "index", rt1_recurrenceRule) VALUES
-		('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102')`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, project, "index") VALUES
-		('head-1', 'A heading', 2, 0, 0, 'p-tmpl', 1)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, heading, "index") VALUES
-		('t-child', 'Under the heading', 0, 0, 0, 1, 0, 'head-1', 1)`)
+	fx.Project("p-tmpl", "Weekly review", 1, repeats())
+	fx.Heading("head-1", "A heading", 1, inProject("p-tmpl"))
+	fx.Todo("t-child", "Under the heading", 1, anytime(), underHeading("head-1"))
 
 	got := mustList(t, d, "anytime", TaskFilter{})
 	if len(got) != 0 {
@@ -323,7 +296,7 @@ func TestTemplateProjectChildrenExcludedThroughHeading(t *testing.T) {
 // and carries no rule; its to-dos are ordinary work and stay unflagged, as do
 // those of an ordinary project.
 func TestTemplateProjectChildrenReportRepeating(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	mustExec(t, d, `ALTER TABLE TMTask ADD COLUMN rt1_repeatingTemplate TEXT`)
 
 	mustExec(t, d, `INSERT INTO TMTask
@@ -331,15 +304,11 @@ func TestTemplateProjectChildrenReportRepeating(t *testing.T) {
 		('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102', NULL),
 		('p-inst', 'Weekly review', 1, 0, 0, 2, NULL, 'p-tmpl'),
 		('p-real', 'Ship it',       1, 0, 0, 3, NULL, NULL)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, project, "index") VALUES
-		('head-1', 'A heading', 2, 0, 0, 'p-tmpl', 1)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, project, heading, "index") VALUES
-		('t-tmpl',  'In the template',     0, 0, 0, 1, 0, 'p-tmpl', NULL,     1),
-		('t-head',  'Under the heading',   0, 0, 0, 1, 0, NULL,     'head-1', 2),
-		('t-inst',  'In the instance',     0, 0, 0, 1, 0, 'p-inst', NULL,     3),
-		('t-plain', 'In an ordinary one',  0, 0, 0, 1, 0, 'p-real', NULL,     4)`)
+	fx.Heading("head-1", "A heading", 1, inProject("p-tmpl"))
+	fx.Todo("t-tmpl", "In the template", 1, anytime(), inProject("p-tmpl"))
+	fx.Todo("t-head", "Under the heading", 2, anytime(), underHeading("head-1"))
+	fx.Todo("t-inst", "In the instance", 3, anytime(), inProject("p-inst"))
+	fx.Todo("t-plain", "In an ordinary one", 4, anytime(), inProject("p-real"))
 
 	for uuid, want := range map[string]bool{
 		"t-tmpl":  true,
@@ -358,15 +327,11 @@ func TestTemplateProjectChildrenReportRepeating(t *testing.T) {
 // that has been trashed or completed still belongs in them. Without this the
 // guard would swallow rows those two views exist to show.
 func TestTrashAndLogbookKeepTemplateProjectChildren(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, "index", rt1_recurrenceRule) VALUES
-		('p-tmpl', 'Weekly review', 1, 0, 0, 1, x'0102')`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, start, startBucket, project, "index") VALUES
-		('t-binned', 'Trashed child',   0, 0, 1, 1, 0, 'p-tmpl', 1),
-		('t-logged', 'Completed child', 0, 3, 0, 1, 0, 'p-tmpl', 2)`)
+	fx.Project("p-tmpl", "Weekly review", 1, repeats())
+	fx.Todo("t-binned", "Trashed child", 1, anytime(), inProject("p-tmpl"), trashed())
+	fx.Todo("t-logged", "Completed child", 2, anytime(), inProject("p-tmpl"), status(model.StatusCompleted))
 
 	for _, tc := range []struct{ view, want string }{
 		{"trash", "t-binned"},
