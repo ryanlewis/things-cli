@@ -1512,10 +1512,10 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 //
 // An exact title is looked for among open rows outside the Trash first, and
 // any such row wins, as `add` treats a title that also exists completed. Only
-// when there is none does a closed or trashed row with the title count: it is
-// returned (or reported as ambiguous with its twins) so the caller refuses it
-// as it would refuse the same row reached by uuid, rather than the lookup
-// falling through to a substring match on some other, open, task.
+// when there is none do closed or trashed rows with the title count: they are
+// reported as a *ClosedTitleError, so the caller can show or refuse them,
+// rather than the lookup falling through to a substring match on some other,
+// open, task.
 func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 	t, err := d.GetTaskByUUID(uuidOrTitle)
 	if err != nil {
@@ -1525,33 +1525,49 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 		return t, nil
 	}
 
-	exact, err := d.findTasksByExactTitle(uuidOrTitle)
+	all, err := d.findTasksByExactTitle(uuidOrTitle)
 	if err != nil {
 		return nil, err
 	}
-	if candidates := preferInstances(exact); len(candidates) > 0 {
+	var open, closed []model.Task
+	for _, m := range all {
+		if m.Status == model.StatusOpen && !m.Trashed && !m.ProjectTrashed {
+			open = append(open, m)
+		} else {
+			closed = append(closed, m)
+		}
+	}
+	if candidates := preferInstances(open); len(candidates) > 0 {
 		if len(candidates) == 1 {
 			return &candidates[0], nil
 		}
 		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
-	}
-
-	closed, err := d.findClosedTasksByExactTitle(uuidOrTitle)
-	if err != nil {
-		return nil, err
 	}
 	if candidates := preferInstances(closed); len(candidates) > 0 {
-		if len(candidates) == 1 {
-			return &candidates[0], nil
-		}
-		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
+		return nil, &ClosedTitleError{Query: uuidOrTitle, Matches: candidates}
 	}
 	return nil, &TaskNotFoundError{Query: uuidOrTitle}
 }
 
-// findTasksByExactTitle returns every open task carrying exactly this title.
-// Like FindTasksByTitle it skips the Trash, and with it a to-do whose project
-// is in the Trash, which Things shows only there.
+// ClosedTitleError reports a reference whose exact title is carried only by
+// closed or trashed rows (or to-dos in a trashed project), with no open row
+// sharing it. The lookup stops there rather than falling through to a
+// substring match on some other, open, task. The caller decides what the
+// rows are good for: a read can show one, a write refuses them.
+type ClosedTitleError struct {
+	Query   string
+	Matches []model.Task
+}
+
+func (e *ClosedTitleError) Error() string {
+	return fmt.Sprintf("no open task is titled %q; %d closed or trashed task(s) are", e.Query, len(e.Matches))
+}
+
+// findTasksByExactTitle returns every task carrying exactly this title, of
+// any status and in the Trash or not; GetTaskExact splits the open rows
+// outside the Trash from the rest, and only reads the rest when there are no
+// open ones. A to-do whose project is in the Trash counts with the rest,
+// since Things shows it only in the Trash.
 // It used to be a LIMIT 1 query, which made the ordering the whole decision
 // and hid the rest of the matches: a project and a to-do can share a title,
 // and whichever sorted first became the write target with no sign that a
@@ -1560,17 +1576,7 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 // do take the first row read the rows in the order the rest of the package
 // uses.
 func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0 AND " + notHeading +
-		" GROUP BY t.uuid " + d.templatesLastOrder()
-	return d.collectTasks(query, normName(title))
-}
-
-// findClosedTasksByExactTitle returns the tasks carrying exactly this title
-// that findTasksByExactTitle leaves out: closed rows, rows in the Trash, and
-// to-dos whose project is in the Trash. GetTaskExact reads it only when no
-// open row has the title.
-func (d *DB) findClosedTasksByExactTitle(title string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND NOT (t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0) AND " + notHeading +
+	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND " + notHeading +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, normName(title))
 }

@@ -254,7 +254,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	if err != nil {
 		return err
 	}
-	task, err := resolveTask(d, ref, database)
+	task, err := resolveTaskForWrite(d, ref, database)
 	if err != nil {
 		return err
 	}
@@ -515,7 +515,7 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 	if err != nil {
 		return err
 	}
-	task, err := resolveTask(d, ref, database)
+	task, err := resolveTaskForWrite(d, ref, database)
 	if err != nil {
 		return err
 	}
