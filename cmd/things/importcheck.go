@@ -241,6 +241,19 @@ func (c importCreate) key() createdKey { return newCreatedKey(c.typ, c.title) }
 
 func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest: c.dest} }
 
+// payloadType is the CLI's type for item, a payload object whose trimmed
+// type is to-do or project. ok is false for any other type, and typ is then
+// TypeTask.
+func payloadType(item map[string]any) (typ model.TaskType, ok bool) {
+	switch itemType, _ := item["type"].(string); strings.TrimSpace(itemType) {
+	case "to-do":
+		return model.TypeTask, true
+	case "project":
+		return model.TypeProject, true
+	}
+	return model.TypeTask, false
+}
+
 // walkImportNode calls visit for every object in a decoded Things JSON
 // payload with the path that locates it. Items nest — a project carries
 // `items`, a to-do carries `checklist-items` — so this walks the whole tree.

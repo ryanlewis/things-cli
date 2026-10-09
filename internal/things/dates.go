@@ -75,10 +75,10 @@ var (
 	whenDateShape = regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$`)
 	// whenClockShape is a value shaped like a time of day: H:MM or HH:MM,
 	// with an optional am or pm.
-	whenClockShape = regexp.MustCompile(`(?i)^(\d{1,2}):(\d{2})\s*(am|pm)?$`)
+	whenClockShape = regexp.MustCompile(`(?i)^(\d{1,2}):(\d{2})(\s*)(am|pm)?$`)
 	// whenClock12Shape is a 12-hour time with no minutes, such as 6pm, the
 	// form the Things documentation uses after an @ (evening@6pm).
-	whenClock12Shape = regexp.MustCompile(`(?i)^(\d{1,2})\s*(am|pm)$`)
+	whenClock12Shape = regexp.MustCompile(`(?i)^(\d{1,2})(\s*)(am|pm)$`)
 )
 
 // whenLocalLayouts are ISO 8601 date-times with no offset. They are read as
@@ -90,6 +90,12 @@ var whenLocalLayouts = [...]string{"2006-01-02T15:04:05", "2006-01-02T15:04"}
 // after (evening@6pm). It ignores a time after anytime or someday.
 var whenTimedKeywords = []string{"today", "tomorrow", "evening"}
 
+// TimedWhenKeyword reports whether v, in any case, is a keyword the Things
+// documentation allows a time after: today, tomorrow or evening.
+func TimedWhenKeyword(v string) bool {
+	return slices.Contains(whenTimedKeywords, strings.ToLower(v))
+}
+
 // KnownWhenWord reports whether v is a --when keyword or a weekday name,
 // which NormalizeWhen accepts as words Things knows, as opposed to a free
 // phrase it passes through unchecked.
@@ -99,19 +105,22 @@ func KnownWhenWord(v string) bool {
 }
 
 // clockShape reports whether v is shaped like a time of day (whenClockShape
-// or whenClock12Shape), and if so whether it names one.
+// or whenClock12Shape), and if so whether it names one. A time with more
+// than one space before its am or pm names none: the Things documentation
+// writes 9:30PM and 6pm, and more space than one was never measured, so it
+// is refused rather than sent.
 func clockShape(v string) (shaped, real bool) {
 	if m := whenClockShape.FindStringSubmatch(v); m != nil {
 		hour, _ := strconv.Atoi(m[1])
 		minute, _ := strconv.Atoi(m[2])
-		if m[3] != "" {
-			return true, hour >= 1 && hour <= 12 && minute <= 59
+		if m[4] != "" {
+			return true, hour >= 1 && hour <= 12 && minute <= 59 && len(m[3]) <= 1
 		}
 		return true, hour <= 23 && minute <= 59
 	}
 	if m := whenClock12Shape.FindStringSubmatch(v); m != nil {
 		hour, _ := strconv.Atoi(m[1])
-		return true, hour >= 1 && hour <= 12
+		return true, hour >= 1 && hour <= 12 && len(m[2]) <= 1
 	}
 	return false, false
 }
@@ -124,7 +133,7 @@ func WhenDateOrTime(v string) bool {
 	if timed {
 		shaped, _ := clockShape(clock)
 		m := whenDateShape.FindStringSubmatch(day)
-		return shaped && (m != nil && m[4] == "" || slices.Contains(whenTimedKeywords, strings.ToLower(day)))
+		return shaped && (m != nil && m[4] == "" || TimedWhenKeyword(day))
 	}
 	if m := whenDateShape.FindStringSubmatch(v); m != nil {
 		return m[4] == ""
@@ -135,13 +144,35 @@ func WhenDateOrTime(v string) bool {
 
 // ImpossibleWhenError is the error NormalizeWhen returns for a value shaped
 // like a date or time that names none (checkWhenShape), so a caller with
-// checks of its own for those shapes can tell it apart with errors.As.
-type ImpossibleWhenError struct{ msg string }
+// checks of its own for those shapes can tell it apart with errors.As, and
+// word its own message from Reason.
+type ImpossibleWhenError struct {
+	Reason WhenReason
+	msg    string
+}
 
 func (e *ImpossibleWhenError) Error() string { return e.msg }
 
-func impossibleWhen(format string, args ...any) error {
-	return &ImpossibleWhenError{msg: fmt.Sprintf(format, args...)}
+// WhenReason says what is wrong with a value ImpossibleWhenError refuses.
+type WhenReason int
+
+const (
+	// WhenBadDate is a month or day that does not exist.
+	WhenBadDate WhenReason = iota + 1
+	// WhenBadDateTime is a date followed by T that is not an ISO 8601
+	// date-time.
+	WhenBadDateTime
+	// WhenBadTime is a time of day, with no @, that names none.
+	WhenBadTime
+	// WhenTimeIgnored is a time after anytime or someday.
+	WhenTimeIgnored
+	// WhenBadClock is a date or keyword followed by an @ and something that
+	// is not a time of day.
+	WhenBadClock
+)
+
+func impossibleWhen(reason WhenReason, format string, args ...any) error {
+	return &ImpossibleWhenError{Reason: reason, msg: fmt.Sprintf(format, args...)}
 }
 
 // checkWhenShape refuses a value shaped like a date or a time of day that
@@ -161,11 +192,11 @@ func checkWhenShape(v string) error {
 		month, _ := strconv.Atoi(m[2])
 		date, _ := strconv.Atoi(m[3])
 		if month < 1 || month > 12 || date < 1 || date > time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
-			return impossibleWhen("invalid --when value %q: %s-%s-%s is not a date (use YYYY-MM-DD)", v, m[1], m[2], m[3])
+			return impossibleWhen(WhenBadDate, "invalid --when value %q: %s-%s-%s is not a date (use YYYY-MM-DD)", v, m[1], m[2], m[3])
 		}
 		if strings.HasPrefix(m[4], "T") {
 			// parseISO8601 and whenLocalLayouts have turned it down already.
-			return impossibleWhen("invalid --when value %q: not a date and time (use YYYY-MM-DDTHH:MM[:SS], with an optional Z or offset such as +01:00, or YYYY-MM-DD@HH:MM)", v)
+			return impossibleWhen(WhenBadDateTime, "invalid --when value %q: not a date and time (use YYYY-MM-DDTHH:MM[:SS], with an optional Z or offset such as +01:00, or YYYY-MM-DD@HH:MM)", v)
 		}
 		if m[4] != "" {
 			// A date followed by words: a phrase.
@@ -173,14 +204,14 @@ func checkWhenShape(v string) error {
 		}
 	case !timed:
 		if shaped, real := clockShape(v); shaped && !real {
-			return impossibleWhen("invalid --when value %q: %s is not a time of day (use HH:MM)", v, v)
+			return impossibleWhen(WhenBadTime, "invalid --when value %q: %s is not a time of day (use HH:MM)", v, v)
 		}
 		return nil
 	default:
 		switch low := strings.ToLower(day); {
 		case low == "anytime" || low == "someday":
-			return impossibleWhen("invalid --when value %q: Things ignores a time after %s", v, low)
-		case !slices.Contains(whenTimedKeywords, low):
+			return impossibleWhen(WhenTimeIgnored, "invalid --when value %q: Things ignores a time after %s", v, low)
+		case !TimedWhenKeyword(low):
 			// Something else before the @: a phrase.
 			return nil
 		}
@@ -189,7 +220,7 @@ func checkWhenShape(v string) error {
 		return nil
 	}
 	if _, real := clockShape(clock); !real {
-		return impossibleWhen("invalid --when value %q: %s is not a time of day (use HH:MM, or a time such as 6pm)", v, clock)
+		return impossibleWhen(WhenBadClock, "invalid --when value %q: %s is not a time of day (use HH:MM, or a time such as 6pm)", v, clock)
 	}
 	return nil
 }
