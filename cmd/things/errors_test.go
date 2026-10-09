@@ -246,8 +246,8 @@ func TestRenderErrorStaleIndex(t *testing.T) {
 // row numbers moved, re-list" apart from "the item is gone" (issue #265).
 func TestRenderErrorStaleListCache(t *testing.T) {
 	payload, raw := decodePayload(t, &staleCacheError{
-		Query: "3",
-		Row:   3,
+		cacheRef: cacheRef{Query: "3"},
+		Row:      3,
 		Last: cache.LastList{
 			WrittenAt: time.Now().Add(-3 * 24 * time.Hour),
 			Command:   "things today",
@@ -318,11 +318,11 @@ var errorPayloadCases = []struct {
 		`{"error":"trashed","message":"\"T\" (u1) was not completed: its project \"P\" is in the Trash; nothing sent. Restore the project in Things first if you meant this task","kind":"task","query":"q","uuid":"u1","title":"T","project":"P"}`},
 	{"misfiled", &misfiledError{msg: "filed elsewhere", kind: "task", title: "T", uuid: "u1", landed: "inbox"},
 		`{"error":"misfiled","message":"filed elsewhere","kind":"task","uuid":"u1","title":"T","landed":"inbox"}`},
-	{"stale cache", &staleCacheError{Query: "2", Row: 2},
+	{"stale cache", &staleCacheError{cacheRef: cacheRef{Query: "2"}, Row: 2},
 		`{"error":"stale list cache","message":"task #2 comes from a stale list cache written by an older things-cli; re-run your listing and use the new row number, or pass the task's uuid.","kind":"task","query":"2"}`},
-	{"other db cache", &otherDBCacheError{Query: "2", Row: 2, Last: cache.LastList{DB: "/a.sqlite"}, Current: "/b.sqlite"},
+	{"other db cache", &otherDBCacheError{cacheRef: cacheRef{Query: "2"}, Row: 2, Last: cache.LastList{DB: "/a.sqlite"}, Current: "/b.sqlite"},
 		`{"error":"stale list cache","message":"task #2 comes from a listing of a different database: the listing read /a.sqlite, and this command reads /b.sqlite. Re-run the listing against this database and use the new row number, or pass the task's uuid.","kind":"task","query":"2"}`},
-	{"unreadable cache", &unreadableCacheError{Query: "2", Err: cache.ErrUnreadable},
+	{"unreadable cache", &unreadableCacheError{cacheRef: cacheRef{Query: "2"}, Err: cache.ErrUnreadable},
 		`{"error":"stale list cache","message":"\"2\" may be a row of the last list, but the last-list cache could not be read; run a listing again or use the task's title or uuid","kind":"task","query":"2"}`},
 	{"empty ref", &emptyRefError{Query: " "},
 		`{"error":"empty reference","message":"the task reference is empty; pass a row number, a uuid or a title","kind":"task","query":" "}`},

@@ -126,6 +126,12 @@ func (e *notFoundError) Error() string {
 	return fmt.Sprintf("%s not found: %s", e.Kind, e.Query)
 }
 
+func (e *notFoundError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "not found"
+	p.Kind = e.Kind
+	p.Query = e.Query
+}
+
 // wrongKindError is a reference that resolved to the wrong sort of item for
 // the command: a project handed to `edit`, which would otherwise open
 // things:///update with a project id and leave Things showing a "does not
@@ -149,6 +155,19 @@ type wrongKindError struct {
 
 func (e *wrongKindError) Error() string {
 	return fmt.Sprintf("%q is a %s; use %s", e.Title, e.Kind, e.Retry)
+}
+
+func (e *wrongKindError) fillPayload(p *jsonErrorPayload) {
+	// Token is what a caller branches on, so an unset one would ship
+	// `"error": ""` — a value no consumer can match. Fall back to the
+	// generic token instead.
+	if e.Token != "" {
+		p.Error = e.Token
+	}
+	p.Kind = e.Kind
+	p.Query = e.Query
+	p.UUID = e.UUID
+	p.Title = e.Title
 }
 
 // trashedError is a write refused because its target is in the Trash. A row
@@ -182,6 +201,15 @@ func (e *trashedError) Error() string {
 	return fmt.Sprintf("%q (%s) is in the Trash, so it was not %s; nothing sent. Put it back from the Trash in Things first if you meant this %s", e.Title, e.UUID, e.Done, e.Kind)
 }
 
+func (e *trashedError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "trashed"
+	p.Kind = e.Kind
+	p.Query = e.Query
+	p.UUID = e.UUID
+	p.Title = e.Title
+	p.Project = e.Project
+}
+
 // closedSwitchError is a status change refused because the item is already
 // closed the other way: `cancel` on a completed item, or `complete` on a
 // cancelled one (see checkClosed). Nothing was sent, so a caller that meant
@@ -193,6 +221,13 @@ type closedSwitchError struct {
 
 func (e *closedSwitchError) Error() string {
 	return fmt.Sprintf("%q is already %s, so it was not %s; nothing sent", e.task.Title, e.task.Status, e.want)
+}
+
+func (e *closedSwitchError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "already closed"
+	p.Kind = e.task.Type.String()
+	p.UUID = e.task.UUID
+	p.Title = e.task.Title
 }
 
 // closedTitleError is a write whose reference is an exact title that only
@@ -231,6 +266,23 @@ func (e *closedTitleError) Error() string {
 	return b.String()
 }
 
+func (e *closedTitleError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "already closed"
+	if e.trashed() {
+		p.Error = "trashed"
+	}
+	p.Kind = kindWord(e.Task.Type)
+	p.Query = e.Query
+	p.UUID = e.Task.UUID
+	p.Title = e.Task.Title
+	if e.Task.ProjectTrashed && !e.Task.Trashed {
+		p.Project = e.Task.ProjectTitle
+	}
+	if len(e.Matches) > 1 {
+		p.Matches = matchList(e.Matches)
+	}
+}
+
 // blankTitleError is an add or edit refused because the title is empty or
 // only whitespace. Things takes such a title and leaves the item untitled,
 // which `import` refuses as "blank-title" (importShape); add, project add,
@@ -242,6 +294,11 @@ type blankTitleError struct {
 
 func (e *blankTitleError) Error() string {
 	return fmt.Sprintf("the title is blank, so the %s was not %s; nothing sent. Things would leave it untitled: give it a title", e.Kind, e.Done)
+}
+
+func (e *blankTitleError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "blank-title"
+	p.Kind = e.Kind
 }
 
 // refuseBlankTitle returns a blankTitleError when title is empty or only
@@ -266,14 +323,29 @@ func (e *ambiguousRefError) Error() string { return e.msg }
 
 func (e *ambiguousRefError) Unwrap() error { return e.inner }
 
+// cacheRef is what the errors refusing a row number over the last-list cache
+// share: staleCacheError, otherDBCacheError and unreadableCacheError embed
+// it. They share the "stale list cache" token too, because the remedy is the
+// same for all three: re-list and use the new row number or the uuid.
+// Re-listing also rewrites a cache file that could not be read.
+type cacheRef struct {
+	Query string // the reference as typed, e.g. "2"
+}
+
+func (e *cacheRef) fillPayload(p *jsonErrorPayload) {
+	p.Error = "stale list cache"
+	p.Kind = "task"
+	p.Query = e.Query
+}
+
 // staleCacheError is a numeric reference to a listing old enough that its row
 // numbers have probably moved (issue #265). The row is refused rather than
 // acted on: the UUID behind it still exists, so acting would silently hit
 // whatever item has drifted into that position.
 type staleCacheError struct {
-	Query string // the reference as typed, e.g. "2"
-	Row   int
-	Last  cache.LastList
+	cacheRef
+	Row  int
+	Last cache.LastList
 }
 
 func (e *staleCacheError) Error() string {
@@ -300,8 +372,8 @@ func (e *staleCacheError) Error() string {
 // which row the number meant, and trying it as a title instead could close a
 // task titled with that number, so it is refused.
 type unreadableCacheError struct {
-	Query string // the reference as typed, e.g. "2"
-	Err   error
+	cacheRef
+	Err error
 }
 
 func (e *unreadableCacheError) Error() string {
@@ -321,11 +393,17 @@ func (e *emptyRefError) Error() string {
 	return "the task reference is empty; pass a row number, a uuid or a title"
 }
 
+func (e *emptyRefError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "empty reference"
+	p.Kind = "task"
+	p.Query = e.Query
+}
+
 // otherDBCacheError is a numeric reference to a listing that read a different
 // database from the one this command reads (issue #274). The listing may be
 // fresh, but its rows describe the other database, so they are refused.
 type otherDBCacheError struct {
-	Query   string // the reference as typed, e.g. "2"
+	cacheRef
 	Row     int
 	Last    cache.LastList
 	Current string // the resolved path of this command's database
@@ -392,12 +470,24 @@ func plural(n int, unit string) string {
 	return fmt.Sprintf("%d %ss", n, unit)
 }
 
+// payloader is an error that fills its own part of the --json error payload:
+// the token, and whichever of the other fields it has to give.
+type payloader interface {
+	fillPayload(*jsonErrorPayload)
+}
+
 // errorPayload classifies err into the JSON shape. It is the single place that
-// maps Go error types onto the wire format — add a case here rather than
-// formatting JSON at a call site.
+// maps Go error types onto the wire format: a new error type implements
+// payloader rather than formatting JSON at a call site.
+//
+// The first error in err's chain that is a payloader fills the payload. No
+// error here wraps another payloader, so there is only ever one to find. An
+// ambiguousRefError wraps a db error, which is checked first.
 func errorPayload(err error) jsonErrorPayload {
 	payload := jsonErrorPayload{Error: "error", Message: err.Error()}
 
+	// internal/db knows nothing of the wire format, so its errors are
+	// mapped here rather than by a method of theirs.
 	var ambig *db.AmbiguousTaskError
 	if errors.As(err, &ambig) {
 		payload.Error = "ambiguous task"
@@ -415,143 +505,42 @@ func errorPayload(err error) jsonErrorPayload {
 		return payload
 	}
 
-	// Batch import failures. The two are kept apart because the recovery
-	// differs: a refusal sent nothing, so the payload can be fixed and re-run
-	// whole, while a partially applied import already changed things and must
-	// be re-run with only the items named here.
-	var refused *importRefusalError
-	if errors.As(err, &refused) {
-		payload.Error = "import refused"
-		payload.Items = refused.jsonItems()
-		if refused.oversize() {
-			payload.Reason = tooManyItems
-		}
-		return payload
+	var p payloader
+	if errors.As(err, &p) {
+		p.fillPayload(&payload)
 	}
-
-	var unapplied *importVerifyError
-	if errors.As(err, &unapplied) {
-		payload.Error = "import partially applied"
-		payload.Items = unapplied.jsonItems()
-		payload.Created = unapplied.created
-		return payload
-	}
-
-	var wrongKind *wrongKindError
-	if errors.As(err, &wrongKind) {
-		// Token is what a caller branches on, so an unset one would ship
-		// `"error": ""` — a value no consumer can match. Fall back to the
-		// generic token instead.
-		if wrongKind.Token != "" {
-			payload.Error = wrongKind.Token
-		}
-		payload.Kind = wrongKind.Kind
-		payload.Query = wrongKind.Query
-		payload.UUID = wrongKind.UUID
-		payload.Title = wrongKind.Title
-		return payload
-	}
-
-	var trashed *trashedError
-	if errors.As(err, &trashed) {
-		payload.Error = "trashed"
-		payload.Kind = trashed.Kind
-		payload.Query = trashed.Query
-		payload.UUID = trashed.UUID
-		payload.Title = trashed.Title
-		payload.Project = trashed.Project
-		return payload
-	}
-
-	var misfiled *misfiledError
-	if errors.As(err, &misfiled) {
-		payload.Error = "misfiled"
-		payload.Kind = misfiled.kind
-		payload.UUID = misfiled.uuid
-		payload.Title = misfiled.title
-		payload.Landed = misfiled.landed
-		return payload
-	}
-
-	var stale *staleCacheError
-	if errors.As(err, &stale) {
-		payload.Error = "stale list cache"
-		payload.Kind = "task"
-		payload.Query = stale.Query
-		return payload
-	}
-
-	// The same token as a stale cache: the remedy is the same, re-list and use
-	// the uuid.
-	var otherDB *otherDBCacheError
-	if errors.As(err, &otherDB) {
-		payload.Error = "stale list cache"
-		payload.Kind = "task"
-		payload.Query = otherDB.Query
-		return payload
-	}
-
-	// The same token again: re-listing rewrites the cache file.
-	var unreadable *unreadableCacheError
-	if errors.As(err, &unreadable) {
-		payload.Error = "stale list cache"
-		payload.Kind = "task"
-		payload.Query = unreadable.Query
-		return payload
-	}
-
-	var empty *emptyRefError
-	if errors.As(err, &empty) {
-		payload.Error = "empty reference"
-		payload.Kind = "task"
-		payload.Query = empty.Query
-		return payload
-	}
-
-	var closedTitle *closedTitleError
-	if errors.As(err, &closedTitle) {
-		payload.Error = "already closed"
-		if closedTitle.trashed() {
-			payload.Error = "trashed"
-		}
-		payload.Kind = kindWord(closedTitle.Task.Type)
-		payload.Query = closedTitle.Query
-		payload.UUID = closedTitle.Task.UUID
-		payload.Title = closedTitle.Task.Title
-		if closedTitle.Task.ProjectTrashed && !closedTitle.Task.Trashed {
-			payload.Project = closedTitle.Task.ProjectTitle
-		}
-		if len(closedTitle.Matches) > 1 {
-			payload.Matches = matchList(closedTitle.Matches)
-		}
-		return payload
-	}
-
-	var closedSwitch *closedSwitchError
-	if errors.As(err, &closedSwitch) {
-		payload.Error = "already closed"
-		payload.Kind = closedSwitch.task.Type.String()
-		payload.UUID = closedSwitch.task.UUID
-		payload.Title = closedSwitch.task.Title
-		return payload
-	}
-
-	var blank *blankTitleError
-	if errors.As(err, &blank) {
-		payload.Error = "blank-title"
-		payload.Kind = blank.Kind
-		return payload
-	}
-
-	var notFound *notFoundError
-	if errors.As(err, &notFound) {
-		payload.Error = "not found"
-		payload.Kind = notFound.Kind
-		payload.Query = notFound.Query
-		return payload
-	}
-
 	return payload
+}
+
+// The errors below are defined beside the code that raises them, in
+// importcheck.go and when.go; their payloads are filled here so the wire
+// format stays in one file.
+
+// Batch import failures. The two are kept apart because the recovery differs:
+// a refusal sent nothing, so the payload can be fixed and re-run whole, while
+// a partially applied import already changed things and must be re-run with
+// only the items named here.
+
+func (e *importRefusalError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "import refused"
+	p.Items = e.jsonItems()
+	if e.oversize() {
+		p.Reason = tooManyItems
+	}
+}
+
+func (e *importVerifyError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "import partially applied"
+	p.Items = e.jsonItems()
+	p.Created = e.created
+}
+
+func (e *misfiledError) fillPayload(p *jsonErrorPayload) {
+	p.Error = "misfiled"
+	p.Kind = e.kind
+	p.UUID = e.uuid
+	p.Title = e.title
+	p.Landed = e.landed
 }
 
 func matchList(tasks []model.Task) []jsonErrorMatch {

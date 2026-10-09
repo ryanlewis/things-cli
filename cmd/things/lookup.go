@@ -65,7 +65,7 @@ func resolveRef(d *Deps, ref string, database *db.DB, write bool) (*model.Task, 
 	// listing: the user may well have meant a row of it, so a bare number
 	// is refused rather than tried as a title.
 	if kind == refRow && errors.Is(cacheErr, cache.ErrUnreadable) {
-		return nil, &unreadableCacheError{Query: ref, Err: cacheErr}
+		return nil, &unreadableCacheError{cacheRef: cacheRef{Query: ref}, Err: cacheErr}
 	}
 	if n, err := strconv.Atoi(digits); kind == refRow && err == nil && n >= 1 {
 		if cacheErr == nil && n <= len(last.UUIDs) {
@@ -73,12 +73,12 @@ func resolveRef(d *Deps, ref string, database *db.DB, write bool) (*model.Task, 
 			// and nothing else. Refuse it when the listing behind it is old
 			// enough that the rows have probably moved (issue #265).
 			if last.Stale(time.Now()) {
-				return nil, &staleCacheError{Query: ref, Row: n, Last: last}
+				return nil, &staleCacheError{cacheRef: cacheRef{Query: ref}, Row: n, Last: last}
 			}
 			// Nor is a listing of another database a guide to this one
 			// (issue #274).
 			if !cacheFromThisDB(d, last) {
-				return nil, &otherDBCacheError{Query: ref, Row: n, Last: last, Current: d.dbIdentity()}
+				return nil, &otherDBCacheError{cacheRef: cacheRef{Query: ref}, Row: n, Last: last, Current: d.dbIdentity()}
 			}
 			t, err := database.GetTaskByUUID(last.UUIDs[n-1])
 			if err != nil {
