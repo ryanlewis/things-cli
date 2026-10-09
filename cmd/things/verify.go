@@ -606,6 +606,12 @@ var unconfirmedMsg = map[string]string{
 	// Import only: the item was saved, but not with the completion-date the
 	// payload gives it.
 	"completion-date-dropped": "Created without its completion-date",
+	// Import only: the item was created, but its when did not file it
+	// where it says.
+	"misfiled": "Created, not where its when puts it",
+	// Import only: the item was created, but Things did not understand
+	// its when, a free phrase.
+	"when": "Created, but Things did not understand its when",
 }
 
 // applyAdd sends write, which creates an item of typ titled title, then finds

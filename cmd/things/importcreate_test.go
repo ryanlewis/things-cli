@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -607,7 +608,7 @@ func TestImportSharesDatedTitleWhenUnreadable(t *testing.T) {
 		{path: "[0]", typ: model.TypeTask, title: "Weekly review", dated: true, datedAt: time.Now()},
 		{path: "[1]", typ: model.TypeTask, title: "Weekly review"},
 	}
-	got := readBackCreates(d, database, creates, createdSnapshot{since: time.Now()}, errors.New("database is locked"), time.Millisecond)
+	got := readBackCreates(d, database, creates, createdSnapshot{since: time.Now()}, errors.New("database is locked"), time.Now(), time.Millisecond)
 	if got[1].Reason != "shares-dated-title" || !got[1].fails() {
 		t.Errorf("[1] = %+v, want shares-dated-title", got[1])
 	}
@@ -659,7 +660,7 @@ func TestImportUnreadableCreatedItemInErrorSaysWhy(t *testing.T) {
 	database, _ := seedWritable(t)
 	d := &Deps{DB: database, Stdout: io.Discard, Stderr: io.Discard}
 	creates := []importCreate{{path: "[1]", typ: model.TypeTask, title: "Buy oat milk"}}
-	created := readBackCreates(d, database, creates, createdSnapshot{}, errors.New("database is locked"), time.Millisecond)
+	created := readBackCreates(d, database, creates, createdSnapshot{}, errors.New("database is locked"), time.Now(), time.Millisecond)
 	err := &importVerifyError{
 		items:   []importVerifyItem{{Path: "[0]", err: errors.New("status change did not apply")}},
 		total:   1,
@@ -1223,5 +1224,87 @@ func TestImportNestedInUpdateNotWarned(t *testing.T) {
 	}
 	if strings.Contains(stderr, "ignores its") {
 		t.Errorf("warned about an updated project's item:\n%s", stderr)
+	}
+}
+
+// An item is confirmed only where its when files it, as an add is. A keyword
+// or date that did not land fails the import as misfiled, keeping the uuid
+// and saying where the item is; a free phrase Things ignored leaves the item
+// unconfirmed with reason when, and the import exits 0, as add does. A
+// to-do given when today and a deadline already past is the measured case:
+// Things files it in the Inbox with no start date.
+func TestImportChecksWhen(t *testing.T) {
+	past := time.Now().AddDate(0, 0, -4).Format("2006-01-02")
+	today := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(time.Now())))
+	for _, tc := range []struct {
+		name    string
+		attrs   string
+		extra   string // the row as Things saved it; "" is the Inbox with no start date
+		fail    bool
+		reason  string
+		landed  string
+		message string
+	}{
+		{name: "todayPastDeadlineInInbox", attrs: `"when":"today","deadline":"` + past + `"`, fail: true, reason: "misfiled", landed: "in inbox with no start date",
+			message: `[0]: task "Pay rent" (new-1) was created, but its when "today" did not file it there: it is in inbox with no start date`},
+		{name: "phraseIgnored", attrs: `"when":"blorp"`, reason: "when", landed: "in inbox with no start date",
+			message: `Created, but Things did not understand its when: [0] "Pay rent" (new-1), in inbox with no start date`},
+		{name: "todayLanded", attrs: `"when":"today","deadline":"` + past + `"`, extra: today},
+		{name: "noWhen", attrs: `"deadline":"` + past + `"`},
+		{name: "closedNotChecked", attrs: `"when":"today","completed":true`, extra: "status = 3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			payload := `[{"type":"to-do","attributes":{"title":"Pay rent",` + tc.attrs + `}}]`
+			for _, asJSON := range []bool{false, true} {
+				database, sqlDB := seedWritable(t)
+				stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Pay rent", extra: tc.extra})
+				var args []string
+				if asJSON {
+					args = []string{"--json"}
+				}
+				out, stderr, err := runImportOut(t, database, payload, args...)
+				if tc.fail {
+					var verr *importVerifyError
+					if !errors.As(err, &verr) {
+						t.Fatalf("json=%v: err = %v, want an importVerifyError", asJSON, err)
+					}
+					if asJSON {
+						p, raw := decodePayload(t, err)
+						it := findItem(t, p.Items, "[0]")
+						if p.Error != "import partially applied" || it.ID != "new-1" || it.Reason != tc.reason || it.Landed != tc.landed {
+							t.Errorf("payload = %s, want [0] new-1 %s landed %q", raw, tc.reason, tc.landed)
+						}
+						if len(p.Created) != 1 || p.Created[0].Confirmed || p.Created[0].Landed != tc.landed {
+							t.Errorf("created = %+v", p.Created)
+						}
+						continue
+					}
+					msg := err.Error()
+					for _, want := range []string{tc.message, "do not import them again", "things edit <uuid> --when"} {
+						if !strings.Contains(msg, want) {
+							t.Errorf("error missing %q:\n%s", want, msg)
+						}
+					}
+					if strings.Contains(msg, "did not appear") {
+						t.Errorf("a misfiled item is not missing:\n%s", msg)
+					}
+					continue
+				}
+				if err != nil {
+					t.Fatalf("json=%v: import: %v (stderr: %s)", asJSON, err, stderr)
+				}
+				if !asJSON {
+					if tc.reason != "" && !strings.Contains(out, tc.message) {
+						t.Errorf("output = %q, want %q", out, tc.message)
+					}
+					continue
+				}
+				got := decodeCreated(t, out)
+				if len(got) != 1 || got[0].UUID != "new-1" || got[0].Confirmed != (tc.reason == "") || got[0].Reason != tc.reason || got[0].Landed != tc.landed {
+					t.Errorf("got %+v, want reason %q landed %q", got, tc.reason, tc.landed)
+				}
+			}
+		})
 	}
 }

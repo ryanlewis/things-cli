@@ -524,7 +524,11 @@ instead of assuming:
   before re-running it.
   An item listed there with reason `completion-date-dropped` did appear,
   without its completion date: set the date in Things rather than import
-  it again.
+  it again. One with reason `misfiled` did appear, but not where its
+  `when` puts it, and `landed` says where it is: move it with `things
+  edit` rather than import it again. A created item with reason `when`
+  (exit 0) has a `when` phrase Things did not understand, so it has no
+  start date.
   If Things is often closed, the first add after it launches can take
   longer than the five-second wait; raise `--verify-timeout`.
 - **Edits are read back.** `edit` and `project edit` wait for Things to
