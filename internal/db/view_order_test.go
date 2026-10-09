@@ -209,3 +209,27 @@ func TestTrashOrdersByModificationDateNewestFirst(t *testing.T) {
 		t.Errorf("trash order:\n got %v\nwant %v", got, want)
 	}
 }
+
+// A project in Today only by its deadline takes its place by todayIndex, like
+// any other row, not a place of its own at the top. Measured on 9 Oct 2026:
+// an undated project due that day was third in the app's Today, after two
+// loose to-dos with a lower todayIndex, and another due project was
+// sixteenth. Things gives such a row a todayIndex and reference date.
+func TestTodayPlacesDeadlineDueProjectByTodayIndex(t *testing.T) {
+	d, fx := newFixture(t)
+	today := int64(model.ThingsDateFromTime(testNow))
+
+	fx.Todo("first", "First", -9741, anytimeOn(today), todayIndexRef(today), todayIndex(-6199))
+	fx.Todo("second", "Second", -9224, anytimeOn(today), todayIndexRef(today), todayIndex(-5554))
+	fx.Project("due", "Due today", -4192, anytime(), deadline(today), todayIndexRef(today), todayIndex(-4544))
+	fx.Todo("after", "After", 5847, anytimeOn(today), todayIndexRef(today), todayIndex(5334))
+
+	got, err := d.ListTasks(ViewToday, TaskFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"first", "second", "due", "after"}
+	if got := uuidsOf(got); !slices.Equal(got, want) {
+		t.Errorf("today order:\n got %v\nwant %v", got, want)
+	}
+}
