@@ -16,20 +16,12 @@ import (
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
-	"github.com/ryanlewis/things-cli/internal/skill"
-	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // newParser builds the kong parser main does, bound to cli.
 func newParser(t *testing.T, cli *CLI) *kong.Kong {
 	t.Helper()
-	parser, err := kong.New(cli, kong.Name("things"),
-		kong.Vars{
-			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skill.AgentNames(),
-		},
-		helpVars,
-	)
+	parser, err := kong.New(cli, parserOptions(nil)...)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}
