@@ -129,15 +129,7 @@ func whenPhrase(value string) bool {
 	case "anytime", "someday", "today", "evening", "tomorrow":
 		return false
 	}
-	if _, ok := parseClock(v); ok {
-		return false
-	}
-	datePart := v
-	if len(v) == len("2006-01-02@15:04") && v[10] == '@' {
-		datePart = v[:10]
-	}
-	_, err = time.ParseInLocation("2006-01-02", datePart, time.Local)
-	return err != nil
+	return !things.WhenDateOrTime(v)
 }
 
 // nearOffsetChange reports whether the local UTC offset an hour before now
@@ -344,6 +336,11 @@ type whenCheck struct {
 	before   *model.Task
 	carried  bool
 	whenOnly bool
+	// phraseOnly says the edit changes nothing but --when, and its value is
+	// a free phrase (whenPhrase). Things records nothing for a phrase it
+	// ignores, so the read-back could only wait out its budget: the edit is
+	// reported unconfirmed at once instead.
+	phraseOnly bool
 }
 
 // holds reports whether t, read at now, is filed where the value puts it. The

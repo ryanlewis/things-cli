@@ -370,6 +370,9 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 		return printUnconfirmedEdit(d, task, "duplicate", "Sent to Things as a duplicate; the copy is not read back")
 	case d.NoVerify:
 		return printUnconfirmedEdit(d, task, "no-verify", "Sent to Things, not confirmed (--no-verify)")
+	case when != nil && when.phraseOnly && want == task.Status:
+		fmt.Fprintf(d.errOut(), "warning: Things may not understand --when %q, and records nothing when it ignores one, so the edit is not read back; run `things show %s` to check\n", when.value, task.UUID)
+		return printUnconfirmedEdit(d, task, "when", "Sent to Things, not confirmed (--when phrase)")
 	}
 
 	current := task
@@ -662,16 +665,12 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 		// had worked is only a busy moment: those reads saw no item.
 		return unreadable(readErr)
 	case len(found) == 0:
-		kind := "to-do"
-		if typ == model.TypeProject {
-			kind = "project"
-		}
 		where := ""
 		if dest.checked {
 			where = " where it was sent"
 		}
 		return fmt.Errorf("add not confirmed: no new %s titled %q appeared%s within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `%s` before retrying; do not retry blindly",
-			kind, title, where, budget, searchCommand(d, title))
+			kindNoun(typ), title, where, budget, searchCommand(d, title))
 	case len(found) > 1:
 		uuids := make([]string, len(found))
 		for i, t := range found {
