@@ -120,7 +120,7 @@ func targetNotes(ref, kind string, t db.Target, reopens bool) []string {
 	case t.Area:
 	case t.Trashed:
 		notes = append(notes, fmt.Sprintf("%q is in the Trash; Things will file into it there", t.Title))
-	case reopens && (t.Status == model.StatusCompleted || t.Status == model.StatusCancelled):
+	case reopens && t.Status.Closed():
 		notes = append(notes, fmt.Sprintf("%q is %s; Things will file into it and reopen it", t.Title, t.Status))
 	}
 	return notes

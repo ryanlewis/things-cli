@@ -123,7 +123,7 @@ func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
 // spelling that always works. --db comes along when the flag supplied it, so
 // the re-run reads the database this listing came from rather than the default.
 func (c *ListCmd) commandLine(d *Deps, view, project string) string {
-	parts := append([]string{"things"}, globalFlags(d)...)
+	parts := thingsCmd(d)
 	// "project" is not a view name a user can type; it is what a bare filter
 	// resolves to, and the filter flags below say the same thing.
 	if view != db.ViewProject {
@@ -333,8 +333,7 @@ func (c *SearchCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	command := append([]string{"things"}, globalFlags(d)...)
-	command = append(command, "search", shellQuote(c.Query))
+	command := thingsCmd(d, "search", shellQuote(c.Query))
 	cacheTaskUUIDs(d, strings.Join(command, " "), tasks)
 	// Search results are a listing like `list`, backed by the same cache, so
 	// they share PrintTaskList's path (and hint) rather than the bare Print

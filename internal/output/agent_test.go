@@ -286,6 +286,16 @@ func TestPrintAgentBriefFoldsMultilineTitles(t *testing.T) {
 	}
 }
 
+// A bare \r, a Unicode line separator or a tab in a title breaks the brief's
+// Markdown as a \n does, so singleLine folds every break oneLine folds.
+func TestPrintAgentBriefFoldsEveryLineBreak(t *testing.T) {
+	task := &model.Task{UUID: "uuid-1", Title: "Cut\rthe\u2028RC\u2029build\u0085now\vor\fthen\tship", Type: model.TypeTask}
+	got := briefText(t, AgentBrief{Task: task})
+	if !strings.Contains(got, "# Cut the RC build now or then ship\n") {
+		t.Errorf("heading not folded onto one line\n%q", got)
+	}
+}
+
 func TestPrintHint(t *testing.T) {
 	var buf bytes.Buffer
 	if err := PrintHint(&buf, []string{"one", "two"}, "a note", 0); err != nil {

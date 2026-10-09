@@ -149,6 +149,9 @@ var statusCodec = newEnumCodec("Status", map[Status]string{
 
 func (s Status) String() string { return statusCodec.nameOf(s) }
 
+// Closed reports whether s is completed or cancelled.
+func (s Status) Closed() bool { return s == StatusCompleted || s == StatusCancelled }
+
 // MarshalJSON renders a recognized status as its string name
 // ("open"/"cancelled"/"completed"), and an unrecognized raw Things code as its
 // integer.

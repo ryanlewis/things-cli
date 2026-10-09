@@ -373,14 +373,19 @@ func cacheTaskUUIDs(d *Deps, command string, tasks []model.Task) {
 	if d.JSON {
 		return
 	}
+	entry := cache.LastList{WrittenAt: time.Now(), Command: command, DB: d.dbIdentity(), UUIDs: taskUUIDs(tasks)}
+	if err := cache.WriteLastList(entry); err != nil {
+		fmt.Fprintf(d.errOut(), "warning: failed to cache task list: %v\n", err)
+	}
+}
+
+// taskUUIDs is the UUID of each of tasks, in order.
+func taskUUIDs(tasks []model.Task) []string {
 	uuids := make([]string, len(tasks))
 	for i, t := range tasks {
 		uuids[i] = t.UUID
 	}
-	entry := cache.LastList{WrittenAt: time.Now(), Command: command, DB: d.dbIdentity(), UUIDs: uuids}
-	if err := cache.WriteLastList(entry); err != nil {
-		fmt.Fprintf(d.errOut(), "warning: failed to cache task list: %v\n", err)
-	}
+	return uuids
 }
 
 // cacheFromThisDB reports whether the cached listing read the database this
@@ -467,4 +472,10 @@ func globalFlags(d *Deps) []string {
 		flags = append(flags, "--config", shellQuote(cfg.Path))
 	}
 	return flags
+}
+
+// thingsCmd is the `things` command line, with globalFlags, that runs args
+// against the database this run reads.
+func thingsCmd(d *Deps, args ...string) []string {
+	return append(append([]string{"things"}, globalFlags(d)...), args...)
 }

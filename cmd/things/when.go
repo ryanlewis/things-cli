@@ -396,6 +396,34 @@ func (c *whenCheck) keptQuietly(t *model.Task, now time.Time) bool {
 	return false
 }
 
+// whenVerdict is the read-back's verdict on a --when or an import's when,
+// for a new item: whether Things filed the item where the value puts it.
+type whenVerdict int
+
+const (
+	// whenFiled is an item filed where the value puts it, or one sent
+	// with no value.
+	whenFiled whenVerdict = iota
+	// whenNotFiled is an item filed somewhere else.
+	whenNotFiled
+	// whenNotUnderstood is an item sent a free phrase (whenPhrase) that
+	// has no start date: Things did not understand the phrase.
+	whenNotUnderstood
+)
+
+// verdict judges t, a new item read at now, against c. add and import both
+// judge a new item by it, so they cannot drift apart. A nil c is no --when,
+// which every item is filed by.
+func (c *whenCheck) verdict(t *model.Task, now time.Time) whenVerdict {
+	switch {
+	case !c.holds(t, now):
+		return whenNotFiled
+	case c != nil && whenPhrase(c.value) && t.StartDate == nil:
+		return whenNotUnderstood
+	}
+	return whenFiled
+}
+
 // misfiledError is an add or edit that Things applied but filed somewhere
 // other than --when put it. The item exists, so the JSON error carries its
 // uuid and where it landed for a caller to act on.
@@ -409,12 +437,10 @@ type misfiledError struct {
 
 func (e *misfiledError) Error() string { return e.msg }
 
-// kindWord is the error payload's word for an item of type typ.
-func kindWord(typ model.TaskType) string {
-	if typ == model.TypeProject {
-		return "project"
-	}
-	return "task"
+// newMisfiled is the misfiledError for an item of type typ titled title,
+// with uuid, that Things filed at landed; msg is the whole message.
+func newMisfiled(typ model.TaskType, title, uuid, landed, msg string) *misfiledError {
+	return &misfiledError{msg: msg, kind: typ.String(), title: title, uuid: uuid, landed: landed}
 }
 
 // describeStart says where t is filed, for an error about a --when that did
