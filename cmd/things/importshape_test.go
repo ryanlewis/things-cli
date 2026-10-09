@@ -431,9 +431,8 @@ func TestImportTooManyItemsWithBadItems(t *testing.T) {
 // only one new item, one of them may be missing, and the import still fails,
 // saying the item may exist.
 func TestImportSharesDatedTitleWithBothPresent(t *testing.T) {
-	pinWallClock(t)
 	payload := `[
-	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate() + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate(t) + `"}},
 	  {"type":"to-do","attributes":{"title":"Weekly review"}}
 	]`
 
@@ -591,12 +590,11 @@ func TestImportSharesDatedTitleDatedBeforeWindow(t *testing.T) {
 // A failing shares-dated-title item carries present false in the error's
 // items too, not only in created.
 func TestImportSharesDatedTitleErrorItemCarriesPresent(t *testing.T) {
-	pinWallClock(t)
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
 	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
 	payload := `[
-	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate() + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate(t) + `"}},
 	  {"type":"to-do","attributes":{"title":"Weekly review"}}
 	]`
 	_, _, err := runImportOut(t, database, payload, "--json")
@@ -616,8 +614,12 @@ func TestImportSharesDatedTitleErrorItemCarriesPresent(t *testing.T) {
 // inside its window. The window starts a moment before the import is sent,
 // and a date stamped with time.Now loses its fraction of a second, so once
 // the clock crosses a second it can fall before the start. Five seconds
-// ahead keeps it inside however the test is timed.
-func recentCreationDate() string {
+// ahead keeps it inside however the test is timed. It pins the clock to
+// the wall time for the rest of t (pinWallClock), so the date is not refused
+// as in the future however long the package has run.
+func recentCreationDate(t *testing.T) string {
+	t.Helper()
+	pinWallClock(t)
 	return time.Now().Add(5 * time.Second).UTC().Format(time.RFC3339)
 }
 
