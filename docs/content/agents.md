@@ -91,7 +91,8 @@ status has exactly that title. A write whose exact title only completed,
 cancelled or trashed items carry fails, non-zero, with `already closed` or
 `trashed`, naming the most recent of them (all of them in `matches` when
 there are several), rather than closing an open item whose title contains
-it. Case and surrounding space do not change that. Such a refusal carries
+it. Case and surrounding space do not change that, though an open item that
+matches with them set aside still wins. Such a refusal carries
 `query`; the same tokens from a uuid or row number do not. A uuid typed in the wrong case is not a
 title fragment either. This is a safety net for people, not a mode to code
 against: act on the `uuid` and it never applies.

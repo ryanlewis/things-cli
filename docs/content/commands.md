@@ -398,7 +398,9 @@ exit and send nothing. With "Pay rent" completed and "Pay rent deposit" open,
 one, and how many there are, when several share the title) and leaves the
 deposit alone. The same holds when the title you type differs from the
 closed one only by case or surrounding space: `"pay rent"` or `"Pay rent "`
-is refused rather than matched as a fragment of the deposit. The `--json`
+is refused rather than matched as a fragment of the deposit. An open item
+whose title matches that way, such as an open "pay rent", still wins and is
+the one acted on. The `--json`
 token is `already closed`, or `trashed` when that item is in the Trash, and
 the object carries `query`; when several closed items share the title they
 are all listed in `matches`. A uuid or a row number that names a closed item is not

@@ -898,6 +898,54 @@ func TestGetTaskClosedTitleFolded(t *testing.T) {
 	}
 }
 
+// An open row whose title matches once case and space are set aside wins
+// over a closed one that matches the same way, as the substring match would
+// have found it; two such open rows are ambiguous; an open repeating template
+// gives way to its instance.
+func TestGetTaskFoldedTitleOpenWins(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Todo("done", "Pay rent", 1, dbtest.Completed(1))
+	fx.Todo("open", "pay rent", 2, dbtest.Anytime())
+	fx.Todo("deposit", "Re: Pay rent deposit", 3, dbtest.Anytime())
+	fx.Todo("w-done", "Water Plants", 4, dbtest.Completed(1))
+	fx.Todo("w-tmpl", "water plants", 5, dbtest.Repeats())
+	fx.Todo("w-inst", "water plants ", 6, dbtest.Anytime())
+	fx.Todo("c-1", "call mum", 7, dbtest.Anytime())
+	fx.Todo("c-2", "CALL MUM", 8, dbtest.Anytime())
+	fx.Todo("c-done", "Call Mum", 9, dbtest.Completed(1))
+
+	for ref, want := range map[string]string{"PAY RENT": "open", " Pay Rent ": "open", "WATER PLANTS": "w-inst"} {
+		if got, err := d.GetTask(ref); err != nil || got.UUID != want {
+			t.Errorf("GetTask(%q) = %+v, %v, want %s", ref, got, err, want)
+		}
+	}
+	var ambig *AmbiguousTaskError
+	if _, err := d.GetTask("Call mum"); !errors.As(err, &ambig) || len(ambig.Matches) != 2 {
+		t.Errorf("GetTask(Call mum) = %v, want the two open rows as ambiguous", err)
+	}
+}
+
+// The folded path counts a to-do whose project is in the Trash as closed,
+// not as an open row that would win, and drops a repeating template that has
+// a closed instance beside it.
+func TestGetTaskFoldedTitleClosedSide(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Project("p-bin", "Binned move", 1, dbtest.Trashed())
+	fx.Todo("t-bin", "Book van", 2, dbtest.Anytime(), dbtest.InProject("p-bin"))
+	fx.Todo("t-live", "Re: book van later", 3, dbtest.Anytime())
+	fx.Todo("tmpl", "Water plants", 4, dbtest.Repeats(), dbtest.Trashed())
+	fx.Todo("inst", "Water plants", 5, dbtest.Completed(1))
+	fx.Todo("w-live", "Re: water plants twice", 6, dbtest.Anytime())
+
+	for ref, want := range map[string]string{"BOOK VAN": "t-bin", "water plants ": "inst"} {
+		var closed *ClosedTitleError
+		got, err := d.GetTask(ref)
+		if !errors.As(err, &closed) || len(closed.Matches) != 1 || closed.Matches[0].UUID != want {
+			t.Errorf("GetTask(%q) = %+v, %v, want a ClosedTitleError naming only %s", ref, got, err, want)
+		}
+	}
+}
+
 // Things trashes a project's to-dos with it but leaves their own trashed
 // column 0. ProjectTrashed follows the to-do to its project directly or
 // through its heading, so the writes can refuse it; a live project's to-do

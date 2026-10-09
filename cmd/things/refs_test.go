@@ -179,6 +179,16 @@ func TestExactTitleOnClosedRowBeatsSubstring(t *testing.T) {
 			uuid:  "zz-base",
 		},
 		{
+			name: "case variant of a to-do in a trashed project",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Project("zz-proj", "zz binned", 19, dbtest.Trashed())
+				fx.Todo("zz-base", "zz base", 20, dbtest.Anytime(), dbtest.InProject("zz-proj"))
+			},
+			args:  []string{"complete", "ZZ Base"},
+			token: "trashed",
+			uuid:  "zz-base",
+		},
+		{
 			name: "several closed exact titles, the latest named",
 			seed: func(fx *dbtest.Fixture) {
 				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
@@ -797,5 +807,23 @@ func TestClosedTitleSingleHasNoMatches(t *testing.T) {
 	payload, raw := decodePayload(t, err)
 	if payload.Error != "already closed" || payload.Query != "zz base" || len(payload.Matches) != 0 {
 		t.Errorf("payload = %s, want already closed with a query and no matches", raw)
+	}
+}
+
+// An open task whose title differs from the typed one only by case is still
+// the one meant when a closed task has the title in the typed case's
+// variant: `complete "PAY RENT"` closes the open "pay rent".
+func TestOpenCaseVariantBeatsClosed(t *testing.T) {
+	fastVerify(t)
+	isolateHome(t)
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("done", "Pay rent", 20, dbtest.Completed(1))
+	fx.Todo("open", "pay rent", 21, dbtest.Anytime())
+	stubExecApplying(t, sqlDB, "open", 3)
+
+	out, err := runOut(t, database, "complete", "PAY RENT")
+	if err != nil || !strings.Contains(out, "open") {
+		t.Fatalf("complete PAY RENT = %q, %v, want the open pay rent closed", out, err)
 	}
 }
