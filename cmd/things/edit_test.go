@@ -926,6 +926,41 @@ func TestEditAlreadyClosedNeedsNoAuthToken(t *testing.T) {
 	}
 }
 
+// An edit that will be sent with no auth token to send is refused before
+// --create-tags creates the unknown tag over AppleScript, with the error the
+// write gives: no command runs at all. An already-closed item counts, since a
+// new tag is a change the edit has to send.
+func TestEditMissingTokenRefusedBeforeTagsCreated(t *testing.T) {
+	tags := []string{"--create-tags", "--tags", "Brandnew"}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"edit", "one-1", "--title", "Renamed"}, "update: auth token is required"},
+		{[]string{"edit", "one-1"}, "update: auth token is required"},
+		{[]string{"edit", "done-1", "--complete"}, "update: auth token is required"},
+		{[]string{"project", "edit", "proj-1", "--title", "Renamed"}, "update-project: auth token is required"},
+	} {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		if _, err := sqlDB.Exec(`DELETE FROM TMSettings`); err != nil {
+			t.Fatalf("clear settings: %v", err)
+		}
+		fx := dbtest.NewFixture(t, sqlDB)
+		fx.Project("proj-1", "Launch", 4)
+		fx.Todo("done-1", "Filed", 5, dbtest.Status(model.StatusCompleted), dbtest.Anytime())
+		calls := stubExecDropping(t)
+		args := append(slices.Clone(tc.args), tags...)
+		_, _, err := runStreams(t, database, args...)
+		if err == nil || !strings.HasPrefix(err.Error(), tc.want) {
+			t.Errorf("%v = %v, want an error starting %q", args, err, tc.want)
+		}
+		if *calls != 0 {
+			t.Errorf("%v issued %d commands, want none", args, *calls)
+		}
+	}
+}
+
 // An edit whose fields the URL scheme would refuse, a value over a length
 // limit or a keyword deadline, is refused before --create-tags creates the
 // unknown tag over AppleScript: no command runs at all.

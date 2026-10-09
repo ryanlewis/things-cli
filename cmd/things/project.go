@@ -38,7 +38,7 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 		Area:  c.Area,
 		Todos: expandNewlines(c.Todos),
 	}
-	if err := preAdd(d, "project", c.Title, c.Tags, params, c.TagFlags); err != nil {
+	if err := preAdd(d, "project", params, c.TagFlags); err != nil {
 		return err
 	}
 	// Things matches area by title only; a uuid has to go as area-id.

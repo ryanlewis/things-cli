@@ -17,6 +17,12 @@ type AddCommon struct {
 	Tags     string
 }
 
+// Common returns the shared fields, so a caller handed either params type
+// can read them.
+func (c AddCommon) Common() AddCommon {
+	return c
+}
+
 // normalized checks the shared fields, with own holding the caller's checks
 // of its own fields, and returns c with When and Deadline canonicalised.
 func (c AddCommon) normalized(own ...error) (AddCommon, error) {
@@ -256,15 +262,24 @@ func (c UpdateCommon) normalized(invalid error) (UpdateCommon, error) {
 	return c, nil
 }
 
+// sendable checks the id and auth token, which values needs before it can
+// send anything. command prefixes the errors; kind names the item.
+func (c UpdateCommon) sendable(command, kind string) error {
+	if c.ID == "" {
+		return fmt.Errorf("%s: %s id is required", command, kind)
+	}
+	if c.AuthToken == "" {
+		return fmt.Errorf("%s: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once", command)
+	}
+	return nil
+}
+
 // values checks the id and auth token, then the fields (normalized), and
 // sets the shared keys. command prefixes the guard errors; kind names the
 // item ("task", "project").
 func (c UpdateCommon) values(command, kind string, invalid error) (url.Values, error) {
-	if c.ID == "" {
-		return nil, fmt.Errorf("%s: %s id is required", command, kind)
-	}
-	if c.AuthToken == "" {
-		return nil, fmt.Errorf("%s: auth token is required — enable Things URLs in Things → Settings → General and ensure the app has been launched at least once", command)
+	if err := c.sendable(command, kind); err != nil {
+		return nil, err
 	}
 	c, err := c.normalized(invalid)
 	if err != nil {
@@ -309,6 +324,13 @@ type UpdateParams struct {
 func (p UpdateParams) Validate() error {
 	_, err := p.normalized(validateUpdate(p))
 	return err
+}
+
+// ValidateSend returns the error UpdateTask would refuse p with before
+// its fields: a missing id or auth token. Validate leaves these out, so a
+// caller checks them once it knows the edit will be sent.
+func (p UpdateParams) ValidateSend() error {
+	return p.sendable("update", "task")
 }
 
 func UpdateTask(params UpdateParams) error {
@@ -360,6 +382,11 @@ type UpdateProjectParams struct {
 func (p UpdateProjectParams) Validate() error {
 	_, err := p.normalized(validateUpdateProject(p))
 	return err
+}
+
+// ValidateSend is UpdateParams.ValidateSend for UpdateProject.
+func (p UpdateProjectParams) ValidateSend() error {
+	return p.sendable("update-project", "project")
 }
 
 func UpdateProject(params UpdateProjectParams) error {

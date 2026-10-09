@@ -3,26 +3,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/alecthomas/kong"
-
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
-
-// Help for --when and --deadline, which add, project add, edit and project
-// edit share. parserOptions hands them to kong as helpVars.
-const (
-	whenValues        = "today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM"
-	deadlineNoKeyword = "Keywords such as today and tomorrow are rejected."
-)
-
-var helpVars = kong.Vars{
-	"add_when_help":      "Schedule: " + whenValues + ", or RFC3339.",
-	"add_deadline_help":  `Deadline: a YYYY-MM-DD date or an English phrase such as "next friday". ` + deadlineNoKeyword,
-	"edit_when_help":     "Schedule: " + whenValues + ", RFC3339, or empty to clear.",
-	"edit_deadline_help": `Deadline: a YYYY-MM-DD date, an English phrase such as "next friday", or empty to clear. ` + deadlineNoKeyword,
-}
 
 type AddCmd struct {
 	Title     string `arg:"" required:"" help:"Task title."`
@@ -55,7 +39,7 @@ func (c *AddCmd) Run(d *Deps) error {
 		Heading:   c.Heading,
 		List:      list,
 	}
-	if err := preAdd(d, "task", c.Title, c.Tags, params, c.TagFlags); err != nil {
+	if err := preAdd(d, "task", params, c.TagFlags); err != nil {
 		return err
 	}
 	// Things matches list by title only; a uuid has to go as list-id.
@@ -68,17 +52,25 @@ func (c *AddCmd) Run(d *Deps) error {
 	})
 }
 
+// addParams is what preAdd needs of AddParams and AddProjectParams: their
+// shared fields and their Validate.
+type addParams interface {
+	Common() things.AddCommon
+	Validate() error
+}
+
 // preAdd refuses an add before anything is sent: a blank title, then
 // whatever p.Validate finds, then the tags. All of it runs before
 // --create-tags can create a tag, so an add that fails creates none.
-func preAdd(d *Deps, kind, title, tags string, p interface{ Validate() error }, flags TagFlags) error {
-	if err := refuseBlankTitle(title, kind, "added"); err != nil {
+func preAdd(d *Deps, kind string, p addParams, flags TagFlags) error {
+	c := p.Common()
+	if err := refuseBlankTitle(c.Title, kind, "added"); err != nil {
 		return err
 	}
 	if err := p.Validate(); err != nil {
 		return err
 	}
-	_, err := verifyTagStrings(d, flags, &tags)
+	_, err := verifyTagStrings(d, flags, &c.Tags)
 	return err
 }
 
