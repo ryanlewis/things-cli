@@ -524,8 +524,9 @@ func deferredUndatedOf(alias string) string {
 }
 
 // notHeldInPlace is the Logbook's complement of what Things has not yet
-// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosedOrUnlogged, which it shares
-// with the views that show unlogged rows, so it is defined with its pair.
+// logged. COALESCE makes the negation null-safe. The Logbook's other extra is
+// parentNotClosedOrUnlogged, which it shares with the views that show unlogged
+// rows, so it is defined with its pair.
 var notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
 
 // The predicates only one view needs.
