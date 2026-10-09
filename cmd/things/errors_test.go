@@ -280,6 +280,93 @@ func TestRenderErrorGeneric(t *testing.T) {
 	}
 }
 
+// errorPayloadCases is one error of every type errorPayload classifies, with
+// the variants that fill different fields, and the exact --json output each
+// prints, compacted. errorPayload maps types onto the wire format, so a change
+// there must leave every one of these byte for byte as it is.
+var errorPayloadCases = []struct {
+	name string
+	err  error
+	want string
+}{
+	{"ambiguous", &db.AmbiguousTaskError{Query: "Shared", Matches: []model.Task{
+		{UUID: "u1", Title: "Shared one", ProjectTitle: "Chores"},
+		{UUID: "u2", Title: "Shared two", Type: model.TypeProject},
+	}},
+		`{"error":"ambiguous task","message":"ambiguous task: \"Shared\" matches 2 tasks","kind":"task","query":"Shared","matches":[{"uuid":"u1","title":"Shared one","type":"task","project":"Chores"},{"uuid":"u2","title":"Shared two","type":"project"}]}`},
+	{"ambiguous ref", &ambiguousRefError{msg: "pick one", inner: &db.AmbiguousTaskError{Query: "Shared", Matches: []model.Task{{UUID: "u1", Title: "Shared one"}}}},
+		`{"error":"ambiguous task","message":"pick one","kind":"task","query":"Shared","matches":[{"uuid":"u1","title":"Shared one","type":"task"}]}`},
+	{"task not found", &db.TaskNotFoundError{Query: "nope"},
+		`{"error":"not found","message":"task not found: nope","kind":"task","query":"nope"}`},
+	{"import refused", &importRefusalError{items: []importRefusalItem{{Path: "items[0]", ID: "i1", Title: "T", Kind: "task", Blocked: []string{"title"}, blank: true}}, total: 1, size: 1},
+		`{"error":"import refused","message":"Things creates a to-do or project with no title, or only whitespace, as an untitled item, so these are refused; give each a title:\n  items[0]\nNothing was sent to Things — fix these and run the import again, or make the changes in the Things app.","items":[{"path":"items[0]","id":"i1","title":"T","blocked":["title"],"reason":"blank-title"}]}`},
+	{"import refused oversize", &importRefusalError{total: maxImportItems + 1, size: maxImportItems + 1},
+		`{"error":"import refused","message":"The payload creates 201 items (update items and checklist items not counted). Above 200, Things stops to ask \"Is this what you intended?\" and creates nothing until someone answers, so the import cannot be read back. Split it into imports of at most 200 items each.\nNothing was sent to Things — fix these and run the import again, or make the changes in the Things app.","reason":"too-many-items"}`},
+	{"import partially applied", &importVerifyError{
+		items:   []importVerifyItem{{Path: "items[0]", ID: "i1", Title: "T", Wanted: model.StatusCompleted, err: errors.New("still open")}},
+		total:   1,
+		created: []importCreated{{Path: "items[1]", Kind: "task", Title: "New", UUID: "n1", Confirmed: true, Reason: "creation-date"}},
+	},
+		`{"error":"import partially applied","message":"1 of 1 requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n  items[0]: still open\nThe other created items:\n  Created and confirmed: items[1] \"New\" (n1)","items":[{"path":"items[0]","id":"i1","title":"T","wanted":"completed"}],"created":[{"path":"items[1]","kind":"task","title":"New","uuid":"n1","confirmed":true,"reason":"creation-date"}]}`},
+	{"not a project", &wrongKindError{Token: "not a project", Kind: "task", Query: "q", UUID: "u1", Title: "T", Retry: "edit"},
+		`{"error":"not a project","message":"\"T\" is a task; use edit","kind":"task","query":"q","uuid":"u1","title":"T"}`},
+	{"wrong kind without token", &wrongKindError{Kind: "project", Query: "q", UUID: "u1", Title: "T", Retry: "project edit"},
+		`{"error":"error","message":"\"T\" is a project; use project edit","kind":"project","query":"q","uuid":"u1","title":"T"}`},
+	{"trashed", &trashedError{Kind: "task", Query: "q", UUID: "u1", Title: "T", Done: "completed"},
+		`{"error":"trashed","message":"\"T\" (u1) is in the Trash, so it was not completed; nothing sent. Put it back from the Trash in Things first if you meant this task","kind":"task","query":"q","uuid":"u1","title":"T"}`},
+	{"trashed project", &trashedError{Kind: "task", Query: "q", UUID: "u1", Title: "T", Done: "completed", Project: "P"},
+		`{"error":"trashed","message":"\"T\" (u1) was not completed: its project \"P\" is in the Trash; nothing sent. Restore the project in Things first if you meant this task","kind":"task","query":"q","uuid":"u1","title":"T","project":"P"}`},
+	{"misfiled", &misfiledError{msg: "filed elsewhere", kind: "task", title: "T", uuid: "u1", landed: "inbox"},
+		`{"error":"misfiled","message":"filed elsewhere","kind":"task","uuid":"u1","title":"T","landed":"inbox"}`},
+	{"stale cache", &staleCacheError{Query: "2", Row: 2},
+		`{"error":"stale list cache","message":"task #2 comes from a stale list cache written by an older things-cli; re-run your listing and use the new row number, or pass the task's uuid.","kind":"task","query":"2"}`},
+	{"other db cache", &otherDBCacheError{Query: "2", Row: 2, Last: cache.LastList{DB: "/a.sqlite"}, Current: "/b.sqlite"},
+		`{"error":"stale list cache","message":"task #2 comes from a listing of a different database: the listing read /a.sqlite, and this command reads /b.sqlite. Re-run the listing against this database and use the new row number, or pass the task's uuid.","kind":"task","query":"2"}`},
+	{"unreadable cache", &unreadableCacheError{Query: "2", Err: cache.ErrUnreadable},
+		`{"error":"stale list cache","message":"\"2\" may be a row of the last list, but the last-list cache could not be read; run a listing again or use the task's title or uuid","kind":"task","query":"2"}`},
+	{"empty ref", &emptyRefError{Query: " "},
+		`{"error":"empty reference","message":"the task reference is empty; pass a row number, a uuid or a title","kind":"task","query":" "}`},
+	{"closed title", &closedTitleError{Query: "T", Task: model.Task{UUID: "u1", Title: "T", Status: model.StatusCompleted}},
+		`{"error":"already closed","message":"no open task is titled \"T\": the only task with that title, \"T\" (u1), is already completed. Nothing sent, and no open task with a similar title was touched; pass its uuid to act on a particular one","kind":"task","query":"T","uuid":"u1","title":"T"}`},
+	{"closed title trashed", &closedTitleError{Query: "T", Task: model.Task{UUID: "u1", Title: "T", Type: model.TypeProject, Trashed: true}},
+		`{"error":"trashed","message":"no open task is titled \"T\": the only project with that title, \"T\" (u1), is in the Trash. Nothing sent, and no open task with a similar title was touched; pass its uuid to act on a particular one","kind":"project","query":"T","uuid":"u1","title":"T"}`},
+	{"closed title project trashed", &closedTitleError{Query: "T", Task: model.Task{UUID: "u1", Title: "T", ProjectTrashed: true, ProjectTitle: "P"}},
+		`{"error":"trashed","message":"no open task is titled \"T\": the only task with that title, \"T\" (u1), is in the Trash with its project \"P\". Nothing sent, and no open task with a similar title was touched; pass its uuid to act on a particular one","kind":"task","query":"T","uuid":"u1","title":"T","project":"P"}`},
+	{"closed title matches", &closedTitleError{Query: "T", Task: model.Task{UUID: "u1", Title: "T", Status: model.StatusCancelled}, Matches: []model.Task{
+		{UUID: "u1", Title: "T", Status: model.StatusCancelled},
+		{UUID: "u2", Title: "T", Status: model.StatusCompleted},
+	}},
+		`{"error":"already closed","message":"no open task is titled \"T\": 2 closed or trashed items have that title, the most recent being \"T\" (u1), which is already cancelled. Nothing sent, and no open task with a similar title was touched; pass its uuid to act on a particular one","kind":"task","query":"T","uuid":"u1","title":"T","matches":[{"uuid":"u1","title":"T","type":"task"},{"uuid":"u2","title":"T","type":"task"}]}`},
+	{"closed switch", &closedSwitchError{task: &model.Task{UUID: "u1", Title: "T", Type: model.TypeProject, Status: model.StatusCompleted}, want: model.StatusCancelled},
+		`{"error":"already closed","message":"\"T\" is already completed, so it was not cancelled; nothing sent","kind":"project","uuid":"u1","title":"T"}`},
+	{"blank title", &blankTitleError{Kind: "project", Done: "added"},
+		`{"error":"blank-title","message":"the title is blank, so the project was not added; nothing sent. Things would leave it untitled: give it a title","kind":"project"}`},
+	{"not found", &notFoundError{Kind: "area", Query: "Work"},
+		`{"error":"not found","message":"area not found: Work","kind":"area","query":"Work"}`},
+	{"wrapped", fmt.Errorf("editing: %w", &trashedError{Kind: "project", Query: "q", UUID: "u1", Title: "T", Done: "edited"}),
+		`{"error":"trashed","message":"editing: \"T\" (u1) is in the Trash, so it was not edited; nothing sent. Put it back from the Trash in Things first if you meant this project","kind":"project","query":"q","uuid":"u1","title":"T"}`},
+	{"generic", errors.New("disk gone"),
+		`{"error":"error","message":"disk gone"}`},
+}
+
+func TestErrorPayloadGolden(t *testing.T) {
+	for _, tc := range errorPayloadCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			renderError(&stdout, &stderr, true, tc.err)
+			// Compact drops only the indentation PrintJSON adds; the keys,
+			// their order and every value stay as printed.
+			var got bytes.Buffer
+			if err := json.Compact(&got, stdout.Bytes()); err != nil {
+				t.Fatalf("stdout is not JSON (%v): %q", err, stdout.String())
+			}
+			if got.String() != tc.want {
+				t.Errorf("--json output changed\ngot:  %s\nwant: %s", got.String(), tc.want)
+			}
+		})
+	}
+}
+
 // The message is meant to read as the plain-text line does, so the encoder
 // must not turn <, > and & into escape sequences.
 func TestRenderErrorDoesNotEscapeHTML(t *testing.T) {
