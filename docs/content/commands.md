@@ -65,11 +65,15 @@ how to sweep projects on their own. The bundled agent skill states the rule
 and the reasoning in full — `things skill show`.
 
 `today`, `anytime` and `someday` are arranged the way the app arranges them —
-items with no area first, then areas, and inside each group its own loose tasks
-before its projects' — so a project with no area leads the list with the
-unfiled tasks rather than following every area, and plain output prints each
-project name once as a group header
-above its tasks. `anytime` carries no project rows of its own because every
+items with no area first, then areas, and inside each group its own project
+rows and loose tasks before its projects' tasks — so a project with no area
+leads the list with the unfiled tasks rather than following every area, and
+plain output prints each project name once as a group header
+above its tasks. The projects' tasks follow project by project: an Anytime
+project's first, then a project scheduled for a later day, earliest first,
+then a Someday project's, each kind in the app's project order. Inside a
+project the tasks are in the order of the project's own page (see `--project`
+below), so tasks under a heading follow those under none. `anytime` carries no project rows of its own because every
 active project is trivially "anytime": listing them all would bury the tasks,
 so the app uses each project as a group header instead. Like the app, it
 leaves out the tasks of a project in Someday or scheduled for a later date,
@@ -78,12 +82,16 @@ including those under one of its headings and those Today shows; `today` and
 group the same way but do list their project rows, because a project put in
 Today or Someday has actually been put somewhere. `someday` reaches only the
 first half of the arrangement: it carries no task with a parent project, so it
-ends at unfiled items and then areas.
+ends at unfiled items and then areas, each group listing its projects before
+its tasks.
 `today` then orders within a group the way the app does: by the day an item
 was last placed in Today, most recent first, so items placed today come above
 those carried over from an earlier day, and then by the position Things keeps
 for the day. An item closed today stays where it was rather than moving to the
-end. `upcoming` reads by date instead, the way the app's own Upcoming does.
+end. Items scheduled for this evening (`--when evening`, `"startBucket": 1` in
+JSON) come after every other item, arranged the same way among themselves,
+and plain output prints a `This Evening` header above them, as the app does.
+`upcoming` reads by date instead, the way the app's own Upcoming does.
 Like the app, it also lists an undated Anytime or Someday task or project
 whose deadline is still to come, under the deadline's day, and
 `--on`/`--from`/`--to` match it on that day. `today` likewise lists any
@@ -97,14 +105,26 @@ shows it.
 A bare `--project` lists the project the way its page in the app does: the
 tasks under no heading first, then each heading's in heading order. Within
 each, Anytime tasks come first, then scheduled tasks by date, then Someday
-tasks. A bare `--area` or `--tag` arranges each project's tasks the same way.
+tasks. A bare `--area` or `--tag` groups like `today`: items with no area
+first, then each area. Inside an area, its rows follow the area's page in the
+app: its Anytime projects, then its loose Anytime tasks, then its scheduled
+projects and tasks by date, then its Someday projects and tasks, projects
+first. Its projects' tasks come last, project by project, each project
+arranged like its own page. The app's area page does not list a project's
+tasks; the CLI does, so a sweep of the area is complete.
 
 `logbook` is everything closed, not just everything finished. Cancelling a
 task or a project logs it under its stop date beside the completed ones, the
 way the app's Logbook shows both, so the view returns cancelled rows too.
 `status` tells them apart — `"completed"` or `"cancelled"` in JSON, `[x]` and
 `[~]` in plain output — so filter on it when you mean finished rather than
-closed: `things logbook -j | jq '.[] | select(.status=="completed")'`.
+closed: `things logbook -j | jq '.[] | select(.status=="completed")'`. It lists
+the newest first, and plain output prints a date header (`2026-10-09`) above
+each day's items, the local day they were closed on, as the app's Logbook
+groups them by day. JSON carries the time in `stopDate`.
+
+`trash` lists the most recently thrown-away items first, as the app's Trash
+does.
 
 An item you tick off in Today is not in `logbook` yet. Things keeps it under
 Today for the rest of the day, ticked, and files it into the Logbook when the

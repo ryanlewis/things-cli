@@ -725,7 +725,13 @@ var views = map[string]viewSpec{
 		// that area's projects. Its own todayIndex then places it among the
 		// area's loose to-dos, the same signal everything else here is ordered
 		// by.
-		orderBy: "ORDER BY " + listGrouping + ", t.todayIndexReferenceDate DESC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
+		//
+		// startBucket leads: the app's This Evening section comes after every
+		// day row, and inside it the rows group the same way the day rows do.
+		// Measured on 9 Oct 2026, six evening rows (a project among them) were
+		// the last six of the app's Today, in todayIndex order, where the CLI
+		// had them inside the no-area group.
+		orderBy: "ORDER BY " + eveningLast + ", " + listGrouping + ", t.todayIndexReferenceDate DESC, t.todayIndex ASC, t.\"index\" ASC" + uuidTiebreak,
 	},
 	ViewInbox: {
 		scope: inboxBucket, status: openRows, trashed: untrashedRows,
@@ -773,7 +779,11 @@ var views = map[string]viewSpec{
 		// header above its own to-dos, not a row among them. The view listed
 		// in bare t."index" order before, so a project's to-dos interleaved
 		// with everything else and the rendered header repeated (issue #217).
-		orderBy: "ORDER BY " + listGrouping + ", t.\"index\" ASC" + uuidTiebreak,
+		// Inside a project group the rows follow projectPageOrder, so a
+		// project's to-dos under no heading come before each heading's, as on
+		// the project's own page. Measured on 9 Oct 2026, the app listed a
+		// project's to-dos that way where the CLI ordered them by index alone.
+		orderBy: "ORDER BY " + listGrouping + ", " + projectPageOrder + uuidTiebreak,
 	},
 	// Someday is the app's list of deferred things you have not filed under a
 	// project. A to-do inside a project stays inside it however it is deferred:
@@ -800,13 +810,11 @@ var views = map[string]viewSpec{
 		// bare t."index" order before and matched the app in none of its
 		// positions (issue #237).
 		//
-		// One case here is unverified: a Someday project row and a loose
-		// Someday to-do in the same area both fall through to t."index", which
-		// compares a project's index with a to-do's — different spaces, the
-		// same concern the repeating view's ordering calls out. It is no worse
-		// than the bare index ordering this replaces, and there is no Someday
-		// project in the data to measure the app's answer against.
-		orderBy: "ORDER BY " + listGrouping + ", t.\"index\" ASC" + uuidTiebreak,
+		// Inside a group it takes projectPageOrder, which puts the group's
+		// project rows ahead of its loose to-dos. Measured on 9 Oct 2026, the
+		// app's Someday opened with its three no-area projects, then the
+		// no-area to-dos, where the CLI had the projects after the to-dos.
+		orderBy: "ORDER BY " + listGrouping + ", " + projectPageOrder + uuidTiebreak,
 	},
 	// The Logbook is where Things files everything closed, not just everything
 	// finished: cancelling a to-do or a project logs it under its stopDate
@@ -856,7 +864,11 @@ var views = map[string]viewSpec{
 		includesProjects:        true,
 		includesTemplates:       true,
 		keepsTrashedParentGuard: true,
-		orderBy:                 indexOrderBy,
+		// Most recently thrown away first. Measured on 9 Oct 2026, the app's
+		// Trash was in userModificationDate order, newest first, over all
+		// 1488 rows, where the CLI listed by index. The trashed-parent fold
+		// above decides which rows are listed, not their order, so it stays.
+		orderBy: "ORDER BY t.userModificationDate DESC, t.\"index\" ASC" + uuidTiebreak,
 	},
 	// Deadlines carries projects too: a project takes a deadline exactly as a
 	// to-do does, `things projects` reports it, and agents.md advertises this
@@ -898,13 +910,16 @@ var views = map[string]viewSpec{
 		includesProjects: true, supportsDateFilter: true,
 		widensToProjectContents: true, completesWithFilter: true,
 		// A filter that spans projects — `things --area X`, `things --tag y` —
-		// groups by area then project so the rendered group headers stay
-		// contiguous instead of repeating as rows interleave by index. Within a
-		// project, and so the whole of a single-project listing, the rows
-		// follow projectPageOrder. The uuid after each index keeps two areas,
-		// or two projects, that share an index from interleaving.
-		orderBy: "ORDER BY COALESCE(a.\"index\", pa.\"index\", 0), COALESCE(a.uuid, pa.uuid, ''), " +
-			"COALESCE(p.\"index\", 0), COALESCE(p.uuid, ''), " + projectPageOrder + uuidTiebreak,
+		// groups the way the lists do (listGrouping), so the rendered group
+		// headers stay contiguous instead of repeating as rows interleave by
+		// index: an area's projects and loose to-dos first, then its projects'
+		// to-dos project by project. Within each, and so the whole of a
+		// single-project listing, the rows follow projectPageOrder. Measured on
+		// 9 Oct 2026 against `to dos of area` and `to dos of tag`, the app put
+		// an area's open projects first, then its loose to-dos; the CLI had
+		// the projects' to-dos first and the project rows among the loose
+		// to-dos by index.
+		orderBy: "ORDER BY " + listGrouping + ", " + projectPageOrder + uuidTiebreak,
 	},
 }
 
@@ -921,10 +936,19 @@ var views = map[string]viewSpec{
 // mostly because it ordered the scheduled to-dos by index rather than date.
 // No open project had a heading, so the heading keys come from a throwaway
 // project built in Things for the purpose.
+//
+// The same order arranges an area's own rows, where project rows sit beside
+// loose to-dos: in the Anytime and Someday parts a project row comes before
+// the to-dos, and a scheduled one takes its place by date like a to-do.
+// Measured on 9 Oct 2026 against `to dos of area` and `to dos of tag` (open
+// projects first, then the loose to-dos, a project scheduled for a later day
+// among the to-dos of its day) and the app's Someday (its projects first). A
+// project page holds no project rows, so the key is constant there.
 const projectPageOrder = `CASE WHEN t.heading IS NULL THEN 0 ELSE 1 END, COALESCE(h."index", 0), COALESCE(h.uuid, ''), ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN 1 WHEN ` + somedayDeferred + ` THEN 2 ELSE 0 END, ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN t.startDate END, ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN t.todayIndex END, ` +
+	`CASE WHEN t.type = 1 THEN 0 ELSE 1 END, ` +
 	`t."index" ASC`
 
 // notHeading excludes project headings (TMTask type 2) from the lookup
@@ -953,8 +977,9 @@ const uuidTiebreak = `, t.uuid ASC`
 
 // listGrouping reproduces how the app arranges a list of to-dos. Today,
 // Anytime and Someday all take it: measured against the app on 10 Sep 2026,
-// the three lists are arranged identically (issues #217, #237). Four keys, and
-// the two that ask "filed here at all?" are a CASE rather than a plain index
+// the three lists are arranged identically (issues #217, #237). The catch-all
+// view behind `--area` and `--tag` takes it too, so those sweeps group the
+// same way. The two keys that ask "filed here at all?" are a CASE rather than a plain index
 // because Things' own indexes are negative, so the COALESCE default of 0 that
 // stands for "not filed here" would sort last where the app puts it first:
 //
@@ -973,15 +998,34 @@ const uuidTiebreak = `, t.uuid ASC`
 // to-dos at the top, beside the loose ones, where the CLI had them near the
 // end.
 //
-// The caller adds its own within-group key after these — t."index" for anytime
-// and someday, todayIndexReferenceDate then todayIndex for today — and the
-// uuid tiebreak last. Together they put a project's to-dos in one contiguous block, so the
-// rendered group header prints once above them, which is the app's own
-// presentation of a project in these lists.
+// Project groups follow one another by the project's own schedule before its
+// index: an Anytime project's group first, then a project scheduled for a
+// later day (earliest first), then a Someday project's. Measured on 9 Oct
+// 2026, the app's Today listed the to-dos of a project scheduled for 15 Oct
+// (index 0) ahead of those of a Someday project (index -369), and those ahead
+// of another Someday project's (index 0); the CLI's index order had the first
+// two the other way round. That is one measured ordering, read as the
+// buckets projectPageOrder already uses; it wants re-measuring against more
+// projects. Anytime leaves out the to-dos of a deferred project and Someday
+// those of every project, so the key only reorders Today and the catch-all.
+// The uuid after each index keeps two areas, or two projects, that share an
+// index from interleaving.
+//
+// The caller adds its own within-group key after these — projectPageOrder for
+// anytime, someday and the catch-all, todayIndexReferenceDate then todayIndex
+// for today — and the uuid tiebreak last. Together they put a project's to-dos
+// in one contiguous block, so the rendered group header prints once above
+// them, which is the app's own presentation of a project in these lists.
 const listGrouping = `CASE WHEN a.uuid IS NULL AND pa.uuid IS NULL THEN 0 ELSE 1 END, ` +
-	`COALESCE(a."index", pa."index", 0), ` +
+	`COALESCE(a."index", pa."index", 0), COALESCE(a.uuid, pa.uuid, ''), ` +
 	`CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, ` +
-	`COALESCE(p."index", 0)`
+	`CASE WHEN p.start = 2 AND p.startDate > ` + thingsToday + ` THEN 1 WHEN p.start = 2 AND p.startDate IS NULL THEN 2 ELSE 0 END, ` +
+	`CASE WHEN p.start = 2 AND p.startDate > ` + thingsToday + ` THEN p.startDate END, ` +
+	`COALESCE(p."index", 0), COALESCE(p.uuid, '')`
+
+// eveningLast is Today's first key: the This Evening rows (startBucket 1)
+// after every day row.
+const eveningLast = "COALESCE(t.startBucket, 0) ASC"
 
 // indexOrderBy is the ordering for the views with no arrangement of their own:
 // inbox and trash name it in the view table and list in index order. There is
