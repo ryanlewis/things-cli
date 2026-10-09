@@ -30,7 +30,10 @@ func parserOptions(cfg *config.File) []kong.Option {
 			"skill_agents":  skill.AgentNames(),
 		},
 	}
-	opts = append(opts, kong.NamedMapper("verifytimeout", verifyTimeoutMapper{}))
+	opts = append(opts,
+		kong.NamedMapper("verifytimeout", verifyTimeoutMapper{}),
+		kong.NamedMapper("path", pathMapper{}),
+	)
 	if cfg != nil {
 		opts = append(opts, kong.Resolvers(cfg.Resolver()))
 	}
@@ -54,6 +57,27 @@ func (verifyTimeoutMapper) Decode(ctx *kong.DecodeContext, target reflect.Value)
 		return fmt.Errorf("%v — to skip the read-back entirely, use --no-verify", err)
 	}
 	target.SetInt(int64(d))
+	return nil
+}
+
+// pathMapper replaces kong's own "path" mapper so that a "~/" in --db, or in
+// the db key the config file supplies through the same flag, expands against
+// $HOME as config.ExpandPath does, not the account's home. It serves the plain
+// string fields that carry type:"path"; "-" is left alone, as kong leaves it.
+type pathMapper struct{}
+
+func (pathMapper) Decode(ctx *kong.DecodeContext, target reflect.Value) error {
+	if target.Kind() != reflect.String {
+		return fmt.Errorf("\"path\" type must be applied to a string not %s", target.Type())
+	}
+	var path string
+	if err := ctx.Scan.PopValueInto("file", &path); err != nil {
+		return err
+	}
+	if path != "-" {
+		path = config.ExpandPath(path)
+	}
+	target.SetString(path)
 	return nil
 }
 

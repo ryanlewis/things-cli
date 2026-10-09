@@ -388,3 +388,21 @@ func TestKeyNamesAreUniqueAndSnakeCase(t *testing.T) {
 		}
 	}
 }
+
+func TestExpandPathFollowsHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got, want := ExpandPath("~/a/b.toml"), filepath.Join(home, "a", "b.toml"); got != want {
+		t.Errorf("ExpandPath(~/a/b.toml) = %q, want %q", got, want)
+	}
+	path, _, err := ResolvePath("~/c.toml")
+	if err != nil {
+		t.Fatalf("ResolvePath: %v", err)
+	}
+	if want := filepath.Join(home, "c.toml"); path != want {
+		t.Errorf("ResolvePath(~/c.toml) = %q, want %q", path, want)
+	}
+	if got := ExpandPath("/abs/path"); got != "/abs/path" {
+		t.Errorf("ExpandPath(/abs/path) = %q, want it unchanged", got)
+	}
+}

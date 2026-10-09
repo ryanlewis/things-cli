@@ -657,3 +657,50 @@ func TestDiagnosesConfigMarksOnlyTheConfigCommands(t *testing.T) {
 		})
 	}
 }
+
+// TestDBTildeFollowsHome pins "~/" in --db and in the db key to $HOME, the
+// directory the default config and database locations follow, rather than
+// the account's home kong's own path mapper reads.
+func TestDBTildeFollowsHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv(config.EnvVar, "")
+	want := filepath.Join(home, "things.sqlite")
+
+	var cli CLI
+	parser, err := kong.New(&cli, parserOptions(nil)...)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	if _, err := parser.Parse([]string{"--db", "~/things.sqlite", "today"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if cli.DB != want {
+		t.Errorf("--db ~/things.sqlite = %q, want %q", cli.DB, want)
+	}
+
+	path := filepath.Join(home, "config.toml")
+	if err := os.WriteFile(path, []byte("db = \"~/things.sqlite\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--config", path, "today"}
+	cfg, err := loadConfig(args)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	var fromFile CLI
+	parser, err = kong.New(&fromFile, parserOptions(cfg)...)
+	if err != nil {
+		t.Fatalf("kong.New: %v", err)
+	}
+	if _, err := parser.Parse(args); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if fromFile.DB != want {
+		t.Errorf("db = \"~/things.sqlite\" = %q, want %q", fromFile.DB, want)
+	}
+	if !cfg.SetsDB(fromFile.DB) {
+		t.Error("SetsDB did not recognise the expanded db key")
+	}
+}

@@ -226,14 +226,28 @@ func DefaultPath() (string, error) {
 	return filepath.Join(base, dirName, fileName), nil
 }
 
+// ExpandPath makes path absolute, rewriting a leading "~/" to $HOME when it
+// is set. kong.ExpandPath, which it otherwise defers to, reads the account's
+// home from the user database instead, so with HOME pointed elsewhere a "~"
+// in --db, --config or the db key would ignore it while the default config
+// and database locations follow it.
+func ExpandPath(path string) string {
+	if rest, ok := strings.CutPrefix(path, "~/"); ok {
+		if home := os.Getenv("HOME"); home != "" {
+			return filepath.Join(home, rest)
+		}
+	}
+	return kong.ExpandPath(path)
+}
+
 // ResolvePath picks the config file to use: an explicit --config path wins,
 // then $THINGS_CLI_CONFIG, then the default location.
 func ResolvePath(explicit string) (path, source string, err error) {
 	if explicit != "" {
-		return kong.ExpandPath(explicit), SourceFlag, nil
+		return ExpandPath(explicit), SourceFlag, nil
 	}
 	if env := os.Getenv(EnvVar); env != "" {
-		return kong.ExpandPath(env), SourceEnv, nil
+		return ExpandPath(env), SourceEnv, nil
 	}
 	p, err := DefaultPath()
 	if err != nil {
@@ -326,7 +340,7 @@ func (f *File) SetsDB(path string) bool {
 		return false
 	}
 	v, ok := f.values[dbKey].(string)
-	return ok && v != "" && kong.ExpandPath(v) == path
+	return ok && v != "" && ExpandPath(v) == path
 }
 
 // checkExclusions rejects two mutually exclusive settings both turned on. Kong
