@@ -1540,7 +1540,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	if t, err := pickTitleMatch(uuidOrTitle, folded); t != nil || err != nil {
+	if t, found, err := pickTitleMatch(uuidOrTitle, folded); found {
 		return t, err
 	}
 
@@ -1583,7 +1583,7 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	if t, err := pickTitleMatch(uuidOrTitle, all); t != nil || err != nil {
+	if t, found, err := pickTitleMatch(uuidOrTitle, all); found {
 		return t, err
 	}
 	return nil, &TaskNotFoundError{Query: uuidOrTitle}
@@ -1593,19 +1593,20 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 // title matched. A single open row outside the Trash is the task; several
 // are an *AmbiguousTaskError. With none, closed or trashed rows are a
 // *ClosedTitleError. A repeating template gives way to an instance of its
-// kind first (preferInstances). With no rows at all it returns nil, nil.
-func pickTitleMatch(query string, rows []model.Task) (*model.Task, error) {
+// kind first (preferInstances). found is false only when there are no rows
+// to decide over, and the caller goes on to its next lookup.
+func pickTitleMatch(query string, rows []model.Task) (t *model.Task, found bool, err error) {
 	open, closed := splitOpen(rows)
 	if candidates := preferInstances(open); len(candidates) > 0 {
 		if len(candidates) == 1 {
-			return &candidates[0], nil
+			return &candidates[0], true, nil
 		}
-		return nil, &AmbiguousTaskError{Query: query, Matches: candidates}
+		return nil, true, &AmbiguousTaskError{Query: query, Matches: candidates}
 	}
 	if candidates := preferInstances(closed); len(candidates) > 0 {
-		return nil, &ClosedTitleError{Query: query, Matches: candidates}
+		return nil, true, &ClosedTitleError{Query: query, Matches: candidates}
 	}
-	return nil, nil
+	return nil, false, nil
 }
 
 // ClosedTitleError reports a reference whose exact title is carried only by
@@ -1788,29 +1789,4 @@ func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 
 func (d *DB) collectTasks(query string, args ...any) ([]model.Task, error) {
 	return queryAll(d, "task", scanTask, query, args...)
-}
-
-// rowScanner is what a scan function reads one row through: *sql.Row and
-// *sql.Rows both satisfy it.
-type rowScanner interface{ Scan(...any) error }
-
-// queryAll runs query and scans every row it returns with scan. The result
-// is empty rather than nil when no row matches. noun names one row in the
-// error text: "querying <noun>s", "scanning <noun>".
-func queryAll[T any](d *DB, noun string, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
-	rows, err := d.query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("querying %ss: %w", noun, err)
-	}
-	defer rows.Close()
-
-	out := []T{}
-	for rows.Next() {
-		v, err := scan(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scanning %s: %w", noun, err)
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
 }
