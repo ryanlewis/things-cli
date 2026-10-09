@@ -477,13 +477,12 @@ func TestImportUndatedSharingDatedTitleIsNotConfirmed(t *testing.T) {
 // A to-do sharing a dated item's title is not confirmed, but names the new
 // items it could be, as an ambiguous one does, in the error and under --json.
 func TestImportSharesDatedTitleListsCandidates(t *testing.T) {
-	pinWallClock(t)
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
 	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
 
 	payload := `[
-	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate() + `"}},
+	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate(t) + `"}},
 	  {"type":"to-do","attributes":{"title":"Weekly review"}}
 	]`
 	_, _, err := runImportOut(t, database, payload, "--json")
