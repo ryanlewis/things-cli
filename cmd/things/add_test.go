@@ -1116,41 +1116,6 @@ func TestAddInvalidRefusedBeforeTagsCreated(t *testing.T) {
 	}
 }
 
-// An edit whose fields the URL scheme would refuse, a value over a length
-// limit or a keyword deadline, is refused before --create-tags creates the
-// unknown tag over AppleScript: no command runs at all.
-func TestEditInvalidRefusedBeforeTagsCreated(t *testing.T) {
-	long := strings.Repeat("a", things.MaxStringLen+1)
-	longNotes := strings.Repeat("a", things.MaxNotesLen+1)
-	tags := []string{"--create-tags", "--tags", "Brandnew"}
-	for _, tc := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"edit", "one-1", "--title", long}, "title: "},
-		{[]string{"edit", "one-1", "--append-notes", longNotes}, "append-notes: "},
-		{[]string{"edit", "one-1", "--checklist", long}, "checklist: "},
-		{[]string{"edit", "one-1", "--heading", long}, "heading: "},
-		{[]string{"edit", "one-1", "--deadline", "today"}, "--deadline does not accept keywords"},
-		{[]string{"project", "edit", "proj-1", "--title", long}, "title: "},
-		{[]string{"project", "edit", "proj-1", "--area", long}, "area: "},
-		{[]string{"project", "edit", "proj-1", "--deadline", "tomorrow"}, "--deadline does not accept keywords"},
-	} {
-		fastVerify(t)
-		database, sqlDB := seedWritable(t)
-		dbtest.NewFixture(t, sqlDB).Project("proj-1", "Launch", 4)
-		calls := stubExecDropping(t)
-		args := append(slices.Clone(tc.args), tags...)
-		_, _, err := runStreams(t, database, args...)
-		if err == nil || !strings.HasPrefix(err.Error(), tc.want) {
-			t.Errorf("%.60v = %v, want an error starting %q", args, err, tc.want)
-		}
-		if *calls != 0 {
-			t.Errorf("%.60v issued %d commands, want none", args, *calls)
-		}
-	}
-}
-
 // A free phrase Things ignores leaves the new item with no start date. The
 // add exits 0 and prints the item, since it exists and was found, and warns
 // on stderr in both output modes that the --when did not take. A phrase

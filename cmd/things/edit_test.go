@@ -901,3 +901,62 @@ func TestEditTagsWarnsWhatReplacementLeaves(t *testing.T) {
 		})
 	}
 }
+
+// An edit that sends nothing, a status the item already has and no field
+// flags, needs no auth token: checking the update up front must not refuse
+// it for the token the URL would carry.
+func TestEditAlreadyClosedNeedsNoAuthToken(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`DELETE FROM TMSettings`); err != nil {
+		t.Fatalf("clear settings: %v", err)
+	}
+	dbtest.NewFixture(t, sqlDB).Todo("done-1", "Filed", 1, dbtest.Status(model.StatusCompleted), dbtest.Anytime())
+	calls := stubExecDropping(t)
+
+	out, err := runOut(t, database, "edit", "done-1", "--complete")
+	if err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if !strings.Contains(out, "done-1") {
+		t.Errorf("output = %q, want the item printed", out)
+	}
+	if *calls != 0 {
+		t.Errorf("issued %d commands, want none", *calls)
+	}
+}
+
+// An edit whose fields the URL scheme would refuse, a value over a length
+// limit or a keyword deadline, is refused before --create-tags creates the
+// unknown tag over AppleScript: no command runs at all.
+func TestEditInvalidRefusedBeforeTagsCreated(t *testing.T) {
+	long := strings.Repeat("a", things.MaxStringLen+1)
+	longNotes := strings.Repeat("a", things.MaxNotesLen+1)
+	tags := []string{"--create-tags", "--tags", "Brandnew"}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"edit", "one-1", "--title", long}, "title: "},
+		{[]string{"edit", "one-1", "--append-notes", longNotes}, "append-notes: "},
+		{[]string{"edit", "one-1", "--checklist", long}, "checklist: "},
+		{[]string{"edit", "one-1", "--heading", long}, "heading: "},
+		{[]string{"edit", "one-1", "--deadline", "today"}, "--deadline does not accept keywords"},
+		{[]string{"project", "edit", "proj-1", "--title", long}, "title: "},
+		{[]string{"project", "edit", "proj-1", "--area", long}, "area: "},
+		{[]string{"project", "edit", "proj-1", "--deadline", "tomorrow"}, "--deadline does not accept keywords"},
+	} {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		dbtest.NewFixture(t, sqlDB).Project("proj-1", "Launch", 4)
+		calls := stubExecDropping(t)
+		args := append(slices.Clone(tc.args), tags...)
+		_, _, err := runStreams(t, database, args...)
+		if err == nil || !strings.HasPrefix(err.Error(), tc.want) {
+			t.Errorf("%.60v = %v, want an error starting %q", args, err, tc.want)
+		}
+		if *calls != 0 {
+			t.Errorf("%.60v issued %d commands, want none", args, *calls)
+		}
+	}
+}
