@@ -674,13 +674,26 @@ func futureImportDates(item map[string]any, now time.Time) (lines, names []strin
 }
 
 // importScheduleDate is a date as the Things JSON format writes when and
-// deadline, YYYY-MM-DD, with a time of day after an @ for when.
-var importScheduleDate = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})(?:@(\d{1,2}:\d{2}))?$`)
+// deadline: YYYY-MM-DD.
+var importScheduleDate = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 // importScheduleNumeric matches a when or deadline that starts as a date
 // or a time does, with digits, so checkScheduleValue holds it to the date
 // forms rather than passing it to Things as an English phrase.
 var importScheduleNumeric = regexp.MustCompile(`^\d`)
+
+// importClock24 and importClock12 are the times of day the Things
+// documentation gives after the @ of a date and time: 21:30 and 9:30PM, and
+// its example 6pm.
+var (
+	importClock24 = regexp.MustCompile(`^(\d{1,2}):(\d{2})$`)
+	importClock12 = regexp.MustCompile(`(?i)^(\d{1,2})(?::(\d{2}))?\s?(am|pm)$`)
+)
+
+// importTimedWhens are the when keywords the Things documentation allows a
+// time after: a date string is today, tomorrow or YYYY-MM-DD, and its
+// example is evening@6pm. It ignores the time after anytime and someday.
+var importTimedWhens = []string{"today", "tomorrow", "evening"}
 
 // checkScheduleValue reports why value, a `when` or `deadline` in an import
 // payload, is one Things would misread, or "" when it is not. It starts from
@@ -691,11 +704,14 @@ var importScheduleNumeric = regexp.MustCompile(`^\d`)
 // narrower: the Things JSON documentation names only the keywords, a date
 // and a date and time. Measured in Things 3 (9 Oct 2026), each saved with no
 // warning: when 2026-13-01 lands in Today, when 18:00 in Today with no
-// reminder, deadline 2026-13-01 on 1 Jan 2026 and deadline someday as no
-// deadline. So a value that starts with a digit must be a real date,
-// YYYY-MM-DD, or for when a date and time, YYYY-MM-DD@HH:MM. Anything else,
-// keywords, weekdays and English phrases, is passed through as `add` passes
-// it; those were not measured in a payload.
+// reminder, when tomorrow@25:00 tomorrow with no reminder, when
+// someday@18:00 in Someday, deadline 2026-13-01 on 1 Jan 2026 and deadline
+// someday as no deadline. So a value that starts with a digit must be a real
+// date, YYYY-MM-DD; a deadline has no time; and a when with an @ must be
+// today, tomorrow, evening or a real YYYY-MM-DD before it, and a real time of
+// day after it. Anything else, keywords, weekdays and English phrases such
+// as next friday (measured: filed on that day), is passed through as `add`
+// passes it.
 func checkScheduleValue(name, value string) string {
 	v := strings.TrimSpace(value)
 	normalize := things.NormalizeWhen
@@ -706,25 +722,70 @@ func checkScheduleValue(name, value string) string {
 		// The message names the add flag; the payload has no flags.
 		return strings.ReplaceAll(err.Error(), "--", "")
 	}
-	if !importScheduleNumeric.MatchString(v) {
-		return ""
-	}
-	m := importScheduleDate.FindStringSubmatch(v)
-	if m == nil || (name == "deadline" && m[2] != "") {
-		if name == "deadline" {
+	if name == "deadline" {
+		switch {
+		case strings.Contains(v, "@"):
+			return "a deadline has no time; give a date as YYYY-MM-DD"
+		case !importScheduleNumeric.MatchString(v):
+			return ""
+		case !importScheduleDate.MatchString(v):
 			return "not a date as YYYY-MM-DD"
 		}
-		return "not a date as YYYY-MM-DD, or a date and time as YYYY-MM-DD@HH:MM"
+		return realDate(v)
 	}
-	if _, err := time.Parse("2006-01-02", m[1]); err != nil {
-		return "not a real date"
-	}
-	if m[2] != "" {
-		if _, err := time.Parse("15:04", fmt.Sprintf("%05s", m[2])); err != nil {
-			return "not a real time of day"
+	day, clockTime, timed := strings.Cut(v, "@")
+	if !timed {
+		switch {
+		case !importScheduleNumeric.MatchString(v):
+			return ""
+		case !importScheduleDate.MatchString(v):
+			return "not a date as YYYY-MM-DD, or a date and time as YYYY-MM-DD@HH:MM"
 		}
+		return realDate(v)
+	}
+	switch low := strings.ToLower(day); {
+	case low == "anytime" || low == "someday":
+		return "Things ignores a time after anytime or someday"
+	case slices.Contains(importTimedWhens, low):
+	case importScheduleDate.MatchString(day):
+		if why := realDate(day); why != "" {
+			return why
+		}
+	default:
+		return "before the @ must be today, tomorrow, evening or a date as YYYY-MM-DD"
+	}
+	if !realClock(clockTime) {
+		return "not a real time of day after the @"
 	}
 	return ""
+}
+
+// realDate reports "not a real date" for v, a YYYY-MM-DD that names no day,
+// or "" for one that does.
+func realDate(v string) string {
+	if _, err := time.Parse("2006-01-02", v); err != nil {
+		return "not a real date"
+	}
+	return ""
+}
+
+// realClock reports whether v is a time of day as importClock24 or
+// importClock12 write it, with each field in range.
+func realClock(v string) bool {
+	if m := importClock24.FindStringSubmatch(v); m != nil {
+		h, _ := strconv.Atoi(m[1])
+		mm, _ := strconv.Atoi(m[2])
+		return h <= 23 && mm <= 59
+	}
+	if m := importClock12.FindStringSubmatch(v); m != nil {
+		h, _ := strconv.Atoi(m[1])
+		mm := 0
+		if m[2] != "" {
+			mm, _ = strconv.Atoi(m[2])
+		}
+		return h >= 1 && h <= 12 && mm <= 59
+	}
+	return false
 }
 
 // badImportSchedule returns each when or deadline of item, a payload to-do
@@ -1019,7 +1080,7 @@ func (e *importRefusalError) Error() string {
 			strings.Join(dates, "\n")))
 	}
 	if len(schedule) > 0 {
-		parts = append(parts, fmt.Sprintf("Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A misspelt keyword, or a keyword as a deadline, is refused, and a when or deadline that starts with a digit must be a date as YYYY-MM-DD, or for a when a date and time as YYYY-MM-DD@HH:MM:\n%s",
+		parts = append(parts, fmt.Sprintf("Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A misspelt keyword, or a keyword as a deadline, is refused. A when or deadline that starts with a digit must be a date as YYYY-MM-DD, and a deadline has no time. A when with an @ must have today, tomorrow, evening or a YYYY-MM-DD date before it and a time of day such as 18:00 or 6pm after it:\n%s",
 			strings.Join(schedule, "\n")))
 	}
 	if len(future) > 0 {
