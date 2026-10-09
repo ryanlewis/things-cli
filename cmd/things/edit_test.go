@@ -926,6 +926,29 @@ func TestEditAlreadyClosedNeedsNoAuthToken(t *testing.T) {
 	}
 }
 
+// --create-tags naming only tags Things has creates nothing, so an
+// already-closed item already carrying them still goes unsent and needs no
+// auth token.
+func TestEditAlreadyClosedExistingCreateTagsNeedsNoAuthToken(t *testing.T) {
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	if _, err := sqlDB.Exec(`DELETE FROM TMSettings`); err != nil {
+		t.Fatalf("clear settings: %v", err)
+	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Tag("tag-known", "Known", 90)
+	fx.Todo("done-1", "Filed", 1, dbtest.Status(model.StatusCompleted), dbtest.Anytime())
+	fx.Tagged("done-1", "tag-known")
+	calls := stubExecDropping(t)
+
+	if _, err := runOut(t, database, "edit", "done-1", "--complete", "--create-tags", "--add-tags", "Known"); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if *calls != 0 {
+		t.Errorf("issued %d commands, want none", *calls)
+	}
+}
+
 // An edit that will be sent with no auth token to send is refused before
 // --create-tags creates the unknown tag over AppleScript, with the error the
 // write gives: no command runs at all. An already-closed item counts, since a
