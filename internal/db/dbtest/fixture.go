@@ -14,10 +14,10 @@ import (
 // argument on every row and every date is passed in, because several ordering
 // tests seed those values deliberately against the order they expect — that is
 // what leaves the key under test as the only thing that can produce it. The
-// arrangement tests still seed their rows in SQL of their own for that reason:
-// their area and project indexes are negative, as Things writes them, and the
-// ordering CASE keys exist precisely because an unfiled row's COALESCE default
-// of 0 would otherwise sort it last instead of first (issues #217, #237). A
+// arrangement tests lean on that: their area and project indexes are negative,
+// as Things writes them, and the ordering CASE keys exist precisely because an
+// unfiled row's COALESCE default of 0 would otherwise sort it last instead of
+// first (issues #217, #237). A
 // fixture that numbered rows 1, 2, 3 for itself would leave those tests green
 // and meaningless, so "index" is a parameter here rather than a counter.
 //
@@ -63,6 +63,15 @@ func (f *Fixture) Tagged(task string, tags ...string) {
 	for _, tag := range tags {
 		f.exec(`INSERT INTO TMTaskTag (tasks, tags) VALUES (?, ?)`, task, tag)
 	}
+}
+
+// LogSettings seeds the TMSettings row that holds the Logbook's settings: the
+// logInterval Things moves closed rows after, and the manualLogDate "Log
+// Completed Now" last set. A nil argument is written as NULL.
+func (f *Fixture) LogSettings(logInterval, manualLogDate any) {
+	f.t.Helper()
+	f.exec(`INSERT INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
+		logInterval, manualLogDate)
 }
 
 // Todo seeds a to-do.
@@ -192,4 +201,7 @@ func TodayIndexRef(date int64) Opt { return func(r *taskRow) { r.todayIndexRef =
 
 // Repeats makes the row a repeating template. Only whether the rule is present
 // is ever read, never its content.
-func Repeats() Opt { return func(r *taskRow) { r.recurrence = []byte{0x01, 0x02} } }
+func Repeats() Opt { return Recurrence([]byte{0x01, 0x02}) }
+
+// Recurrence writes rule as the raw rt1_recurrenceRule blob.
+func Recurrence(rule []byte) Opt { return func(r *taskRow) { r.recurrence = rule } }

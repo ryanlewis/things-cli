@@ -175,12 +175,9 @@ func TestListProjectsWithoutRecurrenceColumn(t *testing.T) {
 // those columns, so `things projects -j` reported no start date for a project
 // that had one while `things show` reported it (issue #202).
 func TestListProjectsCarriesScheduling(t *testing.T) {
-	d := newTestDB(t)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, type, status, trashed, "index",
-		 start, startBucket, startDate, deadline) VALUES
-		('sched', 'Runbook audit', 1, 0, 0, 1, 1, 0, 132813696, 132814464),
-		('anytime', 'No dates',    1, 0, 0, 2, 1, 0, NULL, NULL)`)
+	d, fx := newFixture(t)
+	fx.Project("sched", "Runbook audit", 1, anytimeOn(132813696), deadline(132814464))
+	fx.Project("anytime", "No dates", 2, anytime())
 
 	projects, err := d.ListProjects("", false, false)
 	if err != nil {
@@ -227,13 +224,12 @@ func TestListProjectsCarriesScheduling(t *testing.T) {
 // it the same way, so the two commands cannot disagree about what a name
 // matches (issue #262).
 func TestListProjectsAreaFilterMatchesLiterally(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
 		('ar-pct', '100% Work', 1, 1),
 		('ar-home', 'Home', 1, 2)`)
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
-		('p-pct', 'In percent area', 1, 0, 0, 'ar-pct', 1),
-		('p-home', 'In home', 1, 0, 0, 'ar-home', 2)`)
+	fx.Project("p-pct", "In percent area", 1, inArea("ar-pct"))
+	fx.Project("p-home", "In home", 2, inArea("ar-home"))
 
 	none, err := d.ListProjects("%", false, false)
 	if err != nil {

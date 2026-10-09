@@ -249,10 +249,7 @@ func TestAddTargetLogInterval(t *testing.T) {
 		fx := dbtest.NewFixture(t, sqlDB)
 		fx.Project("p-today", "Today", 1, dbtest.Completed(model.TimeToUnix(now)))
 		fx.Project("p-before", "Before", 2, dbtest.Completed(model.TimeToUnix(now.Add(-48*time.Hour))))
-		if _, err := sqlDB.Exec(`INSERT INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
-			tc.interval, model.TimeToUnix(now.Add(-72*time.Hour))); err != nil {
-			t.Fatal(err)
-		}
+		fx.LogSettings(tc.interval, model.TimeToUnix(now.Add(-72*time.Hour)))
 		d := &DB{db: sqlDB}
 		for list, want := range map[string]bool{"Today": tc.today, "Before": tc.before} {
 			got, _, err := d.AddTarget(list, "")

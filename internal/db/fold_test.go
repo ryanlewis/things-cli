@@ -13,25 +13,22 @@ import (
 // tag named "Ärger". "ΚΟΣ" against "κος" is the final-sigma case: ToLower alone
 // turns Σ into σ, not ς, and misses it.
 func TestFiltersIgnoreNonASCIICase(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
 		('ar-a', 'Ärger', 1, 1),
 		('ar-k', 'κος',   1, 2),
 		('ar-s', 'Straße', 1, 3)`)
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
-		('proj-a', 'Ärger', 1, 0, 0, 'ar-a', 1),
-		('proj-k', 'κος',   1, 0, 0, 'ar-k', 2),
-		('proj-s', 'Straße', 1, 0, 0, 'ar-s', 5)`)
+	fx.Project("proj-a", "Ärger", 1, inArea("ar-a"))
+	fx.Project("proj-k", "κος", 2, inArea("ar-k"))
+	fx.Project("proj-s", "Straße", 5, inArea("ar-s"))
 	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
 		('tg-a', 'Ärger', 1),
 		('tg-k', 'κος',   2),
 		('tg-s', 'Straße', 3)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, notes, type, status, trashed, start, startBucket, project, "index") VALUES
-		('in-a', 'Über alles', 'Notiz zu ÄRGER', 0, 0, 0, 1, 0, 'proj-a', 3),
-		('in-k', 'Φως',        '',               0, 0, 0, 1, 0, 'proj-k', 4),
-		('in-s', 'Fahrt',      '',               0, 0, 0, 1, 0, 'proj-s', 6)`)
+	fx.Todo("in-a", "Über alles", 3, anytime(), notes("Notiz zu ÄRGER"), inProject("proj-a"))
+	fx.Todo("in-k", "Φως", 4, anytime(), inProject("proj-k"))
+	fx.Todo("in-s", "Fahrt", 6, anytime(), inProject("proj-s"))
 	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-a', 'tg-a'), ('in-k', 'tg-k'), ('in-s', 'tg-s')`)
 
 	for _, tc := range []struct {
@@ -116,7 +113,7 @@ func TestNamesRepeatingProjectIgnoresNonASCIICase(t *testing.T) {
 // "Café" rows are stored NFC and the "Noël" rows NFD, and each is asked for
 // in the other form.
 func TestFiltersIgnoreNormalisation(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
 	const (
 		cafeNFC = "Café"
@@ -126,14 +123,12 @@ func TestFiltersIgnoreNormalisation(t *testing.T) {
 	)
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
 		('ar-c', ?, 1, 1), ('ar-n', ?, 1, 2)`, cafeNFC, noelNFD)
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
-		('proj-c', ?, 1, 0, 0, 'ar-c', 1), ('proj-n', ?, 1, 0, 0, 'ar-n', 2)`, cafeNFC, noelNFD)
+	fx.Project("proj-c", cafeNFC, 1, inArea("ar-c"))
+	fx.Project("proj-n", noelNFD, 2, inArea("ar-n"))
 	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
 		('tg-c', ?, 1), ('tg-n', ?, 2)`, cafeNFC, noelNFD)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, notes, type, status, trashed, start, startBucket, project, "index") VALUES
-		('in-c', ?, '', 0, 0, 0, 1, 0, 'proj-c', 3),
-		('in-n', ?, '', 0, 0, 0, 1, 0, 'proj-n', 4)`, "Crème brûlée", "Piña")
+	fx.Todo("in-c", "Crème brûlée", 3, anytime(), inProject("proj-c"))
+	fx.Todo("in-n", "Piña", 4, anytime(), inProject("proj-n"))
 	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-c', 'tg-c'), ('in-n', 'tg-n')`)
 
 	for _, tc := range []struct {
@@ -257,16 +252,13 @@ func TestFoldName(t *testing.T) {
 // Things does not. A fullwidth "％" folds to "%", which must still be matched
 // as itself, not as a wildcard.
 func TestListNamesMatchCompatibilityForms(t *testing.T) {
-	d := newTestDB(t)
+	d, fx := newFixture(t)
 
 	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
 		('ar-1', 'Area 2', 1, 1), ('ar-pct', '50％', 1, 2)`)
-	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, area, "index") VALUES
-		('proj-1', 'Ｗork', 1, 0, 0, 'ar-1', 1)`)
+	fx.Project("proj-1", "Ｗork", 1, inArea("ar-1"))
 	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg-1', 'Tag 2', 1)`)
-	mustExec(t, d, `INSERT INTO TMTask
-		(uuid, title, notes, type, status, trashed, start, startBucket, project, "index") VALUES
-		('in-1', 'Do it', '', 0, 0, 0, 1, 0, 'proj-1', 2)`)
+	fx.Todo("in-1", "Do it", 2, anytime(), inProject("proj-1"))
 	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-1', 'tg-1')`)
 
 	for _, tc := range []struct {
