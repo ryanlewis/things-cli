@@ -41,12 +41,12 @@ func PrintTags(w io.Writer, tags []model.Tag, asJSON bool) error {
 	return printTags(newWriter(w), tags)
 }
 
-// PrintTaskList renders a task listing. When view is non-empty it prefixes a
+// PrintTaskList renders a task listing. When label is non-empty it prefixes a
 // line naming the view the listing was drawn from, so a filtered slice of a
 // view is not mistaken for the filter target's full contents (issue #140).
 // JSON output is the plain task array either way.
-func PrintTaskList(w io.Writer, tasks []model.Task, asJSON bool, view string) error {
-	return PrintViewTaskList(w, tasks, asJSON, "", view)
+func PrintTaskList(w io.Writer, tasks []model.Task, asJSON bool, label string) error {
+	return PrintViewTaskList(w, tasks, asJSON, "", label)
 }
 
 // PrintViewTaskList is PrintTaskList for a listing drawn from the named view,
@@ -289,7 +289,11 @@ func groupHeaders(tasks []model.Task, sections []string) []header {
 	for i := range tasks {
 		t := &tasks[i]
 		if sections[i] != "" {
+			// The section header now sits between this row and the one
+			// above, so a project row there no longer stands in for this
+			// row's project header.
 			currentProject, currentArea = sentinel, sentinel
+			prevUUID = ""
 		}
 		key, title, isProject := t.AreaUUID, oneLine(t.AreaTitle), false
 		if t.ProjectUUID != "" {

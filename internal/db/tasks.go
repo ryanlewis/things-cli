@@ -604,9 +604,9 @@ type viewSpec struct {
 	// orderBy is the view's whole ORDER BY clause, ending in uuidTiebreak. The
 	// key before the tiebreak is t."index", the order Things keeps rows in
 	// within a list, so the tiebreak only decides rows that were genuinely
-	// indistinguishable and no view's primary ordering changes. Views with no
-	// arrangement of their own — inbox and trash — take indexOrderBy, which
-	// they used to reach through a fallback in ListTasks; naming it here means
+	// indistinguishable and no view's primary ordering changes. The view with no
+	// arrangement of its own, inbox, takes indexOrderBy, which it used to
+	// reach through a fallback in ListTasks; naming it here means
 	// no view's ordering is decided anywhere but in this table.
 	orderBy string
 
@@ -944,11 +944,11 @@ var views = map[string]viewSpec{
 // projects first, then the loose to-dos, a project scheduled for a later day
 // among the to-dos of its day) and the app's Someday (its projects first). A
 // project page holds no project rows, so the key is constant there.
-const projectPageOrder = `CASE WHEN t.heading IS NULL THEN 0 ELSE 1 END, COALESCE(h."index", 0), COALESCE(h.uuid, ''), ` +
+var projectPageOrder = `CASE WHEN t.heading IS NULL THEN 0 ELSE 1 END, COALESCE(h."index", 0), COALESCE(h.uuid, ''), ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN 1 WHEN ` + somedayDeferred + ` THEN 2 ELSE 0 END, ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN t.startDate END, ` +
 	`CASE WHEN ` + upcomingScheduled + ` THEN t.todayIndex END, ` +
-	`CASE WHEN t.type = 1 THEN 0 ELSE 1 END, ` +
+	fmt.Sprintf("CASE WHEN t.type = %d THEN 0 ELSE 1 END, ", int(model.TypeProject)) +
 	`t."index" ASC`
 
 // notHeading excludes project headings (TMTask type 2) from the lookup
@@ -1016,20 +1016,28 @@ const uuidTiebreak = `, t.uuid ASC`
 // for today — and the uuid tiebreak last. Together they put a project's to-dos
 // in one contiguous block, so the rendered group header prints once above
 // them, which is the app's own presentation of a project in these lists.
-const listGrouping = `CASE WHEN a.uuid IS NULL AND pa.uuid IS NULL THEN 0 ELSE 1 END, ` +
+var listGrouping = `CASE WHEN a.uuid IS NULL AND pa.uuid IS NULL THEN 0 ELSE 1 END, ` +
 	`COALESCE(a."index", pa."index", 0), COALESCE(a.uuid, pa.uuid, ''), ` +
 	`CASE WHEN p.uuid IS NULL THEN 0 ELSE 1 END, ` +
-	`CASE WHEN p.start = 2 AND p.startDate > ` + thingsToday + ` THEN 1 WHEN p.start = 2 AND p.startDate IS NULL THEN 2 ELSE 0 END, ` +
-	`CASE WHEN p.start = 2 AND p.startDate > ` + thingsToday + ` THEN p.startDate END, ` +
+	`CASE WHEN ` + projectScheduled + ` THEN 1 WHEN ` + projectDeferred + ` THEN 2 ELSE 0 END, ` +
+	`CASE WHEN ` + projectScheduled + ` THEN p.startDate END, ` +
 	`COALESCE(p."index", 0), COALESCE(p.uuid, '')`
+
+// projectScheduled and projectDeferred are upcomingScheduled and
+// somedayDeferred asked of the row's project, so a project group sorts by the
+// same buckets the rows inside it do.
+var (
+	projectScheduled = strings.ReplaceAll(upcomingScheduled, "t.", "p.")
+	projectDeferred  = strings.ReplaceAll(somedayDeferred, "t.", "p.")
+)
 
 // eveningLast is Today's first key: the This Evening rows (startBucket 1)
 // after every day row.
 const eveningLast = "COALESCE(t.startBucket, 0) ASC"
 
-// indexOrderBy is the ordering for the views with no arrangement of their own:
-// inbox and trash name it in the view table and list in index order. There is
-// no fallback behind them any more: a view whose spec leaves orderBy empty
+// indexOrderBy is the ordering for the view with no arrangement of its own:
+// inbox names it in the view table and lists in index order. There is
+// no fallback behind it any more: a view whose spec leaves orderBy empty
 // would run with no ORDER BY at all, which is what
 // TestEveryTaskOrderingEndsInTheUUIDTiebreak is there to catch.
 //

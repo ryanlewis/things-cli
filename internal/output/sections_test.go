@@ -151,3 +151,22 @@ func TestPrintDaySectionsOnlyInLogbook(t *testing.T) {
 		t.Errorf("today printed a day header:\n%s", buf.String())
 	}
 }
+
+// A project row closing one day does not fold away the project header of its
+// to-do opening the next: the date header sits between them.
+func TestPrintSectionStartKeepsProjectHeader(t *testing.T) {
+	later := time.Date(2026, 10, 9, 12, 0, 0, 0, time.Local)
+	earlier := time.Date(2026, 10, 8, 12, 0, 0, 0, time.Local)
+	tasks := []model.Task{
+		{UUID: "p1", Title: "Chores", Type: model.TypeProject, Status: model.StatusCompleted, StopDate: &later},
+		{UUID: "t1", Title: "Sweep", Status: model.StatusCompleted, StopDate: &earlier, ProjectUUID: "p1", ProjectTitle: "Chores"},
+	}
+	var buf bytes.Buffer
+	if err := PrintViewTaskList(&buf, tasks, false, "logbook", ""); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if n := strings.Count(out, "Chores"); n != 2 {
+		t.Errorf("Chores printed %d times, want the row and a header under 2026-10-08:\n%s", n, out)
+	}
+}
