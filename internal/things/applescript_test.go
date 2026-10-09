@@ -39,7 +39,7 @@ func TestCompleteTaskScript(t *testing.T) {
 	for _, want := range []string{
 		`tell application "Things3"`,
 		`to do id "ABC-123"`,
-		`set status of theToDo to completed`,
+		`set status of theItem to completed`,
 		`end tell`,
 	} {
 		if !strings.Contains(*script, want) {
@@ -56,7 +56,7 @@ func TestCompleteProjectScript(t *testing.T) {
 	}
 	for _, want := range []string{
 		`project id "PRJ-1"`,
-		`set status of theProject to completed`,
+		`set status of theItem to completed`,
 	} {
 		if !strings.Contains(*script, want) {
 			t.Errorf("script missing %q:\n%s", want, *script)
@@ -72,7 +72,7 @@ func TestCancelTaskScript(t *testing.T) {
 	}
 	for _, want := range []string{
 		`to do id "ZZZ"`,
-		`set status of theToDo to canceled`,
+		`set status of theItem to canceled`,
 	} {
 		if !strings.Contains(*script, want) {
 			t.Errorf("script missing %q:\n%s", want, *script)
@@ -88,7 +88,7 @@ func TestCancelProjectScript(t *testing.T) {
 	}
 	for _, want := range []string{
 		`project id "PRJ-2"`,
-		`set status of theProject to canceled`,
+		`set status of theItem to canceled`,
 	} {
 		if !strings.Contains(*script, want) {
 			t.Errorf("script missing %q:\n%s", want, *script)

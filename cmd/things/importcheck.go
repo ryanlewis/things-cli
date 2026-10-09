@@ -1230,10 +1230,7 @@ func (e *importVerifyError) Error() string {
 	}
 	missing := e.missing()
 	if len(missing) > 0 {
-		lines := make([]string, len(missing))
-		for i, it := range missing {
-			lines[i] = fmt.Sprintf("  %s: %s", it.Path, it.detail)
-		}
+		lines := detailLines(missing)
 		cause := "The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save."
 		if len(e.items) == e.total && !slices.ContainsFunc(e.created, func(c importCreated) bool {
 			return c.Reason != "creation-date" && (c.Reason != "not-found" || len(c.Candidates) > 0)
@@ -1546,7 +1543,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			// With no rows to see where the dated item went, it may be
 			// any new item with the title.
 			out[i].Reason, out[i].Present = "shares-dated-title", new(bool)
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and the database could not be read to count the new items with that title, so the item may exist but cannot be confirmed", c.typ.String(), c.title)
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and the database could not be read to count the new items with that title, so the item may exist but cannot be confirmed", c.typ, c.title)
 		case err != nil:
 			out[i].Reason = "unreadable"
 		case sharesDated:
@@ -1568,7 +1565,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			}
 			present := len(rows) >= claimants
 			out[i].Present = &present
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and only %s with that title appeared for the %d items that could be filed there, so this item may exist as one of them but cannot be confirmed (%s)", c.typ.String(), c.title, plural(len(rows), "new item"), claimants, strings.Join(uuids, ", "))
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and only %s with that title appeared for the %d items that could be filed there, so this item may exist as one of them but cannot be confirmed (%s)", c.typ, c.title, plural(len(rows), "new item"), claimants, strings.Join(uuids, ", "))
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
 			// Two saved at the same instant cannot be paired with the
 			// payload's items by order, so neither is confirmed.
@@ -1581,10 +1578,10 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			out[i].Reason, out[i].Candidates = "ambiguous", uuids
 		case len(matches) == 0:
 			out[i].Reason = "not-found"
-			out[i].detail = fmt.Sprintf("no new %s titled %q appeared within %s", c.typ.String(), c.title, budget)
+			out[i].detail = fmt.Sprintf("no new %s titled %q appeared within %s", c.typ, c.title, budget)
 		default:
 			out[i].Reason, out[i].Candidates = "not-found", uuids
-			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.typ.String(), c.title, budget, strings.Join(uuids, ", "))
+			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.typ, c.title, budget, strings.Join(uuids, ", "))
 		}
 	}
 	unconfirmShared(out, creates, found)
@@ -1754,7 +1751,7 @@ func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate,
 			continue
 		}
 		out[i].Confirmed, out[i].Reason = false, dateDropped
-		out[i].detail = fmt.Sprintf("%s %q (%s) was saved with completion date %s, not %s", c.typ.String(), c.title, out[i].UUID, stop.UTC().Format(time.RFC3339Nano), c.closedAt.UTC().Format(time.RFC3339Nano))
+		out[i].detail = fmt.Sprintf("%s %q (%s) was saved with completion date %s, not %s", c.typ, c.title, out[i].UUID, stop.UTC().Format(time.RFC3339Nano), c.closedAt.UTC().Format(time.RFC3339Nano))
 	}
 }
 
@@ -1788,7 +1785,7 @@ func checkWhens(out []importCreated, creates []importCreate, found map[createdWa
 			continue
 		}
 		out[i].Landed = describeStart(row)
-		out[i].detail = fmt.Sprintf("%s %q (%s) was created, but its when %q did not file it there: it is %s", c.typ.String(), c.title, out[i].UUID, c.when, out[i].Landed)
+		out[i].detail = fmt.Sprintf("%s %q (%s) was created, but its when %q did not file it there: it is %s", c.typ, c.title, out[i].UUID, c.when, out[i].Landed)
 	}
 }
 
