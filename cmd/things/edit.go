@@ -549,17 +549,18 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 // item. done is what the write would have made of the item.
 //
 // A to-do whose project, directly or through its heading, is in the Trash is
-// refused the same way. Things takes a trashed project's to-dos into the
-// Trash with it, where they cannot be closed or edited until the project is
-// put back, but leaves their own trashed column 0.
+// refused the same way. Things shows such a to-do only in the Trash, with its
+// project, though its own trashed column stays 0. Things itself would accept
+// the write; the CLI refuses it because the user cannot see the item.
 func refuseTrashed(ref string, task *model.Task, done string) error {
-	switch {
-	case task.Trashed:
-		return &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done}
-	case task.ProjectTrashed:
-		return &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done, Project: task.ProjectTitle}
+	if !task.Trashed && !task.ProjectTrashed {
+		return nil
 	}
-	return nil
+	e := &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done}
+	if !task.Trashed {
+		e.Project = task.ProjectTitle
+	}
+	return e
 }
 
 // checkClosed reports whether task already has the closed status want, and

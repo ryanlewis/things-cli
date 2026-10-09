@@ -297,8 +297,8 @@ is already closed is not an error; it exits 0 with a note.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
 to `project edit`; both refuse before anything is written and name the command
 to retry with. `trashed` is a row number or uuid that named an item in the
-Trash, or a reference to a task whose project is in the Trash; the write is
-refused before anything is sent. The two import failures carry an `items` array naming which
+Trash, or a uuid that named a task whose project is in the Trash (Things shows
+it only in the Trash); the write is refused before anything is sent. The two import failures carry an `items` array naming which
 payload items were blocked or did not land; the [Commands](/commands/) page
 has the detail.
 
@@ -462,8 +462,8 @@ instead of assuming:
   printed, makes `complete`, `cancel`, `edit` and `project edit` exit
   non-zero with the `trashed` token and send nothing. `show` still reads
   such an item and marks it as in the Trash. A task whose project is in
-  the Trash is refused the same way, since Things trashed it with the
-  project, and the error names the project.
+  the Trash is refused the same way, since Things shows it only in the
+  Trash; the error names the project, and a title never matches it.
 - **New items are read back.** `add` and `project add` find the item they
   created, by kind, title and where it was sent (when several projects, or
   areas, share the title it named, the one Things picks), and print it as `things show` would, so the agent has its UUID without a `things search`. Agents

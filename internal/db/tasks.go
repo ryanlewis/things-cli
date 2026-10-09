@@ -1405,6 +1405,8 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 }
 
 // findTasksByExactTitle returns every open task carrying exactly this title.
+// Like FindTasksByTitle it skips the Trash, and with it a to-do whose project
+// is in the Trash, which Things shows only there.
 // It used to be a LIMIT 1 query, which made the ordering the whole decision
 // and hid the rest of the matches: a project and a to-do can share a title,
 // and whichever sorted first became the write target with no sign that a
@@ -1413,7 +1415,7 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 // do take the first row read the rows in the order the rest of the package
 // uses.
 func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND t.trashed = 0 AND t.status = 0 AND " + notHeading +
+	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0 AND " + notHeading +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, normName(title))
 }
@@ -1452,7 +1454,10 @@ func preferInstances(matches []model.Task) []model.Task {
 	return out
 }
 
-// FindTasksByTitle returns the open tasks whose title contains substr. The
+// FindTasksByTitle returns the open tasks whose title contains substr,
+// leaving out the Trash: a trashed row, and a to-do whose project (directly
+// or through its heading) is trashed, since Things shows it only in the
+// Trash. A uuid still reaches either, and the writes refuse it. The
 // substring is matched literally: the wildcards are escaped and only the two
 // the caller never typed, either side of the value, are left as wildcards
 // (issue #267). Without that, `_` stood for any character and `%` for any run
@@ -1461,7 +1466,7 @@ func preferInstances(matches []model.Task) []model.Task {
 // write on the wrong task. Matching ignores case, beyond ASCII too (see
 // literalLike); nothing documented offered wildcards.
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE t.trashed = 0 AND t.status = 0 AND " + notHeading + " AND fold(t.title) LIKE ?" + escapeClause +
+	query := d.taskQuery() + " WHERE t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0 AND " + notHeading + " AND fold(t.title) LIKE ?" + escapeClause +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, containsLike(substr))
 }
