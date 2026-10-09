@@ -46,14 +46,22 @@ func PrintTags(w io.Writer, tags []model.Tag, asJSON bool) error {
 // view is not mistaken for the filter target's full contents (issue #140).
 // JSON output is the plain task array either way.
 func PrintTaskList(w io.Writer, tasks []model.Task, asJSON bool, view string) error {
+	return PrintViewTaskList(w, tasks, asJSON, "", view)
+}
+
+// PrintViewTaskList is PrintTaskList for a listing drawn from the named view,
+// whose plain output also carries that view's sections: Today's This Evening
+// and the Logbook's days (see sectionTitles). label is PrintTaskList's view
+// line, empty for none. JSON is the plain task array either way.
+func PrintViewTaskList(w io.Writer, tasks []model.Task, asJSON bool, view, label string) error {
 	if asJSON {
 		return PrintJSON(w, tasks)
 	}
 	tw := newWriter(w)
-	if view != "" {
-		fmt.Fprintf(tw, "%s%s\n", headerIndent, dimStyle.Render("view: "+view))
+	if label != "" {
+		fmt.Fprintf(tw, "%s%s\n", headerIndent, dimStyle.Render("view: "+label))
 	}
-	return printTasks(tw, tasks, currentLayout())
+	return printTasks(tw, tasks, currentLayout(), view)
 }
 
 func PrintTaskWithChecklist(w io.Writer, t *model.Task, items []model.ChecklistItem, asJSON bool) error {
@@ -95,7 +103,7 @@ const (
 // from the rows.
 const headerIndent = "    "
 
-func printTasks(w io.Writer, tasks []model.Task, lay layout) error {
+func printTasks(w io.Writer, tasks []model.Task, lay layout, view string) error {
 	tbl := &table{
 		gap: columnGap,
 		// Unlike every other surface, a task listing fits lay.width even when
@@ -131,8 +139,17 @@ func printTasks(w io.Writer, tasks []model.Task, lay layout) error {
 		tbl.add(taskCells(i+1, &tasks[i], lay.tty)...)
 	}
 
-	headers := groupHeaders(tasks)
+	sections := sectionTitles(tasks, view)
+	headers := groupHeaders(tasks, sections)
 	for i, line := range tbl.lines() {
+		if sections[i] != "" {
+			if i > 0 {
+				fmt.Fprintln(w)
+			}
+			// A section header sits at the margin, outside the group
+			// headers' indent, so it reads as the level above them.
+			fmt.Fprintln(w, sectionStyle.Render(fitHeader(sections[i], lay.fitWidth())))
+		}
 		h := headers[i]
 		if h.gap {
 			fmt.Fprintln(w)
@@ -214,16 +231,66 @@ type header struct {
 	title string
 }
 
+// The view names whose plain output carries sections. They match the db
+// package's view names, which output does not import.
+const (
+	viewToday   = "today"
+	viewLogbook = "logbook"
+)
+
+// eveningSection is the title of Today's last section, as the app names it.
+const eveningSection = "This Evening"
+
+// sectionTitles works out the section header above each row: the title where
+// a section starts, empty elsewhere. A section sits above the group headers
+// and restarts them.
+//
+// Today's This Evening rows (startBucket 1) come after every day row, and the
+// app gives them a section of their own; without one an evening row reads as
+// a day row with no star. The Logbook is filed by the local day each row was
+// closed, newest first, as the app's Logbook is; the header is the date in
+// full, so piped output stays the same whatever day it is read on. A row with
+// no stop date opens no section. Both rely on the view's order keeping a
+// section's rows together.
+func sectionTitles(tasks []model.Task, view string) []string {
+	titles := make([]string, len(tasks))
+	switch view {
+	case viewToday:
+		for i := range tasks {
+			if tasks[i].StartBucket == 1 && (i == 0 || tasks[i-1].StartBucket != 1) {
+				titles[i] = eveningSection
+			}
+		}
+	case viewLogbook:
+		prev := ""
+		for i := range tasks {
+			if tasks[i].StopDate == nil {
+				continue
+			}
+			day := tasks[i].StopDate.Local().Format("2006-01-02")
+			if day != prev {
+				titles[i] = day
+				prev = day
+			}
+		}
+	}
+	return titles
+}
+
 // groupHeaders works out the header above each task's row. Rows group under
 // their project, or else their area; a change of group, or a move between a
-// project and an area, opens a new one.
-func groupHeaders(tasks []model.Task) []header {
+// project and an area, opens a new one, and so does the start of a section
+// (non-empty in sections), which prints its own blank line above.
+func groupHeaders(tasks []model.Task, sections []string) []header {
 	headers := make([]header, len(tasks))
 	const sentinel = "\x00"
 	currentProject, currentArea := sentinel, sentinel
 	prevUUID := ""
 	for i := range tasks {
 		t := &tasks[i]
+		if sections[i] != "" {
+			currentProject, currentArea = sentinel, sentinel
+		}
 		key, title, isProject := t.AreaUUID, oneLine(t.AreaTitle), false
 		if t.ProjectUUID != "" {
 			key, title, isProject = t.ProjectUUID, oneLine(t.ProjectTitle), true

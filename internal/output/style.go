@@ -74,7 +74,10 @@ var (
 	dimStyle         = lipgloss.NewStyle().Faint(true)
 
 	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
-	labelStyle  = lipgloss.NewStyle().Bold(true)
+	// sectionStyle marks a section header (This Evening, a Logbook day), which
+	// sits above the group headers.
+	sectionStyle = lipgloss.NewStyle().Bold(true).Underline(true)
+	labelStyle   = lipgloss.NewStyle().Bold(true)
 )
 
 func styledStatus(status model.Status) string {

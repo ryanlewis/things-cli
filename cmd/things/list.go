@@ -109,7 +109,7 @@ func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
 	if filtered && view != db.ViewProject {
 		viewLabel = view
 	}
-	if err := output.PrintTaskList(d.Stdout, tasks, d.JSON, viewLabel); err != nil {
+	if err := output.PrintViewTaskList(d.Stdout, tasks, d.JSON, view, viewLabel); err != nil {
 		return err
 	}
 	noteEmptyRepeatingProject(d, database, view, project, len(tasks))
