@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -76,24 +75,11 @@ var importScheduleDate = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 // forms rather than passing it to Things as an English phrase.
 var importScheduleNumeric = regexp.MustCompile(`^\d`)
 
-// importClock24 and importClock12 are the times of day the Things
-// documentation gives after the @ of a date and time: 21:30 and 9:30PM, and
-// its example 6pm.
-var (
-	importClock24 = regexp.MustCompile(`^(\d{1,2}):(\d{2})$`)
-	importClock12 = regexp.MustCompile(`(?i)^(\d{1,2})(?::(\d{2}))?\s?(am|pm)$`)
-)
-
-// importTimedWhens are the when keywords the Things documentation allows a
-// time after: a date string is today, tomorrow or YYYY-MM-DD, and its
-// example is evening@6pm. It ignores the time after anytime and someday.
-var importTimedWhens = []string{"today", "tomorrow", "evening"}
-
 // checkScheduleValue reports why value, a `when` or `deadline` in an import
 // payload, is one Things would misread, or "" when it is not. It starts from
 // the checks `add` makes (things.NormalizeWhen and NormalizeDeadline), which
-// refuse a near-miss of a keyword and a keyword as a deadline. Those pass a
-// date or time they cannot read through to Things as an English phrase, but
+// refuse a near-miss of a keyword, a keyword as a deadline, and a date or
+// time of day that names none (whose reason this words itself). But
 // `add` sends a URL and import a JSON payload, and the payload's grammar is
 // narrower: the Things JSON documentation names only the keywords, a date
 // and a date and time. Measured in Things 3 (9 Oct 2026), each saved with no
@@ -112,8 +98,8 @@ func checkScheduleValue(name, value string) string {
 	if name == "deadline" {
 		normalize = things.NormalizeDeadline
 	}
-	// An impossible date or time is left to the checks below, which name
-	// what is wrong with it in the payload's own terms.
+	// An impossible date or time is kept as its reason, for the checks
+	// below to word in the payload's own terms.
 	var impossible *things.ImpossibleWhenError
 	if _, err := normalize(v); err != nil && !errors.As(err, &impossible) {
 		// The message names the add flag; the payload has no flags.
@@ -130,28 +116,33 @@ func checkScheduleValue(name, value string) string {
 		}
 		return realDate(v)
 	}
-	day, clockTime, timed := strings.Cut(v, "@")
+	// NormalizeWhen has judged the date and the time of day; what is left
+	// is the payload's narrower grammar.
+	badDate := impossible != nil && impossible.Reason == things.WhenBadDate
+	day, _, timed := strings.Cut(v, "@")
 	if !timed {
 		switch {
 		case !importScheduleNumeric.MatchString(v):
 			return ""
 		case !importScheduleDate.MatchString(v):
 			return "not a date as YYYY-MM-DD, or a date and time as YYYY-MM-DD@HH:MM"
+		case badDate:
+			return "not a real date"
 		}
-		return realDate(v)
+		return ""
 	}
-	switch low := strings.ToLower(day); {
-	case low == "anytime" || low == "someday":
+	switch {
+	case impossible != nil && impossible.Reason == things.WhenTimeIgnored:
 		return "Things ignores a time after anytime or someday"
-	case slices.Contains(importTimedWhens, low):
+	case things.TimedWhenKeyword(day):
 	case importScheduleDate.MatchString(day):
-		if why := realDate(day); why != "" {
-			return why
+		if badDate {
+			return "not a real date"
 		}
 	default:
 		return "before the @ must be today, tomorrow, evening or a date as YYYY-MM-DD"
 	}
-	if !realClock(clockTime) {
+	if impossible != nil && impossible.Reason == things.WhenBadClock {
 		return "not a real time of day after the @"
 	}
 	return ""
@@ -164,25 +155,6 @@ func realDate(v string) string {
 		return "not a real date"
 	}
 	return ""
-}
-
-// realClock reports whether v is a time of day as importClock24 or
-// importClock12 write it, with each field in range.
-func realClock(v string) bool {
-	if m := importClock24.FindStringSubmatch(v); m != nil {
-		h, _ := strconv.Atoi(m[1])
-		mm, _ := strconv.Atoi(m[2])
-		return h <= 23 && mm <= 59
-	}
-	if m := importClock12.FindStringSubmatch(v); m != nil {
-		h, _ := strconv.Atoi(m[1])
-		mm := 0
-		if m[2] != "" {
-			mm, _ = strconv.Atoi(m[2])
-		}
-		return h >= 1 && h <= 12 && mm <= 59
-	}
-	return false
 }
 
 // badImportSchedule returns each when or deadline of item, a payload to-do
@@ -505,10 +477,8 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 		}
 		if len(dateLines) > 0 || len(schedLines) > 0 || len(futureLines) > 0 || len(typeLines) > 0 || len(dupKeys) > 0 || !shape.empty() {
 			if !refused {
-				typ := model.TypeTask
-				if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
-					typ = model.TypeProject
-				}
+				// Any type but project is reported as a task.
+				typ, _ := payloadType(v)
 				it = importRefusalItem{Path: path, Kind: typ.String()}
 				attrs, _ := v["attributes"].(map[string]any)
 				title, _ := attrs["title"].(string)

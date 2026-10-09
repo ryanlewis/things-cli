@@ -1,6 +1,7 @@
 package things
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -164,14 +165,33 @@ func TestNormalizeDeadlineRejects(t *testing.T) {
 // so add and edit give the same error before anything is sent. Phrases and
 // valid dates and times still pass.
 func TestNormalizeWhenRejectsImpossibleDatesAndTimes(t *testing.T) {
-	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am", "2026-10-09T25:00:00Z", "2026-10-09T10:00:00+200", "2026-10-09T25:00", "tomorrow@25:00", "today@18:60", "Evening@13pm", "today@noon", "2026-10-09@soon", "someday@18:00", "anytime@9am"} {
+	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am", "2026-10-09T25:00:00Z", "2026-10-09T10:00:00+200", "2026-10-09T25:00", "tomorrow@25:00", "today@18:60", "Evening@13pm", "today@noon", "2026-10-09@soon", "someday@18:00", "anytime@9am", "today@6  pm", "today@9:30  pm", "9:30  pm"} {
 		if _, err := NormalizeWhen(in); err == nil || !strings.Contains(err.Error(), "invalid --when value") {
 			t.Errorf("NormalizeWhen(%q) = %v, want it refused", in, err)
 		}
 	}
-	for _, in := range []string{"2026-10-09T10:00", "2026-10-09T10:00:00", "tomorrow@18:00", "evening@6pm", "2026-10-09@9pm", "next friday@noon", "2028-02-29", "2026-5-1", "2026-05-01@23:59", "00:00", "12:30pm", "9:30 PM", "blorp", "in 3 days", "next friday"} {
+	for _, in := range []string{"2026-10-09T10:00", "2026-10-09T10:00:00", "tomorrow@18:00", "evening@6pm", "2026-10-09@9pm", "next friday@noon", "2028-02-29", "2026-5-1", "2026-05-01@23:59", "00:00", "12:30pm", "9:30 PM", "today@6 pm", "blorp", "in 3 days", "next friday"} {
 		if _, err := NormalizeWhen(in); err != nil {
 			t.Errorf("NormalizeWhen(%q) = %v, want it to pass", in, err)
+		}
+	}
+}
+
+// An impossible value carries why, so a caller can word its own message.
+func TestNormalizeWhenImpossibleReason(t *testing.T) {
+	for in, want := range map[string]WhenReason{
+		"2026-02-30":       WhenBadDate,
+		"2026-02-30@18:00": WhenBadDate,
+		"2026-10-09T25:00": WhenBadDateTime,
+		"25:00":            WhenBadTime,
+		"someday@18:00":    WhenTimeIgnored,
+		"today@noon":       WhenBadClock,
+		"today@6  pm":      WhenBadClock,
+	} {
+		_, err := NormalizeWhen(in)
+		var impossible *ImpossibleWhenError
+		if !errors.As(err, &impossible) || impossible.Reason != want {
+			t.Errorf("NormalizeWhen(%q) = %v, want an ImpossibleWhenError with reason %d", in, err, want)
 		}
 	}
 }

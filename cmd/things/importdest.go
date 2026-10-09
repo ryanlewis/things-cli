@@ -335,13 +335,8 @@ func importCreates(payload []any) []importCreate {
 		if op != "" && op != "create" {
 			return
 		}
-		var typ model.TaskType
-		switch itemType {
-		case "to-do":
-			typ = model.TypeTask
-		case "project":
-			typ = model.TypeProject
-		default:
+		typ, ok := payloadType(v)
+		if !ok {
 			return
 		}
 		shown, _ := attrs["title"].(string)
