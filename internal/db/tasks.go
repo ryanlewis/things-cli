@@ -461,8 +461,9 @@ const (
 	// 2026, it also held an Anytime project of that shape, and a Someday to-do
 	// and a Someday project with a later deadline.
 	//
-	// An Inbox to-do with a later deadline was not measured, so the Inbox
-	// stays out; todayDue takes one once its deadline comes. A row with a
+	// The Inbox stays out: measured on 9 Oct 2026, an Inbox to-do with a
+	// later deadline was in the app's Inbox and not its Upcoming. todayDue
+	// takes one once its deadline comes. A row with a
 	// start date as well is upcomingScheduled's, and was not measured here. A Someday
 	// to-do inside a project with a later deadline is in Upcoming too:
 	// measured on 9 Oct 2026, under an open parent project and under a
