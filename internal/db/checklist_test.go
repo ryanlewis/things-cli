@@ -61,10 +61,7 @@ func TestListTasksCarriesChecklistProgress(t *testing.T) {
 		('c3', 'socks',    2, 2, 'with'),
 		('c4', 'tickets',  0, 3, 'with')`)
 
-	tasks, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
+	tasks := mustList(t, d, "anytime", TaskFilter{})
 	byUUID := map[string]model.Task{}
 	for _, task := range tasks {
 		byUUID[task.UUID] = task
@@ -80,10 +77,7 @@ func TestListTasksCarriesChecklistProgress(t *testing.T) {
 		t.Errorf("without: checklist progress %+v, want none", p)
 	}
 
-	got, err := d.GetTaskByUUID("with")
-	if err != nil {
-		t.Fatalf("GetTaskByUUID: %v", err)
-	}
+	got := mustGetByUUID(t, d, "with")
 	if got.ChecklistProgress == nil || got.ChecklistProgress.Done() != 2 {
 		t.Errorf("GetTaskByUUID: checklist progress %+v, want 2 done", got.ChecklistProgress)
 	}

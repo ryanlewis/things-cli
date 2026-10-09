@@ -1,7 +1,6 @@
 package db
 
 import (
-	"slices"
 	"testing"
 	"time"
 
@@ -35,13 +34,8 @@ func TestTodayReadsOneDayFromTheClock(t *testing.T) {
 	fx.Todo("arrived", "Scheduled for today", 3, somedayOn(day), todayIndexRef(day), todayIndex(4))
 	fx.Todo("not-yet", "Scheduled for tomorrow", 4, somedayOn(next), todayIndexRef(day), todayIndex(5))
 
-	got, err := d.ListTasks(ViewToday, TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"open", "closed-evening", "arrived"}; !slices.Equal(uuidsOf(got), want) {
-		t.Errorf("today at %s = %v, want %v", last, uuidsOf(got), want)
-	}
+	got := mustList(t, d, ViewToday, TaskFilter{})
+	assertOrder(t, got, []string{"open", "closed-evening", "arrived"}, "today at %s", last)
 }
 
 // A query that names today_clock without going through withToday fails

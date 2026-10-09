@@ -1,7 +1,9 @@
 package db
 
 import (
+	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -46,7 +48,55 @@ func mustTime(s string) time.Time {
 	return t
 }
 
+// mustList runs a view, failing the test on error.
+func mustList(t *testing.T, d *DB, view string, opts TaskFilter) []model.Task {
+	t.Helper()
+	got, err := d.ListTasks(view, opts)
+	if err != nil {
+		t.Fatalf("ListTasks(%q, %+v): %v", view, opts, err)
+	}
+	return got
+}
+
+// mustGet looks a task up by uuid or title, failing the test on error.
+func mustGet(t *testing.T, d *DB, ref string) *model.Task {
+	t.Helper()
+	got, err := d.GetTask(ref)
+	if err != nil {
+		t.Fatalf("GetTask(%q): %v", ref, err)
+	}
+	return got
+}
+
+// mustGetByUUID looks a task up by uuid, failing the test on error.
+func mustGetByUUID(t *testing.T, d *DB, uuid string) *model.Task {
+	t.Helper()
+	got, err := d.GetTaskByUUID(uuid)
+	if err != nil {
+		t.Fatalf("GetTaskByUUID(%q): %v", uuid, err)
+	}
+	return got
+}
+
 // --- assertions ---
+
+// assertSet reports an error unless tasks hold exactly the want uuids, in any
+// order. label, formatted with args, names the listing in the failure.
+func assertSet(t *testing.T, tasks []model.Task, want []string, label string, args ...any) {
+	t.Helper()
+	if got := uuidsOf(tasks); !sameSet(got, want) {
+		t.Errorf("%s: got %v, want %v", fmt.Sprintf(label, args...), got, want)
+	}
+}
+
+// assertOrder reports an error unless tasks hold exactly the want uuids, in
+// that order.
+func assertOrder(t *testing.T, tasks []model.Task, want []string, label string, args ...any) {
+	t.Helper()
+	if got := uuidsOf(tasks); !slices.Equal(got, want) {
+		t.Errorf("%s: got %v, want %v", fmt.Sprintf(label, args...), got, want)
+	}
+}
 
 // uuidsOf reduces a listing to its uuids, in the order the listing returned
 // them. Compare with sameSet for membership, or slices.Equal for order.

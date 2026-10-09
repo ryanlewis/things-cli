@@ -93,10 +93,7 @@ func TestOpenBadPath(t *testing.T) {
 func TestEmptyResultsAreNonNil(t *testing.T) {
 	d := newTestDB(t)
 
-	tasks, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
+	tasks := mustList(t, d, "today", TaskFilter{})
 	if tasks == nil || len(tasks) != 0 {
 		t.Errorf("ListTasks: want non-nil empty slice, got %#v", tasks)
 	}

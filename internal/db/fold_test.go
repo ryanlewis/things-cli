@@ -53,10 +53,7 @@ func TestFiltersIgnoreNonASCIICase(t *testing.T) {
 		{"tag full fold", TaskFilter{Tag: "STRASSE"}, []string{"in-s"}},
 	} {
 		t.Run("list "+tc.name, func(t *testing.T) {
-			got, err := d.ListTasks("project", tc.filter)
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := mustList(t, d, "project", tc.filter)
 			if !sameSet(uuidsOf(got), tc.want) {
 				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
 			}
@@ -95,9 +92,7 @@ func TestFiltersIgnoreNonASCIICase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !sameSet(uuidsOf(got), want) {
-				t.Errorf("SearchTasks(%q) = %v, want %v", query, uuidsOf(got), want)
-			}
+			assertSet(t, got, want, "SearchTasks(%q)", query)
 		}
 	})
 }
@@ -156,10 +151,7 @@ func TestFiltersIgnoreNormalisation(t *testing.T) {
 		{"project without the accent", TaskFilter{Project: "Cafe"}, nil},
 	} {
 		t.Run("list "+tc.name, func(t *testing.T) {
-			got, err := d.ListTasks("project", tc.filter)
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := mustList(t, d, "project", tc.filter)
 			if !sameSet(uuidsOf(got), tc.want) {
 				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
 			}
@@ -188,9 +180,7 @@ func TestFiltersIgnoreNormalisation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !sameSet(uuidsOf(got), want) {
-				t.Errorf("SearchTasks(%q) = %v, want %v", query, uuidsOf(got), want)
-			}
+			assertSet(t, got, want, "SearchTasks(%q)", query)
 		}
 	})
 }
@@ -292,10 +282,7 @@ func TestListNamesMatchCompatibilityForms(t *testing.T) {
 		{"area wildcard", TaskFilter{Area: "5％"}, nil},
 	} {
 		t.Run("list "+tc.name, func(t *testing.T) {
-			got, err := d.ListTasks("project", tc.filter)
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := mustList(t, d, "project", tc.filter)
 			if !sameSet(uuidsOf(got), tc.want) {
 				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
 			}
