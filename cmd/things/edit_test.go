@@ -657,7 +657,8 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		// A heading-id sent with an empty list may still move the to-do.
 		{"emptyListUnfiledWithHeadingID", []string{"edit", "loose-todo", "--list", "", "--heading-id", "head-1"}, "", false},
 		// An unknown list is ignored, and an empty heading then acts alone.
-		{"emptyHeadingUnknownList", []string{"edit", "head-todo", "--list", "Nowhere", "--heading", ""}, `finds no project or area called "Nowhere"`, false},
+		{"emptyHeadingUnknownList", []string{"edit", "head-todo", "--list", "Nowhere", "--heading", ""}, `finds no project or area called "Nowhere"; it will take the to-do out of its heading`, false},
+		{"emptyHeadingUnknownListNoProject", []string{"edit", "one-1", "--list", "Nowhere", "--heading", ""}, `finds no project or area called "Nowhere"; the to-do will stay where it is`, true},
 		{"emptyHeadingUnknownListNoHeading", []string{"edit", "tool-1", "--list", "Nowhere", "--heading", ""}, `finds no project or area called "Nowhere"`, true},
 		{"projectKnownArea", []string{"project", "edit", "repproj-1", "--area", "personal"}, "", false},
 		{"projectAreaUUID", []string{"project", "edit", "repproj-1", "--area", "area-1"}, "", false},

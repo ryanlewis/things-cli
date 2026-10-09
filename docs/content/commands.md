@@ -721,12 +721,15 @@ naming the item they found; search for the title before adding it again,
 since another add of the same title at the same moment can be the one
 found. Under `--json` either error is one object with `"error":
 "misfiled"`, the item's `"uuid"` and where it `"landed"`. An English phrase is
-not checked against a place, but one Things does not understand is reported:
-a value shaped like a date or time that names none, such as `2026-13-01`,
-`25:00` or a malformed RFC3339 timestamp, is refused before anything is
-sent; `add` warns `Things did not understand --when "…"` on stderr when the
-new item has no start date, and still prints the item and exits 0; and an
-`edit` whose only change is the phrase returns at once with a warning,
+not checked against a place. A value shaped like a date or time that names
+none, such as `2026-13-01`, `25:00`, `tomorrow@25:00` or
+`2026-10-09T25:00:00Z`, or a time after `anytime@` or `someday@`, is refused
+before anything is sent; a date and time with no offset, such as
+`2026-10-09T10:00`, is read as that wall-clock time. A free phrase, anything
+but a keyword, a weekday name, a date or a time, is not read back: `add`
+warns `Things did not understand --when "…"` on stderr when the new item
+has no start date, and still prints the item and exits 0; and an `edit`
+whose only change is a free phrase returns at once with a warning,
 unconfirmed (under `--json`, `{"uuid", "title", "confirmed": false,
 "reason": "when"}`), since Things records nothing when it ignores one;
 check it with `things show`. With other

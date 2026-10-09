@@ -136,11 +136,6 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		}
 		return task.ProjectUUID != "" || task.AreaUUID != "" || task.HeadingUUID != "" ||
 			task.Start != model.StartAnytime || task.StartDate != nil
-	case c.Heading != nil && *c.Heading == "" && c.List == nil && c.ListID == nil && c.HeadingID == nil:
-		// Checked in Things 3: an empty heading alone takes the to-do out of
-		// its heading and leaves it in its project. A to-do under no heading
-		// stays where it is.
-		return task.HeadingUUID != ""
 	}
 	heading := ""
 	if c.Heading != nil {
@@ -164,7 +159,11 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	// next is what Things does when it cannot find the list.
 	next := "the to-do will stay where it is"
-	if c.Heading != nil && task.ProjectUUID != "" {
+	switch {
+	case c.Heading == nil || task.ProjectUUID == "":
+	case heading == "":
+		next = "it will take the to-do out of its heading"
+	default:
 		next = fmt.Sprintf("it will look for --heading %q in the to-do's own project", heading)
 	}
 	list, found := "", false
@@ -214,16 +213,17 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		return task.HeadingUUID != "" || !inList
 	case c.Heading == nil:
 		return false
+	case heading == "":
+		// Checked in Things 3: an empty heading, alone or after a list
+		// Things cannot find, takes the to-do out of its heading and leaves
+		// it in its project. A to-do under no heading stays where it is.
+		return task.HeadingUUID != ""
 	case task.ProjectUUID == "" && list != "":
 		// The unknown list's warning has said the to-do stays put.
 		return false
 	case task.ProjectUUID == "":
 		fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list: the to-do is not in a project, so Things will leave it where it is\n", heading)
 		return false
-	case heading == "":
-		// As for an empty heading alone: Things takes the to-do out of its
-		// heading and leaves it in its project.
-		return task.HeadingUUID != ""
 	}
 	t, f, err := database.AddTarget(task.ProjectUUID, heading)
 	switch {
@@ -311,6 +311,12 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	}
 	if f.Title != nil {
 		if err := refuseBlankTitle(*f.Title, item, "edited"); err != nil {
+			return err
+		}
+	}
+	// Before --create-tags can create anything.
+	if f.When != nil {
+		if _, err := things.NormalizeWhen(*f.When); err != nil {
 			return err
 		}
 	}

@@ -116,7 +116,8 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 }
 
 // whenPhrase reports whether value goes to Things as a free phrase: one that
-// is none of the keywords, an HH:MM time, a date or a date and time, so
+// is none of the keywords or weekday names, a time, a date or a date and
+// time (things.KnownWhenWord, things.WhenDateOrTime), so
 // Things reads it with its own English parser, or ignores it. A phrase
 // Things understands gives the item a start date; one it ignores leaves the
 // item where it would be with no --when.
@@ -125,11 +126,7 @@ func whenPhrase(value string) bool {
 	if err != nil || v == "" {
 		return false
 	}
-	switch v {
-	case "anytime", "someday", "today", "evening", "tomorrow":
-		return false
-	}
-	return !things.WhenDateOrTime(v)
+	return !things.KnownWhenWord(v) && !things.WhenDateOrTime(v)
 }
 
 // nearOffsetChange reports whether the local UTC offset an hour before now

@@ -164,12 +164,12 @@ func TestNormalizeDeadlineRejects(t *testing.T) {
 // so add and edit give the same error before anything is sent. Phrases and
 // valid dates and times still pass.
 func TestNormalizeWhenRejectsImpossibleDatesAndTimes(t *testing.T) {
-	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am", "2026-10-09T25:00:00Z", "2026-10-09T10:00", "2026-10-09T10:00:00+200"} {
+	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am", "2026-10-09T25:00:00Z", "2026-10-09T10:00:00+200", "2026-10-09T25:00", "tomorrow@25:00", "today@18:60", "Evening@13pm", "today@noon", "2026-10-09@soon", "someday@18:00", "anytime@9am"} {
 		if _, err := NormalizeWhen(in); err == nil || !strings.Contains(err.Error(), "invalid --when value") {
 			t.Errorf("NormalizeWhen(%q) = %v, want it refused", in, err)
 		}
 	}
-	for _, in := range []string{"2028-02-29", "2026-5-1", "2026-05-01@23:59", "00:00", "12:30pm", "9:30 PM", "blorp", "in 3 days", "next friday"} {
+	for _, in := range []string{"2026-10-09T10:00", "2026-10-09T10:00:00", "tomorrow@18:00", "evening@6pm", "2026-10-09@9pm", "next friday@noon", "2028-02-29", "2026-5-1", "2026-05-01@23:59", "00:00", "12:30pm", "9:30 PM", "blorp", "in 3 days", "next friday"} {
 		if _, err := NormalizeWhen(in); err != nil {
 			t.Errorf("NormalizeWhen(%q) = %v, want it to pass", in, err)
 		}
@@ -179,7 +179,7 @@ func TestNormalizeWhenRejectsImpossibleDatesAndTimes(t *testing.T) {
 // Every date and time form NormalizeWhen passes is told apart from a phrase,
 // a single-digit hour and an am/pm time included.
 func TestWhenDateOrTime(t *testing.T) {
-	for _, in := range []string{"2026-05-01", "2026-5-1", "2026-05-01@09:30", "2026-05-01@9:30", "09:30", "9:30", "9:30pm", "9:30 PM", "2026-05-01@9:30pm"} {
+	for _, in := range []string{"2026-05-01", "2026-5-1", "2026-05-01@09:30", "2026-05-01@9:30", "09:30", "9:30", "9:30pm", "9:30 PM", "2026-05-01@9:30pm", "2026-10-09@9pm", "tomorrow@18:00", "evening@6pm", "2026-10-09T10:00"} {
 		v, err := NormalizeWhen(in)
 		if err != nil || !WhenDateOrTime(v) {
 			t.Errorf("WhenDateOrTime(%q) = false (err %v), want true", in, err)
@@ -189,6 +189,30 @@ func TestWhenDateOrTime(t *testing.T) {
 		v, _ := NormalizeWhen(in)
 		if WhenDateOrTime(v) {
 			t.Errorf("WhenDateOrTime(%q) = true, want false", in)
+		}
+	}
+}
+
+// A date and time with no offset is read as the wall-clock time it names,
+// as an RFC3339 timestamp's offset is ignored.
+func TestNormalizeWhenLocalDateTime(t *testing.T) {
+	for in, want := range map[string]string{"2026-10-09T10:00": "2026-10-09@10:00", "2026-10-09T10:00:30": "2026-10-09@10:00"} {
+		if got, err := NormalizeWhen(in); err != nil || got != want {
+			t.Errorf("NormalizeWhen(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
+// KnownWhenWord covers the keywords and the weekday names, not phrases.
+func TestKnownWhenWord(t *testing.T) {
+	for _, in := range []string{"today", "Someday", "friday", "Mon"} {
+		if !KnownWhenWord(in) {
+			t.Errorf("KnownWhenWord(%q) = false, want true", in)
+		}
+	}
+	for _, in := range []string{"next friday", "blorp", "tonight"} {
+		if KnownWhenWord(in) {
+			t.Errorf("KnownWhenWord(%q) = true, want false", in)
 		}
 	}
 }
