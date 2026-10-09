@@ -78,6 +78,17 @@ func mustGetByUUID(t *testing.T, d *DB, uuid string) *model.Task {
 	return got
 }
 
+// mustFindByUUID is mustGetByUUID for a row the test seeded: a miss fails the
+// test rather than handing the caller a nil to dereference.
+func mustFindByUUID(t *testing.T, d *DB, uuid string) *model.Task {
+	t.Helper()
+	got := mustGetByUUID(t, d, uuid)
+	if got == nil {
+		t.Fatalf("GetTaskByUUID(%q): not found", uuid)
+	}
+	return got
+}
+
 // --- assertions ---
 
 // assertSet reports an error unless tasks hold exactly the want uuids, in any

@@ -17,9 +17,9 @@ import (
 // arrangement tests lean on that: their area and project indexes are negative,
 // as Things writes them, and the ordering CASE keys exist precisely because an
 // unfiled row's COALESCE default of 0 would otherwise sort it last instead of
-// first (issues #217, #237). A
-// fixture that numbered rows 1, 2, 3 for itself would leave those tests green
-// and meaningless, so "index" is a parameter here rather than a counter.
+// first (issues #217, #237). A fixture that numbered rows 1, 2, 3 for itself
+// would leave those tests green and meaningless, so "index" is a parameter
+// here rather than a counter.
 //
 // Columns left unset stay NULL, which is what an omitted column gave before —
 // the one exception is notes, which defaults to the empty string the old
@@ -67,10 +67,11 @@ func (f *Fixture) Tagged(task string, tags ...string) {
 
 // LogSettings seeds the TMSettings row that holds the Logbook's settings: the
 // logInterval Things moves closed rows after, and the manualLogDate "Log
-// Completed Now" last set. A nil argument is written as NULL.
+// Completed Now" last set. A nil argument is written as NULL. Things keeps one
+// settings row, so a second call replaces the first rather than failing.
 func (f *Fixture) LogSettings(logInterval, manualLogDate any) {
 	f.t.Helper()
-	f.exec(`INSERT INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
+	f.exec(`INSERT OR REPLACE INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
 		logInterval, manualLogDate)
 }
 

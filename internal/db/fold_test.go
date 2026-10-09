@@ -15,21 +15,21 @@ import (
 func TestFiltersIgnoreNonASCIICase(t *testing.T) {
 	d, fx := newFixture(t)
 
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('ar-a', 'Ärger', 1, 1),
-		('ar-k', 'κος',   1, 2),
-		('ar-s', 'Straße', 1, 3)`)
+	fx.Area("ar-a", "Ärger", 1)
+	fx.Area("ar-k", "κος", 2)
+	fx.Area("ar-s", "Straße", 3)
 	fx.Project("proj-a", "Ärger", 1, inArea("ar-a"))
 	fx.Project("proj-k", "κος", 2, inArea("ar-k"))
 	fx.Project("proj-s", "Straße", 5, inArea("ar-s"))
-	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
-		('tg-a', 'Ärger', 1),
-		('tg-k', 'κος',   2),
-		('tg-s', 'Straße', 3)`)
+	fx.Tag("tg-a", "Ärger", 1)
+	fx.Tag("tg-k", "κος", 2)
+	fx.Tag("tg-s", "Straße", 3)
 	fx.Todo("in-a", "Über alles", 3, anytime(), notes("Notiz zu ÄRGER"), inProject("proj-a"))
 	fx.Todo("in-k", "Φως", 4, anytime(), inProject("proj-k"))
 	fx.Todo("in-s", "Fahrt", 6, anytime(), inProject("proj-s"))
-	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-a', 'tg-a'), ('in-k', 'tg-k'), ('in-s', 'tg-s')`)
+	fx.Tagged("in-a", "tg-a")
+	fx.Tagged("in-k", "tg-k")
+	fx.Tagged("in-s", "tg-s")
 
 	for _, tc := range []struct {
 		name   string
@@ -50,10 +50,7 @@ func TestFiltersIgnoreNonASCIICase(t *testing.T) {
 		{"tag full fold", TaskFilter{Tag: "STRASSE"}, []string{"in-s"}},
 	} {
 		t.Run("list "+tc.name, func(t *testing.T) {
-			got := mustList(t, d, "project", tc.filter)
-			if !sameSet(uuidsOf(got), tc.want) {
-				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
-			}
+			assertSet(t, mustList(t, d, "project", tc.filter), tc.want, "%s", tc.name)
 		})
 	}
 
@@ -121,15 +118,16 @@ func TestFiltersIgnoreNormalisation(t *testing.T) {
 		noelNFC = "Noël"
 		noelNFD = "Noël"
 	)
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('ar-c', ?, 1, 1), ('ar-n', ?, 1, 2)`, cafeNFC, noelNFD)
+	fx.Area("ar-c", cafeNFC, 1)
+	fx.Area("ar-n", noelNFD, 2)
 	fx.Project("proj-c", cafeNFC, 1, inArea("ar-c"))
 	fx.Project("proj-n", noelNFD, 2, inArea("ar-n"))
-	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES
-		('tg-c', ?, 1), ('tg-n', ?, 2)`, cafeNFC, noelNFD)
+	fx.Tag("tg-c", cafeNFC, 1)
+	fx.Tag("tg-n", noelNFD, 2)
 	fx.Todo("in-c", "Crème brûlée", 3, anytime(), inProject("proj-c"))
 	fx.Todo("in-n", "Piña", 4, anytime(), inProject("proj-n"))
-	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-c', 'tg-c'), ('in-n', 'tg-n')`)
+	fx.Tagged("in-c", "tg-c")
+	fx.Tagged("in-n", "tg-n")
 
 	for _, tc := range []struct {
 		name   string
@@ -146,10 +144,7 @@ func TestFiltersIgnoreNormalisation(t *testing.T) {
 		{"project without the accent", TaskFilter{Project: "Cafe"}, nil},
 	} {
 		t.Run("list "+tc.name, func(t *testing.T) {
-			got := mustList(t, d, "project", tc.filter)
-			if !sameSet(uuidsOf(got), tc.want) {
-				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
-			}
+			assertSet(t, mustList(t, d, "project", tc.filter), tc.want, "%s", tc.name)
 		})
 	}
 
@@ -254,12 +249,12 @@ func TestFoldName(t *testing.T) {
 func TestListNamesMatchCompatibilityForms(t *testing.T) {
 	d, fx := newFixture(t)
 
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('ar-1', 'Area 2', 1, 1), ('ar-pct', '50％', 1, 2)`)
+	fx.Area("ar-1", "Area 2", 1)
+	fx.Area("ar-pct", "50％", 2)
 	fx.Project("proj-1", "Ｗork", 1, inArea("ar-1"))
-	mustExec(t, d, `INSERT INTO TMTag (uuid, title, "index") VALUES ('tg-1', 'Tag 2', 1)`)
+	fx.Tag("tg-1", "Tag 2", 1)
 	fx.Todo("in-1", "Do it", 2, anytime(), inProject("proj-1"))
-	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('in-1', 'tg-1')`)
+	fx.Tagged("in-1", "tg-1")
 
 	for _, tc := range []struct {
 		name   string
@@ -274,10 +269,7 @@ func TestListNamesMatchCompatibilityForms(t *testing.T) {
 		{"area wildcard", TaskFilter{Area: "5％"}, nil},
 	} {
 		t.Run("list "+tc.name, func(t *testing.T) {
-			got := mustList(t, d, "project", tc.filter)
-			if !sameSet(uuidsOf(got), tc.want) {
-				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
-			}
+			assertSet(t, mustList(t, d, "project", tc.filter), tc.want, "%s", tc.name)
 		})
 	}
 

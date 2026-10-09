@@ -225,9 +225,8 @@ func TestListProjectsCarriesScheduling(t *testing.T) {
 // matches (issue #262).
 func TestListProjectsAreaFilterMatchesLiterally(t *testing.T) {
 	d, fx := newFixture(t)
-	mustExec(t, d, `INSERT INTO TMArea (uuid, title, visible, "index") VALUES
-		('ar-pct', '100% Work', 1, 1),
-		('ar-home', 'Home', 1, 2)`)
+	fx.Area("ar-pct", "100% Work", 1)
+	fx.Area("ar-home", "Home", 2)
 	fx.Project("p-pct", "In percent area", 1, inArea("ar-pct"))
 	fx.Project("p-home", "In home", 2, inArea("ar-home"))
 
