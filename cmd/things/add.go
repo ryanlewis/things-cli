@@ -11,8 +11,8 @@ import (
 type AddCmd struct {
 	Title     string `arg:"" required:"" help:"Task title."`
 	Notes     string `help:"Notes for the task."`
-	When      string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, or RFC3339."`
-	Deadline  string `help:"Deadline date (YYYY-MM-DD)."`
+	When      string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM, or RFC3339."`
+	Deadline  string `help:"Deadline: a YYYY-MM-DD date or an English phrase such as \"next friday\"."`
 	Tags      string `help:"Comma-separated tags."`
 	Checklist string `help:"Newline-separated checklist items."`
 	Project   string `help:"Project name or UUID."`

@@ -207,7 +207,12 @@ the CLI's own read-back tells it whether the write landed.
 
 ## Script it with `--json`
 
-Every command accepts `-j` / `--json`, and it changes more than the format:
+Every command that reads or writes Things accepts `-j` / `--json`, as do
+`config path` and `config show`, and it changes more than the format. The
+rest print plain text whatever you pass: `version`, `completions`,
+`config init`, `update` and the `skill` commands. Their errors are still
+JSON.
+
 
 - **It never prompts.** An ambiguous title returns an error listing the
   candidates instead of opening a picker. `complete` or `cancel` on a
@@ -385,7 +390,10 @@ area page does. To read
 the contents, name the project: `things --project <uuid> -j` on a closed or
 trashed project returns its tasks whatever their status, and
 `things show <uuid> --agent` lists them under `## Tasks` with `[x]`, `[~]` or
-`[ ]` on each row. Naming the project reaches its tasks inside a view as well:
+`[ ]` on each row. The brief uses that heading and those marks whenever the
+project is closed or trashed or any of its listed tasks is closed; an open
+project whose tasks are all open lists them under `## Open tasks`, unmarked.
+Naming the project reaches its tasks inside a view as well:
 `things anytime --project <uuid> -j` on a trashed project lists its open tasks,
 and `things today --project <uuid> -j` on a closed project
 returns the tasks it closed today rather than an empty list. A task thrown

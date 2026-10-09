@@ -25,7 +25,7 @@ Your data never leaves the machine. Things3 stays the source of truth.
 
 ## AI-friendly
 
-Every command speaks JSON (`-j` / `--json`). A bundled agent skill ships
+Every command that reads or writes Things speaks JSON (`-j` / `--json`). A bundled agent skill ships
 inside the binary — install it once for Claude Code, Codex CLI, or Pi
 and your agent learns when to reach for `things` instead of guessing at
 AppleScript.

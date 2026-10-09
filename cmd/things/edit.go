@@ -22,8 +22,8 @@ type commonEditFlags struct {
 	PrependNotes *string `help:"Prepend text to notes." name:"prepend-notes"`
 	AppendNotes  *string `help:"Append text to notes." name:"append-notes"`
 
-	When     *string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, RFC3339, or empty to clear."`
-	Deadline *string `help:"Deadline date (YYYY-MM-DD) or empty to clear."`
+	When     *string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM, RFC3339, or empty to clear."`
+	Deadline *string `help:"Deadline: a YYYY-MM-DD date, an English phrase such as \"next friday\", or empty to clear."`
 
 	Tags    *string `help:"Replace all tags (comma-separated)."`
 	AddTags *string `help:"Add tags (comma-separated)." name:"add-tags"`

@@ -33,7 +33,7 @@ A title can match several items. Under `--json` an ambiguous reference is an err
 
 ## Output and `--json`
 
-Most commands accept `--json` / `-j`. Prefer it when parsing. It also guarantees the command never blocks on a prompt.
+Every command that reads or writes Things accepts `--json` / `-j`; `version`, `completions`, `config init`, `update` and the `skill` commands print plain text regardless, though their errors are JSON. Prefer it when parsing. It also guarantees the command never blocks on a prompt.
 
 - `status` is a string enum — `"open"`, `"cancelled"`, `"completed"` — on tasks, projects and checklist items, not the raw Things integer. Filter with `jq '.[] | select(.status=="open")'`.
 - `type` is a string enum the same way — `"task"` or `"project"` — not the raw Things integer. It is on task rows only: `things projects` rows and checklist items carry no `type`. Headings are never returned by any command, so `"heading"` never appears. Filter with `jq '.[] | select(.type=="project")'`. **This changed:** in v0.7.0 and earlier `type` was the integer `0`, `1` or `2`, so a filter matching on `.type==1` needs updating. Do not copy this value into an `import` payload — that format is Things' own and spells it `"to-do"`, and neither the CLI nor Things will tell you the item was dropped.
@@ -164,7 +164,7 @@ The rest of that import is already applied — re-run with only the failed items
 
 The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CONFIG_HOME/things-cli/config.toml`; `--config PATH` or `$THINGS_CLI_CONFIG` overrides) that changes what the flags default to. Precedence is flag > config file > built-in default. Keys: `json`, `color`, `hints`, `open_only`, `db`, `no_verify`, `verify_timeout`, `strict_tags`, `create_tags`, `assume_yes`.
 
-**The defaults you would otherwise assume may not hold.** `json = true` makes every command emit JSON; `no_verify = true` turns off rule 3 and the tag read-back in rule 1; `assume_yes = true` removes the confirmation in rule 4 (on `complete` and `cancel` only — never on `skill install`/`uninstall`).
+**The defaults you would otherwise assume may not hold.** `json = true` makes every command that reads or writes Things emit JSON; `no_verify = true` turns off rule 3 and the tag read-back in rule 1; `assume_yes = true` removes the confirmation in rule 4 (on `complete` and `cancel` only — never on `skill install`/`uninstall`).
 
 - Pass the flags you depend on explicitly: `--json` when you want JSON, `--json=false` when you want the plain listing. Do not infer the format from a bare invocation.
 - `things config show` prints the file in use and the defaults it establishes; `things config path` prints just the path and whether it exists.
@@ -344,7 +344,7 @@ A plain listing prints each task on one line: a line break or tab in a title, ta
 
 ## Date and multi-line values
 
-`--when` takes a keyword (`today`, `tomorrow`, `evening`, `anytime`, `someday`), a date `YYYY-MM-DD`, a time `HH:MM`, a date+time `YYYY-MM-DD@HH:MM`, or an RFC3339 timestamp. English phrases (`friday`, `next monday`) are passed through to Things. Likely keyword typos (edit distance ≤ 2, e.g. `tommorrow`) are rejected with a "did you mean" hint.
+`--when` takes a keyword (`today`, `tomorrow`, `evening`, `anytime`, `someday`), a date `YYYY-MM-DD`, a time `HH:MM` or `H:MMam`/`H:MMpm` (`9:30PM`), a date+time `YYYY-MM-DD@HH:MM`, or an RFC3339 timestamp. An RFC3339 timestamp keeps its wall-clock time and ignores its offset: `2026-05-01T09:00:00+05:00` sets 09:00 local, so convert to local time before passing one. English phrases (`friday`, `next monday`) are passed through to Things. Likely keyword typos (edit distance ≤ 2, e.g. `tommorrow`) are rejected with a "did you mean" hint.
 
 `--deadline` takes `YYYY-MM-DD` or an English phrase; keywords like `today` are rejected.
 
