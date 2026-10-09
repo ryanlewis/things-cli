@@ -105,7 +105,7 @@ func TestWhenCheckAcrossMidnight(t *testing.T) {
 	}{
 		{"today", today, true},
 		{"today", before, true},
-		{"today", today + 128, false},
+		{"today", today.AddDays(1), false},
 		{"next friday", before, true},
 	} {
 		day := tc.day
