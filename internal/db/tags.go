@@ -30,21 +30,11 @@ func (d *DB) ListTags() ([]model.Tag, error) {
 		-- otherwise list in an order SQLite does not define (issue #221).
 		ORDER BY "index" ASC, uuid ASC
 	`
-	rows, err := d.query(query)
-	if err != nil {
-		return nil, fmt.Errorf("querying tags: %w", err)
-	}
-	defer rows.Close()
-
-	tags := []model.Tag{}
-	for rows.Next() {
+	return queryAll(d, "tag", func(row rowScanner) (model.Tag, error) {
 		var t model.Tag
-		if err := rows.Scan(&t.UUID, &t.Title, &t.Shortcut, &t.ParentUUID); err != nil {
-			return nil, fmt.Errorf("scanning tag: %w", err)
-		}
-		tags = append(tags, t)
-	}
-	return tags, rows.Err()
+		err := row.Scan(&t.UUID, &t.Title, &t.Shortcut, &t.ParentUUID)
+		return t, err
+	}, query)
 }
 
 // UnknownTags returns the requested names that have no matching tag in the

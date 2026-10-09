@@ -59,8 +59,7 @@ func (d *DB) probeRepeating() {
 		// repeatColumn stays "" — the reference degrades to NULL — unless
 		// the probe finds a column below.
 		defer func() {
-			q := strings.ReplaceAll(baseTaskQuery, repeatingParentPlaceholder, recurrenceRef("p", d.repeatColumn))
-			d.repeatQuery = strings.ReplaceAll(q, repeatingPlaceholder, recurrenceRef("t", d.repeatColumn))
+			d.repeatQuery = fillRepeating(baseTaskQuery, recurrenceRef("t", d.repeatColumn), recurrenceRef("p", d.repeatColumn))
 		}()
 		cols, err := d.tableColumns("TMTask")
 		if err != nil {
@@ -76,6 +75,15 @@ func (d *DB) probeRepeating() {
 			}
 		}
 	})
+}
+
+// fillRepeating substitutes the recurrence placeholders in query: self, the
+// reference against the row, for repeatingPlaceholder, and parent, the one
+// against its parent project, for repeatingParentPlaceholder. Every query
+// carrying a placeholder is filled here, so none can fill one and miss the
+// other.
+func fillRepeating(query, self, parent string) string {
+	return strings.NewReplacer(repeatingPlaceholder, self, repeatingParentPlaceholder, parent).Replace(query)
 }
 
 // tableColumns returns the column names of table. The name is interpolated

@@ -148,7 +148,16 @@ LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 LEFT JOIN TMTag tag ON tt.tags = tag.uuid
 `
 
-func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
+// splitTags splits the tag titles GROUP_CONCAT joined with char(31), and
+// returns nil for a row with none.
+func splitTags(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\x1f")
+}
+
+func scanTask(row rowScanner) (model.Task, error) {
 	var t model.Task
 	var startDate, deadline, stopDate, creationDate, modificationDate sql.NullFloat64
 	var reminder sql.NullInt64
@@ -185,9 +194,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	t.StopDate = unixTime(stopDate)
 	t.CreationDate = unixTime(creationDate)
 	t.ModificationDate = unixTime(modificationDate)
-	if tagsStr != "" {
-		t.Tags = strings.Split(tagsStr, "\x1f")
-	}
+	t.Tags = splitTags(tagsStr)
 	if checklistTotal > 0 {
 		t.ChecklistProgress = &model.ChecklistProgress{Total: checklistTotal, Open: checklistOpen}
 	}
@@ -232,15 +239,24 @@ const todoOrProject = "t.type IN (0, 1)"
 // Now", whatever day it closed. Any other value, or no setting row, keeps the
 // daily rule. The other two were read from the app's preferences, not measured
 // in the live app, as that would mean changing the user's setting.
-const closedTodayUnlogged = `CASE COALESCE((SELECT logInterval FROM TMSettings LIMIT 1), 1)` +
-	` WHEN 0 THEN 0` +
-	` WHEN 4 THEN ` + closedAfterManualLog +
-	` ELSE ` + closedAfterManualLog + ` AND COALESCE(t.stopDate, 0) >= (SELECT start FROM ` + todayClock + `)` +
-	` AND COALESCE(t.stopDate, 0) < (SELECT finish FROM ` + todayClock + `) END`
+var closedTodayUnlogged = closedUnloggedOf("t")
+
+// closedUnloggedOf is closedTodayUnlogged asked of the TMTask row aliased
+// alias.
+func closedUnloggedOf(alias string) string {
+	stopDate := "COALESCE(" + alias + ".stopDate, 0)"
+	return `CASE COALESCE((SELECT logInterval FROM TMSettings LIMIT 1), 1)` +
+		` WHEN 0 THEN 0` +
+		` WHEN 4 THEN ` + closedAfterManualLog(alias) +
+		` ELSE ` + closedAfterManualLog(alias) + ` AND ` + stopDate + ` >= (SELECT start FROM ` + todayClock + `)` +
+		` AND ` + stopDate + ` < (SELECT finish FROM ` + todayClock + `) END`
+}
 
 // closedAfterManualLog is true for a row closed after the last "Log Completed
 // Now", the condition the daily and manual choices share.
-const closedAfterManualLog = `COALESCE(t.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0)`
+func closedAfterManualLog(alias string) string {
+	return `COALESCE(` + alias + `.stopDate, 0) > COALESCE((SELECT manualLogDate FROM TMSettings LIMIT 1), 0)`
+}
 
 // todayScheduled is the today view's scheduling test: the rows Things files
 // under Today by their start date. todayDue is the other way in, and
@@ -333,7 +349,7 @@ const thingsToday = `(SELECT day FROM ` + todayClock + `)`
 // withholding such a row would take it out of every list. The Logbook keeps
 // them (includesTemplates) at once. Both halves of notATemplate are "IS NULL"
 // tests, which are never NULL themselves.
-const heldInPlace = "(" + closedTodayUnlogged + " AND " + notATemplate + ")"
+var heldInPlace = "(" + closedTodayUnlogged + " AND " + notATemplate + ")"
 
 // notATemplate excludes the rows those views never carry: the template
 // row itself, and a to-do inside a repeating project template, which carries
@@ -360,7 +376,7 @@ const parentClosed = "COALESCE(p.status, 0) IN (2, 3)"
 const parentNotClosed = "NOT (" + parentClosed + ")"
 
 // parentCloseUnlogged is closedTodayUnlogged asked of the parent project.
-var parentCloseUnlogged = strings.ReplaceAll(closedTodayUnlogged, "t.stopDate", "p.stopDate")
+var parentCloseUnlogged = closedUnloggedOf("p")
 
 // parentNotClosedOrUnlogged is the fold the views that show unlogged rows apply:
 // a to-do of a closed project stays in place, struck through, until the
@@ -395,21 +411,32 @@ func openOrJustClosed(o whereOpts) string {
 	if !o.includeCompleted {
 		return openRows
 	}
-	justClosed := closedRows + " AND " + closedTodayUnlogged
 	// The fold exists so a logged project is one row rather than a row plus
 	// its contents. Naming that project is asking for the contents, so the
 	// fold comes off — the same answer `things --project <uuid>` and
 	// `show --agent` already give (issue #253). With p pinned to the named
 	// project the clause is a constant, true for an open project and false
 	// for a closed one, so dropping it can only ever affect the closed case.
-	if !o.projectNamed {
-		if o.foldsUnlogged {
-			justClosed += " AND " + parentNotClosed
-		} else {
-			justClosed += " AND " + parentNotClosedOrUnlogged
-		}
+	switch {
+	case o.projectNamed:
+		return openOrUnlogged("")
+	case o.foldsUnlogged:
+		return openOrUnlogged(parentNotClosed)
+	default:
+		return openOrUnlogged(parentNotClosedOrUnlogged)
 	}
-	return "(" + openRows + " OR (" + justClosed + "))"
+}
+
+// openOrUnlogged is the open rows and the closed rows Things has not yet
+// logged, the one spelling of "open or just closed" that the views, `things
+// projects` and AddTarget all take. fold, when not empty, is a further test
+// on the closed rows alone.
+func openOrUnlogged(fold string) string {
+	closed := closedRows + " AND " + closedTodayUnlogged
+	if fold != "" {
+		closed += " AND " + fold
+	}
+	return "(" + openRows + " OR (" + closed + "))"
 }
 
 // The row-state and row-kind tests every view is built from. They were spelled
@@ -448,13 +475,6 @@ const (
 	// out of the Inbox. A start = 2 to-do whose day has come is in Anytime
 	// too, as it is in Today (scheduledArrived).
 	anytimeScope = "(" + anytimeBucket + " OR (" + scheduledArrived + ") OR (" + todayDue + "))"
-	// upcomingScheduled and somedayDeferred split the one Things code between
-	// them. start = 2 is both lists: the app shows a deferred item in Upcoming
-	// once it carries a date and in Someday while it does not. A dated one
-	// whose day has come is Today's instead (scheduledArrived), so Upcoming
-	// takes only the days after today.
-	upcomingScheduled = "t.start = 2 AND t.startDate > " + thingsToday
-	somedayDeferred   = "t.start = 2 AND t.startDate IS NULL"
 	// upcomingDue is the other way into Upcoming: an Anytime or Someday row
 	// with no start date but a deadline after today, which the app lists under
 	// the deadline's day. Measured on 30 Sep 2026, the app's Upcoming held both
@@ -470,9 +490,6 @@ const (
 	// measured on 9 Oct 2026, under an open parent project and under a
 	// Someday one alike, while the app's Someday list left both out.
 	upcomingDue = "t.start IN (1, 2) AND t.startDate IS NULL AND t.deadline > " + thingsToday
-	// upcomingScope is Upcoming's whole scope: the two ways in, either of
-	// which is enough.
-	upcomingScope = "((" + upcomingScheduled + ") OR (" + upcomingDue + "))"
 	// upcomingDate is the day Upcoming files a row under — its start date,
 	// or for an upcomingDue row, which has none, its deadline. It is both the
 	// view's sort key and the column --on/--from/--to compare.
@@ -482,6 +499,34 @@ const (
 	// themselves, not the items they generate (issue #147).
 	isTemplate = repeatingPlaceholder + " IS NOT NULL"
 )
+
+// upcomingScheduled and somedayDeferred split the one Things code between
+// them. start = 2 is both lists: the app shows a deferred item in Upcoming
+// once it carries a date and in Someday while it does not. A dated one
+// whose day has come is Today's instead (scheduledArrived), so Upcoming
+// takes only the days after today.
+var (
+	upcomingScheduled = scheduledLaterOf("t")
+	somedayDeferred   = deferredUndatedOf("t")
+	// upcomingScope is Upcoming's whole scope: the two ways in, either of
+	// which is enough.
+	upcomingScope = "((" + upcomingScheduled + ") OR (" + upcomingDue + "))"
+)
+
+// scheduledLaterOf and deferredUndatedOf are upcomingScheduled and
+// somedayDeferred asked of the TMTask row aliased alias.
+func scheduledLaterOf(alias string) string {
+	return alias + ".start = 2 AND " + alias + ".startDate > " + thingsToday
+}
+
+func deferredUndatedOf(alias string) string {
+	return alias + ".start = 2 AND " + alias + ".startDate IS NULL"
+}
+
+// notHeldInPlace is the Logbook's complement of what Things has not yet
+// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosedOrUnlogged, which it shares
+// with the views that show unlogged rows, so it is defined with its pair.
+var notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
 
 // The predicates only one view needs.
 const (
@@ -496,10 +541,6 @@ const (
 	// deferred any more, only not yet moved (scheduledArrived), so its to-dos
 	// stay (issue #363). COALESCE keeps an unparented to-do.
 	parentNotDeferred = "NOT (COALESCE(p.start, 1) = 2 AND (p.startDate IS NULL OR p.startDate > " + thingsToday + "))"
-	// notHeldInPlace is the Logbook's complement of what Things has not yet
-	// logged. COALESCE makes the negation null-safe. The Logbook's other extra is parentNotClosedOrUnlogged, which it shares
-	// with the views that show unlogged rows, so it is defined with its pair.
-	notHeldInPlace = "COALESCE(" + heldInPlace + ", 0) = 0"
 	// notTodayDue is todayDue's other half, for the Inbox and Someday: an
 	// undated row whose deadline has come leaves its bucket for Today and
 	// Anytime, and goes back when it is taken out of Today for that deadline.
@@ -1027,8 +1068,8 @@ var listGrouping = `CASE WHEN a.uuid IS NULL AND pa.uuid IS NULL THEN 0 ELSE 1 E
 // somedayDeferred asked of the row's project, so a project group sorts by the
 // same buckets the rows inside it do.
 var (
-	projectScheduled = strings.ReplaceAll(upcomingScheduled, "t.", "p.")
-	projectDeferred  = strings.ReplaceAll(somedayDeferred, "t.", "p.")
+	projectScheduled = scheduledLaterOf("p")
+	projectDeferred  = deferredUndatedOf("p")
 )
 
 // eveningLast is Today's first key: the This Evening rows (startBucket 1)
@@ -1199,7 +1240,7 @@ func foldsIntoTaggedProject(spec viewSpec, opts TaskFilter) bool {
 // and not yet logged is listed.
 var projectOfFoldedTagged = "t.type = 1 AND " + closedRows + " AND t.uuid IN (SELECT COALESCE(c.project, ch.project) FROM TMTask c" +
 	" LEFT JOIN TMTask ch ON c.heading = ch.uuid WHERE c.status IN (2, 3) AND c.trashed = 0 AND " +
-	strings.ReplaceAll(closedTodayUnlogged, "t.stopDate", "c.stopDate") + " AND c.uuid IN ("
+	closedUnloggedOf("c") + " AND c.uuid IN ("
 
 // projectNameMatch is the --project clause for the project row aliased alias,
 // with its arguments: the uuid, or the title. An exact-case title wins, and
@@ -1349,10 +1390,7 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	// filters carry a placeholder that only a live DB can resolve. On a
 	// schema with no such column it degrades to NULL: "IS NULL" makes the
 	// exclusion a no-op and "IS NOT NULL" leaves the repeating view empty.
-	// The parent-alias placeholder is substituted first; the two literals do
-	// not overlap, so the order is belt and braces rather than load-bearing.
-	where = strings.ReplaceAll(where, repeatingParentPlaceholder, d.recurrenceColFor("p"))
-	where = strings.ReplaceAll(where, repeatingPlaceholder, d.recurrenceCol())
+	where = fillRepeating(where, d.recurrenceCol(), d.recurrenceColFor("p"))
 
 	query := d.taskQuery() + " WHERE " + where + " GROUP BY t.uuid " + spec.orderBy
 	return query, args, nil
@@ -1501,15 +1539,8 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	open, closed := splitOpen(folded)
-	if candidates := preferInstances(open); len(candidates) > 0 {
-		if len(candidates) == 1 {
-			return &candidates[0], nil
-		}
-		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
-	}
-	if candidates := preferInstances(closed); len(candidates) > 0 {
-		return nil, &ClosedTitleError{Query: uuidOrTitle, Matches: candidates}
+	if t, err := pickTitleMatch(uuidOrTitle, folded); t != nil || err != nil {
+		return t, err
 	}
 
 	// Try LIKE match — return all matches for disambiguation
@@ -1551,17 +1582,29 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	open, closed := splitOpen(all)
+	if t, err := pickTitleMatch(uuidOrTitle, all); t != nil || err != nil {
+		return t, err
+	}
+	return nil, &TaskNotFoundError{Query: uuidOrTitle}
+}
+
+// pickTitleMatch is the decision both title lookups make over the rows a
+// title matched. A single open row outside the Trash is the task; several
+// are an *AmbiguousTaskError. With none, closed or trashed rows are a
+// *ClosedTitleError. A repeating template gives way to an instance of its
+// kind first (preferInstances). With no rows at all it returns nil, nil.
+func pickTitleMatch(query string, rows []model.Task) (*model.Task, error) {
+	open, closed := splitOpen(rows)
 	if candidates := preferInstances(open); len(candidates) > 0 {
 		if len(candidates) == 1 {
 			return &candidates[0], nil
 		}
-		return nil, &AmbiguousTaskError{Query: uuidOrTitle, Matches: candidates}
+		return nil, &AmbiguousTaskError{Query: query, Matches: candidates}
 	}
 	if candidates := preferInstances(closed); len(candidates) > 0 {
-		return nil, &ClosedTitleError{Query: uuidOrTitle, Matches: candidates}
+		return nil, &ClosedTitleError{Query: query, Matches: candidates}
 	}
-	return nil, &TaskNotFoundError{Query: uuidOrTitle}
+	return nil, nil
 }
 
 // ClosedTitleError reports a reference whose exact title is carried only by
@@ -1682,7 +1725,7 @@ func preferInstances(matches []model.Task) []model.Task {
 // write on the wrong task. Matching ignores case, beyond ASCII too (see
 // literalLike); nothing documented offered wildcards.
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0 AND " + notHeading + " AND fold(t.title) LIKE ?" + escapeClause +
+	query := d.taskQuery() + " WHERE " + untrashedRows + " AND " + untrashedParent + " AND " + openRows + " AND " + notHeading + " AND fold(t.title) LIKE ?" + escapeClause +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, containsLike(substr))
 }
@@ -1743,19 +1786,30 @@ func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 }
 
 func (d *DB) collectTasks(query string, args ...any) ([]model.Task, error) {
+	return queryAll(d, "task", scanTask, query, args...)
+}
+
+// rowScanner is what a scan function reads one row through: *sql.Row and
+// *sql.Rows both satisfy it.
+type rowScanner interface{ Scan(...any) error }
+
+// queryAll runs query and scans every row it returns with scan. The result
+// is empty rather than nil when no row matches. noun names one row in the
+// error text: "querying <noun>s", "scanning <noun>".
+func queryAll[T any](d *DB, noun string, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
 	rows, err := d.query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("querying tasks: %w", err)
+		return nil, fmt.Errorf("querying %ss: %w", noun, err)
 	}
 	defer rows.Close()
 
-	tasks := []model.Task{}
+	out := []T{}
 	for rows.Next() {
-		t, err := scanTask(rows)
+		v, err := scan(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scanning task: %w", err)
+			return nil, fmt.Errorf("scanning %s: %w", noun, err)
 		}
-		tasks = append(tasks, t)
+		out = append(out, v)
 	}
-	return tasks, rows.Err()
+	return out, rows.Err()
 }
