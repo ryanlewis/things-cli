@@ -162,7 +162,7 @@ func realDate(v string) string {
 // checkScheduleValue), as `name: value (why)`, and the attribute names. A
 // value that is not a string is left to the type checks.
 func badImportSchedule(item map[string]any) (lines, names []string) {
-	if itemType, _ := item["type"].(string); !importTaskTypes[strings.TrimSpace(itemType)] {
+	if _, ok := payloadType(item); !ok {
 		return nil, nil
 	}
 	attrs, _ := item["attributes"].(map[string]any)
@@ -189,8 +189,8 @@ var importDestAttrs = []string{"list", "list-id", "heading", "heading-id", "area
 // Things 3: a number, boolean or array there makes it reject the whole
 // payload. Update items were not measured, so they are not checked.
 func badImportTypes(item map[string]any) (lines, names []string) {
-	itemType, _ := item["type"].(string)
-	if op, _ := item["operation"].(string); !importTaskTypes[strings.TrimSpace(itemType)] || (op != "" && op != "create") {
+	_, task := payloadType(item)
+	if op, _ := item["operation"].(string); !task || (op != "" && op != "create") {
 		return nil, nil
 	}
 	attrs, _ := item["attributes"].(map[string]any)
@@ -205,10 +205,6 @@ func badImportTypes(item map[string]any) (lines, names []string) {
 	}
 	return lines, names
 }
-
-// importTaskTypes are the payload item types that are to-dos or projects,
-// by the format's word for them.
-var importTaskTypes = map[string]bool{"to-do": true, "project": true}
 
 // restrictedImportAttrs names the attributes in an update item's `attributes`
 // that Things refuses on a repeating item, in the order the docs list them. It

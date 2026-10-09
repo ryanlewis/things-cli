@@ -245,7 +245,13 @@ func (c importCreate) want() createdWant { return createdWant{key: c.key(), dest
 // type is to-do or project. ok is false for any other type, and typ is then
 // TypeTask.
 func payloadType(item map[string]any) (typ model.TaskType, ok bool) {
-	switch itemType, _ := item["type"].(string); strings.TrimSpace(itemType) {
+	itemType, _ := item["type"].(string)
+	return taskTypeOf(strings.TrimSpace(itemType))
+}
+
+// taskTypeOf is payloadType for a type already read and trimmed.
+func taskTypeOf(itemType string) (typ model.TaskType, ok bool) {
+	switch itemType {
 	case "to-do":
 		return model.TypeTask, true
 	case "project":

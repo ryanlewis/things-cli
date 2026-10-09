@@ -335,7 +335,7 @@ func importCreates(payload []any) []importCreate {
 		if op != "" && op != "create" {
 			return
 		}
-		typ, ok := payloadType(v)
+		typ, ok := taskTypeOf(itemType)
 		if !ok {
 			return
 		}
