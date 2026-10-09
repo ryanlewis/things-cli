@@ -25,7 +25,7 @@ func seedTasks(t *testing.T, d *DB) {
 	fx.Tag("tg-home", "home", 2)
 
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 	done := model.TimeToUnix(time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC))
 
 	fx.Todo("t-today", "Today task", 10, anytimeOn(today), todayIndexRef(today), todayIndex(1))
@@ -1194,7 +1194,7 @@ func TestListTasksProjectViewExcludesTrashedProject(t *testing.T) {
 // project.
 func TestListTasksViewsExcludeTrashedProject(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 
 	// view → the columns beyond the shared ones that put a row in that view.
 	cases := []struct {
@@ -2083,7 +2083,7 @@ func TestListTasksViewsIncludeProjects(t *testing.T) {
 	d, fx := newFixture(t)
 
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
@@ -2171,7 +2171,7 @@ func TestAnytimeHasNoProjectRows(t *testing.T) {
 	d, fx := newFixture(t)
 
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
@@ -2382,8 +2382,8 @@ func TestUpcomingOrdersByDateThenTodayIndex(t *testing.T) {
 	d, fx := newFixture(t)
 
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
-	later := today + (2 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
+	later := int64(model.ThingsDate(today).AddDays(2))
 
 	// Indexes run against the wanted order so t."index" alone cannot produce it.
 	fx.Todo("late-b", "Later two", 1, somedayOn(later), todayIndex(-100))
@@ -2722,7 +2722,7 @@ func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
 	d, fx := newFixture(t)
 
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
@@ -2765,7 +2765,7 @@ func TestListTasksCatchAllViewExclusions(t *testing.T) {
 	d, fx := newFixture(t)
 
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
@@ -3055,7 +3055,7 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 // trashed-parent guard before the filter could ask for them (issue #263).
 func TestNamedTrashedProjectLiftsTheTrashedParentGuard(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 
 	// view → the columns beyond the shared ones that put a row in that view.
 	cases := []struct {
@@ -3903,7 +3903,7 @@ func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
 	// filtering on status. Seed a cancelled row shaped to land in each of
 	// them, so only `t.status = 0` keeps it out.
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 	stopped := model.TimeToUnix(testNow.Add(-24 * time.Hour))
 	fx.Todo("cancel-today", "Was due today", 8, anytimeOn(today), cancelled(stopped))
 	fx.Todo("cancel-upcoming", "Was scheduled", 9, somedayOn(tomorrow), cancelled(stopped))

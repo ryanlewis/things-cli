@@ -230,7 +230,7 @@ func TestTemplateChildExcludedFromSomeday(t *testing.T) {
 // rather than just hiding everything.
 func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(testNow))
-	tomorrow := today + (1 << 7)
+	tomorrow := int64(model.ThingsDate(today).AddDays(1))
 
 	cases := []struct {
 		view    string

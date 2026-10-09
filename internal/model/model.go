@@ -207,6 +207,12 @@ func ThingsDateFromTime(t time.Time) ThingsDate {
 	return ThingsDate(t.Year()<<16 | int(t.Month())<<12 | t.Day()<<7)
 }
 
+// AddDays returns the date n calendar days after d (before it when n is
+// negative). Adding to the day bits directly would give day 32 on the 31st.
+func (d ThingsDate) AddDays(n int) ThingsDate {
+	return ThingsDateFromTime(d.ToTime().AddDate(0, 0, n))
+}
+
 func (d ThingsDate) String() string {
 	return d.ToTime().Format("2006-01-02")
 }
