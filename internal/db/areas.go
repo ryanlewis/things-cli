@@ -36,21 +36,11 @@ func (d *DB) ListAreas() ([]model.Area, error) {
 		-- otherwise list in an order SQLite does not define (issue #221).
 		ORDER BY "index" ASC, uuid ASC
 	`
-	rows, err := d.query(query)
-	if err != nil {
-		return nil, fmt.Errorf("querying areas: %w", err)
-	}
-	defer rows.Close()
-
-	areas := []model.Area{}
-	for rows.Next() {
+	return queryAll(d, "area", func(row rowScanner) (model.Area, error) {
 		var a model.Area
 		var visible int
-		if err := rows.Scan(&a.UUID, &a.Title, &visible); err != nil {
-			return nil, fmt.Errorf("scanning area: %w", err)
-		}
+		err := row.Scan(&a.UUID, &a.Title, &visible)
 		a.Visible = visible != 0
-		areas = append(areas, a)
-	}
-	return areas, rows.Err()
+		return a, err
+	}, query)
 }

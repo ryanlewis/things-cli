@@ -66,9 +66,9 @@ func (d *DB) AddTarget(list, heading string) (target Target, headingFound bool, 
 		SELECT uuid, COALESCE(title, ''), COALESCE(status, 0), COALESCE(trashed, 0), COUNT(*) OVER () - 1
 		FROM TMTask t
 		WHERE type = ? AND (uuid = ? OR (fold_name(title) = ? AND COALESCE(trashed, 0) = 0
-			AND (status = ? OR `+closedTodayUnlogged+`) AND `+d.recurrenceCol()+` IS NULL))
+			AND `+openOrUnlogged("")+` AND `+d.recurrenceCol()+` IS NULL))
 		ORDER BY uuid = ? DESC, uuid
-		LIMIT 1`, int(model.TypeProject), id, FoldName(list), int(model.StatusOpen), id).
+		LIMIT 1`, int(model.TypeProject), id, FoldName(list), id).
 		Scan(&target.UUID, &target.Title, &target.Status, &trashed, &target.Others)
 	switch {
 	case err == sql.ErrNoRows:

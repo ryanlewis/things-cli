@@ -2,8 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
-	"strings"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -49,7 +47,7 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted, openOnly bool) ([
 	case openOnly:
 		query += " AND " + openRows
 	default:
-		query += " AND (" + openRows + " OR (" + closedRows + " AND " + closedTodayUnlogged + "))"
+		query += " AND " + openOrUnlogged("")
 	}
 	if areaFilter != "" {
 		// The same --area flag as the list filters, escaped the same way so
@@ -67,40 +65,29 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted, openOnly bool) ([
 
 	// shownStart asks whether the row is a template or inside one. A project
 	// has no parent project, so that half is NULL.
-	query = strings.NewReplacer(
-		repeatingPlaceholder, d.recurrenceCol(),
-		repeatingParentPlaceholder, "NULL",
-	).Replace(query)
+	query = fillRepeating(query, d.recurrenceCol(), "NULL")
 
-	rows, err := d.query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("querying projects: %w", err)
-	}
-	defer rows.Close()
+	return queryAll(d, "project", scanProject, query, args...)
+}
 
-	projects := []model.Project{}
-	for rows.Next() {
-		var p model.Project
-		var tagsStr string
-		var status sql.NullInt64
-		var startDate, deadline sql.NullFloat64
-		if err := rows.Scan(
-			&p.UUID, &p.Title, &status,
-			&p.Start, &p.StartBucket, &startDate, &deadline,
-			&p.AreaUUID, &p.AreaTitle, &tagsStr,
-			&p.TaskCount, &p.OpenCount,
-		); err != nil {
-			return nil, fmt.Errorf("scanning project: %w", err)
-		}
-		if status.Valid {
-			p.Status = model.Status(status.Int64)
-		}
-		p.StartDate = thingsDate(startDate)
-		p.Deadline = thingsDate(deadline)
-		if tagsStr != "" {
-			p.Tags = strings.Split(tagsStr, "\x1f")
-		}
-		projects = append(projects, p)
+func scanProject(row rowScanner) (model.Project, error) {
+	var p model.Project
+	var tagsStr string
+	var status sql.NullInt64
+	var startDate, deadline sql.NullFloat64
+	if err := row.Scan(
+		&p.UUID, &p.Title, &status,
+		&p.Start, &p.StartBucket, &startDate, &deadline,
+		&p.AreaUUID, &p.AreaTitle, &tagsStr,
+		&p.TaskCount, &p.OpenCount,
+	); err != nil {
+		return p, err
 	}
-	return projects, rows.Err()
+	if status.Valid {
+		p.Status = model.Status(status.Int64)
+	}
+	p.StartDate = thingsDate(startDate)
+	p.Deadline = thingsDate(deadline)
+	p.Tags = splitTags(tagsStr)
+	return p, nil
 }
