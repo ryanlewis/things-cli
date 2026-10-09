@@ -588,7 +588,8 @@ read-back (five seconds by default; see `--verify-timeout` under Editing).
 Under `--json` the unconfirmed cases print `{"title": …, "confirmed":
 false, "reason": "no-verify"|"unreadable"|"ambiguous"}`, with
 `"candidates": [uuids]` for `ambiguous`. There is no `uuid`, because the
-add did not return one. An add that `--when` did not file where it said
+add did not return one, except with reason `when`: the item was found, but
+Things did not understand the `--when` phrase (below). An add that `--when` did not file where it said
 (below) is an error instead: under `--json` its one object has `"error":
 "misfiled"`, the item's `"uuid"` and where it `"landed"`.
 
@@ -721,7 +722,13 @@ naming the item they found; search for the title before adding it again,
 since another add of the same title at the same moment can be the one
 found. Under `--json` either error is one object with `"error":
 "misfiled"`, the item's `"uuid"` and where it `"landed"`. An English phrase is
-not checked. A write sent just before midnight counts as filed for either
+not checked against a place, but one Things does not understand is reported:
+a value shaped like a date or time that names none, such as `2026-13-01` or
+`25:00`, is refused before anything is sent; `add` warns `Things did not
+understand --when "…"` when the new item has no start date, and exits 0
+(under `--json`, `{"uuid", "title", "confirmed": false, "reason": "when"}`);
+and `edit` still waits, then exits non-zero naming the phrase as the likely
+cause. A write sent just before midnight counts as filed for either
 day.
 An edit with no field flags and no status to change prints the item
 without waiting. `--complete` or `--cancel` on an open item waits for the

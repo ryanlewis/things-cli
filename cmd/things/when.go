@@ -115,6 +115,31 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 	return whenPlace{day: day, bucket: -1, reminder: reminderKept}, true
 }
 
+// whenPhrase reports whether value goes to Things as a free phrase: one that
+// is none of the keywords, an HH:MM time, a date or a date and time, so
+// Things reads it with its own English parser, or ignores it. A phrase
+// Things understands gives the item a start date; one it ignores leaves the
+// item where it would be with no --when.
+func whenPhrase(value string) bool {
+	v, err := things.NormalizeWhen(value)
+	if err != nil || v == "" {
+		return false
+	}
+	switch v {
+	case "anytime", "someday", "today", "evening", "tomorrow":
+		return false
+	}
+	if _, ok := parseClock(v); ok {
+		return false
+	}
+	datePart := v
+	if len(v) == len("2006-01-02@15:04") && v[10] == '@' {
+		datePart = v[:10]
+	}
+	_, err = time.ParseInLocation("2006-01-02", datePart, time.Local)
+	return err != nil
+}
+
 // nearOffsetChange reports whether the local UTC offset an hour before now
 // differs from the one an hour after: a daylight-saving change within the
 // hour either side.

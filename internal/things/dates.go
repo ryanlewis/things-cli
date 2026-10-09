@@ -2,7 +2,9 @@ package things
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -53,10 +55,58 @@ func NormalizeWhen(s string) (string, error) {
 	if isWeekdayWord(strings.ToLower(v)) {
 		return v, nil
 	}
+	if err := checkWhenShape(v); err != nil {
+		return "", err
+	}
 	if k, ok := nearKeyword(v); ok {
 		return "", fmt.Errorf("unrecognised --when value %q (did you mean %q? valid keywords: %s)", v, k, strings.Join(whenKeywords, ", "))
 	}
 	return v, nil
+}
+
+var (
+	// whenDateShape is a value that starts like a date: year, month and day
+	// in digits, then anything (an @time, say).
+	whenDateShape = regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$`)
+	// whenClockShape is a value shaped like a time of day, with an optional
+	// am or pm.
+	whenClockShape = regexp.MustCompile(`(?i)^(\d{1,2}):(\d{2})\s*(am|pm)?$`)
+)
+
+// checkWhenShape refuses a value shaped like a date or a time of day that
+// names none: a month or day that does not exist, or an hour or minute out
+// of range. Things cannot read such a value either, and drops it without a
+// word. Any other value passes, English phrases included, since which of
+// those Things understands is not known here.
+func checkWhenShape(v string) error {
+	clock := v
+	if m := whenDateShape.FindStringSubmatch(v); m != nil {
+		year, _ := strconv.Atoi(m[1])
+		month, _ := strconv.Atoi(m[2])
+		day, _ := strconv.Atoi(m[3])
+		if month < 1 || month > 12 || day < 1 || day > time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
+			return fmt.Errorf("invalid --when value %q: %s-%s-%s is not a date (use YYYY-MM-DD)", v, m[1], m[2], m[3])
+		}
+		rest, ok := strings.CutPrefix(m[4], "@")
+		if !ok {
+			return nil
+		}
+		clock = rest
+	}
+	m := whenClockShape.FindStringSubmatch(clock)
+	if m == nil {
+		return nil
+	}
+	hour, _ := strconv.Atoi(m[1])
+	minute, _ := strconv.Atoi(m[2])
+	maxHour, minHour := 23, 0
+	if m[3] != "" {
+		maxHour, minHour = 12, 1
+	}
+	if hour < minHour || hour > maxHour || minute > 59 {
+		return fmt.Errorf("invalid --when value %q: %s is not a time of day (use HH:MM)", v, clock)
+	}
+	return nil
 }
 
 // ParseListDate parses a list-filter date (--on/--from/--to). Accepts

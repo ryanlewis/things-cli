@@ -265,6 +265,18 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			case expired && current.Status == w.want:
 				// Only an edit can get here: the status is right but the
 				// modification date never moved.
+				if w.when != nil && whenPhrase(w.when.value) {
+					// Things records nothing for a phrase it ignores, so
+					// this cannot be told from a slow write before the
+					// budget runs out; the phrase is the likely cause.
+					results[i] = statusResult{
+						err: fmt.Errorf("edit did not apply: %q (%s) was not modified within %s. Things most likely did not understand --when %q and left the item unchanged; use a keyword, a YYYY-MM-DD date or an HH:MM time instead. Run `things show %s` before retrying; do not retry blindly",
+							w.title, w.uuid, budget, w.when.value, w.uuid),
+						got:      current.Status,
+						observed: true,
+					}
+					continue
+				}
 				results[i] = statusResult{
 					err: fmt.Errorf("edit did not apply: %q (%s) was not modified within %s. Either Things dropped the command — check that Things3 is running — or every value in the edit was one the item already had, which Things does not record as a change. Run `things show %s` to see which before retrying; do not retry blindly",
 						w.title, w.uuid, budget, w.uuid),
@@ -680,8 +692,25 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 				kindWord(typ), title, item.UUID, when, where, searchCommand(d, title), strings.Join(edit, " "), item.UUID),
 			kind: kindWord(typ), title: title, uuid: item.UUID, landed: where,
 		}
+	case whenSent != nil && whenPhrase(when) && found[0].StartDate == nil:
+		// A phrase Things understood would have given the item a start
+		// date. The item exists, so this is not a failure, but the --when
+		// was not applied and the caller has to know.
+		item := &found[0]
+		fmt.Fprintf(d.errOut(), "warning: Things did not understand --when %q; the %s was created %s\n", when, kindNoun(typ), describeStart(item))
+		if d.JSON {
+			return output.PrintJSON(d.Stdout, unconfirmedAdd{UUID: item.UUID, Title: title, Reason: "when"})
+		}
 	}
 	return printItem(d, database, &found[0])
+}
+
+// kindNoun is the prose word for an item of type typ.
+func kindNoun(typ model.TaskType) string {
+	if typ == model.TypeProject {
+		return "project"
+	}
+	return "to-do"
 }
 
 // searchCommand renders the `things search` command that looks for title in
@@ -704,6 +733,9 @@ func searchCommand(d *Deps, title string) string {
 // back. There is no uuid: the add returns none, and finding it is the
 // read-back. candidates lists the new items an ambiguous read-back found.
 type unconfirmedAdd struct {
+	// UUID is given only when the item was found: reason "when", where the
+	// item exists but Things ignored the --when sent with it.
+	UUID       string   `json:"uuid,omitempty"`
 	Title      string   `json:"title"`
 	Confirmed  bool     `json:"confirmed"`
 	Reason     string   `json:"reason"`
