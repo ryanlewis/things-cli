@@ -389,4 +389,17 @@ func TestTagAddReportsCaseTwinAsSkipped(t *testing.T) {
 	if names := osascriptTagNames(*calls); !slices.Equal(names, []string{"focus"}) {
 		t.Errorf("created %v in Things, want [focus] once", names)
 	}
+
+	// Plain output does not say a twin of a tag this run created already
+	// existed.
+	database, sqlDB = seedTagDB(t)
+	stubExecCreatingTags(t, sqlDB)
+	plain, err := runOut(t, database, "tag", "add", "focus", "Work", "FOCUS", "work")
+	if err != nil {
+		t.Fatalf("tag add: %v", err)
+	}
+	want := "created: focus\nalready exists: Work\nskipped: FOCUS, same name as focus\nskipped: work, same name as Work\n"
+	if plain != want {
+		t.Errorf("plain output = %q, want %q", plain, want)
+	}
 }

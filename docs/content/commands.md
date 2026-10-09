@@ -588,8 +588,7 @@ read-back (five seconds by default; see `--verify-timeout` under Editing).
 Under `--json` the unconfirmed cases print `{"title": …, "confirmed":
 false, "reason": "no-verify"|"unreadable"|"ambiguous"}`, with
 `"candidates": [uuids]` for `ambiguous`. There is no `uuid`, because the
-add did not return one, except with reason `when`: the item was found, but
-Things did not understand the `--when` phrase (below). An add that `--when` did not file where it said
+add did not return one. An add that `--when` did not file where it said
 (below) is an error instead: under `--json` its one object has `"error":
 "misfiled"`, the item's `"uuid"` and where it `"landed"`.
 
@@ -723,13 +722,14 @@ since another add of the same title at the same moment can be the one
 found. Under `--json` either error is one object with `"error":
 "misfiled"`, the item's `"uuid"` and where it `"landed"`. An English phrase is
 not checked against a place, but one Things does not understand is reported:
-a value shaped like a date or time that names none, such as `2026-13-01` or
-`25:00`, is refused before anything is sent; `add` warns `Things did not
-understand --when "…"` when the new item has no start date, and exits 0
-(under `--json`, `{"uuid", "title", "confirmed": false, "reason": "when"}`);
-and an `edit` whose only change is the phrase returns at once, with a
-warning and the same unconfirmed shape (reason `when`), since Things records
-nothing when it ignores one; check it with `things show`. With other
+a value shaped like a date or time that names none, such as `2026-13-01`,
+`25:00` or a malformed RFC3339 timestamp, is refused before anything is
+sent; `add` warns `Things did not understand --when "…"` on stderr when the
+new item has no start date, and still prints the item and exits 0; and an
+`edit` whose only change is the phrase returns at once with a warning,
+unconfirmed (under `--json`, `{"uuid", "title", "confirmed": false,
+"reason": "when"}`), since Things records nothing when it ignores one;
+check it with `things show`. With other
 changes the edit waits as usual, and if nothing was modified its error
 names the phrase as the likely cause. A write sent just before midnight counts as filed for either
 day.
@@ -795,7 +795,7 @@ just skipped: the item ends up with only the known tags, or with no tags at
 all when none of them exists, and the warning says which:
 
 ```
-warning: these tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, and none does, so Things will leave the task with no tags
+warning: these --tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, and none does, so Things will leave the task with no tags
 ```
 
 The write still happens. Add `--create-tags` to create the missing tags

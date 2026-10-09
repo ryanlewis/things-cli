@@ -693,13 +693,10 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 		}
 	case whenSent != nil && whenPhrase(when) && found[0].StartDate == nil:
 		// A phrase Things understood would have given the item a start
-		// date. The item exists, so this is not a failure, but the --when
-		// was not applied and the caller has to know.
-		item := &found[0]
-		fmt.Fprintf(d.errOut(), "warning: Things did not understand --when %q; the %s was created %s\n", when, kindNoun(typ), describeStart(item))
-		if d.JSON {
-			return output.PrintJSON(d.Stdout, unconfirmedAdd{UUID: item.UUID, Title: title, Reason: "when"})
-		}
+		// date. The item exists and is printed as found, so this is not a
+		// failure, but the --when was not applied and the caller has to
+		// know.
+		fmt.Fprintf(d.errOut(), "warning: Things did not understand --when %q; the %s was created %s\n", when, kindNoun(typ), describeStart(&found[0]))
 	}
 	return printItem(d, database, &found[0])
 }
@@ -732,9 +729,6 @@ func searchCommand(d *Deps, title string) string {
 // back. There is no uuid: the add returns none, and finding it is the
 // read-back. candidates lists the new items an ambiguous read-back found.
 type unconfirmedAdd struct {
-	// UUID is given only when the item was found: reason "when", where the
-	// item exists but Things ignored the --when sent with it.
-	UUID       string   `json:"uuid,omitempty"`
 	Title      string   `json:"title"`
 	Confirmed  bool     `json:"confirmed"`
 	Reason     string   `json:"reason"`

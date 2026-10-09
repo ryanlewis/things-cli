@@ -1070,9 +1070,9 @@ func TestImpossibleWhenRefusedUpFront(t *testing.T) {
 }
 
 // A free phrase Things ignores leaves the new item with no start date. The
-// add exits 0, since the item exists, but says the --when did not take, and
-// under --json reports it unconfirmed with reason "when" and the item's uuid.
-// A phrase Things understood gives the item a date, and nothing is said.
+// add exits 0 and prints the item, since it exists and was found, and warns
+// on stderr in both output modes that the --when did not take. A phrase
+// Things understood gives the item a date, and nothing is said.
 func TestAddWhenPhraseIgnored(t *testing.T) {
 	dated := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3))))
 	cases := []struct {
@@ -1084,42 +1084,29 @@ func TestAddWhenPhraseIgnored(t *testing.T) {
 		{"understood", dated, false},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			fastVerify(t)
-			database, sqlDB := seedWritable(t)
-			stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask, extra: tc.extra})
-
-			stdout, stderr, err := runStreams(t, database, "--json", "add", "Buy oat milk", "--when", "blorp")
-			if err != nil {
-				t.Fatalf("add: %v", err)
-			}
-			const warning = `warning: Things did not understand --when "blorp"; the to-do was created in inbox with no start date`
-			if got := strings.Contains(stderr, warning); got != tc.warn {
-				t.Errorf("stderr = %q, want the warning %v", stderr, tc.warn)
-			}
-			var out map[string]any
-			if err := json.Unmarshal([]byte(stdout), &out); err != nil {
-				t.Fatalf("decode %s: %v", stdout, err)
-			}
-			if tc.warn {
-				if out["confirmed"] != false || out["reason"] != "when" || out["uuid"] != "new-1" {
-					t.Errorf("stdout = %s, want confirmed false, reason when, uuid new-1", stdout)
+		for _, asJSON := range []bool{false, true} {
+			t.Run(tc.name+map[bool]string{true: "JSON"}[asJSON], func(t *testing.T) {
+				fastVerify(t)
+				database, sqlDB := seedWritable(t)
+				stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask, extra: tc.extra})
+				args, show := []string{"add", "Buy oat milk", "--when", "blorp"}, []string{"show", "new-1"}
+				if asJSON {
+					args, show = append([]string{"--json"}, args...), append([]string{"--json"}, show...)
 				}
-			} else if out["uuid"] != "new-1" || out["confirmed"] != nil {
-				t.Errorf("stdout = %s, want the item", stdout)
-			}
-		})
-	}
-	// Plain output still prints the item.
-	fastVerify(t)
-	database, sqlDB := seedWritable(t)
-	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask})
-	got, err := runOut(t, database, "add", "Buy oat milk", "--when", "blorp")
-	if err != nil {
-		t.Fatalf("add: %v", err)
-	}
-	if want, _ := runOut(t, database, "show", "new-1"); got != want {
-		t.Errorf("plain output = %q, want the show output %q", got, want)
+
+				stdout, stderr, err := runStreams(t, database, args...)
+				if err != nil {
+					t.Fatalf("add: %v", err)
+				}
+				const warning = `warning: Things did not understand --when "blorp"; the to-do was created in inbox with no start date`
+				if got := strings.Contains(stderr, warning); got != tc.warn {
+					t.Errorf("stderr = %q, want the warning %v", stderr, tc.warn)
+				}
+				if want, _ := runOut(t, database, show...); stdout != want {
+					t.Errorf("stdout = %q, want the show output %q", stdout, want)
+				}
+			})
+		}
 	}
 }
 
