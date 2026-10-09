@@ -87,8 +87,8 @@ type importCreate struct {
 	path  string
 	typ   model.TaskType
 	title string // trimmed
-	// shown is the title as the payload gives it, which is what Things
-	// saves: it does not trim a title.
+	// shown is the title as Things saves it: untrimmed, with each line
+	// feed as a space (storedTitle).
 	shown string
 	// dated is set when the payload gives the item a `creation-date`.
 	// Things saves it with that date, so it is not read back: one in the
@@ -617,7 +617,7 @@ func importCreates(payload []any) []importCreate {
 		if completed || canceled {
 			closedAt, _ = parseThingsDate(attrs["completion-date"])
 		}
-		creates = append(creates, importCreate{path: path, typ: typ, title: title, shown: shown, dated: raw != nil, datedAt: datedAt, closedAt: closedAt, closed: completed || canceled, to: to})
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, shown: storedTitle(shown), dated: raw != nil, datedAt: datedAt, closedAt: closedAt, closed: completed || canceled, to: to})
 	})
 	return creates
 }
@@ -960,6 +960,28 @@ type importRefusalError struct {
 // oversize reports whether the payload is refused for its size.
 func (e *importRefusalError) oversize() bool { return e.size > maxImportItems }
 
+// uniqueInOrder returns names with each later repeat of a name dropped.
+func uniqueInOrder(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	out := names[:0:0]
+	for _, n := range names {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// appendItemLine adds the line naming an item at path, with id, and what is
+// wrong with it, to lines, or returns lines as they are when nothing is.
+func appendItemLine(lines []string, path, id string, what []string) []string {
+	if len(what) == 0 {
+		return lines
+	}
+	return append(lines, fmt.Sprintf("  %s%s %s", path, id, strings.Join(what, ", ")))
+}
+
 func (e *importRefusalError) Error() string {
 	var repeating, dates, schedule, future, types, shapes, ignored, dups, long, blanks []string
 	for _, it := range e.items {
@@ -971,30 +993,14 @@ func (e *importRefusalError) Error() string {
 			repeating = append(repeating, fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
 				it.Path, it.ID, it.Title, it.Kind, strings.Join(it.restricted, ", ")))
 		}
-		if len(it.dates) > 0 {
-			dates = append(dates, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.dates, ", ")))
-		}
-		if len(it.schedule) > 0 {
-			schedule = append(schedule, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.schedule, ", ")))
-		}
-		if len(it.future) > 0 {
-			future = append(future, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.future, ", ")))
-		}
-		if len(it.types) > 0 {
-			types = append(types, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.types, ", ")))
-		}
-		if len(it.shape) > 0 {
-			shapes = append(shapes, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.shape, ", ")))
-		}
-		if len(it.ignored) > 0 {
-			ignored = append(ignored, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.ignored, ", ")))
-		}
-		if len(it.dups) > 0 {
-			dups = append(dups, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.dups, ", ")))
-		}
-		if len(it.long) > 0 {
-			long = append(long, fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.long, ", ")))
-		}
+		dates = appendItemLine(dates, it.Path, id, it.dates)
+		schedule = appendItemLine(schedule, it.Path, id, it.schedule)
+		future = appendItemLine(future, it.Path, id, it.future)
+		types = appendItemLine(types, it.Path, id, it.types)
+		shapes = appendItemLine(shapes, it.Path, id, it.shape)
+		ignored = appendItemLine(ignored, it.Path, id, it.ignored)
+		dups = appendItemLine(dups, it.Path, id, it.dups)
+		long = appendItemLine(long, it.Path, id, it.long)
 		if it.blank {
 			blanks = append(blanks, "  "+it.Path)
 		}
@@ -1013,7 +1019,7 @@ func (e *importRefusalError) Error() string {
 			strings.Join(dates, "\n")))
 	}
 	if len(schedule) > 0 {
-		parts = append(parts, fmt.Sprintf("Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A when must be today, tomorrow, evening, anytime, someday, a date as YYYY-MM-DD or a date and time as YYYY-MM-DD@HH:MM, and a deadline a date as YYYY-MM-DD:\n%s",
+		parts = append(parts, fmt.Sprintf("Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A misspelt keyword, or a keyword as a deadline, is refused, and a when or deadline that starts with a digit must be a date as YYYY-MM-DD, or for a when a date and time as YYYY-MM-DD@HH:MM:\n%s",
 			strings.Join(schedule, "\n")))
 	}
 	if len(future) > 0 {
@@ -1281,6 +1287,9 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 			if shape.blank {
 				it.Blocked = append(it.Blocked, "title")
 			}
+			// An attribute refused for two reasons, such as a title given
+			// twice and too long, is named once.
+			it.Blocked = uniqueInOrder(it.Blocked)
 			it.dates, it.schedule, it.future, it.types = dateLines, schedLines, futureLines, append(typeLines, shape.types...)
 			it.shape, it.ignored, it.blank = shape.items, shape.ignored, shape.blank
 			it.long = shape.long

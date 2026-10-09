@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -654,5 +655,36 @@ func TestImportNewRefusalsCombine(t *testing.T) {
 		if !strings.Contains(err.Error(), line) {
 			t.Errorf("message missing %q:\n%v", line, err)
 		}
+	}
+}
+
+// An attribute refused for two reasons is named once in blocked.
+func TestImportRefusalNamesAttributeOnce(t *testing.T) {
+	pinShapeClock(t)
+	database, _ := seedWritable(t)
+	long := strings.Repeat("a", 4001)
+	raw := `[{"type":"to-do","attributes":{"title":"x","title":"` + long + `"}}]`
+	_, err := prepareImport(database, decodeImport(t, raw), importDuplicateKeys([]byte(raw)))
+	var refusal *importRefusalError
+	if !errors.As(err, &refusal) || len(refusal.items) != 1 {
+		t.Fatalf("err = %v, want one refused item", err)
+	}
+	if got := refusal.items[0].Blocked; !slices.Equal(got, []string{"title"}) {
+		t.Errorf("blocked = %q, want [title]", got)
+	}
+	if got, want := refusal.items[0].reason(), "duplicate-key too-long"; got != want {
+		t.Errorf("reason = %q, want %q", got, want)
+	}
+}
+
+// The title reported for a created item is the one Things saves: padding
+// kept, and a line feed saved as a space.
+func TestImportCreateShownTitleIsStored(t *testing.T) {
+	creates := importCreates(decodeImport(t, `[{"type":"to-do","attributes":{"title":" a\nb "}}]`))
+	if len(creates) != 1 {
+		t.Fatalf("got %d creates, want 1", len(creates))
+	}
+	if got, want := creates[0].shownTitle(), " a b "; got != want {
+		t.Errorf("shownTitle = %q, want %q", got, want)
 	}
 }
