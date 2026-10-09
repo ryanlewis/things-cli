@@ -15,7 +15,6 @@ import (
 
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
-	"github.com/ryanlewis/things-cli/internal/skill"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -110,13 +109,7 @@ func writeTempFile(t *testing.T, content string) string {
 func parseCLI(t *testing.T, args ...string) error {
 	t.Helper()
 	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("things"),
-		kong.Vars{
-			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skill.AgentNames(),
-		},
-		helpVars,
-	)
+	parser, err := kong.New(&cli, parserOptions(nil)...)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}

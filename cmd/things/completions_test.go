@@ -8,9 +8,6 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/willabides/kongplete"
-
-	"github.com/ryanlewis/things-cli/internal/skill"
-	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // TestCompletionsEmitsScriptPerShell drives `completions <shell>` through the
@@ -60,13 +57,7 @@ func TestCompletionsZshEnablesBashcompinit(t *testing.T) {
 // don't ship a stub for, rather than emitting an empty or wrong script.
 func TestCompletionsRejectsUnknownShell(t *testing.T) {
 	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("things"),
-		kong.Vars{
-			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skill.AgentNames(),
-		},
-		helpVars,
-	)
+	parser, err := kong.New(&cli, parserOptions(nil)...)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}
@@ -118,13 +109,7 @@ func TestRuntimeCompletionAnswersCompLine(t *testing.T) {
 
 			var buf bytes.Buffer
 			var cli CLI
-			parser := kong.Must(&cli, kong.Name("things"), kong.Writers(&buf, &buf),
-				kong.Vars{
-					"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-					"skill_agents":  skill.AgentNames(),
-				},
-				helpVars,
-			)
+			parser := kong.Must(&cli, append(parserOptions(nil), kong.Writers(&buf, &buf))...)
 
 			exited := -1
 			kongplete.Complete(parser, kongplete.WithExitFunc(func(code int) { exited = code }))

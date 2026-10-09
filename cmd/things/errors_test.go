@@ -17,8 +17,6 @@ import (
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
-	"github.com/ryanlewis/things-cli/internal/skill"
-	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // stubTTY makes isInteractive report that stdin is a terminal for the duration
@@ -583,13 +581,7 @@ func TestJSONRequested(t *testing.T) {
 func TestKongBoolMatchesKong(t *testing.T) {
 	for _, v := range []string{"true", "1", "yes", "TRUE", "Yes", "false", "0", "no", "No", "t", "T", "f", "maybe", ""} {
 		var cli CLI
-		parser, err := kong.New(&cli, kong.Name("things"),
-			kong.Vars{
-				"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-				"skill_agents":  skill.AgentNames(),
-			},
-			helpVars,
-		)
+		parser, err := kong.New(&cli, parserOptions(nil)...)
 		if err != nil {
 			t.Fatalf("kong.New: %v", err)
 		}
@@ -611,13 +603,7 @@ func TestKongBoolMatchesKong(t *testing.T) {
 // value-taking flag may share a letter with it.
 func TestBoolShortsMatchesGrammar(t *testing.T) {
 	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("things"),
-		kong.Vars{
-			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
-			"skill_agents":  skill.AgentNames(),
-		},
-		helpVars,
-	)
+	parser, err := kong.New(&cli, parserOptions(nil)...)
 	if err != nil {
 		t.Fatalf("kong.New: %v", err)
 	}

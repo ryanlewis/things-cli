@@ -1097,6 +1097,9 @@ func TestAddInvalidRefusedBeforeTagsCreated(t *testing.T) {
 		{[]string{"project", "add", long}, "title: "},
 		{[]string{"project", "add", "Launch", "--area", long}, "area: "},
 		{[]string{"project", "add", "Launch", "--deadline", "tomorrow"}, "--deadline does not accept keywords"},
+		// --when is checked first, then the lengths, then --deadline.
+		{[]string{"add", long, "--when", "2026-13-01", "--deadline", "today"}, "invalid --when value"},
+		{[]string{"project", "add", long, "--deadline", "today"}, "title: "},
 	} {
 		fastVerify(t)
 		database, _ := seedWritable(t)

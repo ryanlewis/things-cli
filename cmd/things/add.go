@@ -55,7 +55,7 @@ func (c *AddCmd) Run(d *Deps) error {
 		Heading:   c.Heading,
 		List:      list,
 	}
-	if err := preAdd(d, "task", params.AddCommon, params.Validate, c.TagFlags); err != nil {
+	if err := preAdd(d, "task", c.Title, c.Tags, params, c.TagFlags); err != nil {
 		return err
 	}
 	// Things matches list by title only; a uuid has to go as list-id.
@@ -69,17 +69,16 @@ func (c *AddCmd) Run(d *Deps) error {
 }
 
 // preAdd refuses an add before anything is sent: a blank title, then
-// anything validate, the params' Validate, finds, then the tags. All of it
-// runs before --create-tags can create a tag, so an add that fails creates
-// none.
-func preAdd(d *Deps, kind string, c things.AddCommon, validate func() error, flags TagFlags) error {
-	if err := refuseBlankTitle(c.Title, kind, "added"); err != nil {
+// whatever p.Validate finds, then the tags. All of it runs before
+// --create-tags can create a tag, so an add that fails creates none.
+func preAdd(d *Deps, kind, title, tags string, p interface{ Validate() error }, flags TagFlags) error {
+	if err := refuseBlankTitle(title, kind, "added"); err != nil {
 		return err
 	}
-	if err := validate(); err != nil {
+	if err := p.Validate(); err != nil {
 		return err
 	}
-	_, err := verifyTagStrings(d, flags, &c.Tags)
+	_, err := verifyTagStrings(d, flags, &tags)
 	return err
 }
 
