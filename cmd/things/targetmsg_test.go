@@ -55,7 +55,6 @@ func TestTargetWarningsExact(t *testing.T) {
 			fastVerify(t)
 			database, sqlDB := seedWritable(t)
 			fx := dbtest.NewFixture(t, sqlDB)
-			fx.Area("area-1", "Personal", 1)
 			fx.Project("proj-1", "Tools", 5)
 			fx.Project("garden-1", "Garden", 6)
 			fx.Heading("head-1", "Setup", 1, dbtest.InProject("proj-1"))
@@ -70,5 +69,41 @@ func TestTargetWarningsExact(t *testing.T) {
 				t.Errorf("stderr = %q, want the line %q", stderr, "warning: "+tc.want)
 			}
 		})
+	}
+}
+
+// import builds its list and area warnings with the same builders, under the
+// item's path.
+func TestImportTargetWarningsExact(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-1", "Tools", 5)
+	stubExecDropping(t)
+
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"a","list":"Nowhere"}},
+	  {"type":"to-do","attributes":{"title":"b","list-id":"nope"}},
+	  {"type":"to-do","attributes":{"title":"c","list":"proj-1"}},
+	  {"type":"to-do","attributes":{"title":"d","list":"Tools","heading":"Setup"}},
+	  {"type":"to-do","attributes":{"title":"e","list":"Tools","heading-id":"nope"}},
+	  {"type":"project","attributes":{"title":"Shed","area":"Nowhere"}},
+	  {"type":"project","attributes":{"title":"Barn","area-id":"nope"}}
+	]`
+	_, stderr, err := runImportOut(t, database, payload, "--no-verify")
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for _, want := range []string{
+		`[0]: Things finds no project or area called "Nowhere"; it will put the to-do in the Inbox`,
+		`[1]: Things finds no project or area with id "nope"; it will put the to-do in the Inbox`,
+		`[2]: list "proj-1" is an id, and Things matches list by title only; it will put the to-do in the Inbox (use list-id)`,
+		`[3]: "Tools" has no heading "Setup"; Things will add the to-do there without a heading`,
+		`[4]: Things has no heading with id "nope"; it will ignore heading-id and heading`,
+		`[5]: Things finds no area called "Nowhere"; it will create the project in no area`,
+		`[6]: Things finds no area with id "nope"; it will create the project in no area`,
+	} {
+		if !strings.Contains(stderr, "warning: "+want+"\n") {
+			t.Errorf("stderr = %q, want the line %q", stderr, "warning: "+want)
+		}
 	}
 }
