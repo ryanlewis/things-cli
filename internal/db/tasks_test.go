@@ -856,6 +856,40 @@ func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
 	}
 }
 
+// Things trashes a project's to-dos with it but leaves their own trashed
+// column 0. ProjectTrashed follows the to-do to its project directly or
+// through its heading, so the writes can refuse it; a live project's to-do
+// is not flagged.
+func TestGetTaskByUUIDFlagsTrashedProject(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Project("p-bin", "Binned move", 1, dbtest.Trashed())
+	fx.Heading("h-bin", "Packing", 2, dbtest.InProject("p-bin"))
+	fx.Todo("t-direct", "Book van", 3, dbtest.Anytime(), dbtest.InProject("p-bin"))
+	fx.Todo("t-heading", "Buy boxes", 4, dbtest.Anytime(), dbtest.UnderHeading("h-bin"))
+	fx.Project("p-live", "Garden", 5)
+	fx.Heading("h-live", "Beds", 6, dbtest.InProject("p-live"))
+	fx.Todo("t-live", "Mow lawn", 7, dbtest.Anytime(), dbtest.InProject("p-live"))
+	fx.Todo("t-live-heading", "Weed beds", 8, dbtest.Anytime(), dbtest.UnderHeading("h-live"))
+	fx.Todo("t-loose", "Post letter", 9, dbtest.Anytime())
+
+	for uuid, want := range map[string]bool{
+		"t-direct": true, "t-heading": true,
+		"t-live": false, "t-live-heading": false, "t-loose": false,
+	} {
+		got, err := d.GetTaskByUUID(uuid)
+		if err != nil || got == nil {
+			t.Fatalf("GetTaskByUUID(%s) = %+v, %v", uuid, got, err)
+		}
+		if got.ProjectTrashed != want || got.Trashed {
+			t.Errorf("%s: ProjectTrashed = %v, Trashed = %v, want %v and false", uuid, got.ProjectTrashed, got.Trashed, want)
+		}
+	}
+	p, err := d.GetTaskByUUID("p-bin")
+	if err != nil || p == nil || p.ProjectTrashed {
+		t.Errorf("GetTaskByUUID(trashed project) = %+v, %v, want the project with only Trashed set", p, err)
+	}
+}
+
 func TestGetTaskExactTitle(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)

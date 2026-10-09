@@ -128,6 +128,7 @@ SELECT
 	COALESCE(t.trashed, 0),
 	COALESCE(p.uuid, ''),
 	COALESCE(p.title, ''),
+	COALESCE(p.trashed, 0),
 	COALESCE(t.heading, ''),
 	COALESCE(h.title, ''),
 	COALESCE(a.uuid, COALESCE(pa.uuid, '')),
@@ -153,14 +154,14 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	var startDate, deadline, stopDate, creationDate, modificationDate sql.NullFloat64
 	var reminder sql.NullInt64
 	var tagsStr string
-	var trashed, repeating, checklistTotal, checklistOpen int
+	var trashed, projectTrashed, repeating, checklistTotal, checklistOpen int
 
 	err := row.Scan(
 		&t.UUID, &t.Title, &t.Notes,
 		&t.Type, &t.Status, &t.Start, &t.StartBucket,
 		&startDate, &reminder, &deadline, &stopDate, &creationDate,
 		&trashed,
-		&t.ProjectUUID, &t.ProjectTitle,
+		&t.ProjectUUID, &t.ProjectTitle, &projectTrashed,
 		&t.HeadingUUID, &t.HeadingTitle,
 		&t.AreaUUID, &t.AreaTitle,
 		&tagsStr,
@@ -174,6 +175,7 @@ func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
 	}
 
 	t.Trashed = trashed != 0
+	t.ProjectTrashed = projectTrashed != 0
 	t.Repeating = repeating != 0
 	t.StartDate = thingsDate(startDate)
 	if reminder.Valid {

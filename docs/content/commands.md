@@ -737,6 +737,12 @@ and a uuid can name one; a title never matches it. The error names the item
 and says it is in the Trash; under `--json` its token is `trashed`. `edit`
 and `project edit` refuse a trashed item the same way.
 
+A task whose project is in the Trash, directly or through a heading, is
+refused the same way, with the same `trashed` token. Things takes a trashed
+project's tasks into the Trash with it, so they cannot be closed or edited
+there until the project is put back. Such a task can still be found by
+title, and the error names its project.
+
 Both go through AppleScript so Things3 records the change in its
 activity log. Task creation (`add`) and edits go through the
 `things:///` URL scheme; the CLI never writes to the database directly.
