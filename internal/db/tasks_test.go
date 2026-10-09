@@ -1065,7 +1065,7 @@ func TestScanTaskFieldsPopulated(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	got := mustGetByUUID(t, d, "t-in-proj")
+	got := mustFindByUUID(t, d, "t-in-proj")
 	if got.ProjectUUID != "proj-1" || got.ProjectTitle != "Ship MVP" {
 		t.Errorf("project link: %+v", got)
 	}
@@ -2370,9 +2370,7 @@ func TestAreaLessProjectToDosLeadTheList(t *testing.T) {
 
 			got := mustList(t, d, view, TaskFilter{})
 			want := []string{"unfiled", "free1-todo", "free2-todo", "work-loose", "work-todo"}
-			if got := uuidsOf(got); !slices.Equal(got, want) {
-				t.Errorf("%s order: got %v, want %v", view, got, want)
-			}
+			assertOrder(t, got, want, "%s order", view)
 		})
 	}
 }

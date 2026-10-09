@@ -30,12 +30,12 @@ func seedRepeatingPair(t *testing.T) *DB {
 func TestGetTaskByUUIDReportsRepeating(t *testing.T) {
 	d := seedRepeatingPair(t)
 
-	rep := mustGetByUUID(t, d, "rep-1")
+	rep := mustFindByUUID(t, d, "rep-1")
 	if !rep.Repeating {
 		t.Error("task with a recurrence rule: Repeating = false, want true")
 	}
 
-	one := mustGetByUUID(t, d, "one-1")
+	one := mustFindByUUID(t, d, "one-1")
 	if one.Repeating {
 		t.Error("task without a recurrence rule: Repeating = true, want false")
 	}
@@ -316,7 +316,7 @@ func TestTemplateProjectChildrenReportRepeating(t *testing.T) {
 		"t-inst":  false,
 		"t-plain": false,
 	} {
-		got := mustGetByUUID(t, d, uuid)
+		got := mustFindByUUID(t, d, uuid)
 		if got.Repeating != want {
 			t.Errorf("%s: Repeating = %v, want %v", uuid, got.Repeating, want)
 		}
@@ -338,9 +338,7 @@ func TestTrashAndLogbookKeepTemplateProjectChildren(t *testing.T) {
 		{"logbook", "t-logged"},
 	} {
 		got := mustList(t, d, tc.view, TaskFilter{})
-		if !sameSet(uuidsOf(got), []string{tc.want}) {
-			t.Errorf("view %q: got %v, want [%s]", tc.view, uuidsOf(got), tc.want)
-		}
+		assertSet(t, got, []string{tc.want}, "view %q", tc.view)
 	}
 }
 

@@ -77,7 +77,7 @@ func TestListTasksCarriesChecklistProgress(t *testing.T) {
 		t.Errorf("without: checklist progress %+v, want none", p)
 	}
 
-	got := mustGetByUUID(t, d, "with")
+	got := mustFindByUUID(t, d, "with")
 	if got.ChecklistProgress == nil || got.ChecklistProgress.Done() != 2 {
 		t.Errorf("GetTaskByUUID: checklist progress %+v, want 2 done", got.ChecklistProgress)
 	}
