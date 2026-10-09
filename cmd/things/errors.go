@@ -258,7 +258,7 @@ func (e *closedTitleError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "no open task is titled %q: ", e.Query)
 	if len(e.Matches) <= 1 {
-		fmt.Fprintf(&b, "the only %s with that title, %q (%s), is %s", kindWord(e.Task.Type), e.Task.Title, e.Task.UUID, state)
+		fmt.Fprintf(&b, "the only %s with that title, %q (%s), is %s", e.Task.Type, e.Task.Title, e.Task.UUID, state)
 	} else {
 		fmt.Fprintf(&b, "%d closed or trashed items have that title, the most recent being %q (%s), which is %s", len(e.Matches), e.Task.Title, e.Task.UUID, state)
 	}
@@ -271,7 +271,7 @@ func (e *closedTitleError) fillPayload(p *jsonErrorPayload) {
 	if e.trashed() {
 		p.Error = "trashed"
 	}
-	p.Kind = kindWord(e.Task.Type)
+	p.Kind = e.Task.Type.String()
 	p.Query = e.Query
 	p.UUID = e.Task.UUID
 	p.Title = e.Task.Title

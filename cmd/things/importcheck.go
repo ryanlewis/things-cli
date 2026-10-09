@@ -519,14 +519,6 @@ func projectImportDest(c importCreate, warn func(importCreate, string, ...any), 
 	return createdDest{checked: true, list: target.UUID}
 }
 
-// kind is the CLI's word for the item: "task" or "project".
-func (c importCreate) kind() string {
-	if c.typ == model.TypeProject {
-		return "project"
-	}
-	return "task"
-}
-
 // importCreates collects every to-do and project in a Things JSON payload
 // that is not an `operation: update`, at any depth: a project's `items`, and
 // the `items` of a project the payload updates, create to-dos too.
@@ -548,7 +540,9 @@ func importCreates(payload []any) []importCreate {
 	walkImportNode(payload, "", func(path string, v map[string]any) {
 		op, _ := v["operation"].(string)
 		attrs, _ := v["attributes"].(map[string]any)
-		switch itemType, _ := v["type"].(string); strings.TrimSpace(itemType) {
+		itemType, _ := v["type"].(string)
+		itemType = strings.TrimSpace(itemType)
+		switch itemType {
 		case "project":
 			if title, _ := attrs["title"].(string); strings.TrimSpace(title) != "" {
 				projects[db.FoldName(strings.TrimSpace(title))] = true
@@ -561,7 +555,7 @@ func importCreates(payload []any) []importCreate {
 				headings[db.FoldCase(strings.TrimSpace(title))] = true
 			}
 		}
-		if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
+		if itemType == "project" {
 			parent := importTo{nested: true}
 			if op == "update" {
 				parent.parentID, _ = v["id"].(string)
@@ -580,7 +574,7 @@ func importCreates(payload []any) []importCreate {
 			return
 		}
 		var typ model.TaskType
-		switch itemType, _ := v["type"].(string); strings.TrimSpace(itemType) {
+		switch itemType {
 		case "to-do":
 			typ = model.TypeTask
 		case "project":
@@ -1202,6 +1196,28 @@ func (e *importVerifyError) missing() []importCreated {
 	return out
 }
 
+// withReason is each created item whose verdict is one of reasons, in
+// payload order.
+func (e *importVerifyError) withReason(reasons ...string) []importCreated {
+	var out []importCreated
+	for _, c := range e.created {
+		if slices.Contains(reasons, c.Reason) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// detailLines renders each of items as a line of the plain-text error: its
+// path and why it fails.
+func detailLines(items []importCreated) []string {
+	var lines []string
+	for _, it := range items {
+		lines = append(lines, fmt.Sprintf("  %s: %s", it.Path, it.detail))
+	}
+	return lines
+}
+
 func (e *importVerifyError) Error() string {
 	var parts []string
 	if len(e.items) > 0 {
@@ -1231,22 +1247,12 @@ func (e *importVerifyError) Error() string {
 		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed (each line says why). %s Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
 			len(missing), len(e.created), cause, e.search, strings.Join(lines, "\n")))
 	}
-	var dropped []string
-	for _, it := range e.created {
-		if it.Reason == dateDropped {
-			dropped = append(dropped, fmt.Sprintf("  %s: %s", it.Path, it.detail))
-		}
-	}
+	dropped := detailLines(e.withReason(dateDropped))
 	if len(dropped) > 0 {
 		parts = append(parts, fmt.Sprintf("%d created items were saved without the completion-date the payload gives. They are there, so do not import them again; set the date in the Things app:\n%s",
 			len(dropped), strings.Join(dropped, "\n")))
 	}
-	var misfiled []string
-	for _, it := range e.created {
-		if it.Reason == whenMisfiled {
-			misfiled = append(misfiled, fmt.Sprintf("  %s: %s", it.Path, it.detail))
-		}
-	}
+	misfiled := detailLines(e.withReason(whenMisfiled))
 	if len(misfiled) > 0 {
 		parts = append(parts, fmt.Sprintf("%d created items were not filed where their when puts them. They are there, so do not import them again; move each with `%s edit <uuid> --when ...` (`%s project edit` for a project) if it matters:\n%s",
 			len(misfiled), e.things, e.things, strings.Join(misfiled, "\n")))
@@ -1349,7 +1355,7 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 			continue
 		}
 		repeating[u.path] = importRefusalItem{
-			Path: u.path, ID: u.id, Title: task.Title, Kind: taskKind(task), Blocked: blocked, restricted: blocked,
+			Path: u.path, ID: u.id, Title: task.Title, Kind: task.Type.String(), Blocked: blocked, restricted: blocked,
 		}
 	}
 	shapes, size := importShapes(payload)
@@ -1369,10 +1375,11 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 		}
 		if len(dateLines) > 0 || len(schedLines) > 0 || len(futureLines) > 0 || len(typeLines) > 0 || len(dupKeys) > 0 || !shape.empty() {
 			if !refused {
-				it = importRefusalItem{Path: path, Kind: "task"}
+				typ := model.TypeTask
 				if itemType, _ := v["type"].(string); strings.TrimSpace(itemType) == "project" {
-					it.Kind = "project"
+					typ = model.TypeProject
 				}
+				it = importRefusalItem{Path: path, Kind: typ.String()}
 				attrs, _ := v["attributes"].(map[string]any)
 				title, _ := attrs["title"].(string)
 				it.Title = strings.TrimSpace(title)
@@ -1381,7 +1388,7 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 				if u, ok := updates[path]; ok && u.id != "" {
 					it.ID = u.id
 					if task := plan.tasks[u.id]; task != nil {
-						it.Title, it.Kind = task.Title, taskKind(task)
+						it.Title, it.Kind = task.Title, task.Type.String()
 					}
 				}
 			}
@@ -1410,14 +1417,6 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 	return plan, nil
 }
 
-// taskKind is the CLI's word for task: "task" or "project".
-func taskKind(task *model.Task) string {
-	if task.Type == model.TypeProject {
-		return "project"
-	}
-	return "task"
-}
-
 // warnMissing warns about each update item the database does not have. It
 // runs once nothing else can refuse the import: the warning promises that
 // Things will report the unknown id itself, which is only true when the
@@ -1442,7 +1441,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 		}
 		created := make([]importCreated, len(plan.creates))
 		for i, c := range plan.creates {
-			created[i] = importCreated{Path: c.path, Kind: c.kind(), Title: c.shownTitle(), Reason: "no-verify"}
+			created[i] = importCreated{Path: c.path, Kind: c.typ.String(), Title: c.shownTitle(), Reason: "no-verify"}
 		}
 		return printImportCreated(d, created)
 	}
@@ -1475,7 +1474,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	// cannot see. Every created item's verdict goes in with them, since the
 	// success list is not printed beside an error.
 	if len(failures) > 0 || slices.ContainsFunc(created, importCreated.fails) {
-		things := strings.Join(append([]string{"things"}, globalFlags(d)...), " ")
+		things := strings.Join(thingsCmd(d), " ")
 		return &importVerifyError{
 			items: failures, total: total, created: created,
 			search: things + " search", things: things,
@@ -1533,13 +1532,10 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 	out := make([]importCreated, len(creates))
 	paired := map[createdWant]int{}
 	for i, c := range creates {
-		out[i] = importCreated{Path: c.path, Kind: c.kind(), Title: c.shownTitle()}
+		out[i] = importCreated{Path: c.path, Kind: c.typ.String(), Title: c.shownTitle()}
 		w := c.want()
 		matches := found[w]
-		uuids := make([]string, len(matches))
-		for n, t := range matches {
-			uuids[n] = t.UUID
-		}
+		uuids := taskUUIDs(matches)
 		sharesDated := slices.ContainsFunc(matches, func(t model.Task) bool {
 			return slices.ContainsFunc(dated[c.key()], func(dst createdDest) bool { return dst.fits(t) })
 		})
@@ -1550,7 +1546,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			// With no rows to see where the dated item went, it may be
 			// any new item with the title.
 			out[i].Reason, out[i].Present = "shares-dated-title", new(bool)
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and the database could not be read to count the new items with that title, so the item may exist but cannot be confirmed", c.kind(), c.title)
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and the database could not be read to count the new items with that title, so the item may exist but cannot be confirmed", c.typ.String(), c.title)
 		case err != nil:
 			out[i].Reason = "unreadable"
 		case sharesDated:
@@ -1572,7 +1568,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			}
 			present := len(rows) >= claimants
 			out[i].Present = &present
-			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and only %s with that title appeared for the %d items that could be filed there, so this item may exist as one of them but cannot be confirmed (%s)", c.kind(), c.title, plural(len(rows), "new item"), claimants, strings.Join(uuids, ", "))
+			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and only %s with that title appeared for the %d items that could be filed there, so this item may exist as one of them but cannot be confirmed (%s)", c.typ.String(), c.title, plural(len(rows), "new item"), claimants, strings.Join(uuids, ", "))
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
 			// Two saved at the same instant cannot be paired with the
 			// payload's items by order, so neither is confirmed.
@@ -1585,10 +1581,10 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 			out[i].Reason, out[i].Candidates = "ambiguous", uuids
 		case len(matches) == 0:
 			out[i].Reason = "not-found"
-			out[i].detail = fmt.Sprintf("no new %s titled %q appeared within %s", c.kind(), c.title, budget)
+			out[i].detail = fmt.Sprintf("no new %s titled %q appeared within %s", c.typ.String(), c.title, budget)
 		default:
 			out[i].Reason, out[i].Candidates = "not-found", uuids
-			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.kind(), c.title, budget, strings.Join(uuids, ", "))
+			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.typ.String(), c.title, budget, strings.Join(uuids, ", "))
 		}
 	}
 	unconfirmShared(out, creates, found)
@@ -1694,10 +1690,7 @@ func unconfirmShared(out []importCreated, creates []importCreate, found map[crea
 			}
 			return strings.Compare(a.UUID, b.UUID)
 		})
-		candidates := make([]string, len(rows))
-		for n, t := range rows {
-			candidates[n] = t.UUID
-		}
+		candidates := taskUUIDs(rows)
 		claimants := 0
 		for j := range out {
 			if slices.ContainsFunc(candidates, func(uuid string) bool { return holds(j, uuid) }) {
@@ -1761,7 +1754,7 @@ func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate,
 			continue
 		}
 		out[i].Confirmed, out[i].Reason = false, dateDropped
-		out[i].detail = fmt.Sprintf("%s %q (%s) was saved with completion date %s, not %s", c.kind(), c.title, out[i].UUID, stop.UTC().Format(time.RFC3339Nano), c.closedAt.UTC().Format(time.RFC3339Nano))
+		out[i].detail = fmt.Sprintf("%s %q (%s) was saved with completion date %s, not %s", c.typ.String(), c.title, out[i].UUID, stop.UTC().Format(time.RFC3339Nano), c.closedAt.UTC().Format(time.RFC3339Nano))
 	}
 }
 
@@ -1786,16 +1779,16 @@ func checkWhens(out []importCreated, creates []importCreate, found map[createdWa
 		}
 		row := &found[c.want()][idx]
 		check := &whenCheck{value: c.when, sent: sent}
-		switch {
-		case !check.holds(row, now):
+		switch check.verdict(row, now) {
+		case whenNotFiled:
 			out[i].Confirmed, out[i].Reason = false, whenMisfiled
-		case whenPhrase(c.when) && row.StartDate == nil:
+		case whenNotUnderstood:
 			out[i].Confirmed, out[i].Reason = false, whenIgnored
 		default:
 			continue
 		}
 		out[i].Landed = describeStart(row)
-		out[i].detail = fmt.Sprintf("%s %q (%s) was created, but its when %q did not file it there: it is %s", c.kind(), c.title, out[i].UUID, c.when, out[i].Landed)
+		out[i].detail = fmt.Sprintf("%s %q (%s) was created, but its when %q did not file it there: it is %s", c.typ.String(), c.title, out[i].UUID, c.when, out[i].Landed)
 	}
 }
 
@@ -1909,12 +1902,7 @@ func (e *importRefusalError) jsonItems() []jsonErrorItem {
 // jsonItems renders the unapplied status changes, then the created items
 // that never appeared, for the --json error payload.
 func (e *importVerifyError) jsonItems() []jsonErrorItem {
-	missing := e.missing()
-	for _, it := range e.created {
-		if it.Reason == dateDropped || it.Reason == whenMisfiled {
-			missing = append(missing, it)
-		}
-	}
+	missing := append(e.missing(), e.withReason(dateDropped, whenMisfiled)...)
 	out := make([]jsonErrorItem, len(e.items), len(e.items)+len(missing))
 	for i, it := range e.items {
 		out[i] = jsonErrorItem{

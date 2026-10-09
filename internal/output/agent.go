@@ -280,12 +280,10 @@ func checklistLine(item model.ChecklistItem) string {
 }
 
 // singleLine folds a value that is rendered inline — a heading, a list item —
-// onto one line, so a title carrying a newline cannot break the Markdown
-// structure around it.
+// onto one line, so a title carrying a line break cannot break the Markdown
+// structure around it. It folds every break oneLine does, not just \n.
 func singleLine(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", " ")
-	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.TrimSpace(s)
+	return strings.TrimSpace(oneLine(s))
 }
 
 // PrintHint writes a dim line of next actions below plain output, then a note

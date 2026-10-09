@@ -16,18 +16,22 @@ func runAppleScript(script string, context string) error {
 	return nil
 }
 
-func CompleteTask(uuid string) error {
+// setStatus sets the status of the item of class ("to do" or "project")
+// with id uuid, held in the script as v, to status ("completed" or
+// "canceled"). context names the action in an error.
+func setStatus(class, v, uuid, status, context string) error {
 	return runAppleScript(fmt.Sprintf(`tell application "Things3"
-set theToDo to to do id "%s"
-set status of theToDo to completed
-end tell`, uuid), "completing task")
+set %s to %s id %s
+set status of %s to %s
+end tell`, v, class, appleScriptString(uuid), v, status), context)
+}
+
+func CompleteTask(uuid string) error {
+	return setStatus("to do", "theToDo", uuid, "completed", "completing task")
 }
 
 func CompleteProject(uuid string) error {
-	return runAppleScript(fmt.Sprintf(`tell application "Things3"
-set theProject to project id "%s"
-set status of theProject to completed
-end tell`, uuid), "completing project")
+	return setStatus("project", "theProject", uuid, "completed", "completing project")
 }
 
 func LogCompleted() error {
@@ -37,24 +41,18 @@ end tell`, "logging completed items")
 }
 
 func CancelTask(uuid string) error {
-	return runAppleScript(fmt.Sprintf(`tell application "Things3"
-set theToDo to to do id "%s"
-set status of theToDo to canceled
-end tell`, uuid), "cancelling task")
+	return setStatus("to do", "theToDo", uuid, "canceled", "cancelling task")
 }
 
 func CancelProject(uuid string) error {
-	return runAppleScript(fmt.Sprintf(`tell application "Things3"
-set theProject to project id "%s"
-set status of theProject to canceled
-end tell`, uuid), "cancelling project")
+	return setStatus("project", "theProject", uuid, "canceled", "cancelling project")
 }
 
 // appleScriptString renders s as an AppleScript string literal, quotes
-// included. Every other script in this file interpolates a UUID the CLI read
-// out of the database, but a tag name comes straight from the command line, so
-// it has to be escaped: an unescaped quote or backslash would end the literal
-// early and turn the rest of the name into script.
+// included. A tag name comes straight from the command line, so it has to be
+// escaped: an unescaped quote or backslash would end the literal early and
+// turn the rest of the name into script. A UUID the CLI read out of the
+// database goes through it too, so no script interpolates a raw string.
 func appleScriptString(s string) string {
 	r := strings.NewReplacer(
 		`\`, `\\`,

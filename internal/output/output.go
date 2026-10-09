@@ -168,7 +168,7 @@ func printTasks(w io.Writer, tasks []model.Task, lay layout, view string) error 
 // or none.
 func taskCells(n int, t *model.Task, tty bool) []cell {
 	title := oneLine(t.Title)
-	if t.Status == model.StatusCompleted || t.Status == model.StatusCancelled {
+	if t.Status.Closed() {
 		title = titleDimStyle.Render(title)
 	}
 	// Things shows a to-do's reminder time on its row, ahead of the title. A
@@ -605,7 +605,7 @@ func printProjects(w io.Writer, projects []model.Project, lay layout) error {
 	}
 	for _, p := range projects {
 		title := oneLine(p.Title)
-		if p.Status == model.StatusCompleted || p.Status == model.StatusCancelled {
+		if p.Status.Closed() {
 			title = titleDimStyle.Render(title)
 		}
 		tbl.row(
@@ -697,7 +697,7 @@ func statusText(status model.Status) string {
 // closed projects by default until they are logged, so the two have to read
 // differently.
 func projectIcon(p model.Project) string {
-	if p.Status == model.StatusCompleted || p.Status == model.StatusCancelled {
+	if p.Status.Closed() {
 		return statusIcon(p.Status)
 	}
 	if p.TaskCount == 0 {

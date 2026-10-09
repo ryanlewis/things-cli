@@ -65,10 +65,7 @@ func checkRepeating(task *model.Task, blocked []string) error {
 	}
 	// "task", not "to-do": the word the JSON and the lookup errors use, so a
 	// refusal reads the same way as the error beside it (issue #245).
-	kind := "task"
-	if task.Type == model.TypeProject {
-		kind = "project"
-	}
+	kind := task.Type.String()
 	return fmt.Errorf("%q is a repeating %s — Things does not allow %s to be changed on repeating %ss and drops the request silently (%s). Change it in the Things app instead",
 		task.Title, kind, strings.Join(blocked, ", "), kind, repeatingDocsURL)
 }
@@ -250,11 +247,9 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 			case expired && current.Status == w.want && applied && !w.when.holds(current, now):
 				where := describeStart(current)
 				results[i] = statusResult{
-					err: &misfiledError{
-						msg: fmt.Sprintf("edit did not apply as sent: %q (%s) was modified, but --when %q did not file it there: it is %s. Things may have ignored or reread the value. Run `things show %s` before retrying; do not retry blindly",
-							w.title, w.uuid, w.when.value, where, w.uuid),
-						kind: kindWord(current.Type), title: w.title, uuid: w.uuid, landed: where,
-					},
+					err: newMisfiled(current.Type, w.title, w.uuid, where,
+						fmt.Sprintf("edit did not apply as sent: %q (%s) was modified, but --when %q did not file it there: it is %s. Things may have ignored or reread the value. Run `things show %s` before retrying; do not retry blindly",
+							w.title, w.uuid, w.when.value, where, w.uuid)),
 					got:      current.Status,
 					observed: true,
 				}
@@ -678,33 +673,29 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 		return fmt.Errorf("add not confirmed: no new %s titled %q appeared%s within %s. Things may have dropped it (check that Things3 is running), or it may be slow to save. Run `%s` before retrying; do not retry blindly",
 			kindNoun(typ), title, where, budget, searchCommand(d, title))
 	case len(found) > 1:
-		uuids := make([]string, len(found))
-		for i, t := range found {
-			uuids[i] = t.UUID
-		}
-		return printUnconfirmedAdd(d, title, "ambiguous", uuids)
-	case !whenSent.holds(&found[0], clock.Now()):
+		return printUnconfirmedAdd(d, title, "ambiguous", taskUUIDs(found))
+	}
+	item := &found[0]
+	switch whenSent.verdict(item, clock.Now()) {
+	case whenNotFiled:
 		// The new item may be another add of the same title at the same
 		// moment, so the advice is to search first, as for a missing one.
-		item := &found[0]
 		where := describeStart(item)
-		edit := append(append([]string{"things"}, globalFlags(d)...), "edit")
+		edit := thingsCmd(d, "edit")
 		if typ == model.TypeProject {
-			edit = append(edit[:len(edit)-1], "project", "edit")
+			edit = thingsCmd(d, "project", "edit")
 		}
-		return &misfiledError{
-			msg: fmt.Sprintf("add did not apply as sent: a new %s titled %q (%s) appeared, but --when %q did not file it there: it is %s. Run `%s` before adding it again; move it with `%s %s --when ...` if it matters",
-				kindWord(typ), title, item.UUID, when, where, searchCommand(d, title), strings.Join(edit, " "), item.UUID),
-			kind: kindWord(typ), title: title, uuid: item.UUID, landed: where,
-		}
-	case whenSent != nil && whenPhrase(when) && found[0].StartDate == nil:
+		return newMisfiled(typ, title, item.UUID, where,
+			fmt.Sprintf("add did not apply as sent: a new %s titled %q (%s) appeared, but --when %q did not file it there: it is %s. Run `%s` before adding it again; move it with `%s %s --when ...` if it matters",
+				typ, title, item.UUID, when, where, searchCommand(d, title), strings.Join(edit, " "), item.UUID))
+	case whenNotUnderstood:
 		// A phrase Things understood would have given the item a start
 		// date. The item exists and is printed as found, so this is not a
 		// failure, but the --when was not applied and the caller has to
 		// know.
-		fmt.Fprintf(d.errOut(), "warning: Things did not understand --when %q; the %s was created %s\n", when, kindNoun(typ), describeStart(&found[0]))
+		fmt.Fprintf(d.errOut(), "warning: Things did not understand --when %q; the %s was created %s\n", when, kindNoun(typ), describeStart(item))
 	}
-	return printItem(d, database, &found[0])
+	return printItem(d, database, item)
 }
 
 // kindNoun is the prose word for an item of type typ.
@@ -721,7 +712,7 @@ func kindNoun(typ model.TaskType) string {
 // finds the item and pastes as one line.
 func searchCommand(d *Deps, title string) string {
 	query := strings.TrimSpace(storedTitle(title))
-	search := append(append([]string{"things"}, globalFlags(d)...), "search")
+	search := thingsCmd(d, "search")
 	// A title that starts with a dash would be read as a flag, so the
 	// command ends flag parsing first, as tagAddHint does.
 	if strings.HasPrefix(query, "-") {

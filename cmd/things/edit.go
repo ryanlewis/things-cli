@@ -282,6 +282,14 @@ type editKind struct {
 	retry   string
 }
 
+// typ is the type of item the command edits.
+func (k editKind) typ() model.TaskType {
+	if k.project {
+		return model.TypeProject
+	}
+	return model.TypeTask
+}
+
 var (
 	// things:///update cannot address a project: Things answers a project id
 	// with a modal "does not exist" dialog and changes nothing (issue #189).
@@ -305,10 +313,7 @@ var (
 // has. write sends the update, given the shared params with the item's id and
 // the auth token filled in.
 func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, checkOwn func(*Deps, *db.DB, *model.Task) bool, checklist bool, write func(things.UpdateCommon) error) error {
-	item := "task"
-	if kind.project {
-		item = "project"
-	}
+	item := kind.typ().String()
 	if f.Title != nil {
 		if err := refuseBlankTitle(*f.Title, item, "edited"); err != nil {
 			return err
@@ -632,7 +637,7 @@ func refuseTrashed(ref string, task *model.Task, done string) error {
 	if !task.Trashed && !task.ProjectTrashed {
 		return nil
 	}
-	e := &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done}
+	e := &trashedError{Kind: task.Type.String(), Query: ref, UUID: task.UUID, Title: task.Title, Done: done}
 	if !task.Trashed {
 		e.Project = task.ProjectTitle
 	}

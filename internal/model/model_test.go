@@ -358,6 +358,19 @@ func TestStatusString(t *testing.T) {
 	}
 }
 
+func TestStatusClosed(t *testing.T) {
+	for status, want := range map[Status]bool{
+		StatusOpen:      false,
+		StatusCancelled: true,
+		StatusCompleted: true,
+		Status(99):      false,
+	} {
+		if got := status.Closed(); got != want {
+			t.Errorf("Status(%d).Closed() = %v, want %v", int(status), got, want)
+		}
+	}
+}
+
 // The three wire names are a public contract the same way `type`'s are: agents
 // and jq filters match on them, so a rename is a breaking change and has to
 // fail here first (issue #241).
