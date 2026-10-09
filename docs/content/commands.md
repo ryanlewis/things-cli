@@ -558,6 +558,9 @@ stderr when that will happen, then sends the project anyway:
 warning: Things has no area called "Nowhere"; it will create the project with no area
 ```
 
+Each line of `--todos`, like each `--checklist` item, may be at most 4000
+characters; a longer one is refused before anything is sent.
+
 `add` and `project add` then find the new item in the database and print it
 exactly as `things show` would, the same object under `--json`. Things
 returns no UUID for a new item, so the CLI looks for an item of the right

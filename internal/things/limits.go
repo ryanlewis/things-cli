@@ -40,7 +40,13 @@ func validateChecklist(field, v string) error {
 	if n > MaxChecklistItems {
 		return fmt.Errorf("%s: %d items exceeds the %d-item limit", field, n, MaxChecklistItems)
 	}
-	for _, item := range strings.Split(trimmed, "\n") {
+	return validateItems(field, trimmed)
+}
+
+// validateItems checks each line of v, a newline-separated list of items,
+// against the string limit.
+func validateItems(field, v string) error {
+	for _, item := range strings.Split(v, "\n") {
 		if c := utf8.RuneCountInString(item); c > MaxStringLen {
 			return fmt.Errorf("%s: item %q (%d characters) exceeds the %d-character limit", field, truncate(item), c, MaxStringLen)
 		}

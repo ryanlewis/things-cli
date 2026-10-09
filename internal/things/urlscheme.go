@@ -93,7 +93,10 @@ func (p AddProjectParams) Validate() error {
 }
 
 func (p AddProjectParams) normalized() (AddProjectParams, error) {
-	c, err := p.AddCommon.normalized(validateString("area", p.Area))
+	c, err := p.AddCommon.normalized(
+		validateString("area", p.Area),
+		validateItems("todos", p.Todos),
+	)
 	p.AddCommon = c
 	return p, err
 }
@@ -288,8 +291,19 @@ type UpdateParams struct {
 	HeadingID        *string
 }
 
+// Validate returns the error UpdateTask would refuse p with, so a caller can
+// refuse p before doing anything else, such as creating tags.
+func (p UpdateParams) Validate() error {
+	_, err := p.checked()
+	return err
+}
+
+func (p UpdateParams) checked() (url.Values, error) {
+	return p.values("update", "task", validateUpdate(p))
+}
+
 func UpdateTask(params UpdateParams) error {
-	v, err := params.values("update", "task", validateUpdate(params))
+	v, err := params.checked()
 	if err != nil {
 		return err
 	}
@@ -331,8 +345,19 @@ type UpdateProjectParams struct {
 	AreaID *string
 }
 
+// Validate returns the error UpdateProject would refuse p with, so a caller
+// can refuse p before doing anything else, such as creating tags.
+func (p UpdateProjectParams) Validate() error {
+	_, err := p.checked()
+	return err
+}
+
+func (p UpdateProjectParams) checked() (url.Values, error) {
+	return p.values("update-project", "project", validateUpdateProject(p))
+}
+
 func UpdateProject(params UpdateProjectParams) error {
-	v, err := params.values("update-project", "project", validateUpdateProject(params))
+	v, err := params.checked()
 	if err != nil {
 		return err
 	}

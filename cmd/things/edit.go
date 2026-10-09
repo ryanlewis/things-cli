@@ -70,18 +70,20 @@ type EditCmd struct {
 }
 
 func (c *EditCmd) Run(d *Deps) error {
-	return runEdit(d, c.Task, taskEdit, &c.commonEditFlags, &c.editStatusFlags, c.checkOwn, c.checklistSet(), func(u things.UpdateCommon) error {
-		return things.UpdateTask(things.UpdateParams{
-			UpdateCommon:     u,
-			Checklist:        expandNewlinesPtr(c.Checklist),
-			PrependChecklist: expandNewlinesPtr(c.PrependChecklist),
-			AppendChecklist:  expandNewlinesPtr(c.AppendChecklist),
-			List:             c.List,
-			ListID:           c.ListID,
-			Heading:          c.Heading,
-			HeadingID:        c.HeadingID,
-		})
-	})
+	return runEdit(d, c.Task, taskEdit, &c.commonEditFlags, &c.editStatusFlags, c.checkOwn, c.checklistSet(), c.params, things.UpdateTask)
+}
+
+func (c *EditCmd) params(u things.UpdateCommon) things.UpdateParams {
+	return things.UpdateParams{
+		UpdateCommon:     u,
+		Checklist:        expandNewlinesPtr(c.Checklist),
+		PrependChecklist: expandNewlinesPtr(c.PrependChecklist),
+		AppendChecklist:  expandNewlinesPtr(c.AppendChecklist),
+		List:             c.List,
+		ListID:           c.ListID,
+		Heading:          c.Heading,
+		HeadingID:        c.HeadingID,
+	}
 }
 
 // checkOwn reports whether any of this command's own field flags may change
@@ -310,9 +312,10 @@ var (
 // it with applyEdit. checkOwn warns about the command's own field flags, none
 // of which is in coveredFields, and reports whether they may change the item.
 // checklist says whether the command set a checklist flag, which only `edit`
-// has. write sends the update, given the shared params with the item's id and
-// the auth token filled in.
-func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, checkOwn func(*Deps, *db.DB, *model.Task) bool, checklist bool, write func(things.UpdateCommon) error) error {
+// has. params builds the update from the shared params with the item's id
+// and the auth token filled in, and write sends it. The update is validated
+// before the tag check, so an edit that fails creates no tag.
+func runEdit[P interface{ Validate() error }](d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStatusFlags, checkOwn func(*Deps, *db.DB, *model.Task) bool, checklist bool, params func(things.UpdateCommon) P, write func(P) error) error {
 	item := kind.typ().String()
 	if f.Title != nil {
 		if err := refuseBlankTitle(*f.Title, item, "edited"); err != nil {
@@ -362,6 +365,26 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	if err := checkRepeating(task, restrictedEdits(f.When, f.Deadline, complete, cancel, s.Duplicate)); err != nil {
 		return err
 	}
+	common := things.UpdateCommon{
+		ID:           task.UUID,
+		AuthToken:    authToken(d, database),
+		Title:        f.Title,
+		Notes:        f.Notes,
+		PrependNotes: f.PrependNotes,
+		AppendNotes:  f.AppendNotes,
+		When:         f.When,
+		Deadline:     f.Deadline,
+		Tags:         f.Tags,
+		AddTags:      f.AddTags,
+		Completed:    complete,
+		Canceled:     cancel,
+		Duplicate:    s.Duplicate,
+		Reveal:       s.Reveal,
+	}
+	// Before --create-tags can create anything.
+	if err := params(common).Validate(); err != nil {
+		return err
+	}
 	// After checkRepeating: no point warning about tags on an edit Things
 	// is going to refuse anyway.
 	unknown, err := verifyEditTags(d, s.TagFlags, f.Tags, f.AddTags, item)
@@ -370,24 +393,10 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	}
 	uncovered := checkOwn(d, database, task)
 
-	token := authToken(d, database)
+	// After checkOwn, which can send a uuid given to --list or --area as its
+	// id instead.
 	update := func() error {
-		return write(things.UpdateCommon{
-			ID:           task.UUID,
-			AuthToken:    token,
-			Title:        f.Title,
-			Notes:        f.Notes,
-			PrependNotes: f.PrependNotes,
-			AppendNotes:  f.AppendNotes,
-			When:         f.When,
-			Deadline:     f.Deadline,
-			Tags:         f.Tags,
-			AddTags:      f.AddTags,
-			Completed:    complete,
-			Canceled:     cancel,
-			Duplicate:    s.Duplicate,
-			Reveal:       s.Reveal,
-		})
+		return write(params(common))
 	}
 	reads := readWhen(database, task.UUID)
 	// One instant for the no-op check and the read-back's row check, so they
