@@ -498,6 +498,11 @@ things add "Plan offsite" --list "Open source"   # --list takes a project or are
 things add "Groceries" --checklist "Milk\nBread\nEggs"
 ```
 
+A title that is empty or only whitespace is refused before anything is
+sent, since Things would create an untitled to-do; under `--json` the error
+token is `blank-title`, as `import` reports the same title. `edit --title`,
+`project add` and `project edit --title` refuse it the same way.
+
 `--when` accepts a keyword (`today`, `tomorrow`, `evening`, `anytime`,
 `someday`), a date `YYYY-MM-DD`, a time `HH:MM` or `H:MMam`/`H:MMpm`
 (`21:30`, `9:30PM`), a date+time `YYYY-MM-DD@HH:MM`, an RFC3339 timestamp,
@@ -614,8 +619,11 @@ complain: an unknown list is ignored, so the to-do stays where it is or,
 with `--heading`, the heading is looked up as if given on its own; an
 unknown heading in a known list moves the to-do to that list with no
 heading; an unknown heading on its own is ignored; and an unknown
-`--list-id` or `--heading-id` is ignored too. `edit` warns on stderr when
-that will happen, then sends the edit anyway:
+`--list-id` or `--heading-id` is ignored too. An empty `--list ""` takes
+the to-do out of its project, heading and area and files it in Anytime,
+and an empty `--heading ""` on its own takes it out of its heading and
+leaves it in its project; both are read back like any other move. `edit`
+warns on stderr when a move will not happen, then sends the edit anyway:
 
 ```
 warning: Things finds no project or area called "Nowhere"; the to-do will stay where it is
@@ -771,6 +779,15 @@ things add "Review the flags" --tags "Work,cifas-auto-reject"
 # warning: these tags do not exist in Things and will be ignored: cifas-auto-reject
 ```
 
+`edit --tags` and `project edit --tags` replace the item's tags, and
+Things replaces them with the named tags that exist. An unknown name is not
+just skipped: the item ends up with only the known tags, or with no tags at
+all when none of them exists, and the warning says which:
+
+```
+warning: these tags do not exist in Things: Nope; --tags replaces the task's tags with the ones that exist, and none does, so Things will leave the task with no tags
+```
+
 The write still happens. Add `--create-tags` to create the missing tags
 first so the write applies them all, or `--strict-tags` to fail and write
 nothing instead. The two contradict each other and are rejected together.
@@ -784,7 +801,9 @@ things tag add focus --json         # {"created": [...], "skipped": [...]}
 ```
 
 Names that already exist are skipped rather than duplicated, matched
-case-insensitively as Things matches them. Creation goes through
+case-insensitively as Things matches them. A name that differs only in case
+from one given earlier in the same command is the same tag, so it is
+reported as skipped too. Creation goes through
 AppleScript, so Things3 must be running; the tag list is read back
 afterwards to confirm it landed, which `--no-verify` skips.
 
@@ -811,7 +830,8 @@ not confirmed (under `--json`, `{"uuid", "title", "confirmed": false,
 
 Listings number the items closed today alongside the open ones, so a ref can
 land on one. Completing an item that is already completed, or cancelling one
-already cancelled, sends nothing and exits 0 with a note. Completing a
+already cancelled, sends nothing and exits 0 with a note; under `--json` it
+prints the item, as `edit --complete` does. Completing a
 cancelled item, or cancelling a completed one, is refused and sends nothing;
 under `--json` the error token is `already closed`.
 

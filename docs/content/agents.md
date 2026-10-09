@@ -306,9 +306,12 @@ the uuid you pick tells you whether to retry with `edit` or `project edit`.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
 `trashed`, `stale list cache`, `already closed`, `empty reference`, `misfiled`,
-`import refused`, `import partially applied`, and `error` for everything else.
-`empty reference` is an empty or all-space `<task>` argument, refused before
-any lookup.
+`blank-title`, `import refused`, `import partially applied`, and `error` for
+everything else. `empty reference` is an empty or all-space `<task>`
+argument, refused before any lookup. `blank-title` is an `add`, `project
+add`, or an `edit` or `project edit` `--title`, whose title is empty or only
+whitespace: nothing is sent, as `import` refuses the same title with reason
+`blank-title`.
 `already closed` is `cancel` on a completed item or `complete` on a cancelled
 one (the `edit` and `project edit` flags included, unless `--duplicate` sends
 the status to a copy): nothing is sent, and the object names the item's

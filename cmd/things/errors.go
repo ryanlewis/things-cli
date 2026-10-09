@@ -23,8 +23,10 @@ import (
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
 // "not a project", "trashed", "stale list cache", "already closed",
-// "empty reference", "misfiled", "import refused", "import partially
-// applied", or "error" for a failure with no structure worth naming.
+// "empty reference", "misfiled", "blank-title", "import refused", "import
+// partially applied", or "error" for a failure with no structure worth
+// naming. "blank-title" is spelt as the import reason for the same
+// refusal, so a caller matches one string for both.
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
@@ -224,6 +226,28 @@ func (e *closedTitleError) Error() string {
 	}
 	b.WriteString(". Nothing sent, and no open task with a similar title was touched; pass its uuid to act on a particular one")
 	return b.String()
+}
+
+// blankTitleError is an add or edit refused because the title is empty or
+// only whitespace. Things takes such a title and leaves the item untitled,
+// which `import` refuses as "blank-title" (importShape); add, project add,
+// edit and project edit refuse it the same way, before anything is sent.
+type blankTitleError struct {
+	Kind string // "task" or "project"
+	Done string // what the write would have done: "added" or "edited"
+}
+
+func (e *blankTitleError) Error() string {
+	return fmt.Sprintf("the title is blank, so the %s was not %s; nothing sent. Things would leave it untitled: give it a title", e.Kind, e.Done)
+}
+
+// refuseBlankTitle returns a blankTitleError when title is empty or only
+// whitespace, the test importShape makes.
+func refuseBlankTitle(title, kind, done string) error {
+	if strings.TrimSpace(title) == "" {
+		return &blankTitleError{Kind: kind, Done: done}
+	}
+	return nil
 }
 
 // ambiguousRefError carries a *db.AmbiguousTaskError alongside the multi-line
@@ -506,6 +530,13 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Kind = closedSwitch.task.Type.String()
 		payload.UUID = closedSwitch.task.UUID
 		payload.Title = closedSwitch.task.Title
+		return payload
+	}
+
+	var blank *blankTitleError
+	if errors.As(err, &blank) {
+		payload.Error = "blank-title"
+		payload.Kind = blank.Kind
 		return payload
 	}
 
