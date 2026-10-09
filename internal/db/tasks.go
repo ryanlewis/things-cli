@@ -268,22 +268,26 @@ const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + notATemplat
 	" THEN 1 ELSE COALESCE(t.start, 0) END"
 
 // todayDue is the other way into Today: a row with no start date whose
-// deadline has arrived, from the Inbox or from Anytime, and for as long as it
-// is overdue. Measured on 3 Oct 2026 with test to-dos, the app's Today held
+// deadline has arrived, from any bucket, and for as long as it is overdue. Measured on 3 Oct 2026 with test to-dos, the app's Today held
 // all four of those shapes and the CLI none. It left out the two whose
 // deadlineSuppressionDate equalled their deadline, which is how Things records
 // "taken out of Today for this deadline"; the app cleared that column when a
 // deadline was changed (issue #294).
 //
-// It takes projects as well as to-dos. Measured on 9 Oct 2026, the app's
-// Today held an Anytime project with no start date whose deadline was today
-// or past. Anytime and the Inbox, which also read this test, carry to-dos
-// only (todoOnly), so a project row reaches Today alone.
+// It takes projects as well as to-dos, and the Someday bucket as well as the
+// other two. Measured on 9 Oct 2026, the app's Today held a loose Someday
+// to-do due today, a Someday project and an Anytime project due today, and an
+// Anytime to-do due today inside a Someday project and inside an Anytime one.
+// An earlier measurement that day found a Someday to-do due today out of
+// Today, and that was the suppression column at work, not the bucket: an item
+// created through the URL scheme with a deadline of today or earlier gets
+// deadlineSuppressionDate set to that deadline at creation, so it never
+// enters Today, while one whose deadline is set afterwards has no suppression
+// and does. A row with a start date as well is todayScheduled's question,
+// and was not measured here.
 //
-// The Someday bucket stays out, and that is the app's answer rather than a
-// gap: measured on 9 Oct 2026, a Someday to-do or project due today was not
-// in the app's Today. Upcoming is the other way round, and takes a Someday row
-// with a later deadline; see upcomingDue.
+// Anytime and the Inbox read only the Inbox half of this test (see
+// anytimeScope and notTodayDue), and carry to-dos only (todoOnly).
 //
 // The test is IS NULL rather than "differs from the deadline" because no write
 // measured leaves a stale suppression behind. On 4 Oct 2026, suppressed test
@@ -293,12 +297,11 @@ const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + notATemplat
 // into the app's Today. Setting the same deadline again left the column and
 // kept the to-do out of Today. Sync from another device was not measured
 // (issue #376).
-const todayDue = "t.start IN (0, 1) AND t.startDate IS NULL AND t.deadline <= " + thingsToday +
+const todayDue = "t.startDate IS NULL AND t.deadline <= " + thingsToday +
 	" AND t.deadlineSuppressionDate IS NULL"
 
 // todayScope is Today's whole scope: the two ways in, either of which is
-// enough. A Someday row is in it only by its start date (scheduledArrived),
-// never by its deadline, where upcomingScope takes one by either.
+// enough.
 const todayScope = "((" + todayScheduled + ") OR (" + todayDue + "))"
 
 // todayDate is the day --on/--from/--to match a Today row on: its start date,
@@ -434,13 +437,16 @@ const (
 	inboxBucket   = "t.start = 0"
 	anytimeBucket = "t.start = 1"
 	// anytimeScope is Anytime's whole scope: its bucket, and the undated
-	// Inbox to-dos whose deadline has come. todayDue covers both buckets, so
-	// joining it adds only the Inbox ones. Measured on 3 Oct 2026, the app's
+	// Inbox to-dos whose deadline has come (inboxDue). Whether a Someday to-do
+	// due today, which Today holds, is in Anytime too was not measured, so it
+	// is left out. Measured on 3 Oct 2026, the app's
 	// Anytime held an Inbox to-do due that day and one overdue, the same two
 	// its Today held, and no Inbox to-do due later or taken out of Today for
 	// its deadline. A start = 2 to-do whose day has come is in Anytime too,
 	// as it is in Today (scheduledArrived).
-	anytimeScope = "(" + anytimeBucket + " OR (" + scheduledArrived + ") OR (" + todayDue + "))"
+	anytimeScope = "(" + anytimeBucket + " OR (" + scheduledArrived + ") OR (" + inboxDue + "))"
+	// inboxDue is the Inbox half of todayDue.
+	inboxDue = inboxBucket + " AND " + todayDue
 	// upcomingScheduled and somedayDeferred split the one Things code between
 	// them. start = 2 is both lists: the app shows a deferred item in Upcoming
 	// once it carries a date and in Someday while it does not. A dated one
@@ -455,9 +461,9 @@ const (
 	// 2026, it also held an Anytime project of that shape, and a Someday to-do
 	// and a Someday project with a later deadline.
 	//
-	// Someday is where this differs from todayDue, deliberately: the same
-	// Someday row due today is not in the app's Today. A row with a start date
-	// as well is upcomingScheduled's, and was not measured here. A Someday
+	// An Inbox to-do with a later deadline was not measured, so the Inbox
+	// stays out; todayDue takes one once its deadline comes. A row with a
+	// start date as well is upcomingScheduled's, and was not measured here. A Someday
 	// to-do inside a project with a later deadline is in Upcoming too:
 	// measured on 9 Oct 2026, under an open parent project and under a
 	// Someday one alike, while the app's Someday list left both out.
@@ -1115,6 +1121,28 @@ func listNameLike(value string) string {
 	return likeEscaper.Replace(FoldName(strings.TrimSpace(value)))
 }
 
+// foldsIntoTaggedProject reports whether a --tag listing has to match a
+// project row through its tagged to-dos: when --area and --tag together list
+// the area's page, which folds a to-do closed today into its project closed
+// today. Measured on 9 Oct 2026: with a tagged to-do completed today inside
+// an untagged project completed today, both in the area, the app's area page
+// held the project row, struck through, and not the to-do. Matching the tag
+// on rows alone dropped both, since the fold took the to-do and the tag the
+// project.
+func foldsIntoTaggedProject(spec viewSpec, opts TaskFilter) bool {
+	return opts.Area != "" && opts.Project == "" && !opts.OpenOnly && spec.completesWithFilter
+}
+
+// projectOfFoldedTagged, followed by the tagged-rows subquery and "))" to
+// close its two open subqueries, matches a closed project row holding a to-do the tag carries that
+// the area's fold takes into it: closed, untrashed, and not yet logged. It is
+// filed in the project directly or under one of its headings. The project's
+// own row still has to pass the view's status test, so only a project closed
+// and not yet logged is listed.
+var projectOfFoldedTagged = "t.type = 1 AND " + closedRows + " AND t.uuid IN (SELECT COALESCE(c.project, ch.project) FROM TMTask c" +
+	" LEFT JOIN TMTask ch ON c.heading = ch.uuid WHERE c.status IN (2, 3) AND c.trashed = 0 AND " +
+	strings.ReplaceAll(closedTodayUnlogged, "t.stopDate", "c.stopDate") + " AND c.uuid IN ("
+
 // projectNameMatch is the --project clause for the project row aliased alias,
 // with its arguments: the uuid, or the title. An exact-case title wins, and
 // only when no project carries one does the title match under FoldName,
@@ -1225,7 +1253,16 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	}
 	if opts.Tag != "" {
 		clause, clauseArgs := tagNameMatch("tg2.title", opts.Tag)
-		where += " AND t.uuid IN (SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE " + clause + ")"
+		tagged := "SELECT tt2.tasks FROM TMTaskTag tt2 JOIN TMTag tg2 ON tt2.tags = tg2.uuid WHERE " + clause
+		if foldsIntoTaggedProject(spec, opts) {
+			// The area's page folds a to-do closed today into its project
+			// closed today, so the tag reaches that project's row through the
+			// to-do, or the listing loses both.
+			where += " AND (t.uuid IN (" + tagged + ") OR (" + projectOfFoldedTagged + tagged + "))))"
+			args = append(args, clauseArgs...)
+		} else {
+			where += " AND t.uuid IN (" + tagged + ")"
+		}
 		args = append(args, clauseArgs...)
 	}
 

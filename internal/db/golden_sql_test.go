@@ -46,6 +46,7 @@ func goldenFilterCases() []struct {
 		{"from", TaskFilter{From: &from}},
 		{"to", TaskFilter{To: &to}},
 		{"from+to", TaskFilter{From: &from, To: &to}},
+		{"area+tag", TaskFilter{Area: "Work", Tag: "urgent"}},
 		{"project+area+tag", TaskFilter{Project: "Launch v2", Area: "Work", Tag: "urgent"}},
 		{"all", TaskFilter{Project: "Launch v2", Area: "Work", Tag: "urgent", From: &from, To: &to}},
 	}
