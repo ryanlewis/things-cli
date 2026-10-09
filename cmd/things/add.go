@@ -26,6 +26,10 @@ func (c *AddCmd) Run(d *Deps) error {
 	if err := refuseBlankTitle(c.Title, "task", "added"); err != nil {
 		return err
 	}
+	// Before --create-tags can create anything.
+	if _, err := things.NormalizeWhen(c.When); err != nil {
+		return err
+	}
 	if _, err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
 		return err
 	}

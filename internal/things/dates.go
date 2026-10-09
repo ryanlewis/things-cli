@@ -52,6 +52,11 @@ func NormalizeWhen(s string) (string, error) {
 	if t, ok := parseISO8601(v); ok {
 		return t.Format("2006-01-02") + "@" + t.Format("15:04"), nil
 	}
+	for _, layout := range whenLocalLayouts {
+		if t, err := time.ParseInLocation(layout, v, time.Local); err == nil {
+			return t.Format("2006-01-02") + "@" + t.Format("15:04"), nil
+		}
+	}
 	if isWeekdayWord(strings.ToLower(v)) {
 		return v, nil
 	}
@@ -68,23 +73,64 @@ var (
 	// whenDateShape is a value that starts like a date: year, month and day
 	// in digits, then anything (an @time, say).
 	whenDateShape = regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$`)
-	// whenClockShape is a value shaped like a time of day, with an optional
-	// am or pm.
+	// whenClockShape is a value shaped like a time of day: H:MM or HH:MM,
+	// with an optional am or pm.
 	whenClockShape = regexp.MustCompile(`(?i)^(\d{1,2}):(\d{2})\s*(am|pm)?$`)
+	// whenClock12Shape is a 12-hour time with no minutes, such as 6pm, the
+	// form the Things documentation uses after an @ (evening@6pm).
+	whenClock12Shape = regexp.MustCompile(`(?i)^(\d{1,2})\s*(am|pm)$`)
 )
 
-// WhenDateOrTime reports whether v, a value NormalizeWhen returned, is a
-// date, a time of day, or a date and time (checkWhenShape's shapes), as
-// opposed to a keyword or a free phrase.
-func WhenDateOrTime(v string) bool {
-	if m := whenDateShape.FindStringSubmatch(v); m != nil {
-		rest, ok := strings.CutPrefix(m[4], "@")
-		if m[4] == "" {
-			return true
+// whenLocalLayouts are ISO 8601 date-times with no offset. They are read as
+// the wall-clock time they name, as an RFC3339 timestamp's offset is
+// ignored.
+var whenLocalLayouts = [...]string{"2006-01-02T15:04:05", "2006-01-02T15:04"}
+
+// whenTimedKeywords are the keywords the Things documentation allows a time
+// after (evening@6pm). It ignores a time after anytime or someday.
+var whenTimedKeywords = []string{"today", "tomorrow", "evening"}
+
+// KnownWhenWord reports whether v is a --when keyword or a weekday name,
+// which NormalizeWhen accepts as words Things knows, as opposed to a free
+// phrase it passes through unchecked.
+func KnownWhenWord(v string) bool {
+	low := strings.ToLower(strings.TrimSpace(v))
+	return isWhenKeyword(low) || isWeekdayWord(low)
+}
+
+// clockShape reports whether v is shaped like a time of day (whenClockShape
+// or whenClock12Shape), and if so whether it names one.
+func clockShape(v string) (shaped, real bool) {
+	if m := whenClockShape.FindStringSubmatch(v); m != nil {
+		hour, _ := strconv.Atoi(m[1])
+		minute, _ := strconv.Atoi(m[2])
+		if m[3] != "" {
+			return true, hour >= 1 && hour <= 12 && minute <= 59
 		}
-		return ok && whenClockShape.MatchString(rest)
+		return true, hour <= 23 && minute <= 59
 	}
-	return whenClockShape.MatchString(v)
+	if m := whenClock12Shape.FindStringSubmatch(v); m != nil {
+		hour, _ := strconv.Atoi(m[1])
+		return true, hour >= 1 && hour <= 12
+	}
+	return false, false
+}
+
+// WhenDateOrTime reports whether v, a value NormalizeWhen returned, is a
+// date, a time of day, or a date or keyword with a time after an @
+// (checkWhenShape's shapes), as opposed to a keyword alone or a free phrase.
+func WhenDateOrTime(v string) bool {
+	day, clock, timed := strings.Cut(v, "@")
+	if timed {
+		shaped, _ := clockShape(clock)
+		m := whenDateShape.FindStringSubmatch(day)
+		return shaped && (m != nil && m[4] == "" || slices.Contains(whenTimedKeywords, strings.ToLower(day)))
+	}
+	if m := whenDateShape.FindStringSubmatch(v); m != nil {
+		return m[4] == ""
+	}
+	shaped, _ := clockShape(v)
+	return shaped && whenClockShape.MatchString(v)
 }
 
 // ImpossibleWhenError is the error NormalizeWhen returns for a value shaped
@@ -100,42 +146,50 @@ func impossibleWhen(format string, args ...any) error {
 
 // checkWhenShape refuses a value shaped like a date or a time of day that
 // names none: a month or day that does not exist, an hour or minute out of
-// range, or a date followed by T that is not an RFC3339 timestamp. Measured
-// in Things 3 on 9 Oct 2026, Things saves such a value as something else
-// with no warning (2026-13-01 lands in Today). Any other value passes,
-// English phrases included, since which of those Things understands is not
-// known here.
+// range, a date followed by T that is not an ISO 8601 date-time, or a date
+// or a keyword with something after the @ that is not a time of day.
+// Measured in Things 3 on 9 Oct 2026, Things saves such a value as something
+// else with no warning (2026-13-01 lands in Today, tomorrow@25:00 lands
+// tomorrow with no reminder, someday@18:00 in Someday). Any other value
+// passes, English phrases included, since which of those Things understands
+// is not known here.
 func checkWhenShape(v string) error {
-	clock := v
-	if m := whenDateShape.FindStringSubmatch(v); m != nil {
+	day, clock, timed := strings.Cut(v, "@")
+	switch m := whenDateShape.FindStringSubmatch(day); {
+	case m != nil:
 		year, _ := strconv.Atoi(m[1])
 		month, _ := strconv.Atoi(m[2])
-		day, _ := strconv.Atoi(m[3])
-		if month < 1 || month > 12 || day < 1 || day > time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
+		date, _ := strconv.Atoi(m[3])
+		if month < 1 || month > 12 || date < 1 || date > time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
 			return impossibleWhen("invalid --when value %q: %s-%s-%s is not a date (use YYYY-MM-DD)", v, m[1], m[2], m[3])
 		}
 		if strings.HasPrefix(m[4], "T") {
-			// parseISO8601 has turned it down already.
-			return impossibleWhen("invalid --when value %q: not an RFC3339 timestamp (use YYYY-MM-DDTHH:MM:SSZ or an offset such as +01:00)", v)
+			// parseISO8601 and whenLocalLayouts have turned it down already.
+			return impossibleWhen("invalid --when value %q: not a date and time (use YYYY-MM-DDTHH:MM[:SS], with an optional Z or offset such as +01:00, or YYYY-MM-DD@HH:MM)", v)
 		}
-		rest, ok := strings.CutPrefix(m[4], "@")
-		if !ok {
+		if m[4] != "" {
+			// A date followed by words: a phrase.
 			return nil
 		}
-		clock = rest
+	case !timed:
+		if shaped, real := clockShape(v); shaped && !real {
+			return impossibleWhen("invalid --when value %q: %s is not a time of day (use HH:MM)", v, v)
+		}
+		return nil
+	default:
+		switch low := strings.ToLower(day); {
+		case low == "anytime" || low == "someday":
+			return impossibleWhen("invalid --when value %q: Things ignores a time after %s", v, low)
+		case !slices.Contains(whenTimedKeywords, low):
+			// Something else before the @: a phrase.
+			return nil
+		}
 	}
-	m := whenClockShape.FindStringSubmatch(clock)
-	if m == nil {
+	if !timed {
 		return nil
 	}
-	hour, _ := strconv.Atoi(m[1])
-	minute, _ := strconv.Atoi(m[2])
-	maxHour, minHour := 23, 0
-	if m[3] != "" {
-		maxHour, minHour = 12, 1
-	}
-	if hour < minHour || hour > maxHour || minute > 59 {
-		return impossibleWhen("invalid --when value %q: %s is not a time of day (use HH:MM)", v, clock)
+	if _, real := clockShape(clock); !real {
+		return impossibleWhen("invalid --when value %q: %s is not a time of day (use HH:MM, or a time such as 6pm)", v, clock)
 	}
 	return nil
 }

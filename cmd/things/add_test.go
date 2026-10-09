@@ -1055,6 +1055,14 @@ func TestImpossibleWhenRefusedUpFront(t *testing.T) {
 		{"edit", "one-1", "--when", "2026-13-01"},
 		{"add", "Post letter", "--when", "25:00"},
 		{"edit", "one-1", "--when", "25:00"},
+		{"add", "Post letter", "--when", "tomorrow@25:00"},
+		{"edit", "one-1", "--when", "today@18:60"},
+		// Refused before --create-tags creates the unknown tag over
+		// AppleScript: no command runs at all.
+		{"add", "Post letter", "--create-tags", "--tags", "Brandnew", "--when", "2026-13-01"},
+		{"edit", "one-1", "--create-tags", "--tags", "Brandnew", "--when", "2026-13-01"},
+		{"project", "add", "Launch", "--create-tags", "--tags", "Brandnew", "--when", "2026-13-01"},
+		{"project", "edit", "repproj-1", "--create-tags", "--tags", "Brandnew", "--when", "2026-13-01"},
 	} {
 		fastVerify(t)
 		database, _ := seedWritable(t)
@@ -1135,6 +1143,13 @@ func TestEditWhenPhrase(t *testing.T) {
 	}
 	if !strings.Contains(stderr, `Things may not understand --when "blorp"`) {
 		t.Errorf("stderr = %q, want a warning naming the phrase", stderr)
+	}
+
+	// A weekday name is a word Things knows, not a free phrase: the edit
+	// waits for the modification date as before.
+	_, stderr, err = runStreams(t, database, "--json", "edit", "one-1", "--when", "friday")
+	if err == nil || !strings.Contains(err.Error(), "was not modified") || strings.Contains(stderr, "may not understand") {
+		t.Errorf("edit --when friday = %v, stderr %q; want it read back like any edit", err, stderr)
 	}
 
 	_, _, err = runStreams(t, database, "edit", "one-1", "--when", "blorp", "--notes", "x")
