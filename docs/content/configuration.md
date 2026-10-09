@@ -31,7 +31,11 @@ built-in defaults. The same applies to a path you name yourself; run
 `things config path` to see which file is in use and whether it exists.
 {{< /note >}}
 
-`~` and relative paths are expanded, so `--config ./project.toml` works.
+A leading `~/` and relative paths are expanded, so `--config
+./project.toml` works. The same goes for `$THINGS_CLI_CONFIG`, `--db` and the
+`db` key. `~/` stands for `$HOME`, the home the default config location and
+the database auto-detection follow, so a run with a different `$HOME`
+expands it there too.
 
 ## Precedence
 
@@ -385,7 +389,7 @@ Keys can be scoped this way in general. `assume_yes` is one;
 ## Notes for agents and scripts
 
 A config file can change defaults you would otherwise assume. `json =
-true` makes every command emit JSON; `no_verify = true` turns off the
+true` makes every command that reads or writes Things emit JSON; `no_verify = true` turns off the
 read-back that confirms an `add`, a `complete` or an `edit` landed; `hints = false` drops the
 next-actions hint and its note; `open_only = true` leaves the closed items
 Things still shows out of every listing.

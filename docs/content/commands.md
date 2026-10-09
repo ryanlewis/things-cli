@@ -8,7 +8,10 @@ description: "Full command reference for things-cli: listing, searching, capturi
 
 Read commands (`list`/views, `projects`, `areas`, `tags`, `show`, `search`)
 accept `-j` / `--json` for structured output. Run `things --help` or
-`things <subcommand> --help` for the full flag list.
+`things <subcommand> --help` for the full flag list. The one flag it leaves
+out is `--include-completed` on the listings, which is retired and kept only
+so existing scripts keep working; it is described under
+[`--open-only`](#listing) below.
 
 In JSON, `status`, `type` and `start` are string enums rather than the raw
 Things integers. `status` is `"open"`, `"completed"` or `"cancelled"`, and
@@ -420,9 +423,14 @@ things add "Groceries" --checklist "Milk\nBread\nEggs"
 ```
 
 `--when` accepts a keyword (`today`, `tomorrow`, `evening`, `anytime`,
-`someday`), a date `YYYY-MM-DD`, a time `HH:MM`, a date+time
-`YYYY-MM-DD@HH:MM`, or an RFC3339 timestamp. `--deadline` accepts a
-`YYYY-MM-DD` date only.
+`someday`), a date `YYYY-MM-DD`, a time `HH:MM` or `H:MMam`/`H:MMpm`
+(`21:30`, `9:30PM`), a date+time `YYYY-MM-DD@HH:MM`, an RFC3339 timestamp,
+or an English phrase such as `friday` or `next monday`, which Things reads
+itself. An RFC3339 timestamp keeps its wall-clock time and ignores its
+offset: `2026-05-01T09:00:00+05:00` sets a 09:00 reminder in your local
+time, not the local time of 09:00 at +05:00. `--deadline` accepts a
+`YYYY-MM-DD` date or an English phrase such as `next friday`; the `--when`
+keywords, such as `today`, are rejected.
 
 Things files the to-do by matching `--list` (or `--project`) against the
 titles of the projects and areas it shows, and `--heading` against the

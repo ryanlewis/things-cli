@@ -33,13 +33,13 @@ What it does:
 - **Complete, cancel, log**, or **reveal** items in the app
 - **Import** [Things JSON URL scheme](https://culturedcode.com/things/support/articles/2803573/)
   payloads in bulk
-- **JSON everywhere** — every command supports `-j` / `--json` for clean
-  piping into `jq`, agents, or scripts
+- **JSON output** — every command that reads or writes Things supports
+  `-j` / `--json` for clean piping into `jq`, agents, or scripts
 
 **Working with agents.** A bundled skill teaches Claude Code, Codex and Pi
 to drive the CLI, `things show <ref> --agent` prints a brief you can hand
-straight to an agent, and every command speaks JSON. See
-[Working with agents](https://things.rlew.io/agents/) on the docs site.
+straight to an agent, and every command that reads or writes Things speaks
+JSON. See [Working with agents](https://things.rlew.io/agents/) on the docs site.
 
 ```sh
 things skill install claude                     # also: codex, pi

@@ -17,8 +17,8 @@ type ProjectCmd struct {
 type ProjectAddCmd struct {
 	Title    string `arg:"" required:"" help:"Project title."`
 	Notes    string `help:"Notes for the project."`
-	When     string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM, YYYY-MM-DD@HH:MM, or RFC3339."`
-	Deadline string `help:"Deadline date (YYYY-MM-DD)."`
+	When     string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM, or RFC3339."`
+	Deadline string `help:"Deadline: a YYYY-MM-DD date or an English phrase such as \"next friday\"."`
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial tasks."`
