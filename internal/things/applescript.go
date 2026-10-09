@@ -17,21 +17,21 @@ func runAppleScript(script string, context string) error {
 }
 
 // setStatus sets the status of the item of class ("to do" or "project")
-// with id uuid, held in the script as v, to status ("completed" or
-// "canceled"). context names the action in an error.
-func setStatus(class, v, uuid, status, context string) error {
+// with id uuid to status ("completed" or "canceled"). context names the
+// action in an error.
+func setStatus(class, uuid, status, context string) error {
 	return runAppleScript(fmt.Sprintf(`tell application "Things3"
-set %s to %s id %s
-set status of %s to %s
-end tell`, v, class, appleScriptString(uuid), v, status), context)
+set theItem to %s id %s
+set status of theItem to %s
+end tell`, class, appleScriptString(uuid), status), context)
 }
 
 func CompleteTask(uuid string) error {
-	return setStatus("to do", "theToDo", uuid, "completed", "completing task")
+	return setStatus("to do", uuid, "completed", "completing task")
 }
 
 func CompleteProject(uuid string) error {
-	return setStatus("project", "theProject", uuid, "completed", "completing project")
+	return setStatus("project", uuid, "completed", "completing project")
 }
 
 func LogCompleted() error {
@@ -41,11 +41,11 @@ end tell`, "logging completed items")
 }
 
 func CancelTask(uuid string) error {
-	return setStatus("to do", "theToDo", uuid, "canceled", "cancelling task")
+	return setStatus("to do", uuid, "canceled", "cancelling task")
 }
 
 func CancelProject(uuid string) error {
-	return setStatus("project", "theProject", uuid, "canceled", "cancelling project")
+	return setStatus("project", uuid, "canceled", "cancelling project")
 }
 
 // appleScriptString renders s as an AppleScript string literal, quotes
