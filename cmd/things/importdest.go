@@ -171,7 +171,7 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 					}
 					continue
 				}
-				warn(*c, "Things has no heading with id %q; it will ignore heading-id and heading", id)
+				warn(*c, "%s", noHeadingID(id, "it will ignore heading-id and heading"))
 			} else if heading != "" {
 				warn(*c, "heading-id is empty; Things will ignore heading %q", heading)
 			}
@@ -226,7 +226,7 @@ func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
 			// lowest-uuid twin of one the list already has.
 			c.dest.anyHeading = true
 		case heading != "" && !res.headingFound:
-			warn(*c, "%q has no heading %q; Things will add the to-do there without a heading", list, heading)
+			warn(*c, "%s", noHeading(list, heading, "add the to-do there without a heading"))
 		}
 	}
 }
@@ -243,13 +243,10 @@ func targetMatches(target db.Target, ref string, byID bool) bool {
 // when byID, that Things will not file in any noun, so will fallback
 // instead. target is what the lookup found for ref.
 func missedTarget(attr, noun, ref string, byID bool, target db.Target, fallback string) string {
-	switch {
-	case byID:
-		return fmt.Sprintf("Things finds no %s with id %q; it will %s", noun, ref, fallback)
-	case target.ByUUID:
+	if !byID && target.ByUUID {
 		return fmt.Sprintf("%s %q is an id, and Things matches %s by title only; it will %s (use %s-id)", attr, ref, attr, fallback, attr)
 	}
-	return fmt.Sprintf("Things finds no %s called %q; it will %s", noun, ref, fallback)
+	return noTarget(noun, ref, byID, "it will "+fallback)
 }
 
 // projectImportDest is resolveImportDests for a project the payload creates:

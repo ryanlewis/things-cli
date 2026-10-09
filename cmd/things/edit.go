@@ -154,10 +154,10 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 			// heading title sent with it.
 			return task.HeadingUUID != id
 		case !anySet(c.List, c.ListID, c.Heading):
-			fmt.Fprintf(d.errOut(), "warning: Things has no heading with id %q; the to-do will stay where it is\n", *c.HeadingID)
+			fmt.Fprintf(d.errOut(), "warning: %s\n", noHeadingID(*c.HeadingID, "the to-do will stay where it is"))
 			return false
 		}
-		fmt.Fprintf(d.errOut(), "warning: Things has no heading with id %q; it will ignore --heading-id\n", *c.HeadingID)
+		fmt.Fprintf(d.errOut(), "warning: %s\n", noHeadingID(*c.HeadingID, "it will ignore --heading-id"))
 	}
 	// next is what Things does when it cannot find the list.
 	next := "the to-do will stay where it is"
@@ -171,30 +171,24 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	list, found := "", false
 	var target db.Target
 	switch {
-	case c.List != nil:
-		list = *c.List
+	case c.List != nil, c.ListID != nil:
+		byID := c.ListID != nil
+		if byID {
+			list = *c.ListID
+		} else {
+			list = *c.List
+		}
 		t, f, err := database.AddTarget(list, heading)
 		switch {
 		case err != nil:
 			return true
-		case t.UUID == "":
-			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area called %q; %s\n", list, next)
-		case t.ByUUID:
+		case t.UUID == "", byID && !t.ByUUID:
+			// AddTarget also matches a title, which list-id does not.
+			fmt.Fprintf(d.errOut(), "warning: %s\n", noTarget("project or area", list, byID, next))
+		case t.ByUUID && !byID:
 			id := t.UUID
 			c.List, c.ListID = nil, &id
 			fallthrough
-		default:
-			target, found = t, f
-		}
-	case c.ListID != nil:
-		list = *c.ListID
-		t, f, err := database.AddTarget(list, heading)
-		switch {
-		case err != nil:
-			return true
-		case !t.ByUUID:
-			// AddTarget also matches a title, which list-id does not.
-			fmt.Fprintf(d.errOut(), "warning: Things finds no project or area with id %q; %s\n", list, next)
 		default:
 			target, found = t, f
 		}
@@ -210,7 +204,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		return !inList || task.HeadingUUID != target.Heading
 	case target.UUID != "":
 		if heading != "" {
-			fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will move the to-do there without a heading\n", list, heading)
+			fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(list, heading, "move the to-do there without a heading"))
 		}
 		return task.HeadingUUID != "" || !inList
 	case c.Heading == nil:
@@ -232,7 +226,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	case err != nil || t.UUID == "":
 		return true
 	case !f:
-		fmt.Fprintf(d.errOut(), "warning: %q has no heading %q; Things will leave the to-do where it is\n", task.ProjectTitle, heading)
+		fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(task.ProjectTitle, heading, "leave the to-do where it is"))
 		return false
 	}
 	return task.HeadingUUID != t.Heading
