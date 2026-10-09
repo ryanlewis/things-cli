@@ -833,9 +833,10 @@ func TestGetTaskByUUID(t *testing.T) {
 }
 
 // A uuid reaches a trashed item, flagged as trashed, and its exact title
-// reports it as a ClosedTitleError when no open row carries the title. `show` relies on that, and the writes
-// refuse the item on the flag rather than reporting it missing, so the reader
-// learns where it went. A substring still never reaches it.
+// reports it as a ClosedTitleError when no open row carries the title.
+// `show` relies on that, and the writes refuse the item rather than
+// reporting it missing, so the reader learns where it went. A substring
+// still never reaches it.
 func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
 	d, fx := newFixture(t)
 	fx.Todo("t-bin", "Binned errand", 1, dbtest.Trashed())
@@ -858,6 +859,42 @@ func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
 	var nf *TaskNotFoundError
 	if _, err := d.GetTask("Binned"); !errors.As(err, &nf) {
 		t.Errorf("GetTask(fragment of trashed item) = %v, want a TaskNotFoundError", err)
+	}
+}
+
+// A repeating template that shares a closed title with a closed instance is
+// dropped from the closed candidates, as it is from open ones; on its own it
+// is still the candidate.
+func TestClosedTitlePrefersInstances(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Todo("tmpl", "Water plants", 1, dbtest.Repeats(), dbtest.Trashed())
+	fx.Todo("inst", "Water plants", 2, dbtest.Completed(1))
+	fx.Todo("lone-tmpl", "Feed cat", 3, dbtest.Repeats(), dbtest.Trashed())
+
+	for title, want := range map[string]string{"Water plants": "inst", "Feed cat": "lone-tmpl"} {
+		var closed *ClosedTitleError
+		_, err := d.GetTask(title)
+		if !errors.As(err, &closed) || len(closed.Matches) != 1 || closed.Matches[0].UUID != want {
+			t.Errorf("GetTask(%q) = %v, want a ClosedTitleError naming only %s", title, err, want)
+		}
+	}
+}
+
+// GetTask reports a closed row whose title matches once case and surrounding
+// space are set aside, before the substring match can reach an open twin.
+func TestGetTaskClosedTitleFolded(t *testing.T) {
+	d, fx := newFixture(t)
+	fx.Todo("done", "Pay rent ", 1, dbtest.Completed(1))
+	fx.Todo("open", "Re: Pay rent deposit", 2, dbtest.Anytime())
+
+	for _, ref := range []string{"pay rent", "PAY RENT", " Pay rent", "Pay rent", "Pay rent  "} {
+		var closed *ClosedTitleError
+		if got, err := d.GetTask(ref); !errors.As(err, &closed) || closed.Matches[0].UUID != "done" {
+			t.Errorf("GetTask(%q) = %+v, %v, want a ClosedTitleError naming done", ref, got, err)
+		}
+	}
+	if got, err := d.GetTask("rent dep"); err != nil || got.UUID != "open" {
+		t.Errorf("GetTask(fragment) = %+v, %v, want open", got, err)
 	}
 }
 

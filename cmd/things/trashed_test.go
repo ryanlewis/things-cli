@@ -159,7 +159,7 @@ func TestWritesRefuseToDoInTrashedProject(t *testing.T) {
 // of the title skips it, as it skips a trashed row. With the same title in a
 // live project the title is not ambiguous: it names the live one, the only
 // one Things shows outside the Trash.
-func TestTitleSkipsToDoInTrashedProject(t *testing.T) {
+func TestTitleOnToDoInTrashedProject(t *testing.T) {
 	t.Run("only match", func(t *testing.T) {
 		fastVerify(t)
 		database, _ := seedTrashedProject(t)

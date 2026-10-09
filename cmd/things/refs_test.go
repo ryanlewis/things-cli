@@ -111,6 +111,73 @@ func TestExactTitleOnClosedRowBeatsSubstring(t *testing.T) {
 			token: "trashed",
 			uuid:  "zz-base",
 		},
+		// Case and surrounding space aside, a closed title still stops the
+		// lookup before the case-folding substring match can reach the
+		// open twin.
+		{
+			name: "case variant of a closed title, upper",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "Zz Base", 20, dbtest.Completed(1))
+			},
+			args:  []string{"complete", "ZZ BASE"},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "case variant of a closed title, lower",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "Zz Base", 20, dbtest.Completed(1))
+			},
+			args:  []string{"complete", "zz base"},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "closed title typed with a trailing space",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+			},
+			args:  []string{"complete", "zz base "},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "closed title typed with a leading space",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+			},
+			args:  []string{"edit", " zz base", "--notes", "x"},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "closed title stored with a trailing space, typed clean",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "zz base ", 20, dbtest.Completed(1))
+			},
+			args:  []string{"complete", "zz base"},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "trashed title, case and space altered",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "zz base", 20, dbtest.Trashed())
+			},
+			args:  []string{"cancel", "\tZZ Base "},
+			token: "trashed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "case variant with a prefixed open twin",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "Pay rent", 20, dbtest.Completed(1))
+				fx.Todo("zz-deposit", "Re: Pay rent deposit", 21, dbtest.Anytime())
+			},
+			args:  []string{"complete", "PAY RENT"},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
 		{
 			name: "several closed exact titles, the latest named",
 			seed: func(fx *dbtest.Fixture) {
@@ -536,5 +603,199 @@ func TestPlainRefIsNotTrimmed(t *testing.T) {
 		if err != nil || got.UUID != want {
 			t.Errorf("resolveTask(%q) = %+v, %v, want %s", ref, got, err, want)
 		}
+	}
+}
+
+// A to-do whose project is in the Trash is marked as in the Trash by `show`,
+// in plain output and with "projectTrashed" in JSON; `open` refuses it with
+// the trashed token and the project's name, since Things shows it nowhere.
+// The closed-title refusal names the project too.
+func TestToDoInTrashedProjectIsMarked(t *testing.T) {
+	t.Run("show plain", func(t *testing.T) {
+		database, _ := seedTrashedProject(t)
+		out, err := runOut(t, database, "show", "binchild-1")
+		if err != nil || !strings.Contains(out, "(in Trash)") {
+			t.Errorf("show = %q, %v, want the status marked (in Trash)", out, err)
+		}
+	})
+	t.Run("show json", func(t *testing.T) {
+		database, _ := seedTrashedProject(t)
+		out, err := runOut(t, database, "--json", "show", "binchild-1")
+		if err != nil || !strings.Contains(out, `"projectTrashed": true`) {
+			t.Errorf("show --json = %s, %v, want projectTrashed true", out, err)
+		}
+		out, err = runOut(t, database, "--json", "show", "livechild-1")
+		if err != nil || strings.Contains(out, "projectTrashed") {
+			t.Errorf("show --json on a live to-do = %s, %v, want no projectTrashed", out, err)
+		}
+	})
+	for _, args := range [][]string{{"open", "binchild-1"}, {"open", "Book van"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			database, _ := seedTrashedProject(t)
+			calls := stubExecDropping(t)
+			_, _, err := runStreams(t, database, args...)
+			if err == nil || *calls != 0 {
+				t.Fatalf("%v = %v with %d call(s), want a refusal and nothing sent", args, err, *calls)
+			}
+			payload, raw := decodePayload(t, err)
+			if payload.Error != "trashed" || payload.Project != "Binned move" || payload.UUID != "binchild-1" {
+				t.Errorf("payload = %s, want trashed naming project Binned move", raw)
+			}
+		})
+	}
+	t.Run("open a trashed row still opens", func(t *testing.T) {
+		database, sqlDB := seedTrashedProject(t)
+		dbtest.NewFixture(t, sqlDB).Todo("bin-row", "Binned row", 30, dbtest.Trashed())
+		calls := stubExecDropping(t)
+		if _, _, err := runStreams(t, database, "open", "bin-row"); err != nil || *calls != 1 {
+			t.Errorf("open bin-row = %v with %d call(s), want it opened", err, *calls)
+		}
+	})
+	t.Run("closed-title refusal names the project", func(t *testing.T) {
+		fastVerify(t)
+		database, _ := seedTrashedProject(t)
+		stubExecDropping(t)
+		_, _, err := runStreams(t, database, "complete", "Book van")
+		if err == nil || !strings.Contains(err.Error(), `its project "Binned move"`) {
+			t.Fatalf("complete = %v, want the project named", err)
+		}
+		payload, raw := decodePayload(t, err)
+		if payload.Error != "trashed" || payload.Project != "Binned move" {
+			t.Errorf("payload = %s, want trashed with project Binned move", raw)
+		}
+	})
+	t.Run("uuid refusal names the project in JSON", func(t *testing.T) {
+		fastVerify(t)
+		database, _ := seedTrashedProject(t)
+		stubExecDropping(t)
+		_, _, err := runStreams(t, database, "complete", "binchild-1")
+		payload, raw := decodePayload(t, err)
+		if payload.Error != "trashed" || payload.Project != "Binned move" {
+			t.Errorf("payload = %s, want trashed with project Binned move", raw)
+		}
+	})
+}
+
+// A uuid pasted with space around it still resolves, and a mis-cased one with
+// space around it is still kept from the substring match.
+func TestPaddedUUIDRef(t *testing.T) {
+	const real = "NAmXd4kencwJqJwnyKR3gu"
+	t.Setenv("HOME", t.TempDir())
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo(real, "The real one", 1)
+	fx.Todo("decoy", "Paste namxd4kencwjqjwnykr3gu here", 2)
+	database := db.NewFromSQL(sqlDB)
+
+	for _, ref := range []string{" " + real, real + " ", "\t" + real + "\n"} {
+		got, err := resolveTask(&Deps{}, ref, database)
+		if err != nil || got.UUID != real {
+			t.Errorf("resolveTask(%q) = %+v, %v, want %s", ref, got, err, real)
+		}
+	}
+	ref := " " + strings.ToLower(real) + " "
+	got, err := resolveTask(&Deps{}, ref, database)
+	var nf *notFoundError
+	if !errors.As(err, &nf) || !strings.Contains(err.Error(), "looks like a uuid") {
+		t.Errorf("resolveTask(%q) = %+v, %v, want the uuid-shaped not-found", ref, got, err)
+	}
+}
+
+// The most recent closed row is the one Things last changed: a row trashed
+// yesterday beats one completed last week although its stop date is older.
+// Rows with no modification or stop date fall back to their creation date.
+// Several rows are listed under --json so a caller can pick.
+func TestClosedTitleRecency(t *testing.T) {
+	day := 24 * time.Hour
+	now := time.Now()
+	ts := func(ago time.Duration) float64 { return float64(now.Add(-ago).Unix()) }
+	set := func(t *testing.T, exec func(string, ...any) error, uuid, col string, v float64) {
+		t.Helper()
+		if err := exec("UPDATE TMTask SET "+col+" = ? WHERE uuid = ?", v, uuid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cases := []struct {
+		name string
+		seed func(t *testing.T, fx *dbtest.Fixture, exec func(string, ...any) error)
+		want string
+		tok  string
+	}{
+		{
+			name: "modification date beats stop date",
+			seed: func(t *testing.T, fx *dbtest.Fixture, exec func(string, ...any) error) {
+				fx.Todo("done", "zz base", 20, dbtest.Completed(ts(7*day)))
+				fx.Todo("binned", "zz base", 21, dbtest.Completed(ts(30*day)), dbtest.Trashed())
+				set(t, exec, "done", "userModificationDate", ts(7*day))
+				set(t, exec, "binned", "userModificationDate", ts(day))
+			},
+			want: "binned",
+			tok:  "trashed",
+		},
+		{
+			name: "stop date when no modification date",
+			seed: func(t *testing.T, fx *dbtest.Fixture, exec func(string, ...any) error) {
+				fx.Todo("old", "zz base", 20, dbtest.Completed(ts(7*day)))
+				fx.Todo("new", "zz base", 21, dbtest.Cancelled(ts(day)))
+			},
+			want: "new",
+			tok:  "already closed",
+		},
+		{
+			name: "creation date when nothing else",
+			seed: func(t *testing.T, fx *dbtest.Fixture, exec func(string, ...any) error) {
+				fx.Todo("older", "zz base", 20, dbtest.Trashed())
+				fx.Todo("newer", "zz base", 21, dbtest.Trashed())
+				fx.Todo("oldest", "zz base", 22, dbtest.Trashed())
+				set(t, exec, "older", "creationDate", ts(5*day))
+				set(t, exec, "newer", "creationDate", ts(day))
+				set(t, exec, "oldest", "creationDate", ts(9*day))
+			},
+			want: "newer",
+			tok:  "trashed",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			isolateHome(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Todo("zz-extra", "zz base extra", 30, dbtest.Anytime())
+			exec := func(q string, args ...any) error { _, err := sqlDB.Exec(q, args...); return err }
+			tc.seed(t, fx, exec)
+			calls := stubExecDropping(t)
+
+			_, _, err := runStreams(t, database, "complete", "zz base")
+			if err == nil || *calls != 0 {
+				t.Fatalf("complete = %v with %d write(s), want a refusal", err, *calls)
+			}
+			payload, raw := decodePayload(t, err)
+			if payload.UUID != tc.want || payload.Error != tc.tok {
+				t.Errorf("payload = %s, want %s on %s", raw, tc.tok, tc.want)
+			}
+			if len(payload.Matches) < 2 {
+				t.Errorf("payload = %s, want every closed row listed as a match", raw)
+			}
+			for _, m := range payload.Matches {
+				if m.UUID == "zz-extra" {
+					t.Errorf("matches include the open twin (%s)", raw)
+				}
+			}
+		})
+	}
+}
+
+// A single closed row is named without a matches list.
+func TestClosedTitleSingleHasNoMatches(t *testing.T) {
+	fastVerify(t)
+	isolateHome(t)
+	database, sqlDB := seedWritable(t)
+	dbtest.NewFixture(t, sqlDB).Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+	stubExecDropping(t)
+	_, _, err := runStreams(t, database, "complete", "zz base")
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "already closed" || payload.Query != "zz base" || len(payload.Matches) != 0 {
+		t.Errorf("payload = %s, want already closed with a query and no matches", raw)
 	}
 }

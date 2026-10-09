@@ -396,8 +396,12 @@ title, `show` displays the one (or offers them as candidates), and
 exit and send nothing. With "Pay rent" completed and "Pay rent deposit" open,
 `things complete "Pay rent"` fails, names the completed item (the most recent
 one, and how many there are, when several share the title) and leaves the
-deposit alone. The `--json` token is `already closed`, or `trashed` when that
-item is in the Trash. A uuid or a row number that names a closed item is not
+deposit alone. The same holds when the title you type differs from the
+closed one only by case or surrounding space: `"pay rent"` or `"Pay rent "`
+is refused rather than matched as a fragment of the deposit. The `--json`
+token is `already closed`, or `trashed` when that item is in the Trash, and
+the object carries `query`; when several closed items share the title they
+are all listed in `matches`. A uuid or a row number that names a closed item is not
 refused this way; see [Completing and cancelling](#completing-and-cancelling).
 
 A title matching more than one item is reported rather than guessed at: an
@@ -449,7 +453,9 @@ titles.
 `show` still reaches an item in the Trash by row number, uuid or an exact
 title no open item has. Its
 status line says so, as in `Status: Open (in Trash)`, and `--json` has
-`"trashed": true`. The writes refuse such an item; see
+`"trashed": true`. A task whose project is in the Trash is marked the same
+way on the status line, and `--json` has `"projectTrashed": true` for it
+(the field is left out otherwise). The writes refuse such an item; see
 [Completing and cancelling](#completing-and-cancelling).
 
 A `--json` listing is the exception: it prints no numbers and records
@@ -816,9 +822,12 @@ and `project edit` refuse a trashed item the same way.
 
 A task whose project is in the Trash, directly or through a heading, is
 refused the same way, with the same `trashed` token, and the error names
-the project. Things shows such a task only in the Trash, so the CLI treats
-it as trashed: a title fragment never matches it, and a uuid or its exact
-title reaches it only to be refused. Restore the project in Things first.
+the project, which `--json` gives as `project`. Things shows such a task only
+in the Trash, so the CLI treats it as trashed: a title fragment never matches
+it, and a uuid or its exact title reaches it only to be refused. `show` marks
+it `(in Trash)` on the status line, and `--json` gives `"projectTrashed":
+true`. `open` refuses it with the same `trashed` token, since Things has
+nowhere to show it. Restore the project in Things first.
 
 Both go through AppleScript so Things3 records the change in its
 activity log. Task creation (`add`) and edits go through the

@@ -374,7 +374,9 @@ func printTaskDetail(w io.Writer, t *model.Task, items []model.ChecklistItem, la
 	// JSON carries "trashed"; the plain block says it on the status line, so
 	// an item in the Trash never reads as an ordinary open one.
 	status := statusText(t.Status)
-	if t.Trashed {
+	// A to-do whose project is in the Trash is shown by Things only there,
+	// so it is marked the same way.
+	if t.Trashed || t.ProjectTrashed {
 		status += " (in Trash)"
 	}
 	field("Status:", status)

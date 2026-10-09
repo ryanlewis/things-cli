@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
@@ -68,6 +69,9 @@ func (c *OpenCmd) Run(d *Deps) error {
 		if err != nil {
 			return err
 		}
+		if err := refuseHiddenInTrash(c.Project, task); err != nil {
+			return err
+		}
 		params.ID = task.UUID
 	case things.IsBuiltinList(c.Ref):
 		params.ID = c.Ref
@@ -76,8 +80,23 @@ func (c *OpenCmd) Run(d *Deps) error {
 		if err != nil {
 			return err
 		}
+		if err := refuseHiddenInTrash(c.Ref, task); err != nil {
+			return err
+		}
 		params.ID = task.UUID
 	}
 
 	return things.Show(params)
+}
+
+// refuseHiddenInTrash refuses to open a to-do whose project is in the Trash.
+// Things shows such a to-do nowhere but inside its trashed project, so asking
+// it to reveal one has nothing to show; the refusal carries the "trashed"
+// token and names the project, as the writes do. An item that is itself in
+// the Trash still opens: Things shows it in the Trash.
+func refuseHiddenInTrash(ref string, task *model.Task) error {
+	if task.Trashed || !task.ProjectTrashed {
+		return nil
+	}
+	return refuseTrashed(ref, task, "opened")
 }

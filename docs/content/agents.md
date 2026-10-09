@@ -89,8 +89,10 @@ cache` rather than fall through to a title. `-N` needs `--` before it on the com
 line (`things complete -- -3`). A title fragment only matches open items, and only when no item of any
 status has exactly that title. A write whose exact title only completed,
 cancelled or trashed items carry fails, non-zero, with `already closed` or
-`trashed`, naming the most recent of them, rather than closing an open item
-whose title contains it. A uuid typed in the wrong case is not a
+`trashed`, naming the most recent of them (all of them in `matches` when
+there are several), rather than closing an open item whose title contains
+it. Case and surrounding space do not change that. Such a refusal carries
+`query`; the same tokens from a uuid or row number do not. A uuid typed in the wrong case is not a
 title fragment either. This is a safety net for people, not a mode to code
 against: act on the `uuid` and it never applies.
 
@@ -485,7 +487,9 @@ instead of assuming:
   non-zero with the `trashed` token and send nothing. `show` still reads
   such an item and marks it as in the Trash. A task whose project is in
   the Trash is refused the same way, since Things shows it only in the
-  Trash; the error names the project. An exact title reaches such an
+  Trash; the error names the project, in `project` under `--json`. `show`
+  marks such a task with `"projectTrashed": true`, and `open` refuses it
+  with `trashed`. An exact title reaches such an
   item only when no open item has that title, and only to refuse it; a
   title fragment never matches it.
 - **New items are read back.** `add` and `project add` find the item they
