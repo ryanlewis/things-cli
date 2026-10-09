@@ -547,11 +547,19 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 // runs before checkClosed, so a trashed item that is already closed is
 // refused too rather than noted: the reference most likely meant some other
 // item. done is what the write would have made of the item.
+//
+// A to-do whose project, directly or through its heading, is in the Trash is
+// refused the same way. Things takes a trashed project's to-dos into the
+// Trash with it, where they cannot be closed or edited until the project is
+// put back, but leaves their own trashed column 0.
 func refuseTrashed(ref string, task *model.Task, done string) error {
-	if !task.Trashed {
-		return nil
+	switch {
+	case task.Trashed:
+		return &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done}
+	case task.ProjectTrashed:
+		return &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done, Project: task.ProjectTitle}
 	}
-	return &trashedError{Kind: kindWord(task.Type), Query: ref, UUID: task.UUID, Title: task.Title, Done: done}
+	return nil
 }
 
 // checkClosed reports whether task already has the closed status want, and

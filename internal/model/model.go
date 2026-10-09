@@ -282,13 +282,18 @@ type Task struct {
 	Trashed      bool        `json:"trashed"`
 	ProjectUUID  string      `json:"projectUUID,omitempty"`
 	ProjectTitle string      `json:"projectTitle,omitempty"`
-	AreaUUID     string      `json:"areaUUID,omitempty"`
-	AreaTitle    string      `json:"areaTitle,omitempty"`
-	HeadingUUID  string      `json:"headingUUID,omitempty"`
-	HeadingTitle string      `json:"headingTitle,omitempty"`
-	Tags         []string    `json:"tags,omitempty"`
-	Index        int         `json:"index"`
-	TodayIndex   int         `json:"todayIndex"`
+	// ProjectTrashed says the to-do's project, reached directly or through
+	// its heading, is in the Trash. Things trashes a project's to-dos with
+	// it but leaves their own trashed column 0, so Trashed alone misses
+	// them. The writes refuse such a to-do; it is read but not printed.
+	ProjectTrashed bool     `json:"-"`
+	AreaUUID       string   `json:"areaUUID,omitempty"`
+	AreaTitle      string   `json:"areaTitle,omitempty"`
+	HeadingUUID    string   `json:"headingUUID,omitempty"`
+	HeadingTitle   string   `json:"headingTitle,omitempty"`
+	Tags           []string `json:"tags,omitempty"`
+	Index          int      `json:"index"`
+	TodayIndex     int      `json:"todayIndex"`
 
 	// Repeating marks an item Things treats as a repeating to-do or project,
 	// including a to-do inside a repeating project template, which carries no

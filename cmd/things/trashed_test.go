@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -78,6 +79,112 @@ func TestWritesRefuseTrashedItem(t *testing.T) {
 			}
 		})
 	}
+}
+
+// seedTrashedProject adds a project in the Trash holding one to-do directly
+// and one under a heading, and a live project with a to-do as the control.
+// Things leaves a trashed project's to-dos with trashed = 0.
+func seedTrashedProject(t *testing.T) (*db.DB, *sql.DB) {
+	t.Helper()
+	isolateHome(t)
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("binproj-2", "Binned move", 5, dbtest.Trashed())
+	fx.Heading("binhead-2", "Packing", 6, dbtest.InProject("binproj-2"))
+	fx.Todo("binchild-1", "Book van", 7, dbtest.Anytime(), dbtest.InProject("binproj-2"))
+	fx.Todo("binchild-2", "Buy boxes", 8, dbtest.Anytime(), dbtest.UnderHeading("binhead-2"))
+	fx.Project("liveproj-1", "Garden", 9)
+	fx.Todo("livechild-1", "Mow lawn", 10, dbtest.Anytime(), dbtest.InProject("liveproj-1"))
+	return database, sqlDB
+}
+
+// A to-do whose project, directly or through its heading, is in the Trash is
+// refused like a trashed to-do: in Things it went into the Trash with the
+// project. Its own row is not trashed, so a title reaches it too.
+func TestWritesRefuseToDoInTrashedProject(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		ref  string
+		uuid string
+		done string
+	}{
+		{"complete in project", []string{"complete", "binchild-1"}, "binchild-1", "binchild-1", "completed"},
+		{"complete under heading", []string{"complete", "binchild-2"}, "binchild-2", "binchild-2", "completed"},
+		{"complete by title", []string{"complete", "Book van"}, "Book van", "binchild-1", "completed"},
+		{"cancel in project", []string{"cancel", "binchild-1"}, "binchild-1", "binchild-1", "cancelled"},
+		{"cancel under heading", []string{"cancel", "binchild-2"}, "binchild-2", "binchild-2", "cancelled"},
+		{"edit in project", []string{"edit", "binchild-1", "--title", "New"}, "binchild-1", "binchild-1", "edited"},
+		{"edit under heading", []string{"edit", "binchild-2", "--notes", "x"}, "binchild-2", "binchild-2", "edited"},
+		{"edit complete under heading", []string{"edit", "binchild-2", "--complete"}, "binchild-2", "binchild-2", "edited"},
+		{"edit move out", []string{"edit", "binchild-1", "--list", "Garden"}, "binchild-1", "binchild-1", "edited"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, _ := seedTrashedProject(t)
+			calls := stubExecDropping(t)
+
+			stdout, _, err := runStreams(t, database, tc.args...)
+			if err == nil {
+				t.Fatalf("run %v: want a refusal for a to-do in a trashed project", tc.args)
+			}
+			if *calls != 0 {
+				t.Errorf("issued %d write(s); a to-do in a trashed project must not reach Things", *calls)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want nothing on a refusal", stdout)
+			}
+			want := `is in project "Binned move", which is in the Trash, so it was not ` + tc.done
+			if !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), tc.uuid) {
+				t.Errorf("error = %v, want it to name %s and contain %q", err, tc.uuid, want)
+			}
+			var trashed *trashedError
+			if !errors.As(err, &trashed) {
+				t.Fatalf("error = %T, want a *trashedError", err)
+			}
+
+			payload, raw := decodePayload(t, err)
+			if payload.Error != "trashed" {
+				t.Errorf("JSON error = %q, want %q (%s)", payload.Error, "trashed", raw)
+			}
+			if payload.UUID != tc.uuid || payload.Query != tc.ref || payload.Kind != "task" {
+				t.Errorf("JSON payload = %s, want uuid %s, query %q and kind task", raw, tc.uuid, tc.ref)
+			}
+		})
+	}
+}
+
+// The control: a to-do in a live project still closes and edits.
+func TestWritesAllowToDoInLiveProject(t *testing.T) {
+	for _, tc := range []struct {
+		cmd    string
+		status int
+	}{{"complete", 3}, {"cancel", 2}} {
+		t.Run(tc.cmd, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedTrashedProject(t)
+			stubExecApplying(t, sqlDB, "livechild-1", tc.status)
+
+			if _, err := runOut(t, database, tc.cmd, "livechild-1"); err != nil {
+				t.Fatalf("%s livechild-1: %v, want it closed", tc.cmd, err)
+			}
+		})
+	}
+	t.Run("edit", func(t *testing.T) {
+		fastVerify(t)
+		database, _ := seedTrashedProject(t)
+		calls := stubExecDropping(t)
+
+		_, _, err := runStreams(t, database, "edit", "livechild-1", "--title", "Mow the lawn")
+		var trashed *trashedError
+		if errors.As(err, &trashed) {
+			t.Fatalf("edit livechild-1 = %v, want no trashed refusal", err)
+		}
+		if *calls != 1 {
+			t.Errorf("issued %d writes, want the edit sent once", *calls)
+		}
+	})
 }
 
 // show still reaches an item in the Trash, by row or uuid, and says so.

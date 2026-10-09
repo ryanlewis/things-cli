@@ -655,9 +655,11 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		// heading is still found by the project's uuid.
 		{"sameHeadingInTemplate", []string{"edit", "rephead-todo", "--heading", "setup"}, "", true},
 		// Measured in Things 3: a heading alone moves a to-do under it in its
-		// own project when that project is logged or trashed, too.
+		// own project when that project is logged or trashed, too. A to-do
+		// in a trashed project is refused before the move is checked
+		// (TestWritesRefuseToDoInTrashedProject), so only the logged case
+		// reaches Things here.
 		{"headingInLoggedProject", []string{"edit", "logged-todo", "--heading", "setup"}, "", false},
-		{"headingInTrashedProject", []string{"edit", "trashed-todo", "--heading", "setup"}, "", false},
 		// What Things does with an empty area was not checked.
 		{"projectEmptyArea", []string{"project", "edit", "repproj-1", "--area", ""}, "", false},
 		{"projectKnownAreaID", []string{"project", "edit", "repproj-1", "--area-id", "area-1"}, "", false},
@@ -687,9 +689,6 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 			fx.Project("proj-logged", "Shipped", 15, dbtest.Completed(model.TimeToUnix(testNow.Add(-48*time.Hour))))
 			fx.Heading("head-logged", "Setup", 16, dbtest.InProject("proj-logged"))
 			fx.Todo("logged-todo", "Write notes", 17, dbtest.Anytime(), dbtest.InProject("proj-logged"))
-			fx.Project("proj-trashed", "Binned", 18, dbtest.Trashed())
-			fx.Heading("head-trashed", "Setup", 19, dbtest.InProject("proj-trashed"))
-			fx.Todo("trashed-todo", "Bin notes", 20, dbtest.Anytime(), dbtest.InProject("proj-trashed"))
 			calls := stubExecDropping(t)
 
 			_, stderr, err := runStreams(t, database, tc.args...)

@@ -146,6 +146,11 @@ func (e *wrongKindError) Error() string {
 // Things after the listing was printed. Acting on it would change an item the
 // user can no longer see, so `complete`, `cancel`, `edit` and `project edit`
 // refuse it and send nothing.
+//
+// A to-do whose project is in the Trash is in the Trash too as far as the
+// user can see, so it gets the same refusal and the same "trashed" token,
+// with Project naming the trashed project. Its own row is not trashed, so a
+// title lookup can reach it as well.
 type trashedError struct {
 	Kind  string // "task" or "project"
 	Query string
@@ -154,9 +159,15 @@ type trashedError struct {
 	// Done is what the refused write would have made of the item, as in
 	// "so it was not completed".
 	Done string
+	// Project is the title of the trashed project the to-do is in, or empty
+	// when the item itself is in the Trash.
+	Project string
 }
 
 func (e *trashedError) Error() string {
+	if e.Project != "" {
+		return fmt.Sprintf("%q (%s) is in project %q, which is in the Trash, so it was not %s; nothing sent. Put the project back from the Trash in Things first if you meant this %s", e.Title, e.UUID, e.Project, e.Done, e.Kind)
+	}
 	return fmt.Sprintf("%q (%s) is in the Trash, so it was not %s; nothing sent. Put it back from the Trash in Things first if you meant this %s", e.Title, e.UUID, e.Done, e.Kind)
 }
 
