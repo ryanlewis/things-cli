@@ -330,8 +330,8 @@ items have no start date, so they can't be date-filtered, and neither can
 `inbox`, `today`, `anytime`, `upcoming` and `someday`, and a bare `--project`,
 `--area` or `--tag` listing, show the items you ticked off in that list which
 Things still keeps there, marked `[x]` or `[~]`, unless you pass
-`--open-only`. `--include-completed`, which used to turn this on, is accepted on those same lists and does nothing beyond
-overriding `open_only` in the config file; anywhere else it is an error.
+`--open-only`. `--include-completed`, which used to turn this on, is accepted
+on those same lists and does nothing beyond overriding `open_only` in the config file; anywhere else it is an error.
 `logbook` holds every other closed item, today's closes outside those lists included, so a closed
 item whose project is still open is either logged or still listed, never both.
 The lists do overlap each other — a task scheduled for today is in the Anytime
@@ -419,8 +419,8 @@ otherwise). Things blocks several kinds of edit on those — see the note under
 [Editing](#editing-tasks-and-projects).
 
 `things projects` renders a one-line-per-project list; the leading glyph
-shows completion progress (`○` empty, `◔ ◑ ◕` partial, `●` done, `◌`
-cancelled):
+shows completion progress (`○` empty, `◔ ◑ ◕` partial, `●` every task
+done), or `[x]` completed and `[~]` cancelled for a closed project:
 
 ```text
 $ things projects

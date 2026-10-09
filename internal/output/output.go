@@ -531,9 +531,13 @@ func printProjects(w io.Writer, projects []model.Project, lay layout) error {
 		},
 	}
 	for _, p := range projects {
+		title := oneLine(p.Title)
+		if p.Status == model.StatusCompleted || p.Status == model.StatusCancelled {
+			title = titleDimStyle.Render(title)
+		}
 		tbl.row(
 			styledProjectIcon(p),
-			oneLine(p.Title),
+			title,
 			areaStyle.Render(oneLine(p.AreaTitle)),
 			styledTags(p.Tags),
 		)
@@ -613,12 +617,15 @@ func statusText(status model.Status) string {
 	return strings.ToUpper(name[:1]) + name[1:]
 }
 
+// projectIcon is a project row's marker: a closed project takes the [x] or
+// [~] a closed task carries, and an open one a circle filled to show how much
+// of its work is done. A closed project used to take a full circle, the one an
+// open project with every task done also takes, and `things projects` lists
+// closed projects by default until they are logged, so the two have to read
+// differently.
 func projectIcon(p model.Project) string {
-	if p.Status == model.StatusCompleted {
-		return "●"
-	}
-	if p.Status == model.StatusCancelled {
-		return "◌"
+	if p.Status == model.StatusCompleted || p.Status == model.StatusCancelled {
+		return statusIcon(p.Status)
 	}
 	if p.TaskCount == 0 {
 		return "○"

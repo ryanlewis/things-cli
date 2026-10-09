@@ -137,7 +137,10 @@ except to override `open_only`, as `--open-only=false` does. Anywhere else
 `logbook` holds nothing Things has not logged yet, wherever it was closed, as
 the app's Logbook does. A closed item is therefore either in `logbook` or
 still in place, never both. Still in place, it is listed by its view, by its
-project (`things --project <uuid>`), or by its area (`things --area <name>`).
+project (`things --project <uuid>`), by its area (`things --area <name>`), by
+a tag it carries (`things --tag <name>`), and, for a project, by `things
+projects`, which marks a closed project `[x]` or `[~]` as a listing marks a
+closed task.
 The one exception is a closed Anytime project with no area: no list shows it,
 in the app or the CLI, and `things projects` is where to find it until it is
 logged. The lists overlap each other, since a task scheduled for

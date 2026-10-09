@@ -399,7 +399,7 @@ Find projects with no open tasks — the work has landed but the project is stil
 things projects -j | jq -r '.[] | select(.openCount == 0 and .taskCount > 0) | "\(.uuid)\t\(.title)"'
 ```
 
-`taskCount > 0` keeps out empty projects, which have nothing done rather than everything done. It does not tell done from cancelled — a project whose tasks were all cancelled matches too — so confirm before offering to close one. Plain output marks the same projects with a filled `●` progress icon, and under `--completed` that icon also marks every completed project, empty ones included. A project holding a repeating task never shows up while the repeat is live: Things counts the hidden template row itself as an open task, and a template never completes. Note that `things list -p <project>` hides that template, so it can show no open tasks for a project whose `openCount` is 1.
+`taskCount > 0` keeps out empty projects, which have nothing done rather than everything done. It does not tell done from cancelled — a project whose tasks were all cancelled matches too — so confirm before offering to close one. Plain output marks the same projects with a filled `●` progress icon; a closed project is marked `[x]` or `[~]` instead, as a closed task is. A project holding a repeating task never shows up while the repeat is live: Things counts the hidden template row itself as an open task, and a template never completes. Note that `things list -p <project>` hides that template, so it can show no open tasks for a project whose `openCount` is 1.
 
 ## Shell completions
 
