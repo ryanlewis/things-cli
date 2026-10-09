@@ -106,7 +106,7 @@ var Keys = []Key{
 		Name:     "open_only",
 		Flag:     "open-only",
 		Default:  false,
-		Commands: []string{"list"},
+		Commands: []string{"list", "projects"},
 		YieldsTo: []string{"include-completed"},
 		Comment: []string{
 			"Leave out the closed items Things hasn't logged yet from every listing",

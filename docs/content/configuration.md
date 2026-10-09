@@ -73,7 +73,7 @@ an error rather than a coin toss.
 | `json` | — | boolean | `false` | every command | Print JSON instead of the plain text listing |
 | `color` | — | `"auto"` \| `"always"` \| `"never"` | `"auto"` | every command | When to colour output; `auto` means only on a terminal |
 | `hints` | — | boolean | `true` | every command | Print a line of common next actions, and a note on turning it off, under a plain task listing |
-| `open_only` | `open-only` | boolean | `false` | `list` (`things today`, `things inbox` and the rest) | Leave out the closed items Things hasn't logged yet, as before v0.10.0; `--open-only=false` lists them for one call, and `logbook` and `trash` ignore it |
+| `open_only` | `open-only` | boolean | `false` | `list` (`things today`, `things inbox` and the rest), `projects` | Leave out the closed items Things hasn't logged yet, as before v0.10.0; `--open-only=false` lists them for one call, and `logbook` and `trash` ignore it |
 | `db` | — | path | auto-detected | every command | Where the Things3 SQLite database is; the file must exist |
 | `no_verify` | `no-verify` | boolean | `false` | `add`, `project add`, `complete`, `cancel`, `edit`, `project edit`, `import`, `tag add` (and any write that creates tags) | Skip the read-back that confirms a new item (an import's included), a status change, an edit, or a tag creation landed |
 | `verify_timeout` | `verify-timeout` | duration string | `"5s"` | the same writes as `no_verify` | How long the read-back waits before reporting a write as not applied |

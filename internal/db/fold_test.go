@@ -64,7 +64,7 @@ func TestFiltersIgnoreNonASCIICase(t *testing.T) {
 	}
 
 	t.Run("projects --area", func(t *testing.T) {
-		got, err := d.ListProjects("ärger", false)
+		got, err := d.ListProjects("ärger", false, false)
 		if err != nil {
 			t.Fatal(err)
 		}

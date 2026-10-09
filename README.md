@@ -327,11 +327,10 @@ The date filters (`--on`, `--from`, `--to`) apply to date-filterable views —
 `today`, `upcoming`, `anytime`, `deadlines`, and project listings (`someday`
 items have no start date, so they can't be date-filtered, and neither can
 `repeating` templates) — and `--on` can't be combined with `--from`/`--to`.
-`inbox`, `today`, `anytime`, `upcoming` and `someday`, and a bare `--project`
-or `--area` listing, show the items you ticked off in that list which Things
-still keeps there, marked `[x]` or `[~]`, unless you pass `--open-only`; a
-bare `--tag` sweep lists open tasks only. `--include-completed`, which used to
-turn this on, is accepted on those same lists and does nothing beyond
+`inbox`, `today`, `anytime`, `upcoming` and `someday`, and a bare `--project`,
+`--area` or `--tag` listing, show the items you ticked off in that list which
+Things still keeps there, marked `[x]` or `[~]`, unless you pass
+`--open-only`. `--include-completed`, which used to turn this on, is accepted on those same lists and does nothing beyond
 overriding `open_only` in the config file; anywhere else it is an error.
 `logbook` holds every other closed item, today's closes outside those lists included, so a closed
 item whose project is still open is either logged or still listed, never both.

@@ -136,7 +136,7 @@ func TestProjectsAreaFilterPrefersExactCase(t *testing.T) {
 		{"a-upper", []string{"p-upper"}},
 	}
 	for _, tc := range cases {
-		got, err := d.ListProjects(tc.ref, false)
+		got, err := d.ListProjects(tc.ref, false, false)
 		if err != nil {
 			t.Fatalf("projects --area %q: %v", tc.ref, err)
 		}

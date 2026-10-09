@@ -241,12 +241,14 @@ nothing on success. Their errors are still JSON.
   day in Someday until it next tidies up; the app already shows it as
   today's, so it reports `"anytime"`, as it will once Things moves it. An
   undated
-  `"anytime"` task with a deadline after today is in Upcoming too, under
-  the deadline's day, as well as in Anytime, so a sweep across `upcoming`
-  and `anytime` merges on `uuid`. An undated `"anytime"` task whose
-  deadline is today or past is in Today as well as in Anytime, and an
-  undated `"inbox"` one is in Today and Anytime instead of the Inbox,
-  unless it was taken out of Today for that deadline. In v0.7.0 and earlier this field was the
+  `"anytime"` or `"someday"` task or project with a deadline after today
+  is in Upcoming too, under the deadline's day, as well as in Anytime or
+  Someday, so a sweep across them merges on `uuid`. An undated
+  `"anytime"` task whose deadline is today or past is in Today as well as
+  in Anytime, an undated `"anytime"` project is in Today, and an undated
+  `"inbox"` one is in Today and Anytime instead of the Inbox, unless it was
+  taken out of Today for that deadline. A `"someday"` one due today is not
+  in Today. In v0.7.0 and earlier this field was the
   integer `0`, `1` or `2`, so a filter matching on `.start==2` has to
   become `.start=="someday"`. `startBucket` beside it
   is still an integer — `1` is the app's This Evening section, `0` is
@@ -340,20 +342,21 @@ reads: under Immediately nothing is held and every closed item is in
 `logbook`; under Manually items stay in place, whatever day they closed,
 until `things log`. The items still in place are listed by default, as the
 app shows them: on `inbox`, `today`, `anytime`, `upcoming` and `someday`, on a
-project's listing (`things --project <uuid>`), and on an area's (`things
---area <uuid>`). Each closed row carries `"status": "completed"` or
+project's listing (`things --project <uuid>`), on an area's (`things
+--area <uuid>`), on a tag's (`things --tag <name>`), and on `things
+projects` for the projects themselves. Each closed row carries `"status": "completed"` or
 `"cancelled"` in JSON and `[x]` or `[~]` in plain output, so an agent that
 wants only the work still to do passes `--open-only`, or filters on
 `status == "open"`. `open_only = true` in the config file makes that the
 default, as it was before v0.10.0; `--open-only=false` overrides it for one
 call. `--include-completed`, which used to be how to ask for
 the closed items, is still accepted on those same lists (the five views and a
-`--project` or `--area` listing with no view) and now has no effect beyond
-overriding `open_only` the same way. On `deadlines`, `repeating`, `logbook`,
-`trash` and a bare `--tag` sweep it is an error, so drop it there. A task closed today inside
+`--project`, `--area` or `--tag` listing with no view) and now has no effect
+beyond overriding `open_only` the same way. On `deadlines`, `repeating`,
+`logbook` and `trash` it is an error, so drop it there. A task closed today inside
 a project in Someday or scheduled for later is in no list, as in the app, so
 only its project listing has it. A closed Anytime project with no area is in
-no list or area either; `things projects --completed -j` lists it. The tasks
+no list or area either; `things projects -j` lists it until it is logged. The tasks
 of a project closed today stay in place, struck through, in the lists until
 the project is logged.
 

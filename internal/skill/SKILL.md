@@ -230,11 +230,14 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # upcoming still list theirs.
     # --on/--from/--to filter startDate, or deadline on the `deadlines` view;
     # unsupported on inbox/trash/logbook/someday/repeating. --on excludes --from/--to.
-    # upcoming also lists an undated anytime task due after today, filed (and
-    # filtered) under its deadline, as the app's Upcoming does — so that task
-    # comes back from both upcoming and anytime; dedupe a sweep on uuid.
-    # today likewise lists an undated inbox or anytime task once its deadline
-    # is today or past (unless it was taken out of Today for that deadline).
+    # upcoming also lists an undated anytime or someday task or project due
+    # after today, filed (and filtered) under its deadline, as the app's
+    # Upcoming does — so that row comes back from upcoming and from anytime or
+    # someday too; dedupe a sweep on uuid.
+    # today likewise lists an undated inbox or anytime task, or an undated
+    # anytime project, once its deadline is today or past (unless it was
+    # taken out of Today for that deadline). A someday one due today stays out
+    # of today, as in the app.
     # Either one also comes back from anytime, as in the app; an inbox one
     # leaves inbox while today holds it. --on/--from/--to on today match it
     # on today, not on its deadline.
@@ -249,9 +252,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # trash. open_only = true in the config file makes --open-only the
     # default (logbook and trash ignore it); --open-only=false overrides it.
     # --include-completed does nothing beyond that override, and is accepted
-    # only on inbox, today, anytime, upcoming, someday and a --project or
-    # --area listing with no view; it is an error on deadlines, repeating,
-    # logbook, trash and a bare --tag sweep.
+    # only on inbox, today, anytime, upcoming, someday and a --project,
+    # --area or --tag listing with no view; it is an error on deadlines,
+    # repeating, logbook and trash.
     # upcoming keeps only what was in it while open (a task closed ahead of
     # its date, or an undated one due later). logbook holds nothing Things
     # hasn't logged, wherever it was closed, as in the app, so a closed item
@@ -259,12 +262,12 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # listed by its view, its project (`--project <uuid>`, the only place for
     # a task in a project in Someday or scheduled later) or its area
     # (`--area <A>`). A closed Anytime project with no area is in none of
-    # those; `things projects --completed` lists it. The tasks of a project
+    # those; `things projects` lists it until it is logged. The tasks of a project
     # closed today stay in place in the lists, struck through, until the
     # project is logged. The lists overlap each other — a task scheduled for
     # today is in the Anytime bucket too, and an undated one due later is in
     # anytime and upcoming — so for today's closes sweep the five lists, each
-    # area's listing and `projects --completed`, and merge on uuid; earlier
+    # area's listing and `projects`, and merge on uuid; earlier
     # days are in logbook, filtered on stopDate. One closed inside a project
     # closed on an earlier day, or trashed, is in none of those sweeps: it is
     # folded into the project row, per the note above. Name the project to reach it: `--project <uuid>`
@@ -280,16 +283,21 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # anytime, upcoming or logbook, except the deferred-project case above.
     # `things --area <A>` (no view) does the same for an area: its open
     # contents plus the tasks and projects in it closed today and not yet
-    # logged, a closed project as one row. A bare --tag sweep lists open
-    # tasks only; name a view to see closed ones, e.g. `things today --tag T`.
+    # logged, a closed project as one row. A bare --tag sweep lists the
+    # tag's open tasks and projects plus the ones closed and not yet logged,
+    # as the lists do; --open-only drops those.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
-things projects [-a|--area A] [--completed]
+things projects [-a|--area A] [--completed] [--open-only]
+    # open projects plus those closed and not yet logged (as the app's list
+    # still shows them; "status" tells them apart), unless --open-only;
+    # --completed lists every closed project too.
     # carries start/startBucket/startDate/deadline like a task,
     # plus taskCount/openCount in JSON
 things areas
 things tags
 things search <query>           # titles and notes, matched literally; a lookup, not a view
+    # skips trashed rows and tasks of a project in the trash, as the app does
 
 things tag add <name>...        # create tags; existing names are skipped
 

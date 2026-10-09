@@ -304,15 +304,10 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 		}
 	}
 
-	// A bare --tag sweep lists through the catch-all view, which rejects the
-	// flag: tags are a filter in the app, not a list with a page of its own.
-	err := runWith(t, database, "list", "--tag", "urgent", "--include-completed")
-	if err == nil || !strings.Contains(err.Error(), "only supported on the anytime, inbox, someday, today and upcoming views") {
-		t.Fatalf("tag filter: expected view-rejection error, got: %v", err)
-	}
-	// It names what was typed, not the internal catch-all view.
-	if !strings.Contains(err.Error(), "not a bare --tag listing") || strings.Contains(err.Error(), `"project"`) {
-		t.Fatalf("tag filter: error should name a bare --tag listing, got: %v", err)
+	// A bare --tag sweep lists the tag's contents, which keep a row closed
+	// today as an area's do, so the flag is accepted there.
+	if err := runWith(t, database, "list", "--tag", "urgent", "--include-completed"); err != nil {
+		t.Fatalf("--tag: %v", err)
 	}
 
 	// A named area lists its contents, which the app's area page keeps a
@@ -326,8 +321,8 @@ func TestRunListIncludeCompletedRejectsView(t *testing.T) {
 
 	// --project on a view that rejects the flag is still rejected, and the
 	// message says --project helps only with no view named.
-	err = runWith(t, database, "list", "deadlines", "--project", "Chores", "--include-completed")
-	if err == nil || !strings.Contains(err.Error(), "on a --project or --area listing with no view") {
+	err := runWith(t, database, "list", "deadlines", "--project", "Chores", "--include-completed")
+	if err == nil || !strings.Contains(err.Error(), "on a --project, --area or --tag listing with no view") {
 		t.Fatalf("deadlines + --project: expected view-rejection error, got: %v", err)
 	}
 
@@ -471,6 +466,52 @@ func TestRunListOpenOnlyConfig(t *testing.T) {
 	for _, view := range []string{"logbook", "trash"} {
 		if err := runWith(t, database, "--config", path, "list", view); err != nil {
 			t.Errorf("list %s under open_only: %v", view, err)
+		}
+	}
+}
+
+// things projects lists a project closed today and not yet logged, as the
+// app's project list does. --open-only, or open_only in the config file,
+// drops it, and --open-only=false brings it back under the config.
+func TestRunProjectsOpenOnly(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-open", "Open", 0, dbtest.Anytime())
+	fx.Project("proj-done", "Done today", 1, dbtest.Anytime(), dbtest.Completed(model.TimeToUnix(testNow)))
+	database := db.NewFromSQL(sqlDB)
+	path := writeConfig(t, "open_only = true\n")
+
+	uuids := func(args ...string) []string {
+		t.Helper()
+		out, err := runOut(t, database, append([]string{"--json"}, args...)...)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		var projects []model.Project
+		if err := json.Unmarshal([]byte(out), &projects); err != nil {
+			t.Fatalf("unmarshal %q: %v", out, err)
+		}
+		got := make([]string, len(projects))
+		for i, p := range projects {
+			got[i] = p.UUID
+		}
+		return got
+	}
+
+	both := []string{"proj-open", "proj-done"}
+	open := []string{"proj-open"}
+	for _, tc := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"projects"}, both},
+		{[]string{"projects", "--open-only"}, open},
+		{[]string{"--config", path, "projects"}, open},
+		{[]string{"--config", path, "projects", "--open-only=false"}, both},
+		{[]string{"projects", "--completed", "--open-only"}, both},
+	} {
+		if got := uuids(tc.args...); !slices.Equal(got, tc.want) {
+			t.Errorf("%v = %v, want %v", tc.args, got, tc.want)
 		}
 	}
 }

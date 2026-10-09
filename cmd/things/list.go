@@ -18,7 +18,7 @@ type ListCmd struct {
 	Area    string   `help:"Filter by area name or UUID." short:"a"`
 	Tag     string   `help:"Filter by tag name." short:"t"`
 
-	OpenOnly         bool   `help:"Leave out the closed items the inbox, today, anytime, upcoming and someday views, and a --project or --area listing, show by default: the ones Things hasn't logged out of the list yet, which under the app's default Daily logging means closed today. Not supported on logbook or trash. --open-only=false overrides open_only in the config file." xor:"closed"`
+	OpenOnly         bool   `help:"Leave out the closed items the inbox, today, anytime, upcoming and someday views, and a --project, --area or --tag listing, show by default: the ones Things hasn't logged out of the list yet, which under the app's default Daily logging means closed today. Not supported on logbook or trash. --open-only=false overrides open_only in the config file." xor:"closed"`
 	IncludeCompleted bool   `hidden:"" help:"No effect beyond overriding open_only in the config file: the closed items Things still shows are listed by default since --open-only was added. Accepted so existing scripts keep working." xor:"closed"`
 	On               string `help:"Only tasks scheduled on YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline. Mutually exclusive with --from/--to."`
 	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
@@ -57,20 +57,14 @@ func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
 
 	// The views the app keeps a just-closed item visible in — inbox, today,
 	// anytime, upcoming and someday (issues #238, #293), and a named
-	// project's or area's contents (issue #295) — list it by default, as the
-	// app does. --include-completed used to be how to ask for it and is now a
-	// no-op; it is still rejected where it never applied (a bare --tag sweep
-	// included), as it was, so a script that ran before runs the same.
-	if c.IncludeCompleted && !db.CompletableView(view, project != "", c.Area != "") {
+	// project's, area's or tag's contents (issue #295) — list it by default,
+	// as the app does. --include-completed used to be how to ask for it and
+	// is now a no-op; it is still rejected where it never applied, as it was,
+	// so a script that ran before runs the same.
+	if c.IncludeCompleted && !db.CompletableView(view, project != "", c.Area != "", c.Tag != "") {
 		names := db.CompletableViewNames()
-		// A bare --tag sweep runs through the catch-all view, whose internal
-		// name the user never typed, so name what they did type instead.
-		got := fmt.Sprintf("%q", view)
-		if !explicitView && view == db.ViewProject {
-			got = "a bare --tag listing"
-		}
-		return fmt.Errorf("--include-completed is only supported on the %s and %s views and on a --project or --area listing with no view, not %s; it has no effect now, since those list the closed items Things still shows by default, so drop it",
-			strings.Join(names[:len(names)-1], ", "), names[len(names)-1], got)
+		return fmt.Errorf("--include-completed is only supported on the %s and %s views and on a --project, --area or --tag listing with no view, not %q; it has no effect now, since those list the closed items Things still shows by default, so drop it",
+			strings.Join(names[:len(names)-1], ", "), names[len(names)-1], view)
 	}
 	// --open-only is a no-op on the views that list only open rows anyway,
 	// so an agent can pass it everywhere. logbook and trash are the two that
@@ -242,6 +236,7 @@ func applyDateFilters(filter *db.TaskFilter, view, on, from, to string) error {
 type ProjectsCmd struct {
 	Area      string `help:"Filter by area name or UUID." short:"a"`
 	Completed bool   `help:"Include completed projects." default:"false"`
+	OpenOnly  bool   `help:"Leave out the projects closed but not yet logged, which are listed by default as Things still shows them: under the app's default Daily logging, the ones closed today. Ignored with --completed. --open-only=false overrides open_only in the config file."`
 }
 
 func (c *ProjectsCmd) Run(d *Deps) error {
@@ -249,7 +244,7 @@ func (c *ProjectsCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	projects, err := database.ListProjects(c.Area, c.Completed)
+	projects, err := database.ListProjects(c.Area, c.Completed, c.OpenOnly)
 	if err != nil {
 		return err
 	}
