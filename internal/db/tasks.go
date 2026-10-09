@@ -1490,6 +1490,19 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 		return t, err
 	}
 
+	// Exact titles compare case and space as typed, while the substring
+	// match below ignores case. So before it runs, a closed or trashed row
+	// whose title equals the reference once case and surrounding space are
+	// set aside stops the lookup too: `complete "pay rent"` with "Pay rent"
+	// completed must not close the open "Re: Pay rent deposit".
+	closed, err := d.findClosedTasksByFoldedTitle(uuidOrTitle)
+	if err != nil {
+		return nil, err
+	}
+	if candidates := preferInstances(closed); len(candidates) > 0 {
+		return nil, &ClosedTitleError{Query: uuidOrTitle, Matches: candidates}
+	}
+
 	// Try LIKE match — return all matches for disambiguation
 	matches, err := d.FindTasksByTitle(uuidOrTitle)
 	if err != nil {
@@ -1551,7 +1564,8 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 
 // ClosedTitleError reports a reference whose exact title is carried only by
 // closed or trashed rows (or to-dos in a trashed project), with no open row
-// sharing it. The lookup stops there rather than falling through to a
+// sharing it. GetTask also reports it for a title that matches such rows
+// only once case and surrounding space are ignored. The lookup stops there rather than falling through to a
 // substring match on some other, open, task. The caller decides what the
 // rows are good for: a read can show one, a write refuses them.
 type ClosedTitleError struct {
@@ -1579,6 +1593,31 @@ func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
 	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND " + notHeading +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, normName(title))
+}
+
+// findClosedTasksByFoldedTitle returns the closed or trashed tasks, and the
+// to-dos in a trashed project, whose title equals title under FoldCase once
+// surrounding space is trimmed from both. The SQL narrows the rows to those
+// whose folded title contains the folded key; the comparison itself is made
+// in Go, so space trims the same way on both sides.
+func (d *DB) findClosedTasksByFoldedTitle(title string) ([]model.Task, error) {
+	key := FoldCase(strings.TrimSpace(title))
+	if key == "" {
+		return nil, nil
+	}
+	query := d.taskQuery() + " WHERE NOT (t.trashed = 0 AND COALESCE(p.trashed, 0) = 0 AND t.status = 0) AND " + notHeading +
+		" AND fold(t.title) LIKE ?" + escapeClause + " GROUP BY t.uuid " + d.templatesLastOrder()
+	rows, err := d.collectTasks(query, containsLike(strings.TrimSpace(title)))
+	if err != nil {
+		return nil, err
+	}
+	var out []model.Task
+	for _, r := range rows {
+		if FoldCase(strings.TrimSpace(r.Title)) == key {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 // preferInstances drops a repeating template from a set of same-titled matches

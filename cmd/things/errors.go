@@ -48,6 +48,9 @@ type jsonErrorPayload struct {
 	// created, in the shape a successful import prints, so the confirmed
 	// ones keep their uuids.
 	Created []importCreated `json:"created,omitempty"`
+	// Project names the trashed project a refused to-do is in, on a
+	// "trashed" error about a to-do whose project is in the Trash.
+	Project string `json:"project,omitempty"`
 	// Reason is why a whole import was refused, beside the per-item reasons
 	// in Items: "too-many-items" for a payload over the size Things takes
 	// without asking.
@@ -196,22 +199,28 @@ func (e *closedSwitchError) Error() string {
 type closedTitleError struct {
 	Query string
 	Task  model.Task
-	Count int
+	// Matches is every closed or trashed item with the title, Task among
+	// them, listed under --json when there is more than one so a caller can
+	// pick by uuid.
+	Matches []model.Task
 }
 
 func (e *closedTitleError) trashed() bool { return e.Task.Trashed || e.Task.ProjectTrashed }
 
 func (e *closedTitleError) Error() string {
 	state := "already " + e.Task.Status.String()
-	if e.trashed() {
+	switch {
+	case e.Task.Trashed:
 		state = "in the Trash"
+	case e.Task.ProjectTrashed:
+		state = fmt.Sprintf("in the Trash with its project %q", e.Task.ProjectTitle)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "no open task is titled %q: ", e.Query)
-	if e.Count == 1 {
+	if len(e.Matches) <= 1 {
 		fmt.Fprintf(&b, "the only %s with that title, %q (%s), is %s", kindWord(e.Task.Type), e.Task.Title, e.Task.UUID, state)
 	} else {
-		fmt.Fprintf(&b, "%d closed or trashed items have that title, the most recent being %q (%s), which is %s", e.Count, e.Task.Title, e.Task.UUID, state)
+		fmt.Fprintf(&b, "%d closed or trashed items have that title, the most recent being %q (%s), which is %s", len(e.Matches), e.Task.Title, e.Task.UUID, state)
 	}
 	b.WriteString(". Nothing sent, and no open task with a similar title was touched; pass its uuid to act on a particular one")
 	return b.String()
@@ -423,6 +432,7 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Query = trashed.Query
 		payload.UUID = trashed.UUID
 		payload.Title = trashed.Title
+		payload.Project = trashed.Project
 		return payload
 	}
 
@@ -481,6 +491,12 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Query = closedTitle.Query
 		payload.UUID = closedTitle.Task.UUID
 		payload.Title = closedTitle.Task.Title
+		if closedTitle.Task.ProjectTrashed && !closedTitle.Task.Trashed {
+			payload.Project = closedTitle.Task.ProjectTitle
+		}
+		if len(closedTitle.Matches) > 1 {
+			payload.Matches = matchList(closedTitle.Matches)
+		}
 		return payload
 	}
 

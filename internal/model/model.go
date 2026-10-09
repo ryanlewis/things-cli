@@ -286,9 +286,10 @@ type Task struct {
 	// its heading, is in the Trash. Things then shows the to-do only in the
 	// Trash but leaves its own trashed column 0, so Trashed alone misses it.
 	// A title fragment skips such a to-do, an exact title reaches it only
-	// when no open item has that title, and the writes refuse it; it is
-	// read but not printed.
-	ProjectTrashed bool     `json:"-"`
+	// when no open item has that title, and the writes and `open` refuse
+	// it. JSON carries it only when true, and the plain status line of
+	// `show` marks it "(in Trash)" as it does a trashed row.
+	ProjectTrashed bool     `json:"projectTrashed,omitempty"`
 	AreaUUID       string   `json:"areaUUID,omitempty"`
 	AreaTitle      string   `json:"areaTitle,omitempty"`
 	HeadingUUID    string   `json:"headingUUID,omitempty"`

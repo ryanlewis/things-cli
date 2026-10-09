@@ -113,7 +113,7 @@ func resolveRef(d *Deps, ref string, database *db.DB, write bool) (*model.Task, 
 	}
 	task, err := lookup(ref)
 	var notFound *db.TaskNotFoundError
-	if kind != refPlain && errors.As(err, &notFound) && strings.TrimSpace(ref) != ref {
+	if (kind != refPlain || uuidShaped) && errors.As(err, &notFound) && strings.TrimSpace(ref) != ref {
 		// The space around ` 2026 ` is not part of the title "2026".
 		task, err = lookup(strings.TrimSpace(ref))
 	}
@@ -196,13 +196,16 @@ func newClosedTitleError(ref string, matches []model.Task) *closedTitleError {
 			latest = m
 		}
 	}
-	return &closedTitleError{Query: ref, Task: latest, Count: len(matches)}
+	return &closedTitleError{Query: ref, Task: latest, Matches: matches}
 }
 
-// recency is when a task last changed state as far as the row records it:
-// its stop date when closed, else its creation date.
+// recency is when a task last changed as far as the row records it: Things'
+// modification date, which trashing bumps as well as closing, else its stop
+// date, else its creation date.
 func recency(t model.Task) time.Time {
 	switch {
+	case t.ModificationDate != nil:
+		return *t.ModificationDate
 	case t.StopDate != nil:
 		return *t.StopDate
 	case t.CreationDate != nil:
