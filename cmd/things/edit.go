@@ -129,7 +129,11 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		// Checked in Things 3: an empty list takes the to-do out of its
 		// project, heading and area, and files it in Anytime. Only a to-do
 		// that is there already, unfiled in Anytime with no start date, is
-		// left as it is.
+		// left as it is. A heading-id sent with it may still move the
+		// to-do, which was not checked, so that counts as a change.
+		if c.HeadingID != nil {
+			return true
+		}
 		return task.ProjectUUID != "" || task.AreaUUID != "" || task.HeadingUUID != "" ||
 			task.Start != model.StartAnytime || task.StartDate != nil
 	case c.Heading != nil && *c.Heading == "" && c.List == nil && c.ListID == nil && c.HeadingID == nil:
@@ -196,7 +200,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	// inList is whether the to-do is in the target list already, so a move
 	// changes at most its heading, and Things files it nowhere new.
-	inList := task.ProjectUUID == target.UUID || task.ProjectUUID == "" && task.AreaUUID == target.UUID
+	inList := filedIn(task, target.UUID)
 	if target.UUID != "" && !inList {
 		noteTarget(d, list, "lists", target)
 	}
@@ -216,6 +220,10 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	case task.ProjectUUID == "":
 		fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list: the to-do is not in a project, so Things will leave it where it is\n", heading)
 		return false
+	case heading == "":
+		// As for an empty heading alone: Things takes the to-do out of its
+		// heading and leaves it in its project.
+		return task.HeadingUUID != ""
 	}
 	t, f, err := database.AddTarget(task.ProjectUUID, heading)
 	switch {
@@ -242,10 +250,16 @@ func (c *EditCmd) noteListID(d *Deps, database *db.DB, task *model.Task) {
 	if err != nil || !t.ByUUID {
 		return
 	}
-	if task.ProjectUUID == t.UUID || task.ProjectUUID == "" && task.AreaUUID == t.UUID {
+	if filedIn(task, t.UUID) {
 		return
 	}
 	noteTarget(d, *c.ListID, "lists", t)
+}
+
+// filedIn reports whether task is filed in the project or area list already,
+// so a move there changes at most its heading.
+func filedIn(task *model.Task, list string) bool {
+	return task.ProjectUUID == list || task.ProjectUUID == "" && task.AreaUUID == list
 }
 
 // emptyID reports whether an id flag was given as blank.
@@ -371,7 +385,7 @@ func runEdit(d *Deps, ref string, kind editKind, f *commonEditFlags, s *editStat
 	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), reads, now)
 	var when *whenCheck
 	if f.When != nil && changed {
-		when = &whenCheck{value: *f.When}
+		when = &whenCheck{value: *f.When, phraseOnly: !uncovered && f.onlyWhen() && whenPhrase(*f.When)}
 		if !s.Duplicate && !d.NoVerify {
 			if h := heldIn(task, now, reads.stored); h == heldUnmoved || h == heldCarried {
 				when.before = task

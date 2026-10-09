@@ -405,7 +405,9 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"whenClearOnSomeday", []string{"edit", "some-1", "--when", ""}, false},
 		{"whenClearOnInbox", []string{"edit", "inbox-1", "--when", ""}, false},
 		{"whenAnytimeOnToday", []string{"edit", "one-1", "--when", "anytime"}, false},
-		{"whenPhrase", []string{"edit", "one-1", "--when", "friday"}, false},
+		// A phrase on its own is not read back at all (TestEditWhenPhrase);
+		// beside another flag it is a change and waits.
+		{"whenPhrase", []string{"edit", "one-1", "--title", "Post letter", "--when", "friday"}, false},
 		{"allNoOp", []string{"edit", "one-1", "--title", "Post letter", "--notes", "second class", "--add-tags", "errand", "--deadline", "2026-10-15", "--when", "today", "--append-notes", ""}, true},
 		{"noOpPlusNewWhen", []string{"edit", "one-1", "--title", "Post letter", "--when", "someday"}, false},
 		{"sameWhenPlusNewTitle", []string{"edit", "one-1", "--title", "Post the letter", "--when", "today"}, false},

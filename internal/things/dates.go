@@ -73,6 +73,20 @@ var (
 	whenClockShape = regexp.MustCompile(`(?i)^(\d{1,2}):(\d{2})\s*(am|pm)?$`)
 )
 
+// WhenDateOrTime reports whether v, a value NormalizeWhen returned, is a
+// date, a time of day, or a date and time (checkWhenShape's shapes), as
+// opposed to a keyword or a free phrase.
+func WhenDateOrTime(v string) bool {
+	if m := whenDateShape.FindStringSubmatch(v); m != nil {
+		rest, ok := strings.CutPrefix(m[4], "@")
+		if m[4] == "" {
+			return true
+		}
+		return ok && whenClockShape.MatchString(rest)
+	}
+	return whenClockShape.MatchString(v)
+}
+
 // checkWhenShape refuses a value shaped like a date or a time of day that
 // names none: a month or day that does not exist, or an hour or minute out
 // of range. Things cannot read such a value either, and drops it without a

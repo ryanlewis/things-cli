@@ -709,8 +709,8 @@ other item. Tags that do
 not exist in Things count as no change, since Things drops them, unless
 `--create-tags` creates them first. So does a move the warnings above say
 will leave the item where it is. It then prints the item straight away.
-Any other re-set value, such as an English phrase, still waits and
-reports the same error, so on that error check the item with `things
+Any other re-set value still waits and reports the same error (an
+English `--when` phrase on its own is not waited for; see below), so on that error check the item with `things
 show` before retrying.
 
 With `--when`, the read-back also checks that Things filed the item where
@@ -727,8 +727,11 @@ a value shaped like a date or time that names none, such as `2026-13-01` or
 `25:00`, is refused before anything is sent; `add` warns `Things did not
 understand --when "…"` when the new item has no start date, and exits 0
 (under `--json`, `{"uuid", "title", "confirmed": false, "reason": "when"}`);
-and `edit` still waits, then exits non-zero naming the phrase as the likely
-cause. A write sent just before midnight counts as filed for either
+and an `edit` whose only change is the phrase returns at once, with a
+warning and the same unconfirmed shape (reason `when`), since Things records
+nothing when it ignores one; check it with `things show`. With other
+changes the edit waits as usual, and if nothing was modified its error
+names the phrase as the likely cause. A write sent just before midnight counts as filed for either
 day.
 An edit with no field flags and no status to change prints the item
 without waiting. `--complete` or `--cancel` on an open item waits for the

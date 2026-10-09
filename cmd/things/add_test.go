@@ -1123,15 +1123,35 @@ func TestAddWhenPhraseIgnored(t *testing.T) {
 	}
 }
 
-// An edit with a phrase Things ignores is not modified. Things records
-// nothing, so the read-back cannot tell that from a slow write before its
-// budget runs out, but the error names the phrase as the likely cause.
-func TestEditWhenPhraseIgnoredNamesThePhrase(t *testing.T) {
+// An edit whose only change is a --when phrase is not read back: Things
+// records nothing for a phrase it ignores, so the wait could only run out.
+// It returns at once, unconfirmed with reason "when". With another change
+// the edit waits as before, and when nothing is modified the error names
+// the phrase as the likely cause.
+func TestEditWhenPhrase(t *testing.T) {
 	fastVerify(t)
 	database, _ := seedWritable(t)
-	stubExecDropping(t)
-	_, _, err := runStreams(t, database, "edit", "one-1", "--when", "blorp")
+	calls := stubExecDropping(t)
+	stdout, stderr, err := runStreams(t, database, "--json", "edit", "one-1", "--when", "blorp")
+	if err != nil {
+		t.Fatalf("edit --when blorp: %v", err)
+	}
+	if *calls != 1 {
+		t.Errorf("issued %d writes, want 1", *calls)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("decode %s: %v", stdout, err)
+	}
+	if out["confirmed"] != false || out["reason"] != "when" || out["uuid"] != "one-1" {
+		t.Errorf("stdout = %s, want confirmed false, reason when, uuid one-1", stdout)
+	}
+	if !strings.Contains(stderr, `Things may not understand --when "blorp"`) {
+		t.Errorf("stderr = %q, want a warning naming the phrase", stderr)
+	}
+
+	_, _, err = runStreams(t, database, "edit", "one-1", "--when", "blorp", "--notes", "x")
 	if err == nil || !strings.Contains(err.Error(), `Things most likely did not understand --when "blorp"`) {
-		t.Fatalf("edit = %v, want an error naming the phrase", err)
+		t.Fatalf("edit with notes = %v, want an error naming the phrase", err)
 	}
 }
