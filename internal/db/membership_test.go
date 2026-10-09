@@ -51,8 +51,9 @@ func TestDeadlineProjectInTodayAndUpcoming(t *testing.T) {
 }
 
 // A Someday to-do or project with a later deadline is in Upcoming under the
-// deadline's day, and one due today is in Today, as an Anytime one is. A
-// deadline suppressed for Today keeps it out, whatever the bucket.
+// deadline's day, and one due today is in Today, as an Anytime one is, and
+// out of Someday. A deadline suppressed for Today keeps it out, whatever the
+// bucket.
 func TestSomedayDeadlineInUpcomingAndToday(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(testNow))
@@ -80,11 +81,14 @@ func TestSomedayDeadlineInUpcomingAndToday(t *testing.T) {
 	if got, want := listSet(t, d, "upcoming", TaskFilter{On: &on}), []string{"t-someday-later", "p-someday-later"}; !sameSet(got, want) {
 		t.Errorf("upcoming --on = %v, want %v", got, want)
 	}
-	// Anytime takes only the Inbox half of the deadline rule, so a Someday
-	// row due today stays out of it; the Anytime project's to-do is there by
-	// its bucket.
-	if got, want := listSet(t, d, "anytime", TaskFilter{}), []string{"t-in-anytime-proj"}; !sameSet(got, want) {
+	// The deadline promotes a Someday to-do into Anytime as well, and out of
+	// Someday, as it does an Inbox one; a suppressed one stays in Someday.
+	// The Anytime project's to-do is in Anytime by its bucket.
+	if got, want := listSet(t, d, "anytime", TaskFilter{}), []string{"t-someday-today", "t-in-anytime-proj"}; !sameSet(got, want) {
 		t.Errorf("anytime = %v, want %v", got, want)
+	}
+	if got, want := listSet(t, d, "someday", TaskFilter{}), []string{"t-someday-later", "p-someday-later", "t-someday-suppressed", "p-someday"}; !sameSet(got, want) {
+		t.Errorf("someday = %v, want %v", got, want)
 	}
 }
 

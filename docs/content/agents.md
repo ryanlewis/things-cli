@@ -245,9 +245,10 @@ nothing on success. Their errors are still JSON.
   is in Upcoming too, under the deadline's day, as well as in Anytime or
   Someday, so a sweep across them merges on `uuid`. An undated
   `"anytime"` task whose deadline is today or past is in Today as well as
-  in Anytime, an undated `"someday"` task or any undated project of that
-  shape is in Today, and an undated `"inbox"` one is in Today and Anytime
-  instead of the Inbox, unless it was taken out of Today for that deadline. In v0.7.0 and earlier this field was the
+  in Anytime, an undated `"inbox"` or `"someday"` one is in Today and
+  Anytime instead of the Inbox or Someday, and an undated project of that
+  shape is in Today (and out of Someday), unless it was taken out of Today
+  for that deadline. In v0.7.0 and earlier this field was the
   integer `0`, `1` or `2`, so a filter matching on `.start==2` has to
   become `.start=="someday"`. `startBucket` beside it
   is still an integer — `1` is the app's This Evening section, `0` is
