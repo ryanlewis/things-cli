@@ -30,9 +30,11 @@ so it does not on its own say which list the app shows the item in: a dated
 Upcoming, and only an undated one is in Someday. Just after midnight,
 Things can leave an open task scheduled for the new day in Someday until it
 next tidies up; the app already shows it as today's, so it reports
-`"anytime"`, as it will once Things moves it. An undated `"anytime"` task whose
-deadline is today or past is in Today as well, and an undated `"inbox"` one
-is in Today and Anytime instead of the Inbox.
+`"anytime"`, as it will once Things moves it. An undated open task or
+project in the Inbox, Anytime or Someday whose deadline is today or past is
+in Today and Anytime, and leaves the Inbox or Someday, unless Things took it
+out of Today for that deadline. It still reports the `start` it was filed
+with.
 
 In v0.7.0 and earlier `type` and `start` were both integers, so a caller
 matching on `.type==1` has to become `.type=="project"`, and one matching
@@ -1051,7 +1053,7 @@ the order says nothing, so they are all reported `ambiguous` instead.
 
 An item that is not confirmed has `"confirmed": false` and a `reason`, as
 an unconfirmed `add` does, and no `uuid` unless the reason is
-`completion-date-dropped`:
+`completion-date-dropped`, `misfiled` or `when`:
 
 - `no-verify`: `--no-verify` (or `no_verify = true`) skipped the read-back.
 - `unreadable`: the database could not be read, so a warning is printed.
@@ -1089,8 +1091,20 @@ an unconfirmed `add` does, and no `uuid` unless the reason is
   item is in `items` with its `id`; set the date in the Things app rather
   than importing the item again. A `completion-date` on an item the payload
   does not complete or cancel is ignored by Things and not checked.
+- `misfiled`: the item's `when` is a keyword or a date, and Things filed
+  the new item somewhere else, as `add` reports a `--when` that did not
+  land. A to-do sent with `when` `today` and a deadline already past is one
+  case: Things files it in the Inbox with no start date. It carries its
+  `uuid` and `landed`, where Things filed it. The import exits non-zero
+  with `import partially applied`, and under `--json` the item is in
+  `items` with its `id` and `landed`. Move it with `things edit` rather
+  than importing it again.
+- `when`: the item's `when` is a free phrase Things did not understand, so
+  the new item has no start date. It carries its `uuid` and `landed`, and
+  the import exits 0, as `add` does with such a `--when`. An item the
+  payload completes or cancels is not checked against its `when`.
 
-The first four exit 0 with the list printed. Any `not-found` item, or a
+The first four, and `when`, exit 0 with the list printed. Any `not-found` item, or a
 `shares-dated-title` item with too few new items to account for it, makes
 the import exit non-zero with `import partially applied`, the same error a
 dropped status change gives. The error names those items, and under

@@ -90,6 +90,9 @@ type jsonErrorItem struct {
 	// Present is given on a shares-dated-title item only, as on the
 	// created record (see importCreated).
 	Present *bool `json:"present,omitempty"`
+	// Landed is given on a misfiled created item only, as on the created
+	// record (see importCreated).
+	Landed string `json:"landed,omitempty"`
 }
 
 // jsonErrorMatch is one candidate of an ambiguous reference — enough for a

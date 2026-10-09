@@ -104,6 +104,9 @@ type importCreate struct {
 	closedAt time.Time
 	// closed is set when the payload completes or cancels the item.
 	closed bool
+	// when is the item's `when` attribute, "" when it gives none or one
+	// that is not a string.
+	when string
 	// to is where the payload files the item, and dest is where the CLI
 	// resolved that to before the import was sent (see resolveImportDests).
 	to   importTo
@@ -618,7 +621,8 @@ func importCreates(payload []any) []importCreate {
 		if completed || canceled {
 			closedAt, _ = parseThingsDate(attrs["completion-date"])
 		}
-		creates = append(creates, importCreate{path: path, typ: typ, title: title, shown: storedTitle(shown), dated: raw != nil, datedAt: datedAt, closedAt: closedAt, closed: completed || canceled, to: to})
+		when, _ := attrs["when"].(string)
+		creates = append(creates, importCreate{path: path, typ: typ, title: title, shown: storedTitle(shown), dated: raw != nil, datedAt: datedAt, closedAt: closedAt, closed: completed || canceled, when: when, to: to})
 	})
 	return creates
 }
@@ -1144,13 +1148,14 @@ type importVerifyError struct {
 	// confirmed ones keep their uuids when the import fails.
 	created []importCreated
 	search  string // the `things search` command, with the flags this run needs
+	things  string // `things` with the flags this run needs, for the edit that moves a misfiled item
 }
 
 // fails reports whether c, a created item's verdict, makes the import fail:
 // the item may be missing (see mayBeMissing), or it was saved without its
 // completion-date.
 func (c importCreated) fails() bool {
-	return c.mayBeMissing() || c.Reason == dateDropped
+	return c.mayBeMissing() || c.Reason == dateDropped || c.Reason == whenMisfiled
 }
 
 // mayBeMissing reports whether c says a created item may not be there: it
@@ -1167,6 +1172,17 @@ func (c importCreated) mayBeMissing() bool {
 // completion-date the payload gives it. The item is there, so the import
 // fails without asking for it to be created again.
 const dateDropped = "completion-date-dropped"
+
+// whenMisfiled is the verdict on a created item Things filed somewhere other
+// than its keyword or date `when` puts it, as an add's misfiled error. The
+// item is there, so the import fails without asking for it to be created
+// again.
+const whenMisfiled = "misfiled"
+
+// whenIgnored is the verdict on a created item whose `when` is a free phrase
+// Things did not understand: the item was given no start date. As an add with
+// such a --when, the item is there and the import does not fail over it.
+const whenIgnored = "when"
 
 // missing is the created items that are not known to be there: the ones to
 // search for and re-run.
@@ -1219,7 +1235,17 @@ func (e *importVerifyError) Error() string {
 		parts = append(parts, fmt.Sprintf("%d created items were saved without the completion-date the payload gives. They are there, so do not import them again; set the date in the Things app:\n%s",
 			len(dropped), strings.Join(dropped, "\n")))
 	}
-	if len(e.created) > len(missing)+len(dropped) {
+	var misfiled []string
+	for _, it := range e.created {
+		if it.Reason == whenMisfiled {
+			misfiled = append(misfiled, fmt.Sprintf("  %s: %s", it.Path, it.detail))
+		}
+	}
+	if len(misfiled) > 0 {
+		parts = append(parts, fmt.Sprintf("%d created items were not filed where their when puts them. They are there, so do not import them again; move each with `%s edit <uuid> --when ...` (`%s project edit` for a project) if it matters:\n%s",
+			len(misfiled), e.things, e.things, strings.Join(misfiled, "\n")))
+	}
+	if len(e.created) > len(missing)+len(dropped)+len(misfiled) {
 		lines := []string{"The other created items:"}
 		for _, it := range e.created {
 			if !it.fails() {
@@ -1243,7 +1269,10 @@ func (e *importVerifyError) Error() string {
 // item goes: reason "shares-dated-title", with candidates listing its new
 // items. A confirmed item the payload closes with a completion-date that was
 // saved with another stopDate is turned back with reason
-// "completion-date-dropped", keeping its uuid.
+// "completion-date-dropped", keeping its uuid. A confirmed item its `when`
+// did not file is turned back with reason "misfiled", or "when" for a free
+// phrase Things did not understand, keeping its uuid and saying in landed
+// where it is.
 type importCreated struct {
 	Path       string   `json:"path"`
 	Kind       string   `json:"kind"`
@@ -1256,6 +1285,8 @@ type importCreated struct {
 	// new items appeared as the items that could claim them, so it is there
 	// (the import does not fail over it), false when it may be missing.
 	Present *bool `json:"present,omitempty"`
+	// Landed is given on a misfiled or when item only: where Things filed it.
+	Landed string `json:"landed,omitempty"`
 
 	detail string // why a failing item is missing or unconfirmed, for the plain-text error
 }
@@ -1421,13 +1452,14 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	if len(types) > 0 {
 		snap, snapErr = snapshotCreated(database, types)
 	}
+	sent := clock.Now()
 	if err := write(); err != nil {
 		return err
 	}
 	budget := d.readBackTimeout()
 	deadline := time.Now().Add(budget)
 
-	created := readBackCreates(d, database, plan.creates, snap, snapErr, budget)
+	created := readBackCreates(d, database, plan.creates, snap, snapErr, sent, budget)
 	failures, total := verifyImportStatuses(database, plan, max(time.Until(deadline), 0), budget)
 
 	// The failures go in the error rather than straight to stderr: under
@@ -1440,6 +1472,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 		return &importVerifyError{
 			items: failures, total: total, created: created,
 			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
+			things: strings.Join(append([]string{"things"}, globalFlags(d)...), " "),
 		}
 	}
 	return printImportCreated(d, created)
@@ -1462,7 +1495,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 // confirmed, rather than risk confirming it with the dated item's row, and
 // names the new items it could be. It fails the import unless a new item
 // appeared for each item that could claim one, when all of them are there.
-func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, budget time.Duration) []importCreated {
+func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap createdSnapshot, snapErr error, sent time.Time, budget time.Duration) []importCreated {
 	if len(creates) == 0 {
 		return nil
 	}
@@ -1554,6 +1587,7 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 	}
 	unconfirmShared(out, creates, found)
 	checkClosedAt(database, out, creates, found, max(budget-time.Since(start), 0))
+	checkWhens(out, creates, found, sent)
 	if err != nil && len(want) > 0 && !d.dbWarned {
 		fmt.Fprintf(d.errOut(), "warning: cannot read the Things database to confirm the items the import created: %v\n", err)
 	}
@@ -1725,6 +1759,39 @@ func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate,
 	}
 }
 
+// checkWhens turns back each confirmation of an item whose `when` did not
+// file it, sent at sent, keeping its uuid, as applyAdd does for --when: a
+// keyword or date that did not land is "misfiled", and a free phrase that
+// left the item with no start date is "when". Things files a to-do whose
+// `when` it applies with a deadline already past in the Inbox, measured on
+// 9 Oct 2026, and the item still shows in Today by its deadline, so only the
+// read-back can tell. An item the payload completes or cancels is not
+// checked: Things was not measured filing a closed item by its when.
+func checkWhens(out []importCreated, creates []importCreate, found map[createdWant][]model.Task, sent time.Time) {
+	now := clock.Now()
+	for i, c := range creates {
+		if !out[i].Confirmed || c.closed || strings.TrimSpace(c.when) == "" {
+			continue
+		}
+		idx := slices.IndexFunc(found[c.want()], func(t model.Task) bool { return t.UUID == out[i].UUID })
+		if idx < 0 {
+			continue
+		}
+		row := &found[c.want()][idx]
+		check := &whenCheck{value: c.when, sent: sent}
+		switch {
+		case !check.holds(row, now):
+			out[i].Confirmed, out[i].Reason = false, whenMisfiled
+		case whenPhrase(c.when) && row.StartDate == nil:
+			out[i].Confirmed, out[i].Reason = false, whenIgnored
+		default:
+			continue
+		}
+		out[i].Landed = describeStart(row)
+		out[i].detail = fmt.Sprintf("%s %q (%s) was created, but its when %q did not file it there: it is %s", c.kind(), c.title, out[i].UUID, c.when, out[i].Landed)
+	}
+}
+
 // distinctCreationDates reports whether no two of tasks, oldest first, share a
 // creation date, so their order is the order Things saved them in.
 func distinctCreationDates(tasks []model.Task) bool {
@@ -1744,6 +1811,8 @@ func (c importCreated) line() string {
 		return fmt.Sprintf("Created and confirmed: %s %q (%s)", c.Path, c.Title, c.UUID)
 	case len(c.Candidates) > 0:
 		return fmt.Sprintf("%s: %s %q (%s)", unconfirmedMsg[c.Reason], c.Path, c.Title, strings.Join(c.Candidates, ", "))
+	case c.UUID != "" && c.Landed != "":
+		return fmt.Sprintf("%s: %s %q (%s), %s", unconfirmedMsg[c.Reason], c.Path, c.Title, c.UUID, c.Landed)
 	case c.UUID != "":
 		return fmt.Sprintf("%s: %s %q (%s)", unconfirmedMsg[c.Reason], c.Path, c.Title, c.UUID)
 	}
@@ -1835,7 +1904,7 @@ func (e *importRefusalError) jsonItems() []jsonErrorItem {
 func (e *importVerifyError) jsonItems() []jsonErrorItem {
 	missing := e.missing()
 	for _, it := range e.created {
-		if it.Reason == dateDropped {
+		if it.Reason == dateDropped || it.Reason == whenMisfiled {
 			missing = append(missing, it)
 		}
 	}
@@ -1860,6 +1929,7 @@ func (e *importVerifyError) jsonItems() []jsonErrorItem {
 			Reason:     it.Reason,
 			Candidates: append([]string(nil), it.Candidates...),
 			Present:    it.Present,
+			Landed:     it.Landed,
 		})
 	}
 	return out
