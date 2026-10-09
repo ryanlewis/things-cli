@@ -367,6 +367,23 @@ func TestErrorPayloadGolden(t *testing.T) {
 	}
 }
 
+// errorPayload takes the outermost payloader in err's chain. That agrees with
+// the fixed order it used to check the types in only while no payloader wraps
+// another.
+func TestNoPayloaderWrapsAnother(t *testing.T) {
+	for _, tc := range errorPayloadCases {
+		var p payloader
+		if !errors.As(tc.err, &p) {
+			continue
+		}
+		for inner := errors.Unwrap(p.(error)); inner != nil; inner = errors.Unwrap(inner) {
+			if _, ok := inner.(payloader); ok {
+				t.Errorf("%s: %T wraps payloader %T", tc.name, p, inner)
+			}
+		}
+	}
+}
+
 // The message is meant to read as the plain-text line does, so the encoder
 // must not turn <, > and & into escape sequences.
 func TestRenderErrorDoesNotEscapeHTML(t *testing.T) {
