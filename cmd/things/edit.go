@@ -186,6 +186,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 			// AddTarget also matches a title, which list-id does not.
 			fmt.Fprintf(d.errOut(), "warning: %s\n", noTarget("project or area", list, byID, next))
 		case t.ByUUID && !byID:
+			// A uuid given to --list goes to Things as list-id.
 			id := t.UUID
 			c.List, c.ListID = nil, &id
 			fallthrough

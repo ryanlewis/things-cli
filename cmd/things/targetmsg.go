@@ -2,10 +2,11 @@ package main
 
 import "fmt"
 
-// The warnings add, edit, project and import give when Things will not file
-// an item where it was asked. Agents read this wording, so each command
-// builds it here rather than by hand. Where the rules differ between
-// commands, the caller decides; these only say it.
+// The warnings add, edit, project and import give when Things cannot find
+// the list, area or heading an item was sent to. Agents read this wording,
+// so each command builds it here rather than by hand. (The "--heading needs
+// --list" warnings differ per command and stay with add and edit.) Where the
+// rules differ between commands, the caller decides; these only say it.
 
 // noTarget is the warning for ref, sent by uuid when byID and by title
 // otherwise, when Things finds no noun ("project or area", or "area") for
