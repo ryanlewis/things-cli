@@ -86,12 +86,11 @@ for the day. An item closed today stays where it was rather than moving to the
 end. `upcoming` reads by date instead, the way the app's own Upcoming does.
 Like the app, it also lists an undated Anytime or Someday task or project
 whose deadline is still to come, under the deadline's day, and
-`--on`/`--from`/`--to` match it on that day. `today` likewise lists an undated
-task in the Inbox or Anytime, or an undated Anytime project, once its deadline
-is today or past, unless it was taken out of Today for that deadline. A
-Someday task or project due today stays out of `today`, as it does in the app.
-Such a task also comes back from `anytime`, from the Inbox as well as from
-Anytime, as in the app, so merge a sweep on `uuid`. One from the Inbox
+`--on`/`--from`/`--to` match it on that day. `today` likewise lists any
+undated task or project once its deadline is today or past, from the Inbox,
+Anytime or Someday, unless it was taken out of Today for that deadline. An
+Inbox or Anytime task of that shape also comes back from `anytime`, as in the
+app, so merge a sweep on `uuid`. One from the Inbox
 leaves `inbox` while Today holds it, as it leaves the app's Inbox. `--on`/`--from`/`--to` match it on today, the day Today
 shows it.
 
@@ -166,7 +165,10 @@ app's area page shows them, and its projects' tasks, closed today among them,
 as each project's page does. A project closed today is one row there, as in
 `logbook`. A bare `--tag` sweep lists the tag's tasks and projects, closed
 today and not yet logged among them, as the app's tag listing does;
-`--open-only` leaves those out.
+`--open-only` leaves those out. With `--area` as well, the listing is the
+area's page narrowed to the tag: a tagged task closed today inside a project
+closed today is folded into that project's row, so the project is listed
+even when only its task carries the tag.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none

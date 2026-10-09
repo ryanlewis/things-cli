@@ -51,8 +51,9 @@ func TestDeadlineProjectInTodayAndUpcoming(t *testing.T) {
 }
 
 // A Someday to-do or project with a later deadline is in Upcoming under the
-// deadline's day; one due today is not in Today. That asymmetry is the app's.
-func TestSomedayDeadlineInUpcomingNotToday(t *testing.T) {
+// deadline's day, and one due today is in Today, as an Anytime one is. A
+// deadline suppressed for Today keeps it out, whatever the bucket.
+func TestSomedayDeadlineInUpcomingAndToday(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(testNow))
 	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
@@ -61,21 +62,29 @@ func TestSomedayDeadlineInUpcomingNotToday(t *testing.T) {
 	fx.Project("p-someday-later", "Someday project due later", 2, someday(), deadline(later))
 	fx.Todo("t-someday-today", "Someday to-do due today", 3, someday(), deadline(today))
 	fx.Project("p-someday-today", "Someday project due today", 4, someday(), deadline(today))
+	fx.Todo("t-someday-suppressed", "Someday to-do taken out of Today", 5, someday(), deadline(today), suppressed(today))
+	// To-dos due today inside a Someday project and inside an Anytime one.
+	fx.Project("p-someday", "Someday project", 6, someday())
+	fx.Project("p-anytime", "Anytime project", 7, anytime())
+	fx.Todo("t-in-someday-proj", "In a Someday project", 8, anytime(), deadline(today), inProject("p-someday"))
+	fx.Todo("t-in-anytime-proj", "In an Anytime project", 9, anytime(), deadline(today), inProject("p-anytime"))
 
 	if got, want := listSet(t, d, "upcoming", TaskFilter{}), []string{"t-someday-later", "p-someday-later"}; !sameSet(got, want) {
 		t.Errorf("upcoming = %v, want %v", got, want)
 	}
-	if got := listSet(t, d, "today", TaskFilter{}); len(got) != 0 {
-		t.Errorf("today = %v, want empty", got)
+	if got, want := listSet(t, d, "today", TaskFilter{}), []string{"t-someday-today", "p-someday-today", "t-in-someday-proj", "t-in-anytime-proj"}; !sameSet(got, want) {
+		t.Errorf("today = %v, want %v", got, want)
 	}
 	// --on matches the Upcoming rows on their deadline day.
 	on := model.ThingsDate(later)
 	if got, want := listSet(t, d, "upcoming", TaskFilter{On: &on}), []string{"t-someday-later", "p-someday-later"}; !sameSet(got, want) {
 		t.Errorf("upcoming --on = %v, want %v", got, want)
 	}
-	// They are still Someday rows.
-	if got, want := listSet(t, d, "someday", TaskFilter{}), []string{"t-someday-later", "p-someday-later", "t-someday-today", "p-someday-today"}; !sameSet(got, want) {
-		t.Errorf("someday = %v, want %v", got, want)
+	// Anytime takes only the Inbox half of the deadline rule, so a Someday
+	// row due today stays out of it; the Anytime project's to-do is there by
+	// its bucket.
+	if got, want := listSet(t, d, "anytime", TaskFilter{}), []string{"t-in-anytime-proj"}; !sameSet(got, want) {
+		t.Errorf("anytime = %v, want %v", got, want)
 	}
 }
 
@@ -124,9 +133,43 @@ func TestTagKeepsToDosOfProjectClosedToday(t *testing.T) {
 	if got, want := listSet(t, d, ViewProject, TaskFilter{Tag: "urgent"}), []string{"t-child"}; !sameSet(got, want) {
 		t.Errorf("--tag = %v, want %v", got, want)
 	}
-	// With --area as well, the area's fold wins.
-	if got := listSet(t, d, ViewProject, TaskFilter{Tag: "urgent", Area: "Work"}); len(got) != 0 {
-		t.Errorf("--tag --area = %v, want empty", got)
+	// With --area as well, the area's page folds the to-do into its
+	// project's row, and the tag reaches that row through the to-do.
+	if got, want := listSet(t, d, ViewProject, TaskFilter{Tag: "urgent", Area: "Work"}), []string{"p-done"}; !sameSet(got, want) {
+		t.Errorf("--tag --area = %v, want %v", got, want)
+	}
+	if got := listSet(t, d, ViewProject, TaskFilter{Tag: "urgent", Area: "Work", OpenOnly: true}); len(got) != 0 {
+		t.Errorf("--tag --area --open-only = %v, want empty", got)
+	}
+}
+
+// Only a closed project takes its tagged to-do's place. A to-do closed today
+// inside an open project is not folded, so it is its own row and the project
+// is not matched; nor is a closed project whose tagged to-do was logged on an
+// earlier day, or is still open.
+func TestTagAreaMatchesOnlyFoldedProjects(t *testing.T) {
+	d, fx := newFixture(t)
+	stopToday := model.TimeToUnix(testNow)
+	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
+
+	fx.Area("area-work", "Work", 1)
+	fx.Tag("tg-urgent", "urgent", 1)
+	fx.Project("p-open", "Open", 1, anytime(), inArea("area-work"))
+	fx.Todo("t-open-proj-done", "Done in open project", 2, anytime(), inProject("p-open"), completed(stopToday))
+	fx.Project("p-done-a", "Done, child logged", 3, anytime(), inArea("area-work"), completed(stopToday))
+	fx.Todo("t-logged", "Logged yesterday", 4, anytime(), inProject("p-done-a"), completed(stopYesterday))
+	fx.Project("p-done-b", "Done, child open", 5, anytime(), inArea("area-work"), completed(stopToday))
+	fx.Todo("t-still-open", "Still open", 6, anytime(), inProject("p-done-b"))
+	fx.Project("p-done-c", "Done, child under heading", 7, anytime(), inArea("area-work"), completed(stopToday))
+	fx.Heading("h-c", "Heading", 8, inProject("p-done-c"))
+	fx.Todo("t-under-heading", "Under heading", 9, anytime(), underHeading("h-c"), completed(stopToday))
+	for _, uuid := range []string{"t-open-proj-done", "t-logged", "t-still-open", "t-under-heading"} {
+		fx.Tagged(uuid, "tg-urgent")
+	}
+
+	got := listSet(t, d, ViewProject, TaskFilter{Tag: "urgent", Area: "Work"})
+	if want := []string{"t-open-proj-done", "t-still-open", "p-done-c"}; !sameSet(got, want) {
+		t.Errorf("--tag --area = %v, want %v", got, want)
 	}
 }
 

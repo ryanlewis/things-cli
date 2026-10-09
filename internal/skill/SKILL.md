@@ -234,11 +234,11 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # after today, filed (and filtered) under its deadline, as the app's
     # Upcoming does — so that row comes back from upcoming and from anytime or
     # someday too; dedupe a sweep on uuid.
-    # today likewise lists an undated inbox or anytime task, or an undated
-    # anytime project, once its deadline is today or past (unless it was
-    # taken out of Today for that deadline). A someday one due today stays out
-    # of today, as in the app.
-    # Either one also comes back from anytime, as in the app; an inbox one
+    # today likewise lists any undated task or project, inbox, anytime or
+    # someday, once its deadline is today or past (unless it was taken out of
+    # Today for that deadline).
+    # An inbox or anytime task of that shape also comes back from anytime, as
+    # in the app; an inbox one
     # leaves inbox while today holds it. --on/--from/--to on today match it
     # on today, not on its deadline.
     # inbox, today, anytime, upcoming and someday list, by default, the items
@@ -285,7 +285,9 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # contents plus the tasks and projects in it closed today and not yet
     # logged, a closed project as one row. A bare --tag sweep lists the
     # tag's open tasks and projects plus the ones closed and not yet logged,
-    # as the lists do; --open-only drops those.
+    # as the lists do; --open-only drops those. --tag with --area folds a
+    # tagged task closed today into its project closed today, as the area's
+    # page does, and lists that project's row instead.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
 things projects [-a|--area A] [--completed] [--open-only]
