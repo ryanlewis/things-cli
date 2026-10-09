@@ -109,7 +109,7 @@ func TestEmptyResultsAreNonNil(t *testing.T) {
 		t.Errorf("SearchTasks: want non-nil empty slice, got %#v", found)
 	}
 
-	projects, err := d.ListProjects("", false)
+	projects, err := d.ListProjects("", false, false)
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}

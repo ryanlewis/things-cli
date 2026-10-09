@@ -84,10 +84,12 @@ was last placed in Today, most recent first, so items placed today come above
 those carried over from an earlier day, and then by the position Things keeps
 for the day. An item closed today stays where it was rather than moving to the
 end. `upcoming` reads by date instead, the way the app's own Upcoming does.
-Like the app, it also lists an undated Anytime task whose deadline is still to
-come, under the deadline's day, and `--on`/`--from`/`--to` match it on that
-day. `today` likewise lists an undated task in the Inbox or Anytime once its
-deadline is today or past, unless it was taken out of Today for that deadline.
+Like the app, it also lists an undated Anytime or Someday task or project
+whose deadline is still to come, under the deadline's day, and
+`--on`/`--from`/`--to` match it on that day. `today` likewise lists an undated
+task in the Inbox or Anytime, or an undated Anytime project, once its deadline
+is today or past, unless it was taken out of Today for that deadline. A
+Someday task or project due today stays out of `today`, as it does in the app.
 Such a task also comes back from `anytime`, from the Inbox as well as from
 Anytime, as in the app, so merge a sweep on `uuid`. One from the Inbox
 leaves `inbox` while Today holds it, as it leaves the app's Inbox. `--on`/`--from`/`--to` match it on today, the day Today
@@ -120,26 +122,25 @@ same way, because the app goes on showing a just-closed item there too.
 date, or an undated one with a deadline after today.
 
 `--open-only` leaves those closed items out, for when you want only the work
-still to do: `things today --open-only`. It works on every listing, and changes
-nothing on the ones that list only open tasks anyway (`deadlines`, `repeating`,
-a bare `--tag` sweep); `logbook` and `trash` reject it.
+still to do: `things today --open-only`. It works on every listing, `things
+projects` included, and changes nothing on the ones that list only open tasks
+anyway (`deadlines`, `repeating`); `logbook` and `trash` reject it.
 To make it the default, set `open_only = true` in the
 [config file](/configuration/); `--open-only=false` then lists the closed
 items for one call, and `logbook` and `trash` ignore the setting.
 `--include-completed`, which used to be how to ask for the closed items, is
 still accepted on `inbox`, `today`, `anytime`, `upcoming` and `someday`, and on
-a `--project` or `--area` listing with no view named. It has no effect except
-to override `open_only`, as `--open-only=false` does. Anywhere else
-(`deadlines`, `repeating`, `logbook`, `trash`, a bare `--tag` sweep) it is an
-error.
+a `--project`, `--area` or `--tag` listing with no view named. It has no effect
+except to override `open_only`, as `--open-only=false` does. Anywhere else
+(`deadlines`, `repeating`, `logbook`, `trash`) it is an error.
 
 `logbook` holds nothing Things has not logged yet, wherever it was closed, as
 the app's Logbook does. A closed item is therefore either in `logbook` or
 still in place, never both. Still in place, it is listed by its view, by its
 project (`things --project <uuid>`), or by its area (`things --area <name>`).
 The one exception is a closed Anytime project with no area: no list shows it,
-in the app or the CLI, and `things projects --completed` is where to find it
-until it is logged. The lists overlap each other, since a task scheduled for
+in the app or the CLI, and `things projects` is where to find it until it is
+logged. The lists overlap each other, since a task scheduled for
 today is in the Anytime bucket too and an undated one due later is in both
 `anytime` and `upcoming`, so sweeping them means merging on `uuid`. The tasks
 of a project closed today stay in place in these lists, struck through, until
@@ -160,9 +161,9 @@ A bare `--area` is the area's page the same way: `things -a Work` lists the
 area's tasks and projects, closed today and not yet logged among them, as the
 app's area page shows them, and its projects' tasks, closed today among them,
 as each project's page does. A project closed today is one row there, as in
-`logbook`. A bare `--tag` sweep lists open tasks only: a tag is a filter in the
-app, not a list with a page of its own, so name the view to see the closed
-ones too: `things today -t urgent`.
+`logbook`. A bare `--tag` sweep lists the tag's tasks and projects, closed
+today and not yet logged among them, as the app's tag listing does;
+`--open-only` leaves those out.
 
 A closed project is one row in `logbook`, not a row plus its contents. The
 app folds a closed project's tasks into the project's own row and lists none
@@ -278,6 +279,12 @@ a title's own line breaks, and `--json` carries it exactly as written.
 `things projects`, `things areas`, and `things tags` list the
 collections themselves. `things projects` accepts `--area`, which takes
 a name the way the list filters do, and `--completed`.
+
+`things projects` lists the open projects and, like the app's project list,
+the ones closed and not yet logged: under the app's default Daily logging,
+those closed today. `status` tells them apart. `--open-only` leaves those out,
+and `open_only = true` in the config file does the same. `--completed` lists
+every closed project, logged or not.
 
 On a terminal, `things projects` fits the width the same way: a title
 longer than 30 columns is cut first, then, if that is not enough, an area
@@ -413,6 +420,9 @@ The query matches titles and notes literally and case-insensitively, so
 `strasse` finds "Straße". There is
 no wildcard syntax: `%` and `_` are characters to find, so
 `things search "50%"` returns the items that say "50%".
+
+Search leaves out the Trash, as the app does: a trashed item, and a task
+whose project is in the Trash, even if the task itself was not thrown away.
 
 ## Capturing
 

@@ -19,7 +19,7 @@ type TaskFilter struct {
 	// OpenOnly drops the completed/cancelled items that Things has not yet
 	// logged out of the list they are in. By default the views CompletableView
 	// reports — inbox, today, anytime, upcoming, someday, and the catch-all
-	// when Project or Area names one — list those items, as the app does
+	// when Project, Area or Tag names one — list those items, as the app does
 	// (UI-parity); with OpenOnly they return only open tasks. Every other view
 	// lists the same rows either way.
 	OpenOnly bool
@@ -35,18 +35,17 @@ type TaskFilter struct {
 // view's own spec, and it is the same field that widens the status test, so
 // the question the CLI asks and the SQL it then runs cannot disagree.
 //
-// projectNamed is whether --project names a project, and areaNamed whether
-// --area names an area. The catch-all view widens only then. Naming a
-// project lists its contents (widensToProjectContents), and the app keeps a
-// to-do closed today on the project's page (issue #295). Naming an area lists
-// the area's page, which keeps one too (see completesWithArea). A bare --tag
-// sweep through the same view lists open rows only: a tag is a filter in the
-// app, not a list with a page of its own, so there is no app answer to match.
-func CompletableView(view string, projectNamed, areaNamed bool) bool {
+// projectNamed is whether --project names a project, areaNamed whether
+// --area names an area, and tagNamed whether --tag names a tag. The catch-all
+// view widens only then. Naming a project lists its contents
+// (widensToProjectContents), and the app keeps a to-do closed today on the
+// project's page (issue #295). Naming an area lists the area's page, which
+// keeps one too, and so does a tag (see completesWithFilter).
+func CompletableView(view string, projectNamed, areaNamed, tagNamed bool) bool {
 	spec := views[view]
 	return spec.showsUnlogged ||
 		(projectNamed && spec.widensToProjectContents) ||
-		(areaNamed && spec.completesWithArea)
+		((areaNamed || tagNamed) && spec.completesWithFilter)
 }
 
 // CompletableViewNames lists those views in a stable order, for error text.
@@ -268,14 +267,23 @@ const scheduledArrived = "t.start = 2 AND t.startDate <= " + thingsToday
 const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + notATemplate + " AND " + scheduledArrived +
 	" THEN 1 ELSE COALESCE(t.start, 0) END"
 
-// todayDue is the other way into Today: a to-do with no start date whose
+// todayDue is the other way into Today: a row with no start date whose
 // deadline has arrived, from the Inbox or from Anytime, and for as long as it
 // is overdue. Measured on 3 Oct 2026 with test to-dos, the app's Today held
 // all four of those shapes and the CLI none. It left out the two whose
 // deadlineSuppressionDate equalled their deadline, which is how Things records
 // "taken out of Today for this deadline"; the app cleared that column when a
-// deadline was changed. No project, and no Someday-bucket to-do, of this shape
-// was measured, so both are left out rather than guessed at (issue #294).
+// deadline was changed (issue #294).
+//
+// It takes projects as well as to-dos. Measured on 9 Oct 2026, the app's
+// Today held an Anytime project with no start date whose deadline was today
+// or past. Anytime and the Inbox, which also read this test, carry to-dos
+// only (todoOnly), so a project row reaches Today alone.
+//
+// The Someday bucket stays out, and that is the app's answer rather than a
+// gap: measured on 9 Oct 2026, a Someday to-do or project due today was not
+// in the app's Today. Upcoming is the other way round, and takes a Someday row
+// with a later deadline; see upcomingDue.
 //
 // The test is IS NULL rather than "differs from the deadline" because no write
 // measured leaves a stale suppression behind. On 4 Oct 2026, suppressed test
@@ -285,11 +293,12 @@ const shownStart = "CASE WHEN t.status = 0 AND t.trashed = 0 AND " + notATemplat
 // into the app's Today. Setting the same deadline again left the column and
 // kept the to-do out of Today. Sync from another device was not measured
 // (issue #376).
-const todayDue = "t.start IN (0, 1) AND t.startDate IS NULL AND t.type = 0 AND t.deadline <= " + thingsToday +
+const todayDue = "t.start IN (0, 1) AND t.startDate IS NULL AND t.deadline <= " + thingsToday +
 	" AND t.deadlineSuppressionDate IS NULL"
 
 // todayScope is Today's whole scope: the two ways in, either of which is
-// enough.
+// enough. A Someday row is in it only by its start date (scheduledArrived),
+// never by its deadline, where upcomingScope takes one by either.
 const todayScope = "((" + todayScheduled + ") OR (" + todayDue + "))"
 
 // todayDate is the day --on/--from/--to match a Today row on: its start date,
@@ -439,13 +448,17 @@ const (
 	// takes only the days after today.
 	upcomingScheduled = "t.start = 2 AND t.startDate > " + thingsToday
 	somedayDeferred   = "t.start = 2 AND t.startDate IS NULL"
-	// upcomingDue is the other way into Upcoming: an Anytime to-do with no
-	// start date but a deadline after today, which the app lists under the
-	// deadline's day. Measured on 30 Sep 2026, the app's Upcoming held both
-	// such to-dos in the data and the CLI neither. The measurement had no
-	// project of this shape, and no to-do that also carried a start date, so
-	// both are left out rather than guessed at.
-	upcomingDue = "t.start = 1 AND t.startDate IS NULL AND t.type = 0 AND t.deadline > " + thingsToday
+	// upcomingDue is the other way into Upcoming: an Anytime or Someday row
+	// with no start date but a deadline after today, which the app lists under
+	// the deadline's day. Measured on 30 Sep 2026, the app's Upcoming held both
+	// such Anytime to-dos in the data and the CLI neither. Measured on 9 Oct
+	// 2026, it also held an Anytime project of that shape, and a Someday to-do
+	// and a Someday project with a later deadline.
+	//
+	// Someday is where this differs from todayDue, deliberately: the same
+	// Someday row due today is not in the app's Today. A row with a start date
+	// as well is upcomingScheduled's, and was not measured here.
+	upcomingDue = "t.start IN (1, 2) AND t.startDate IS NULL AND t.deadline > " + thingsToday
 	// upcomingScope is Upcoming's whole scope: the two ways in, either of
 	// which is enough.
 	upcomingScope = "((" + upcomingScheduled + ") OR (" + upcomingDue + "))"
@@ -592,16 +605,23 @@ type viewSpec struct {
 	// its usual WHERE with a project filter. Only the catch-all has it.
 	widensToProjectContents bool
 
-	// completesWithArea marks the view that shows unlogged rows when --area
-	// names an area, as it does when --project names a project. Only
-	// the catch-all has it. The app's area page keeps an item closed today in
-	// place until it is logged: measured on 3 Oct 2026, `to dos of area id X`
-	// held loose to-dos closed out of Anytime, Upcoming and Someday, and a
-	// project completed that day, but not that project's own to-dos, which
-	// its row stands for, so the closed-parent fold stays on. The listing
-	// also carries the area's projects' to-dos, and the project's page keeps
-	// one closed today (issue #295), so the widening reaches those too.
-	completesWithArea bool
+	// completesWithFilter marks the view that shows unlogged rows when --area
+	// names an area or --tag names a tag, as it does when --project names a
+	// project. Only the catch-all has it. The app's area page keeps an item
+	// closed today in place until it is logged: measured on 3 Oct 2026, `to
+	// dos of area id X` held loose to-dos closed out of Anytime, Upcoming and
+	// Someday, and a project completed that day, but not that project's own
+	// to-dos, which its row stands for, so the closed-parent fold stays on.
+	// The listing also carries the area's projects' to-dos, and the project's
+	// page keeps one closed today (issue #295), so the widening reaches those
+	// too.
+	//
+	// A tag keeps them as well. Measured on 9 Oct 2026, the app's listing
+	// for one tag held 70 rows where a bare --tag listed 65, and the five
+	// were rows closed that day and not yet logged. A tag has no page that folds a
+	// project's to-dos into its row, so a tag alone takes the lists' fold
+	// (parentNotClosedOrUnlogged) and not the area's.
+	completesWithFilter bool
 
 	// keepsTrashedParentGuard marks the view that keeps untrashedParent even
 	// when --project names a project, where every other view lifts it. Only
@@ -624,7 +644,7 @@ func (s viewSpec) rowKinds() string {
 // booleans.
 type whereOpts struct {
 	// includeCompleted is TaskFilter's !OpenOnly. It widens the status test on
-	// the views showsUnlogged or completesWithArea mark, and is ignored on the
+	// the views showsUnlogged or completesWithFilter mark, and is ignored on the
 	// rest.
 	includeCompleted bool
 
@@ -632,9 +652,11 @@ type whereOpts struct {
 	// closed-parent fold. See openOrJustClosed for why.
 	projectNamed bool
 
-	// areaNamed is set when --area names an area, which lets the widening reach
-	// the view that completesWithArea.
+	// areaNamed is set when --area names an area, and tagNamed when --tag
+	// names a tag. Either lets the widening reach the view that
+	// completesWithFilter.
 	areaNamed bool
+	tagNamed  bool
 
 	// foldsUnlogged keeps the fold for a project closed and not yet logged.
 	// An area's page does that: measured on 3 and 4 Oct 2026, it held a
@@ -646,8 +668,9 @@ type whereOpts struct {
 // where composes the view's WHERE clause.
 func (s viewSpec) where(o whereOpts) string {
 	status := s.status
-	if o.includeCompleted && (s.showsUnlogged || (o.areaNamed && s.completesWithArea)) {
-		o.foldsUnlogged = !s.showsUnlogged
+	if o.includeCompleted && (s.showsUnlogged || ((o.areaNamed || o.tagNamed) && s.completesWithFilter)) {
+		// Only an area's page folds a project closed today into its row.
+		o.foldsUnlogged = !s.showsUnlogged && o.areaNamed
 		status = openOrJustClosed(o)
 	}
 	parts := make([]string, 0, 4+len(s.extra))
@@ -858,7 +881,7 @@ var views = map[string]viewSpec{
 	ViewProject: {
 		status: openRows, trashed: untrashedRows,
 		includesProjects: true, supportsDateFilter: true,
-		widensToProjectContents: true, completesWithArea: true,
+		widensToProjectContents: true, completesWithFilter: true,
 		// A filter that spans projects — `things --area X`, `things --tag y` —
 		// groups by area then project so the rendered group headers stay
 		// contiguous instead of repeating as rows interleave by index. Within a
@@ -1146,6 +1169,7 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 		includeCompleted: !opts.OpenOnly,
 		projectNamed:     opts.Project != "",
 		areaNamed:        opts.Area != "",
+		tagNamed:         opts.Tag != "",
 	})
 	// untrashedParent is what stops a trashed project's children outliving it
 	// in the lists. Naming a project is asking for that project's contents, so
@@ -1515,9 +1539,14 @@ func (e *AmbiguousTaskError) Error() string {
 // literally for the same reason FindTasksByTitle is: `things search '50%'`
 // used to match every title holding a 5 followed by a 0, because the value
 // went in as a pattern (issue #267).
+//
+// It leaves out a to-do whose project, directly or through its heading, is in
+// the Trash, as the lists do (untrashedParent): Things shows such a to-do only
+// in the Trash, folded into its project. Measured on 9 Oct 2026, the app's
+// search did not list one and the CLI's did, under the trashed project.
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 	pattern := containsLike(query)
-	q := d.taskQuery() + " WHERE t.trashed = 0 AND " + notHeading + " AND (fold(t.title) LIKE ?" + escapeClause + " OR fold(t.notes) LIKE ?" + escapeClause + ") GROUP BY t.uuid " + indexOrderBy
+	q := d.taskQuery() + " WHERE t.trashed = 0 AND " + untrashedParent + " AND " + notHeading + " AND (fold(t.title) LIKE ?" + escapeClause + " OR fold(t.notes) LIKE ?" + escapeClause + ") GROUP BY t.uuid " + indexOrderBy
 	return d.collectTasks(q, pattern, pattern)
 }
 

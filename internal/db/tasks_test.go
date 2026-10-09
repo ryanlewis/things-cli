@@ -55,21 +55,21 @@ func seedTasks(t *testing.T, d *DB) {
 func TestCompletableViews(t *testing.T) {
 	want := map[string]bool{"inbox": true, "today": true, "anytime": true, "upcoming": true, "someday": true}
 	for view := range views {
-		if got := CompletableView(view, false, false); got != want[view] {
-			t.Errorf("CompletableView(%q, false, false) = %v, want %v", view, got, want[view])
+		if got := CompletableView(view, false, false, false); got != want[view] {
+			t.Errorf("CompletableView(%q, none named) = %v, want %v", view, got, want[view])
 		}
-		// Naming a project or an area adds the catch-all, which then lists
-		// that project's or area's contents (issue #295), and nothing else.
+		// Naming a project, an area or a tag adds the catch-all, which then
+		// lists that project's, area's or tag's contents (issue #295), and
+		// nothing else.
 		wantNamed := want[view] || view == ViewProject
-		if got := CompletableView(view, true, false); got != wantNamed {
-			t.Errorf("CompletableView(%q, true, false) = %v, want %v", view, got, wantNamed)
-		}
-		if got := CompletableView(view, false, true); got != wantNamed {
-			t.Errorf("CompletableView(%q, false, true) = %v, want %v", view, got, wantNamed)
+		for _, named := range [][3]bool{{true, false, false}, {false, true, false}, {false, false, true}} {
+			if got := CompletableView(view, named[0], named[1], named[2]); got != wantNamed {
+				t.Errorf("CompletableView(%q, %v) = %v, want %v", view, named, got, wantNamed)
+			}
 		}
 	}
-	if CompletableView("bogus", true, true) {
-		t.Error("CompletableView(\"bogus\", true, true) = true, want false")
+	if CompletableView("bogus", true, true, true) {
+		t.Error("CompletableView(\"bogus\", true, true, true) = true, want false")
 	}
 	if got := CompletableViewNames(); !reflect.DeepEqual(got, []string{"anytime", "inbox", "someday", "today", "upcoming"}) {
 		t.Errorf("CompletableViewNames() = %v, want [anytime inbox someday today upcoming]", got)
@@ -473,7 +473,7 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 					t.Errorf("--project --include-completed = %v, want it listed", uuidsOf(byProj))
 				}
 			}
-			projects, err := d.ListProjects("", true)
+			projects, err := d.ListProjects("", true, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2900,7 +2900,7 @@ func TestScheduledRowNotYetMovedReportsAnytime(t *testing.T) {
 		}
 	}
 
-	projects, err := d.ListProjects("", false)
+	projects, err := d.ListProjects("", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,13 @@ import (
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
-func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Project, error) {
+// ListProjects lists the projects, in area order. includeCompleted lists the
+// closed ones too, logged or not. Without it the listing is the open projects
+// and, unless openOnly is set, the ones closed and not yet logged
+// (closedTodayUnlogged), which the app's own project list still holds: on 9
+// Oct 2026 AppleScript's `projects` returned a project completed that day
+// that `things projects` left out. That is the rule the task lists follow.
+func (d *DB) ListProjects(areaFilter string, includeCompleted, openOnly bool) ([]model.Project, error) {
 	query := `
 		SELECT
 			t.uuid,
@@ -38,8 +44,12 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted bool) ([]model.Pro
 	// NULL and the clause is a no-op.
 	query += " AND " + d.recurrenceCol() + " IS NULL"
 
-	if !includeCompleted {
-		query += " AND t.status = 0"
+	switch {
+	case includeCompleted:
+	case openOnly:
+		query += " AND " + openRows
+	default:
+		query += " AND (" + openRows + " OR (" + closedRows + " AND " + closedTodayUnlogged + "))"
 	}
 	if areaFilter != "" {
 		// The same --area flag as the list filters, escaped the same way so

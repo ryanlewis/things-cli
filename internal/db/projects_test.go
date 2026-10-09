@@ -28,7 +28,7 @@ func TestListProjectsOpenOnly(t *testing.T) {
 	d := newTestDB(t)
 	seedProjects(t, d)
 
-	projects, err := d.ListProjects("", false)
+	projects, err := d.ListProjects("", false, false)
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestListProjectsIncludeCompleted(t *testing.T) {
 	d := newTestDB(t)
 	seedProjects(t, d)
 
-	projects, err := d.ListProjects("", true)
+	projects, err := d.ListProjects("", true, false)
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestListProjectsAreaFilter(t *testing.T) {
 	d := newTestDB(t)
 	seedProjects(t, d)
 
-	byUUID, err := d.ListProjects("area-work", false)
+	byUUID, err := d.ListProjects("area-work", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestListProjectsAreaFilter(t *testing.T) {
 		t.Errorf("uuid filter: got %+v", byUUID)
 	}
 
-	byTitle, err := d.ListProjects("Home", false)
+	byTitle, err := d.ListProjects("Home", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestListProjectsAreaFilterTrimsSpace(t *testing.T) {
 	d := newTestDB(t)
 	seedProjects(t, d)
 
-	got, err := d.ListProjects(" Home ", false)
+	got, err := d.ListProjects(" Home ", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestListProjectsCarriesTagsAndCounts(t *testing.T) {
 	d := newTestDB(t)
 	seedProjects(t, d)
 
-	projects, err := d.ListProjects("area-work", false)
+	projects, err := d.ListProjects("area-work", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestListProjectsExcludesRepeatingTemplates(t *testing.T) {
 		('p-done', 'Old repeat',    1, 3, 0, 'area-work', 4, 0, 0, x'0102')`)
 
 	for _, includeCompleted := range []bool{false, true} {
-		projects, err := d.ListProjects("", includeCompleted)
+		projects, err := d.ListProjects("", includeCompleted, false)
 		if err != nil {
 			t.Fatalf("ListProjects(includeCompleted=%v): %v", includeCompleted, err)
 		}
@@ -162,7 +162,7 @@ func TestListProjectsWithoutRecurrenceColumn(t *testing.T) {
 	d := &DB{db: sqlDB}
 	seedProjects(t, d)
 
-	projects, err := d.ListProjects("", false)
+	projects, err := d.ListProjects("", false, false)
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestListProjectsCarriesScheduling(t *testing.T) {
 		('sched', 'Runbook audit', 1, 0, 0, 1, 1, 0, 132813696, 132814464),
 		('anytime', 'No dates',    1, 0, 0, 2, 1, 0, NULL, NULL)`)
 
-	projects, err := d.ListProjects("", false)
+	projects, err := d.ListProjects("", false, false)
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestListProjectsAreaFilterMatchesLiterally(t *testing.T) {
 		('p-pct', 'In percent area', 1, 0, 0, 'ar-pct', 1),
 		('p-home', 'In home', 1, 0, 0, 'ar-home', 2)`)
 
-	none, err := d.ListProjects("%", false)
+	none, err := d.ListProjects("%", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestListProjectsAreaFilterMatchesLiterally(t *testing.T) {
 		t.Errorf("--area '%%': got %d projects, want none — the value is a title, not a pattern", len(none))
 	}
 
-	match, err := d.ListProjects("100% Work", false)
+	match, err := d.ListProjects("100% Work", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
