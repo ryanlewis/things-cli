@@ -32,6 +32,20 @@ import (
 //     when no open row has it, so the write refuses them), then a fragment
 //     of an open task's title.
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
+	return resolveRef(d, ref, database, false)
+}
+
+// resolveTaskForWrite is resolveTask for a command that changes the item. An
+// exact title carried only by closed or trashed items is refused outright
+// (closedTitleError) rather than resolved: the user most likely meant an open
+// task with a similar title, and a note on an already-closed item exiting 0
+// would read as success to a script. A uuid or a row number that names a
+// closed item still resolves, and the write decides what to do with it.
+func resolveTaskForWrite(d *Deps, ref string, database *db.DB) (*model.Task, error) {
+	return resolveRef(d, ref, database, true)
+}
+
+func resolveRef(d *Deps, ref string, database *db.DB, write bool) (*model.Task, error) {
 	// A blank ref is a title fragment of every task, and an exact title of
 	// every untitled one: `show ''` must not pick one of those.
 	if strings.TrimSpace(ref) == "" {
@@ -92,7 +106,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	// uuids match byte for byte while titles ignore case, so a uuid typed
 	// in the wrong case would otherwise reach a task whose title merely
 	// contains it.
-	uuidShaped := kind == refPlain && looksLikeUUID(ref)
+	uuidShaped := kind == refPlain && looksLikeUUID(strings.TrimSpace(ref))
 	lookup := database.GetTask
 	if kind != refPlain || uuidShaped {
 		lookup = database.GetTaskExact
@@ -107,6 +121,19 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		return task, nil
 	}
 
+	// Only closed or trashed items carry the exact title. A read shows the
+	// one, or offers them as candidates; a write refuses.
+	var closedTitle *db.ClosedTitleError
+	if errors.As(err, &closedTitle) {
+		if write {
+			return nil, newClosedTitleError(ref, closedTitle.Matches)
+		}
+		if len(closedTitle.Matches) == 1 {
+			return &closedTitle.Matches[0], nil
+		}
+		err = &db.AmbiguousTaskError{Query: closedTitle.Query, Matches: closedTitle.Matches}
+	}
+
 	switch {
 	case kind == refRow && errors.As(err, &notFound):
 		return nil, notARowError(ref, last, cacheErr)
@@ -116,7 +143,7 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		return nil, &notFoundError{
 			Kind:  "task",
 			Query: ref,
-			msg:   fmt.Sprintf("no item has the uuid %q and no task has exactly that title; uuids are case-sensitive, so copy the uuid exactly as a listing prints it", ref),
+			msg:   fmt.Sprintf("%q looks like a uuid, but no item has that uuid and no task has exactly that title; uuids are case-sensitive, so copy the uuid exactly as a listing prints it. If you meant part of a title, pass a shorter or longer part of it, or the full title", ref),
 		}
 	}
 
@@ -157,6 +184,31 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 		return nil, fmt.Errorf("invalid choice")
 	}
 	return &ambig.Matches[choice-1], nil
+}
+
+// newClosedTitleError builds the refusal for a write whose ref is an exact
+// title carried only by closed or trashed items, naming the most recent of
+// them: the one most likely meant, if any was.
+func newClosedTitleError(ref string, matches []model.Task) *closedTitleError {
+	latest := matches[0]
+	for _, m := range matches[1:] {
+		if recency(m).After(recency(latest)) {
+			latest = m
+		}
+	}
+	return &closedTitleError{Query: ref, Task: latest, Count: len(matches)}
+}
+
+// recency is when a task last changed state as far as the row records it:
+// its stop date when closed, else its creation date.
+func recency(t model.Task) time.Time {
+	switch {
+	case t.StopDate != nil:
+		return *t.StopDate
+	case t.CreationDate != nil:
+		return *t.CreationDate
+	}
+	return time.Time{}
 }
 
 // refKind is how a task ref is read before any lookup.

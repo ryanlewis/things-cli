@@ -388,12 +388,17 @@ and `water`, `things show water` finds the second, while `things show WATER`
 matches both.
 
 A title fragment only matches open items outside the Trash, and it is only
-tried when no item has exactly that title. An exact title can name a closed
-or trashed item too, when no open item has it: `things complete "Pay rent"`
-with "Pay rent" completed and "Pay rent deposit" open reports that "Pay
-rent" is already completed and leaves the deposit alone. An open item with
-the exact title wins over closed ones that share it, so a title you have
-completed before still reaches the open copy.
+tried when no item has exactly that title. An open item with the exact title
+wins over closed ones that share it, so a title you have completed before
+still reaches the open copy. When only closed or trashed items have the exact
+title, `show` displays the one (or offers them as candidates), and
+`complete`, `cancel`, `edit` and `project edit` refuse it with a non-zero
+exit and send nothing. With "Pay rent" completed and "Pay rent deposit" open,
+`things complete "Pay rent"` fails, names the completed item (the most recent
+one, and how many there are, when several share the title) and leaves the
+deposit alone. The `--json` token is `already closed`, or `trashed` when that
+item is in the Trash. A uuid or a row number that names a closed item is not
+refused this way; see [Completing and cancelling](#completing-and-cancelling).
 
 A title matching more than one item is reported rather than guessed at: an
 interactive run prints the candidates and asks which one, and a non-TTY run
@@ -804,8 +809,8 @@ under `--json` the error token is `already closed`.
 
 An item in the Trash is refused and nothing is sent. A row number can point
 at one when the item was trashed in Things after the listing was printed,
-and a uuid can name one, as can its exact title when no open item has it; a
-title fragment never matches it. The error names the item
+and a uuid can name one. Its exact title, when no open item has it, is
+refused the same way, and a title fragment never matches it. The error names the item
 and says it is in the Trash; under `--json` its token is `trashed`. `edit`
 and `project edit` refuse a trashed item the same way.
 

@@ -87,9 +87,10 @@ not a row either and behave the same way. A cache file that exists but cannot
 be read (empty, truncated, garbled) makes a bare number fail with `stale list
 cache` rather than fall through to a title. `-N` needs `--` before it on the command
 line (`things complete -- -3`). A title fragment only matches open items, and only when no item of any
-status has exactly that title: an exact title on a completed or trashed item
-is refused as `already closed`, a note, or `trashed`, rather than closing an
-open item whose title contains it. A uuid typed in the wrong case is not a
+status has exactly that title. A write whose exact title only completed,
+cancelled or trashed items carry fails, non-zero, with `already closed` or
+`trashed`, naming the most recent of them, rather than closing an open item
+whose title contains it. A uuid typed in the wrong case is not a
 title fragment either. This is a safety net for people, not a mode to code
 against: act on the `uuid` and it never applies.
 
@@ -309,7 +310,9 @@ any lookup.
 one (the `edit` and `project edit` flags included, unless `--duplicate` sends
 the status to a copy): nothing is sent, and the object names the item's
 `kind`, `uuid` and `title`. Closing an item the way it
-is already closed is not an error; it exits 0 with a note.
+is already closed is not an error; it exits 0 with a note. It is also the
+token for a write whose exact title only closed items carry, which is refused
+whatever the write was.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
 to `project edit`; both refuse before anything is written and name the command
 to retry with. `trashed` is a row number, uuid or exact title that named an

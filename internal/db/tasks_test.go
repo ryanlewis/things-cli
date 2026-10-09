@@ -832,8 +832,8 @@ func TestGetTaskByUUID(t *testing.T) {
 	}
 }
 
-// A uuid reaches a trashed item, flagged as trashed, and so does its exact
-// title when no open row carries it. `show` relies on that, and the writes
+// A uuid reaches a trashed item, flagged as trashed, and its exact title
+// reports it as a ClosedTitleError when no open row carries the title. `show` relies on that, and the writes
 // refuse the item on the flag rather than reporting it missing, so the reader
 // learns where it went. A substring still never reaches it.
 func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
@@ -851,8 +851,9 @@ func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
 		t.Errorf("GetTaskExact(uuid) = %+v, %v, want the trashed item", exact, err)
 	}
 
-	if got, err := d.GetTask("Binned errand"); err != nil || got.UUID != "t-bin" || !got.Trashed {
-		t.Errorf("GetTask(title of trashed item) = %+v, %v, want the trashed item", got, err)
+	var closed *ClosedTitleError
+	if got, err := d.GetTask("Binned errand"); !errors.As(err, &closed) || len(closed.Matches) != 1 || closed.Matches[0].UUID != "t-bin" || !closed.Matches[0].Trashed {
+		t.Errorf("GetTask(title of trashed item) = %+v, %v, want a ClosedTitleError naming the trashed item", got, err)
 	}
 	var nf *TaskNotFoundError
 	if _, err := d.GetTask("Binned"); !errors.As(err, &nf) {

@@ -187,6 +187,36 @@ func (e *closedSwitchError) Error() string {
 	return fmt.Sprintf("%q is already %s, so it was not %s; nothing sent", e.task.Title, e.task.Status, e.want)
 }
 
+// closedTitleError is a write whose reference is an exact title that only
+// closed or trashed items carry. Task is the most recent of them and Count
+// how many there are. Nothing is sent: the user most likely meant an open
+// task whose title is similar, and a substring match on one would have been
+// a guess. Under --json the token is "trashed" when Task is in the Trash (or
+// its project is), and "already closed" otherwise.
+type closedTitleError struct {
+	Query string
+	Task  model.Task
+	Count int
+}
+
+func (e *closedTitleError) trashed() bool { return e.Task.Trashed || e.Task.ProjectTrashed }
+
+func (e *closedTitleError) Error() string {
+	state := "already " + e.Task.Status.String()
+	if e.trashed() {
+		state = "in the Trash"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "no open task is titled %q: ", e.Query)
+	if e.Count == 1 {
+		fmt.Fprintf(&b, "the only %s with that title, %q (%s), is %s", kindWord(e.Task.Type), e.Task.Title, e.Task.UUID, state)
+	} else {
+		fmt.Fprintf(&b, "%d closed or trashed items have that title, the most recent being %q (%s), which is %s", e.Count, e.Task.Title, e.Task.UUID, state)
+	}
+	b.WriteString(". Nothing sent, and no open task with a similar title was touched; pass its uuid to act on a particular one")
+	return b.String()
+}
+
 // ambiguousRefError carries a *db.AmbiguousTaskError alongside the multi-line
 // "pick one" text resolveTask prints in non-interactive mode. Error() returns
 // that text unchanged so the plain-text path is untouched, while errors.As
@@ -438,6 +468,19 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Error = "empty reference"
 		payload.Kind = "task"
 		payload.Query = empty.Query
+		return payload
+	}
+
+	var closedTitle *closedTitleError
+	if errors.As(err, &closedTitle) {
+		payload.Error = "already closed"
+		if closedTitle.trashed() {
+			payload.Error = "trashed"
+		}
+		payload.Kind = kindWord(closedTitle.Task.Type)
+		payload.Query = closedTitle.Query
+		payload.UUID = closedTitle.Task.UUID
+		payload.Title = closedTitle.Task.Title
 		return payload
 	}
 

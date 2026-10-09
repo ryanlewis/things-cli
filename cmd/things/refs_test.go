@@ -14,23 +14,45 @@ import (
 )
 
 // An exact title on a closed or trashed row wins over a substring match on an
-// open one: the write is refused (or noted) on the row the title names, and
-// the open twin whose title merely contains it is left alone. Only an open
-// row with the same exact title beats it.
+// open one: the write is refused, non-zero, naming the most recent row with
+// that title, and the open twin whose title merely contains it is left alone.
+// Only an open row with the same exact title beats it.
 func TestExactTitleOnClosedRowBeatsSubstring(t *testing.T) {
 	cases := []struct {
 		name  string
 		seed  func(fx *dbtest.Fixture)
 		args  []string
-		token string // "" means exit 0 with nothing sent
+		token string
 		uuid  string // the row the refusal names
+		count string // the count the message gives, if several
 	}{
 		{
 			name: "completed exact title, complete",
 			seed: func(fx *dbtest.Fixture) {
 				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
 			},
-			args: []string{"complete", "zz base"},
+			args:  []string{"complete", "zz base"},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "completed exact title, edit",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+			},
+			args:  []string{"edit", "zz base", "--when", "tomorrow"},
+			token: "already closed",
+			uuid:  "zz-base",
+		},
+		{
+			name: "completed exact-case title beside an open case variant",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+				fx.Todo("zz-upper", "ZZ BASE", 21, dbtest.Anytime())
+			},
+			args:  []string{"complete", "zz base"},
+			token: "already closed",
+			uuid:  "zz-base",
 		},
 		{
 			name: "completed exact title, cancel",
@@ -90,13 +112,27 @@ func TestExactTitleOnClosedRowBeatsSubstring(t *testing.T) {
 			uuid:  "zz-base",
 		},
 		{
-			name: "two closed exact titles",
+			name: "several closed exact titles, the latest named",
 			seed: func(fx *dbtest.Fixture) {
 				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
-				fx.Todo("zz-base-2", "zz base", 21, dbtest.Cancelled(2))
+				fx.Todo("zz-base-2", "zz base", 21, dbtest.Cancelled(3))
+				fx.Todo("zz-base-3", "zz base", 22, dbtest.Completed(2))
 			},
 			args:  []string{"complete", "zz base"},
-			token: "ambiguous task",
+			token: "already closed",
+			uuid:  "zz-base-2",
+			count: "3 closed or trashed items",
+		},
+		{
+			name: "several closed exact titles, the latest trashed",
+			seed: func(fx *dbtest.Fixture) {
+				fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+				fx.Todo("zz-base-2", "zz base", 21, dbtest.Completed(5), dbtest.Trashed())
+			},
+			args:  []string{"cancel", "zz base"},
+			token: "trashed",
+			uuid:  "zz-base-2",
+			count: "2 closed or trashed items",
 		},
 	}
 	for _, tc := range cases {
@@ -109,21 +145,12 @@ func TestExactTitleOnClosedRowBeatsSubstring(t *testing.T) {
 			tc.seed(fx)
 			calls := stubExecDropping(t)
 
-			stdout, stderr, err := runStreams(t, database, tc.args...)
+			stdout, _, err := runStreams(t, database, tc.args...)
 			if *calls != 0 {
 				t.Errorf("issued %d write(s); the open twin %q must not be touched", *calls, "zz base extra")
 			}
-			if strings.Contains(stdout, "zz-extra") {
-				t.Errorf("stdout = %q names the open twin", stdout)
-			}
-			if tc.token == "" {
-				if err != nil {
-					t.Fatalf("run %v: %v, want exit 0 with a note", tc.args, err)
-				}
-				if !strings.Contains(stderr, "already completed") {
-					t.Errorf("stderr = %q, want an already-completed note", stderr)
-				}
-				return
+			if stdout != "" {
+				t.Errorf("stdout = %q, want nothing on a refusal", stdout)
 			}
 			if err == nil {
 				t.Fatalf("run %v: want a %q refusal", tc.args, tc.token)
@@ -132,13 +159,14 @@ func TestExactTitleOnClosedRowBeatsSubstring(t *testing.T) {
 			if payload.Error != tc.token {
 				t.Errorf("JSON error = %q, want %q (%s)", payload.Error, tc.token, raw)
 			}
-			if tc.uuid != "" && payload.UUID != tc.uuid {
+			if payload.UUID != tc.uuid {
 				t.Errorf("JSON uuid = %q, want %q (%s)", payload.UUID, tc.uuid, raw)
 			}
-			for _, m := range payload.Matches {
-				if m.UUID == "zz-extra" {
-					t.Errorf("candidates include the open twin (%s)", raw)
-				}
+			if !strings.Contains(err.Error(), "no open task with a similar title was touched") {
+				t.Errorf("message %q does not say the open task was left alone", err.Error())
+			}
+			if tc.count != "" && !strings.Contains(err.Error(), tc.count) {
+				t.Errorf("message %q does not give the count %q", err.Error(), tc.count)
 			}
 		})
 	}
@@ -172,6 +200,53 @@ func TestExactTitleOpenRowWins(t *testing.T) {
 	var nf *db.TaskNotFoundError
 	if got, err := resolveTask(&Deps{}, "passport", database); !errors.As(err, &nf) {
 		t.Errorf("resolveTask(fragment of a closed title) = %+v, %v, want not found", got, err)
+	}
+}
+
+// A uuid or a row number that names a completed item keeps the exit-0 note:
+// only the title path is refused.
+func TestClosedItemByUUIDOrRowStillNoted(t *testing.T) {
+	for _, ref := range []string{"zz-base", "1"} {
+		t.Run(ref, func(t *testing.T) {
+			fastVerify(t)
+			isolateHome(t)
+			database, sqlDB := seedWritable(t)
+			fx := dbtest.NewFixture(t, sqlDB)
+			fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+			fx.Todo("zz-extra", "zz base extra", 30, dbtest.Anytime())
+			seedCache(t, time.Minute, "things today", "zz-base")
+			calls := stubExecDropping(t)
+
+			_, stderr, err := runStreams(t, database, "complete", ref)
+			if err != nil || *calls != 0 {
+				t.Fatalf("complete %s = %v with %d write(s), want exit 0 and nothing sent", ref, err, *calls)
+			}
+			if !strings.Contains(stderr, "already completed") {
+				t.Errorf("stderr = %q, want an already-completed note", stderr)
+			}
+		})
+	}
+}
+
+// `show` on an exact title that several closed rows share offers them as
+// candidates, and never the open row whose title contains it.
+func TestShowExactTitleOnSeveralClosedRows(t *testing.T) {
+	isolateHome(t)
+	database, sqlDB := seedWritable(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("zz-base", "zz base", 20, dbtest.Completed(1))
+	fx.Todo("zz-base-2", "zz base", 21, dbtest.Trashed())
+	fx.Todo("zz-extra", "zz base extra", 30, dbtest.Anytime())
+
+	_, _, err := runStreams(t, database, "show", "zz base")
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "ambiguous task" || len(payload.Matches) != 2 {
+		t.Fatalf("show = %s, want the two closed rows as candidates", raw)
+	}
+	for _, m := range payload.Matches {
+		if m.UUID == "zz-extra" {
+			t.Errorf("candidates include the open twin (%s)", raw)
+		}
 	}
 }
 
