@@ -526,7 +526,8 @@ instead of assuming:
   without its completion date: set the date in Things rather than import
   it again. One with reason `misfiled` did appear, but not where its
   `when` puts it, and `landed` says where it is: move it with `things
-  edit` rather than import it again. A created item with reason `when`
+  edit` (`things project edit` for a project) rather than import it
+  again. A created item with reason `when`
   (exit 0) has a `when` phrase Things did not understand, so it has no
   start date.
   If Things is often closed, the first add after it launches can take

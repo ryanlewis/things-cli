@@ -1308,3 +1308,45 @@ func TestImportChecksWhen(t *testing.T) {
 		})
 	}
 }
+
+// A to-do in the items of a project the payload completes or cancels is not
+// checked against its when, as a closed item is not: Things was not measured
+// filing one. In an open project the same row is misfiled.
+func TestImportSkipsWhenInClosedProject(t *testing.T) {
+	for _, tc := range []struct {
+		name, closed string
+		misfiled     bool
+	}{
+		{"completed", `"completed":true,`, false},
+		{"canceled", `"canceled":true,`, false},
+		{"open", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			project := createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject}
+			if tc.closed != "" {
+				project.extra = "status = 3"
+			}
+			stubExecAdding(t, sqlDB, project,
+				createdRow{uuid: "new-1", title: "Book venue", extra: `project = 'new-p', start = 1`})
+			payload := `[{"type":"project","attributes":{"title":"Launch",` + tc.closed + `"items":[
+			  {"type":"to-do","attributes":{"title":"Book venue","when":"today"}}
+			]}}]`
+			out, _, err := runImportOut(t, database, payload, "--json")
+			if tc.misfiled {
+				var verr *importVerifyError
+				if !errors.As(err, &verr) || verr.created[1].Reason != whenMisfiled {
+					t.Fatalf("err = %v, want [0].attributes.items[0] misfiled", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("import: %v", err)
+			}
+			if got := decodeCreated(t, out); len(got) != 2 || !got[0].Confirmed || !got[1].Confirmed {
+				t.Errorf("got %+v, want both confirmed", got)
+			}
+		})
+	}
+}
