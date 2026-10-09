@@ -123,6 +123,9 @@ type importTo struct {
 	areaID, area                     string
 	parentID, parentTitle            string
 	nested                           bool
+	// parentClosed is set on a to-do in the items of a project the payload
+	// completes or cancels.
+	parentClosed bool
 	// The id attributes win over the titles even when empty, so whether
 	// the payload gives each one at all matters. A null one counts as not
 	// given, as it does to Things.
@@ -565,6 +568,9 @@ func importCreates(payload []any) []importCreate {
 			} else {
 				parent.parentTitle, _ = attrs["title"].(string)
 			}
+			completed, _ := attrs["completed"].(bool)
+			canceled, _ := attrs["canceled"].(bool)
+			parent.parentClosed = completed || canceled
 			items, _ := attrs["items"].([]any)
 			for i := range items {
 				parents[fmt.Sprintf("%s.attributes.items[%d]", path, i)] = parent
@@ -1469,10 +1475,10 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 	// cannot see. Every created item's verdict goes in with them, since the
 	// success list is not printed beside an error.
 	if len(failures) > 0 || slices.ContainsFunc(created, importCreated.fails) {
+		things := strings.Join(append([]string{"things"}, globalFlags(d)...), " ")
 		return &importVerifyError{
 			items: failures, total: total, created: created,
-			search: strings.Join(append(append([]string{"things"}, globalFlags(d)...), "search"), " "),
-			things: strings.Join(append([]string{"things"}, globalFlags(d)...), " "),
+			search: things + " search", things: things,
 		}
 	}
 	return printImportCreated(d, created)
@@ -1764,13 +1770,14 @@ func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate,
 // keyword or date that did not land is "misfiled", and a free phrase that
 // left the item with no start date is "when". Things files a to-do whose
 // `when` it applies with a deadline already past in the Inbox, measured on
-// 9 Oct 2026, and the item still shows in Today by its deadline, so only the
-// read-back can tell. An item the payload completes or cancels is not
-// checked: Things was not measured filing a closed item by its when.
+// 9 Oct 2026, and nothing in the import says so, so only the read-back can
+// tell. An item the payload completes or cancels is not checked, nor one in
+// the items of a project it completes or cancels: Things was not measured
+// filing a closed item by its when.
 func checkWhens(out []importCreated, creates []importCreate, found map[createdWant][]model.Task, sent time.Time) {
 	now := clock.Now()
 	for i, c := range creates {
-		if !out[i].Confirmed || c.closed || strings.TrimSpace(c.when) == "" {
+		if !out[i].Confirmed || c.closed || c.to.parentClosed || strings.TrimSpace(c.when) == "" {
 			continue
 		}
 		idx := slices.IndexFunc(found[c.want()], func(t model.Task) bool { return t.UUID == out[i].UUID })

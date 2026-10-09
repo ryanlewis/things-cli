@@ -1097,12 +1097,13 @@ an unconfirmed `add` does, and no `uuid` unless the reason is
   case: Things files it in the Inbox with no start date. It carries its
   `uuid` and `landed`, where Things filed it. The import exits non-zero
   with `import partially applied`, and under `--json` the item is in
-  `items` with its `id` and `landed`. Move it with `things edit` rather
-  than importing it again.
+  `items` with its `id` and `landed`. Move it with `things edit` (`things
+  project edit` for a project) rather than importing it again. An item the
+  payload completes or cancels, or one inside a project it completes or
+  cancels, is not checked against its `when`.
 - `when`: the item's `when` is a free phrase Things did not understand, so
   the new item has no start date. It carries its `uuid` and `landed`, and
-  the import exits 0, as `add` does with such a `--when`. An item the
-  payload completes or cancels is not checked against its `when`.
+  the import exits 0, as `add` does with such a `--when`.
 
 The first four, and `when`, exit 0 with the list printed. Any `not-found` item, or a
 `shares-dated-title` item with too few new items to account for it, makes
