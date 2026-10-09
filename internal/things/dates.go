@@ -87,11 +87,24 @@ func WhenDateOrTime(v string) bool {
 	return whenClockShape.MatchString(v)
 }
 
+// ImpossibleWhenError is the error NormalizeWhen returns for a value shaped
+// like a date or time that names none (checkWhenShape), so a caller with
+// checks of its own for those shapes can tell it apart with errors.As.
+type ImpossibleWhenError struct{ msg string }
+
+func (e *ImpossibleWhenError) Error() string { return e.msg }
+
+func impossibleWhen(format string, args ...any) error {
+	return &ImpossibleWhenError{msg: fmt.Sprintf(format, args...)}
+}
+
 // checkWhenShape refuses a value shaped like a date or a time of day that
-// names none: a month or day that does not exist, or an hour or minute out
-// of range. Things cannot read such a value either, and drops it without a
-// word. Any other value passes, English phrases included, since which of
-// those Things understands is not known here.
+// names none: a month or day that does not exist, an hour or minute out of
+// range, or a date followed by T that is not an RFC3339 timestamp. Measured
+// in Things 3 on 9 Oct 2026, Things saves such a value as something else
+// with no warning (2026-13-01 lands in Today). Any other value passes,
+// English phrases included, since which of those Things understands is not
+// known here.
 func checkWhenShape(v string) error {
 	clock := v
 	if m := whenDateShape.FindStringSubmatch(v); m != nil {
@@ -99,11 +112,11 @@ func checkWhenShape(v string) error {
 		month, _ := strconv.Atoi(m[2])
 		day, _ := strconv.Atoi(m[3])
 		if month < 1 || month > 12 || day < 1 || day > time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
-			return fmt.Errorf("invalid --when value %q: %s-%s-%s is not a date (use YYYY-MM-DD)", v, m[1], m[2], m[3])
+			return impossibleWhen("invalid --when value %q: %s-%s-%s is not a date (use YYYY-MM-DD)", v, m[1], m[2], m[3])
 		}
 		if strings.HasPrefix(m[4], "T") {
 			// parseISO8601 has turned it down already.
-			return fmt.Errorf("invalid --when value %q: not an RFC3339 timestamp (use YYYY-MM-DDTHH:MM:SSZ or an offset such as +01:00)", v)
+			return impossibleWhen("invalid --when value %q: not an RFC3339 timestamp (use YYYY-MM-DDTHH:MM:SSZ or an offset such as +01:00)", v)
 		}
 		rest, ok := strings.CutPrefix(m[4], "@")
 		if !ok {
@@ -122,7 +135,7 @@ func checkWhenShape(v string) error {
 		maxHour, minHour = 12, 1
 	}
 	if hour < minHour || hour > maxHour || minute > 59 {
-		return fmt.Errorf("invalid --when value %q: %s is not a time of day (use HH:MM)", v, clock)
+		return impossibleWhen("invalid --when value %q: %s is not a time of day (use HH:MM)", v, clock)
 	}
 	return nil
 }

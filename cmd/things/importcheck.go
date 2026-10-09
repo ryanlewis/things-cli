@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -718,7 +719,10 @@ func checkScheduleValue(name, value string) string {
 	if name == "deadline" {
 		normalize = things.NormalizeDeadline
 	}
-	if _, err := normalize(v); err != nil {
+	// An impossible date or time is left to the checks below, which name
+	// what is wrong with it in the payload's own terms.
+	var impossible *things.ImpossibleWhenError
+	if _, err := normalize(v); err != nil && !errors.As(err, &impossible) {
 		// The message names the add flag; the payload has no flags.
 		return strings.ReplaceAll(err.Error(), "--", "")
 	}
