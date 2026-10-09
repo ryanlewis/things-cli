@@ -431,6 +431,7 @@ func TestImportTooManyItemsWithBadItems(t *testing.T) {
 // only one new item, one of them may be missing, and the import still fails,
 // saying the item may exist.
 func TestImportSharesDatedTitleWithBothPresent(t *testing.T) {
+	pinWallClock(t)
 	payload := `[
 	  {"type":"to-do","attributes":{"title":"Weekly review","creation-date":"` + recentCreationDate() + `"}},
 	  {"type":"to-do","attributes":{"title":"Weekly review"}}
@@ -566,6 +567,7 @@ func TestSharedRowsFollowsChains(t *testing.T) {
 // among the new items read back, so it does not count as a claimant: the
 // undated item's row is enough, and the import exits 0.
 func TestImportSharesDatedTitleDatedBeforeWindow(t *testing.T) {
+	pinWallClock(t)
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
 	datedAt := time.Now().Add(-30 * time.Second).UTC().Truncate(time.Second)
@@ -589,6 +591,7 @@ func TestImportSharesDatedTitleDatedBeforeWindow(t *testing.T) {
 // A failing shares-dated-title item carries present false in the error's
 // items too, not only in created.
 func TestImportSharesDatedTitleErrorItemCarriesPresent(t *testing.T) {
+	pinWallClock(t)
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
 	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Weekly review"})
