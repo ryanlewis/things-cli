@@ -1,7 +1,6 @@
 package db
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -22,14 +21,9 @@ func TestTodayListsEveningRowsLast(t *testing.T) {
 	fx.Todo("day-loose", "Day loose", 4, anytimeOn(today), todayIndexRef(today), todayIndex(100))
 	fx.Todo("day-area", "Day in area", 5, anytimeOn(today), todayIndexRef(today), todayIndex(200), inArea("ar"))
 
-	got, err := d.ListTasks(ViewToday, TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewToday, TaskFilter{})
 	want := []string{"day-loose", "day-area", "eve-loose", "eve-proj", "eve-area"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("today order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "today")
 }
 
 // Project groups in Today follow the project's schedule before its index: an
@@ -57,14 +51,9 @@ func TestTodayOrdersProjectGroupsBySchedule(t *testing.T) {
 	fx.Todo("c-soon", "S", 0, anytimeOn(today), todayIndexRef(today), todayIndex(4), inProject("p-soon"))
 	fx.Todo("c-anytime", "A", 0, anytimeOn(today), todayIndexRef(today), todayIndex(5), inProject("p-anytime"))
 
-	got, err := d.ListTasks(ViewToday, TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewToday, TaskFilter{})
 	want := []string{"c-anytime", "c-soon", "c-later", "c-someday-a", "c-someday-b"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("today order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "today")
 }
 
 // Anytime orders a project's to-dos the way the project's page does: those
@@ -81,14 +70,9 @@ func TestAnytimeOrdersProjectTodosByHeading(t *testing.T) {
 	fx.Todo("plain-a", "Plain a", 0, anytime(), inProject("proj"))
 	fx.Todo("plain-b", "Plain b", 398, anytime(), inProject("proj"))
 
-	got, err := d.ListTasks(ViewAnytime, TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewAnytime, TaskFilter{})
 	want := []string{"plain-a", "plain-b", "h1-a", "h1-b", "h2-a"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("anytime order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "anytime")
 }
 
 // Someday opens each group with its project rows, then the loose to-dos.
@@ -104,14 +88,9 @@ func TestSomedayListsProjectRowsFirst(t *testing.T) {
 	fx.Todo("ta", "TA", -37852, someday(), inArea("ar"))
 	fx.Project("pa", "PA", 0, someday(), inArea("ar"))
 
-	got, err := d.ListTasks(ViewSomeday, TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewSomeday, TaskFilter{})
 	want := []string{"p1", "p2", "t1", "t2", "pa", "ta"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("someday order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "someday")
 }
 
 // An area's listing puts its open projects first, then its loose to-dos in
@@ -140,19 +119,14 @@ func TestAreaListingOrdersProjectsThenLooseThenChildren(t *testing.T) {
 	fx.Todo("c2", "Child of P2", -999, anytime(), inProject("p2"))
 	fx.Todo("c1", "Child of P1", 0, anytime(), inProject("p1"))
 
-	got, err := d.ListTasks(ViewProject, TaskFilter{Area: "Personal"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewProject, TaskFilter{Area: "Personal"})
 	want := []string{
 		"p1", "p2", "loose-1", "loose-2",
 		"p-sched", "loose-sched", "loose-later",
 		"p-someday", "loose-someday",
 		"c1", "c2",
 	}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("--area order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "--area")
 }
 
 // A --tag sweep groups like the lists: rows filed in no area first, then each
@@ -178,14 +152,9 @@ func TestTagListingGroupsLikeTheLists(t *testing.T) {
 	fx.Tagged("p-loose", "tg")
 	fx.Tagged("unfiled", "tg")
 
-	got, err := d.ListTasks(ViewProject, TaskFilter{Tag: "Work"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewProject, TaskFilter{Tag: "Work"})
 	want := []string{"unfiled", "p-loose", "w-proj", "w-loose", "w-child"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("--tag order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "--tag")
 }
 
 // Trash lists what was thrown away most recently first. Measured on 9 Oct
@@ -200,14 +169,9 @@ func TestTrashOrdersByModificationDateNewestFirst(t *testing.T) {
 	mustExec(t, d, `UPDATE TMTask SET userModificationDate = ? WHERE uuid = 'mid'`, 1791100000.0)
 	mustExec(t, d, `UPDATE TMTask SET userModificationDate = ? WHERE uuid = 'new'`, 1791200000.0)
 
-	got, err := d.ListTasks(ViewTrash, TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewTrash, TaskFilter{})
 	want := []string{"new", "mid", "old"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("trash order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "trash")
 }
 
 // A project in Today only by its deadline takes its place by todayIndex, like
@@ -224,12 +188,7 @@ func TestTodayPlacesDeadlineDueProjectByTodayIndex(t *testing.T) {
 	fx.Project("due", "Due today", -4192, anytime(), deadline(today), todayIndexRef(today), todayIndex(-4544))
 	fx.Todo("after", "After", 5847, anytimeOn(today), todayIndexRef(today), todayIndex(5334))
 
-	got, err := d.ListTasks(ViewToday, TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, ViewToday, TaskFilter{})
 	want := []string{"first", "second", "due", "after"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("today order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "today")
 }

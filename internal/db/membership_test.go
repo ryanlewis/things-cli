@@ -13,10 +13,7 @@ import (
 // listSet runs a view and returns its uuids, failing the test on error.
 func listSet(t *testing.T, d *DB, view string, opts TaskFilter) []string {
 	t.Helper()
-	got, err := d.ListTasks(view, opts)
-	if err != nil {
-		t.Fatalf("%s: %v", view, err)
-	}
+	got := mustList(t, d, view, opts)
 	return uuidsOf(got)
 }
 
@@ -195,9 +192,7 @@ func TestSearchSkipsTrashedProjectChildren(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"t-live", "t-loose"}; !sameSet(uuidsOf(got), want) {
-		t.Errorf("search = %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, []string{"t-live", "t-loose"}, "search")
 }
 
 // The other list views already leave a trashed project's to-dos out, through

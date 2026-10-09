@@ -158,10 +158,7 @@ func TestListTasksViews(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
-			got, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatalf("ListTasks(%q): %v", tc.view, err)
-			}
+			got := mustList(t, d, tc.view, TaskFilter{})
 			gotUUIDs := uuidsOf(got)
 			if !sameSet(gotUUIDs, tc.want) {
 				t.Errorf("view %q: got %v, want %v", tc.view, gotUUIDs, tc.want)
@@ -213,10 +210,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 		today, today, stopToday)
 
 	// OpenOnly: completed/cancelled items are excluded outright.
-	got, err := d.ListTasks("today", TaskFilter{OpenOnly: true})
-	if err != nil {
-		t.Fatalf("ListTasks today: %v", err)
-	}
+	got := mustList(t, d, "today", TaskFilter{OpenOnly: true})
 	if !sameSet([]string{"t-today", "t-evening"}, uuidsOf(got)) {
 		t.Fatalf("OpenOnly: expected {t-today, t-evening}, got %v", uuidsOf(got))
 	}
@@ -224,10 +218,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	// Without OpenOnly (pre-log): the items closed today reappear. The one
 	// closed yesterday does not — Things filed it into the Logbook when the
 	// day rolled over, whatever manualLogDate says (issue #230).
-	got, err = d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks today --include-completed: %v", err)
-	}
+	got = mustList(t, d, "today", TaskFilter{})
 	want := []string{"t-today", "t-evening", "t-just-done", "t-cancelled-today"}
 	if !sameSet(want, uuidsOf(got)) {
 		t.Fatalf("pre-log: expected %v, got %v", want, uuidsOf(got))
@@ -237,10 +228,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	// neither of the two closed today. t-cancelled carries no stopDate at all,
 	// so it also proves the NULL guard keeps such a row in the Logbook rather
 	// than letting the negated clause drop it out of both lists.
-	logged, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks logbook: %v", err)
-	}
+	logged := mustList(t, d, "logbook", TaskFilter{})
 	wantLogged := []string{"t-done", "t-cancelled", "t-done-yesterday"}
 	if !sameSet(wantLogged, uuidsOf(logged)) {
 		t.Fatalf("pre-log logbook: expected %v, got %v", wantLogged, uuidsOf(logged))
@@ -252,19 +240,13 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 
-	got, err = d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks today --include-completed: %v", err)
-	}
+	got = mustList(t, d, "today", TaskFilter{})
 	if !sameSet([]string{"t-today", "t-evening"}, uuidsOf(got)) {
 		t.Fatalf("post-log: expected {t-today, t-evening}, got %v", uuidsOf(got))
 	}
 
 	// The two rows that left Today arrive in the Logbook in the same move.
-	logged, err = d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks logbook: %v", err)
-	}
+	logged = mustList(t, d, "logbook", TaskFilter{})
 	wantLogged = []string{"t-done", "t-cancelled", "t-done-yesterday", "t-just-done", "t-cancelled-today"}
 	if !sameSet(wantLogged, uuidsOf(logged)) {
 		t.Fatalf("post-log logbook: expected %v, got %v", wantLogged, uuidsOf(logged))
@@ -303,14 +285,8 @@ func TestTodayAndLogbookPartitionClosedItems(t *testing.T) {
 				mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
 			}
 
-			inToday, err := d.ListTasks("today", TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			inLogbook, err := d.ListTasks("logbook", TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			inToday := mustList(t, d, "today", TaskFilter{})
+			inLogbook := mustList(t, d, "logbook", TaskFilter{})
 			if len(inToday)+len(inLogbook) != 1 {
 				t.Errorf("today=%v logbook=%v: want the row in exactly one list", uuidsOf(inToday), uuidsOf(inLogbook))
 			}
@@ -361,14 +337,8 @@ func TestHeldInPlaceFollowsLogSetting(t *testing.T) {
 			mustExec(t, d, `INSERT INTO TMSettings (uuid, logInterval, manualLogDate) VALUES ('s', ?, ?)`,
 				tc.logInterval, tc.manualLog)
 
-			held, err := d.ListTasks("anytime", TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			logged, err := d.ListTasks("logbook", TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			held := mustList(t, d, "anytime", TaskFilter{})
+			logged := mustList(t, d, "logbook", TaskFilter{})
 			if len(held)+len(logged) != 1 {
 				t.Errorf("anytime=%v logbook=%v: want the row in exactly one list", uuidsOf(held), uuidsOf(logged))
 			}
@@ -441,34 +411,22 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 			fx.Area("area", "Area", 1)
 			tc.build(fx)
 
-			logged, err := d.ListTasks("logbook", TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			logged := mustList(t, d, "logbook", TaskFilter{})
 			if slices.Contains(uuidsOf(logged), "row") {
 				t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
 			}
 			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-				got, err := d.ListTasks(view, TaskFilter{})
-				if err != nil {
-					t.Fatal(err)
-				}
+				got := mustList(t, d, view, TaskFilter{})
 				if gotHeld, want := slices.Contains(uuidsOf(got), "row"), slices.Contains(tc.heldBy, view); gotHeld != want {
 					t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
 				}
 			}
-			byArea, err := d.ListTasks("project", TaskFilter{Area: "area"})
-			if err != nil {
-				t.Fatal(err)
-			}
+			byArea := mustList(t, d, "project", TaskFilter{Area: "area"})
 			if got := slices.Contains(uuidsOf(byArea), "row"); got != tc.inArea {
 				t.Errorf("--area --include-completed = %v, want listed: %v", uuidsOf(byArea), tc.inArea)
 			}
 			if tc.inProj {
-				byProj, err := d.ListTasks("project", TaskFilter{Project: "proj"})
-				if err != nil {
-					t.Fatal(err)
-				}
+				byProj := mustList(t, d, "project", TaskFilter{Project: "proj"})
 				if !slices.Contains(uuidsOf(byProj), "row") {
 					t.Errorf("--project --include-completed = %v, want it listed", uuidsOf(byProj))
 				}
@@ -538,10 +496,7 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 				VALUES (?, 'Closed', 0, 3, 0, ?, ?, ?, ?, ?, 1)`,
 				tc.uuid, tc.start, tc.startBucket, tc.startDate, tc.deadline, stopNow)
 
-			logged, err := d.ListTasks("logbook", TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			logged := mustList(t, d, "logbook", TaskFilter{})
 			wantLogged := len(tc.heldBy) == 0
 			if gotLogged := len(logged) == 1; gotLogged != wantLogged {
 				t.Errorf("logbook = %v, want held there: %v", uuidsOf(logged), wantLogged)
@@ -549,10 +504,7 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 
 			held := 0
 			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-				got, err := d.ListTasks(view, TaskFilter{})
-				if err != nil {
-					t.Fatal(err)
-				}
+				got := mustList(t, d, view, TaskFilter{})
 				want := slices.Contains(tc.heldBy, view)
 				if gotHeld := len(got) == 1; gotHeld != want {
 					t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
@@ -579,18 +531,12 @@ func TestClosedSuppressedInboxToDoStaysInInbox(t *testing.T) {
 		VALUES ('t-closed', 'Closed', 0, 3, 0, 0, 0, ?, ?, ?, 1)`,
 		earlier, earlier, model.TimeToUnix(testNow))
 
-	logged, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	logged := mustList(t, d, "logbook", TaskFilter{})
 	if len(logged) != 0 {
 		t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
 	}
 	for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-		got, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		got := mustList(t, d, view, TaskFilter{})
 		if want := view == "inbox"; (len(got) == 1) != want {
 			t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
 		}
@@ -610,48 +556,31 @@ func TestClosedTodayUnderTrashedProjectIsReachable(t *testing.T) {
 		VALUES ('t-closed', 'Closed', 0, 3, 0, 1, 0, ?, ?, 'proj-binned', 2)`,
 		today, model.TimeToUnix(testNow))
 
-	inToday, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	inToday := mustList(t, d, "today", TaskFilter{})
 	if len(inToday) != 0 {
 		t.Errorf("today = %v, want empty — the parent is trashed", uuidsOf(inToday))
 	}
 	// It is not in the logbook either: issue #229 folds a trashed project's
 	// to-dos into the project's Trash row. What issue #230 needs is that the
 	// row has somewhere to be, and naming the project is where.
-	logged, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	logged := mustList(t, d, "logbook", TaskFilter{})
 	if len(logged) != 0 {
 		t.Errorf("logbook = %v, want empty — the parent is trashed", uuidsOf(logged))
 	}
-	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-binned"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet([]string{"t-closed"}, uuidsOf(contents)) {
-		t.Errorf("--project proj-binned = %v, want {t-closed}", uuidsOf(contents))
-	}
+	contents := mustList(t, d, "project", TaskFilter{Project: "proj-binned"})
+	assertSet(t, contents, []string{"t-closed"}, "--project proj-binned")
 }
 
 func TestListTasksProjectFilter(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	byUUID, err := d.ListTasks("project", TaskFilter{Project: "proj-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byUUID := mustList(t, d, "project", TaskFilter{Project: "proj-1"})
 	if len(byUUID) != 1 || byUUID[0].UUID != "t-in-proj" {
 		t.Errorf("project uuid filter: got %+v", uuidsOf(byUUID))
 	}
 
-	byTitle, err := d.ListTasks("project", TaskFilter{Project: "Ship MVP"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byTitle := mustList(t, d, "project", TaskFilter{Project: "Ship MVP"})
 	if len(byTitle) != 1 || byTitle[0].UUID != "t-in-proj" {
 		t.Errorf("project title filter: got %+v", uuidsOf(byTitle))
 	}
@@ -663,10 +592,7 @@ func TestListTasksAreaFilter(t *testing.T) {
 
 	// t-in-proj inherits area-work via its project (pa.uuid join), and proj-1
 	// is a row in its own right since issue #222.
-	tasks, err := d.ListTasks("project", TaskFilter{Area: "area-work"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tasks := mustList(t, d, "project", TaskFilter{Area: "area-work"})
 	if !sameSet(uuidsOf(tasks), []string{"proj-1", "t-in-proj"}) {
 		t.Errorf("area filter: got %+v, want [proj-1 t-in-proj]", uuidsOf(tasks))
 	}
@@ -676,19 +602,13 @@ func TestListTasksTagFilter(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	tasks, err := d.ListTasks("today", TaskFilter{Tag: "urgent"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tasks := mustList(t, d, "today", TaskFilter{Tag: "urgent"})
 	if len(tasks) != 1 || tasks[0].UUID != "t-today" {
 		t.Errorf("tag filter: got %+v", uuidsOf(tasks))
 	}
 
 	// Non-matching tag
-	none, err := d.ListTasks("today", TaskFilter{Tag: "does-not-exist"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	none := mustList(t, d, "today", TaskFilter{Tag: "does-not-exist"})
 	if len(none) != 0 {
 		t.Errorf("expected empty, got %+v", uuidsOf(none))
 	}
@@ -728,10 +648,7 @@ func TestListTasksDateFilters(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := d.ListTasks("upcoming", tc.filter)
-			if err != nil {
-				t.Fatalf("ListTasks: %v", err)
-			}
+			got := mustList(t, d, "upcoming", tc.filter)
 			if !sameSet(uuidsOf(got), tc.want) {
 				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
 			}
@@ -753,13 +670,8 @@ func TestListTasksDeadlinesDateFilters(t *testing.T) {
 		d1, d2)
 
 	on := model.ThingsDate(d1)
-	got, err := d.ListTasks("deadlines", TaskFilter{On: &on})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
-	if !sameSet(uuidsOf(got), []string{"dl-1"}) {
-		t.Errorf("deadlines --on: got %v", uuidsOf(got))
-	}
+	got := mustList(t, d, "deadlines", TaskFilter{On: &on})
+	assertSet(t, got, []string{"dl-1"}, "deadlines --on")
 }
 
 // DateFilterableView reads the view table. Pin it against the answer spelled
@@ -792,10 +704,7 @@ func TestTagGroupConcatDelimiter(t *testing.T) {
 
 	// Filter to t-today specifically; today now also includes the Evening
 	// bucket (t-evening), so don't assert the row count of the whole view.
-	tasks, err := d.ListTasks("today", TaskFilter{Tag: "urgent"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tasks := mustList(t, d, "today", TaskFilter{Tag: "urgent"})
 	if len(tasks) != 1 {
 		t.Fatalf("got %d, want 1", len(tasks))
 	}
@@ -815,18 +724,12 @@ func TestGetTaskByUUID(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	got, err := d.GetTaskByUUID("t-today")
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustGetByUUID(t, d, "t-today")
 	if got == nil || got.Title != "Today task" {
 		t.Errorf("got %+v", got)
 	}
 
-	missing, err := d.GetTaskByUUID("nope")
-	if err != nil {
-		t.Fatal(err)
-	}
+	missing := mustGetByUUID(t, d, "nope")
 	if missing != nil {
 		t.Errorf("expected nil, got %+v", missing)
 	}
@@ -841,10 +744,7 @@ func TestGetTaskByUUIDReachesTrashedItem(t *testing.T) {
 	d, fx := newFixture(t)
 	fx.Todo("t-bin", "Binned errand", 1, dbtest.Trashed())
 
-	got, err := d.GetTaskByUUID("t-bin")
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustGetByUUID(t, d, "t-bin")
 	if got == nil || !got.Trashed {
 		t.Fatalf("GetTaskByUUID(trashed) = %+v, want the item with Trashed set", got)
 	}
@@ -984,10 +884,7 @@ func TestGetTaskExactTitle(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	got, err := d.GetTask("Inbox task")
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustGet(t, d, "Inbox task")
 	if got.UUID != "t-inbox" {
 		t.Errorf("got %q, want t-inbox", got.UUID)
 	}
@@ -998,10 +895,7 @@ func TestGetTaskUUIDFirst(t *testing.T) {
 	seedTasks(t, d)
 
 	// UUID match should take precedence over title fallback.
-	got, err := d.GetTask("t-today")
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustGet(t, d, "t-today")
 	if got.UUID != "t-today" {
 		t.Errorf("got %q, want t-today", got.UUID)
 	}
@@ -1011,10 +905,7 @@ func TestGetTaskLikeMatchSingle(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	got, err := d.GetTask("Someday")
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustGet(t, d, "Someday")
 	if got.UUID != "t-someday" {
 		t.Errorf("got %q", got.UUID)
 	}
@@ -1050,10 +941,7 @@ func TestLookupMatchesTitlesLiterally(t *testing.T) {
 	// matched the same pattern and the lookup was ambiguous.
 	mustExec(t, d, `INSERT INTO TMTask (uuid, title, type, status, trashed, "index") VALUES
 		('t-under', '20_30 review', 0, 0, 0, 4)`)
-	got, err := d.GetTask("20_30 rev")
-	if err != nil {
-		t.Fatalf("GetTask(\"20_30 rev\"): %v", err)
-	}
+	got := mustGet(t, d, "20_30 rev")
 	if got.UUID != "t-under" {
 		t.Errorf("got %q, want t-under", got.UUID)
 	}
@@ -1064,9 +952,7 @@ func TestLookupMatchesTitlesLiterally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sameSet(uuidsOf(matches), []string{"t-pct"}) {
-		t.Errorf("FindTasksByTitle(\"50%%\"): got %v, want [t-pct]", uuidsOf(matches))
-	}
+	assertSet(t, matches, []string{"t-pct"}, "FindTasksByTitle(\"50%%\")")
 
 	// Substring matching itself is unchanged: the wrapping wildcards are the
 	// CLI's, not the caller's.
@@ -1074,9 +960,7 @@ func TestLookupMatchesTitlesLiterally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sameSet(uuidsOf(matches), []string{"t-under", "t-colon"}) {
-		t.Errorf("FindTasksByTitle(\"review\"): got %v, want both reviews", uuidsOf(matches))
-	}
+	assertSet(t, matches, []string{"t-under", "t-colon"}, "FindTasksByTitle(\"review\")")
 
 	// Still case-insensitive, as it has always been.
 	matches, err = d.FindTasksByTitle("REVIEW")
@@ -1105,17 +989,13 @@ func TestSearchMatchesLiterally(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The note match is wanted — search covers notes — but s-fifty is not.
-	if !sameSet(uuidsOf(pct), []string{"s-pct", "s-note"}) {
-		t.Errorf("search 50%%: got %v, want [s-pct s-note]", uuidsOf(pct))
-	}
+	assertSet(t, pct, []string{"s-pct", "s-note"}, "search 50%%")
 
 	under, err := d.SearchTasks("a_b")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sameSet(uuidsOf(under), []string{"s-under"}) {
-		t.Errorf("search a_b: got %v, want [s-under]", uuidsOf(under))
-	}
+	assertSet(t, under, []string{"s-under"}, "search a_b")
 }
 
 func TestGetTaskAmbiguous(t *testing.T) {
@@ -1216,10 +1096,7 @@ func TestScanTaskFieldsPopulated(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	got, err := d.GetTaskByUUID("t-in-proj")
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustGetByUUID(t, d, "t-in-proj")
 	if got.ProjectUUID != "proj-1" || got.ProjectTitle != "Ship MVP" {
 		t.Errorf("project link: %+v", got)
 	}
@@ -1241,13 +1118,8 @@ func TestListTasksProjectFilterIncludesHeadingTasks(t *testing.T) {
 	fx.Todo("t-loose", "Loose task", 5, anytime())
 
 	for _, filter := range []string{"proj-h", "Ship v2"} {
-		got, err := d.ListTasks("project", TaskFilter{Project: filter})
-		if err != nil {
-			t.Fatalf("ListTasks(project, %q): %v", filter, err)
-		}
-		if !sameSet(uuidsOf(got), []string{"t-direct", "t-nested"}) {
-			t.Errorf("project filter %q: got %v, want [t-direct t-nested]", filter, uuidsOf(got))
-		}
+		got := mustList(t, d, "project", TaskFilter{Project: filter})
+		assertSet(t, got, []string{"t-direct", "t-nested"}, "project filter %q", filter)
 	}
 }
 
@@ -1264,14 +1136,9 @@ func TestListTasksAreaFilterIncludesHeadingTasks(t *testing.T) {
 	// Filed in no area at all, so the filter has to leave it out.
 	fx.Todo("t-loose", "Loose task", 5, anytime())
 
-	got, err := d.ListTasks("project", TaskFilter{Area: "Launch"})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Area: "Launch"})
 	// proj-h itself is in the area too, and lists as a row (issue #222).
-	if !sameSet(uuidsOf(got), []string{"proj-h", "t-direct", "t-nested"}) {
-		t.Errorf("area filter: got %v, want [proj-h t-direct t-nested]", uuidsOf(got))
-	}
+	assertSet(t, got, []string{"proj-h", "t-direct", "t-nested"}, "area filter")
 }
 
 // A heading-nested task reports its project in output, so it can't be mistaken
@@ -1283,10 +1150,7 @@ func TestHeadingTaskCarriesProject(t *testing.T) {
 	fx.Heading("head-1", "Phase one", 2, inProject("proj-h"))
 	fx.Todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 
-	task, err := d.GetTaskByUUID("t-nested")
-	if err != nil {
-		t.Fatalf("GetTaskByUUID: %v", err)
-	}
+	task := mustGetByUUID(t, d, "t-nested")
 	if task == nil {
 		t.Fatal("t-nested not found")
 	}
@@ -1312,21 +1176,13 @@ func TestListTasksProjectViewIsNotATodaySlice(t *testing.T) {
 	fx.Todo("t-direct", "Direct task", 3, anytimeOn(todayDate), inProject("proj-h"))
 	fx.Todo("t-nested", "Nested task", 4, anytime(), underHeading("head-1"))
 
-	today, err := d.ListTasks("today", TaskFilter{Project: "Ship v2"})
-	if err != nil {
-		t.Fatalf("ListTasks(today): %v", err)
-	}
+	today := mustList(t, d, "today", TaskFilter{Project: "Ship v2"})
 	if !sameSet(uuidsOf(today), []string{"t-direct"}) {
 		t.Fatalf("today slice: got %v, want [t-direct]", uuidsOf(today))
 	}
 
-	all, err := d.ListTasks("project", TaskFilter{Project: "Ship v2"})
-	if err != nil {
-		t.Fatalf("ListTasks(project): %v", err)
-	}
-	if !sameSet(uuidsOf(all), []string{"t-direct", "t-nested"}) {
-		t.Errorf("project view: got %v, want [t-direct t-nested]", uuidsOf(all))
-	}
+	all := mustList(t, d, "project", TaskFilter{Project: "Ship v2"})
+	assertSet(t, all, []string{"t-direct", "t-nested"}, "project view")
 }
 
 // Tags live on the task itself, but the tag filter still has to work on a
@@ -1342,13 +1198,8 @@ func TestListTasksTagFilterIncludesHeadingTasks(t *testing.T) {
 	fx.Todo("t-loose", "Loose task", 5, anytime())
 	fx.Tagged("t-nested", "tg-ship")
 
-	got, err := d.ListTasks("project", TaskFilter{Tag: "ship"})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
-	if !sameSet(uuidsOf(got), []string{"t-nested"}) {
-		t.Errorf("tag filter: got %v, want [t-nested]", uuidsOf(got))
-	}
+	got := mustList(t, d, "project", TaskFilter{Tag: "ship"})
+	assertSet(t, got, []string{"t-nested"}, "tag filter")
 }
 
 // The project view is the default for a bare --project/--area/--tag filter, so
@@ -1364,10 +1215,7 @@ func TestListTasksProjectViewExcludesTrashedProject(t *testing.T) {
 		('t-orphan', 'Child of trashed', 0, 0, 0, 1, 0, 'proj-gone', 1)`)
 	mustExec(t, d, `INSERT INTO TMTaskTag (tasks, tags) VALUES ('t-orphan', 'tg-u')`)
 
-	got, err := d.ListTasks("project", TaskFilter{Tag: "urgent"})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Tag: "urgent"})
 	if len(got) != 0 {
 		t.Errorf("got %v, want no tasks from a trashed project", uuidsOf(got))
 	}
@@ -1406,10 +1254,7 @@ func TestListTasksViewsExcludeTrashedProject(t *testing.T) {
 				(uuid, title, type, status, trashed, project, "index", `+tc.columns+`) VALUES
 				('t-orphan', 'Child of trashed', 0, 0, 0, 'proj-gone', 1, `+tc.values+`)`)
 
-			got, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatalf("ListTasks(%q): %v", tc.view, err)
-			}
+			got := mustList(t, d, tc.view, TaskFilter{})
 			if len(got) != 0 {
 				t.Errorf("view %q: got %v, want no tasks from a trashed project", tc.view, uuidsOf(got))
 			}
@@ -1431,10 +1276,7 @@ func TestListTasksExcludesTrashedProjectThroughHeading(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, heading, "index") VALUES
 		('t-orphan', 'Under the heading', 0, 0, 0, 1, 0, 'head-1', 1)`)
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(anytime): %v", err)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
 	if len(got) != 0 {
 		t.Errorf("got %v, want no heading-nested tasks from a trashed project", uuidsOf(got))
 	}
@@ -1464,26 +1306,16 @@ func TestTrashAndLogbookFoldTrashedProjectChildren(t *testing.T) {
 		{"trash", []string{"proj-gone"}},
 		{"logbook", nil},
 	} {
-		got, err := d.ListTasks(tc.view, TaskFilter{})
-		if err != nil {
-			t.Fatalf("ListTasks(%q): %v", tc.view, err)
-		}
-		if !sameSet(uuidsOf(got), tc.want) {
-			t.Errorf("view %q: got %v, want %v", tc.view, uuidsOf(got), tc.want)
-		}
+		got := mustList(t, d, tc.view, TaskFilter{})
+		assertSet(t, got, tc.want, "view %q", tc.view)
 	}
 
 	// The folded child is reachable by naming the project. The trashed child
 	// is not, and matches the app: asking Things for a trashed project's
 	// contents returns nothing for a row already in the Trash on its own
 	// account.
-	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-gone"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(contents), []string{"t-logged"}) {
-		t.Errorf("--project proj-gone: got %v, want [t-logged]", uuidsOf(contents))
-	}
+	contents := mustList(t, d, "project", TaskFilter{Project: "proj-gone"})
+	assertSet(t, contents, []string{"t-logged"}, "--project proj-gone")
 }
 
 // The app folds a closed project's to-dos into the project's own Logbook row
@@ -1507,24 +1339,14 @@ func TestLogbookFoldsClosedProjectChildren(t *testing.T) {
 	fx.Todo("binned-logged", "Logged", 8, anytime(), inProject("proj-binned"), completed(stop))
 	fx.Todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
-	logged, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	logged := mustList(t, d, "logbook", TaskFilter{})
 	// Only the closed project itself. Its completed and cancelled children are
 	// folded into it, and binned-logged is folded into the trashed project.
-	if !sameSet(uuidsOf(logged), []string{"proj-done"}) {
-		t.Errorf("logbook: got %v, want [proj-done]", uuidsOf(logged))
-	}
+	assertSet(t, logged, []string{"proj-done"}, "logbook")
 
-	binned, err := d.ListTasks("trash", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	binned := mustList(t, d, "trash", TaskFilter{})
 	// done-trashed keeps its Trash row even though its project is closed.
-	if !sameSet(uuidsOf(binned), []string{"proj-binned", "done-trashed"}) {
-		t.Errorf("trash: got %v, want [proj-binned done-trashed]", uuidsOf(binned))
-	}
+	assertSet(t, binned, []string{"proj-binned", "done-trashed"}, "trash")
 }
 
 // A to-do logged on an earlier day inside a project closed today and not
@@ -1544,15 +1366,10 @@ func TestLogbookListsLoggedChildrenOfUnloggedProject(t *testing.T) {
 	fx.Todo("unlogged-new", "Held child", 4, anytime(), inProject("proj-unlogged"), cancelled(stopToday))
 	fx.Todo("logged-old", "Folded child", 5, anytime(), inProject("proj-logged"), completed(stopEarlier))
 
-	got, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "logbook", TaskFilter{})
 	// proj-unlogged and unlogged-new are still held in place, not logged.
 	// logged-old folds into proj-logged as before.
-	if !sameSet(uuidsOf(got), []string{"proj-logged", "unlogged-old"}) {
-		t.Errorf("logbook: got %v, want [proj-logged unlogged-old]", uuidsOf(got))
-	}
+	assertSet(t, got, []string{"proj-logged", "unlogged-old"}, "logbook")
 }
 
 // A closed repeating project template is logged at once, so it still folds
@@ -1571,13 +1388,8 @@ func TestLogbookFoldsClosedTemplateProjectChildren(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, stopDate, project, "index") VALUES
 		('inside-template', 'Step', 0, 3, 0, 1, 0, ?, 'proj-template', 2)`, stopEarlier)
 
-	got, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(got), []string{"proj-template"}) {
-		t.Errorf("logbook: got %v, want [proj-template]", uuidsOf(got))
-	}
+	got := mustList(t, d, "logbook", TaskFilter{})
+	assertSet(t, got, []string{"proj-template"}, "logbook")
 }
 
 // Naming a closed or trashed project returns its contents whatever their
@@ -1616,13 +1428,8 @@ func TestProjectFilterReturnsClosedProjectContents(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := d.ListTasks("project", TaskFilter{Project: tc.project})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(got), tc.want) {
-				t.Errorf("--project %s: got %v, want %v", tc.project, uuidsOf(got), tc.want)
-			}
+			got := mustList(t, d, "project", TaskFilter{Project: tc.project})
+			assertSet(t, got, tc.want, "--project %s", tc.project)
 		})
 	}
 }
@@ -1649,38 +1456,23 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	fx.Todo("done-under-heading", "Done under heading", 7, anytime(), underHeading("head"), completed(stopToday))
 	fx.Todo("done-yesterday", "Done yesterday", 8, anytime(), inProject("proj-open"), completed(stopYesterday))
 
-	plain, err := d.ListTasks("project", TaskFilter{Project: "proj-open", OpenOnly: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(plain), []string{"open-todo"}) {
-		t.Errorf("--project proj-open: got %v, want [open-todo]", uuidsOf(plain))
-	}
+	plain := mustList(t, d, "project", TaskFilter{Project: "proj-open", OpenOnly: true})
+	assertSet(t, plain, []string{"open-todo"}, "--project proj-open")
 
 	// The one closed yesterday stays out: Things logged it when the day
 	// rolled over.
 	want := []string{"open-todo", "done-today", "dropped-today", "done-ahead", "done-under-heading"}
 	for _, project := range []string{"proj-open", "Live"} {
-		got, err := d.ListTasks("project", TaskFilter{Project: project})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !sameSet(uuidsOf(got), want) {
-			t.Errorf("--project %s --include-completed: got %v, want %v", project, uuidsOf(got), want)
-		}
+		got := mustList(t, d, "project", TaskFilter{Project: project})
+		assertSet(t, got, want, "--project %s --include-completed", project)
 	}
 
 	// "Log Completed Now" files the day's closed items early, here as in
 	// anytime.
 	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
-	afterLog, err := d.ListTasks("project", TaskFilter{Project: "proj-open"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(afterLog), []string{"open-todo"}) {
-		t.Errorf("after Log Completed Now: got %v, want [open-todo]", uuidsOf(afterLog))
-	}
+	afterLog := mustList(t, d, "project", TaskFilter{Project: "proj-open"})
+	assertSet(t, afterLog, []string{"open-todo"}, "after Log Completed Now")
 }
 
 // The app's area page keeps an item closed today in place until it is logged,
@@ -1707,22 +1499,12 @@ func TestAreaFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 	fx.Todo("child-done", "Child done", 8, anytime(), inProject("proj-open"), completed(stopToday))
 	fx.Todo("child-of-done", "Child of done", 9, anytime(), inProject("proj-done"), completed(stopToday))
 
-	plain, err := d.ListTasks("project", TaskFilter{Area: "ar", OpenOnly: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(plain), []string{"proj-open", "open-todo"}) {
-		t.Errorf("--area ar: got %v, want [proj-open open-todo]", uuidsOf(plain))
-	}
+	plain := mustList(t, d, "project", TaskFilter{Area: "ar", OpenOnly: true})
+	assertSet(t, plain, []string{"proj-open", "open-todo"}, "--area ar")
 
-	got, err := d.ListTasks("project", TaskFilter{Area: "ar"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Area: "ar"})
 	want := []string{"proj-open", "proj-done", "open-todo", "done-anytime", "done-ahead", "done-someday", "child-done"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("--area ar --include-completed: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "--area ar --include-completed")
 }
 
 // The widening is scoped to a named project. A bare --area sweep is still the
@@ -1744,16 +1526,11 @@ func TestAreaFilterDoesNotWidenToClosedContents(t *testing.T) {
 	fx.Todo("done-open", "Left over", 7, anytime(), inProject("proj-done"))
 	fx.Todo("open-todo", "To do", 9, anytime(), inProject("proj-open"))
 
-	got, err := d.ListTasks("project", TaskFilter{Area: "ar"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Area: "ar"})
 	// The open project, its open to-do, and the closed project's one open
 	// child. Nothing closed, and no row of the closed project's contents.
 	want := []string{"proj-open", "open-todo", "done-open"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("--area ar: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "--area ar")
 }
 
 // A filter spanning several projects must keep each project's tasks contiguous,
@@ -1773,10 +1550,7 @@ func TestListTasksProjectViewGroupsByProject(t *testing.T) {
 		('a2', 'A two', 0, 0, 0, 1, 0, 'proj-a', 3),
 		('b2', 'B two', 0, 0, 0, 1, 0, 'proj-b', 4)`)
 
-	got, err := d.ListTasks("project", TaskFilter{Area: "Home"})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Area: "Home"})
 	var order []string
 	for _, task := range got {
 		order = append(order, task.UUID)
@@ -1829,18 +1603,13 @@ func TestListTasksProjectOrderMatchesProjectPage(t *testing.T) {
 	fx.Todo("h2b-sooner", "H2b", 0, somedayOn(sooner), underHeading("head-2"))
 	fx.Todo("h2c-anytime", "H2c", 0, anytime(), underHeading("head-2"))
 
-	got, err := d.ListTasks("project", TaskFilter{Project: "proj"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Project: "proj"})
 	want := []string{
 		"l1-anytime", "l5-today", "l6-anytime", "l4-sooner", "l2-later", "l3-someday",
 		"h1b-anytime", "h1d-anytime", "h1a-later", "h1c-someday",
 		"h2c-anytime", "h2b-sooner", "h2a-someday",
 	}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("project order:\n got %v\nwant %v", got, want)
-	}
+	assertOrder(t, got, want, "project order")
 }
 
 // Two projects, or two areas, that share an index still list as separate
@@ -1858,14 +1627,9 @@ func TestListTasksCatchAllKeepsTiedProjectsAndAreasApart(t *testing.T) {
 	fx.Todo("pb2", "PB2", 3, anytime(), inProject("proj-b"))
 	fx.Todo("pa2", "PA2", 4, anytime(), inProject("proj-a"))
 
-	got, err := d.ListTasks("project", TaskFilter{Area: "ar-a"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Area: "ar-a"})
 	want := []string{"proj-a", "proj-b", "pa1", "pa2", "pb1", "pb2"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("--area: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "--area")
 
 	fx.Todo("b1", "B1", 1, anytime(), inArea("ar-b"))
 	fx.Todo("a1", "A1", 2, anytime(), inArea("ar-a"))
@@ -1876,14 +1640,9 @@ func TestListTasksCatchAllKeepsTiedProjectsAndAreasApart(t *testing.T) {
 	fx.Tagged("b2", "tg")
 	fx.Tagged("a2", "tg")
 
-	got, err = d.ListTasks("project", TaskFilter{Tag: "urgent"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got = mustList(t, d, "project", TaskFilter{Tag: "urgent"})
 	want = []string{"a1", "a2", "b1", "b2"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("--tag: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "--tag")
 }
 
 // Two headings that share an index still list as two blocks: without a key
@@ -1898,14 +1657,9 @@ func TestListTasksProjectOrderKeepsTiedHeadingsApart(t *testing.T) {
 	fx.Todo("b2", "B2", 3, anytime(), underHeading("head-b"))
 	fx.Todo("a2", "A2", 4, anytime(), underHeading("head-a"))
 
-	got, err := d.ListTasks("project", TaskFilter{Project: "proj"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Project: "proj"})
 	want := []string{"a1", "a2", "b1", "b2"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("project order: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "project order")
 }
 
 // --- heading exclusion from lookups (issue #146) ---
@@ -1920,10 +1674,7 @@ func TestGetTaskByUUIDExcludesHeading(t *testing.T) {
 	seedTasks(t, d)
 	fx.Heading("head-phase", "Phase one", 20, notes("heading notes"), inProject("proj-1"))
 
-	got, err := d.GetTaskByUUID("head-phase")
-	if err != nil {
-		t.Fatalf("GetTaskByUUID: %v", err)
-	}
+	got := mustGetByUUID(t, d, "head-phase")
 	if got != nil {
 		t.Errorf("heading returned as a task: %+v", got)
 	}
@@ -1935,10 +1686,7 @@ func TestGetTaskByUUIDKeepsProject(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	got, err := d.GetTaskByUUID("proj-1")
-	if err != nil {
-		t.Fatalf("GetTaskByUUID: %v", err)
-	}
+	got := mustGetByUUID(t, d, "proj-1")
 	if got == nil || got.Type != model.TypeProject {
 		t.Fatalf("project lookup: got %+v", got)
 	}
@@ -1951,10 +1699,7 @@ func TestGetTaskExactTitleSkipsHeading(t *testing.T) {
 	seedTasks(t, d)
 	fx.Heading("head-dupe", "Inbox task", 21, inProject("proj-1"))
 
-	got, err := d.GetTask("Inbox task")
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
+	got := mustGet(t, d, "Inbox task")
 	if got.UUID != "t-inbox" {
 		t.Errorf("got %q, want t-inbox", got.UUID)
 	}
@@ -1973,10 +1718,7 @@ func TestGetTaskLikeMatchSkipsHeading(t *testing.T) {
 
 	// A single to-do plus a same-named heading resolves to the to-do rather
 	// than raising AmbiguousTaskError.
-	got, err := d.GetTask("nbox tas")
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
+	got := mustGet(t, d, "nbox tas")
 	if got.UUID != "t-inbox" {
 		t.Errorf("got %q, want t-inbox", got.UUID)
 	}
@@ -2041,9 +1783,7 @@ func TestSearchTasksExcludesHeadings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SearchTasks: %v", err)
 	}
-	if !sameSet(uuidsOf(proj), []string{"proj-1"}) {
-		t.Errorf("project search: got %v, want [proj-1]", uuidsOf(proj))
-	}
+	assertSet(t, proj, []string{"proj-1"}, "project search")
 }
 
 // --- repeating template vs. its instance in title lookups (issue #156) ---
@@ -2062,10 +1802,7 @@ func TestGetTaskExactTitlePrefersInstance(t *testing.T) {
 	fx.Todo("tpl-water", "Water plants", 1, someday(), repeats())
 	fx.Todo("inst-water", "Water plants", 2, anytimeOn(today))
 
-	got, err := d.GetTask("Water plants")
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
+	got := mustGet(t, d, "Water plants")
 	if got.UUID != "inst-water" {
 		t.Errorf("got %q (repeating=%v), want inst-water", got.UUID, got.Repeating)
 	}
@@ -2083,10 +1820,7 @@ func TestGetTaskExactTitleTemplateOnly(t *testing.T) {
 		(uuid, title, type, status, trashed, start, "index", rt1_recurrenceRule) VALUES
 		('tpl-only', 'Pay rent', 0, 0, 0, 2, 1, x'0102')`)
 
-	got, err := d.GetTask("Pay rent")
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
+	got := mustGet(t, d, "Pay rent")
 	if got.UUID != "tpl-only" || !got.Repeating {
 		t.Errorf("got %+v, want the template", got)
 	}
@@ -2230,10 +1964,7 @@ func TestGetTaskExactTitleIgnoresClosedAndTrashed(t *testing.T) {
 	fx.Todo("done-one", "File taxes", 2, completed(1_600_000_000))
 	fx.Todo("gone-one", "File taxes", 3, anytime(), trashed())
 
-	got, err := d.GetTask("File taxes")
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
+	got := mustGet(t, d, "File taxes")
 	if got.UUID != "open-one" {
 		t.Errorf("got %q, want open-one", got.UUID)
 	}
@@ -2256,10 +1987,7 @@ func TestTitleLookupsWithoutRecurrenceColumn(t *testing.T) {
 	}
 	d := &DB{db: sqlDB}
 
-	got, err := d.GetTask("Water the tree")
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
+	got := mustGet(t, d, "Water the tree")
 	if got.UUID != "c" {
 		t.Errorf("got %q, want c", got.UUID)
 	}
@@ -2334,10 +2062,7 @@ func TestGetTasksByUUIDsMatchesGetTaskByUUID(t *testing.T) {
 		t.Fatalf("GetTasksByUUIDs: %v", err)
 	}
 	for _, id := range ids {
-		single, err := d.GetTaskByUUID(id)
-		if err != nil {
-			t.Fatalf("GetTaskByUUID(%s): %v", id, err)
-		}
+		single := mustGetByUUID(t, d, id)
 		one, ok := batch[id]
 		if single == nil {
 			if ok {
@@ -2433,13 +2158,8 @@ func TestListTasksViewsIncludeProjects(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
-			got, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatalf("ListTasks(%q): %v", tc.view, err)
-			}
-			if !sameSet(uuidsOf(got), tc.want) {
-				t.Errorf("view %q: got %v, want %v", tc.view, uuidsOf(got), tc.want)
-			}
+			got := mustList(t, d, tc.view, TaskFilter{})
+			assertSet(t, got, tc.want, "view %q", tc.view)
 			for _, task := range got {
 				if task.UUID == "proj-today" || task.UUID == "proj-upcoming" || task.UUID == "proj-anytime" {
 					if task.Type != model.TypeProject {
@@ -2473,10 +2193,7 @@ func TestListTasksProjectsExcludedFromViews(t *testing.T) {
 
 	excluded := []string{"proj-template", "todo-in-template", "proj-trashed", "head-1"}
 	for _, view := range []string{"today", "anytime"} {
-		got, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatalf("ListTasks(%q): %v", view, err)
-		}
+		got := mustList(t, d, view, TaskFilter{})
 		for _, uuid := range excluded {
 			for _, task := range got {
 				if task.UUID == uuid {
@@ -2488,13 +2205,8 @@ func TestListTasksProjectsExcludedFromViews(t *testing.T) {
 
 	// The template itself still belongs to Repeating, which already carried
 	// project templates.
-	got, err := d.ListTasks("repeating", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating): %v", err)
-	}
-	if !sameSet(uuidsOf(got), []string{"proj-template"}) {
-		t.Errorf("repeating: got %v, want [proj-template]", uuidsOf(got))
-	}
+	got := mustList(t, d, "repeating", TaskFilter{})
+	assertSet(t, got, []string{"proj-template"}, "repeating")
 }
 
 // Anytime is the one scheduled view without project rows. Every active project
@@ -2520,10 +2232,7 @@ func TestAnytimeHasNoProjectRows(t *testing.T) {
 	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
 	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
 	for _, task := range got {
 		if task.Type == model.TypeProject {
 			t.Errorf("anytime lists project %s as a row", task.UUID)
@@ -2531,19 +2240,14 @@ func TestAnytimeHasNoProjectRows(t *testing.T) {
 	}
 	// The projects' to-dos are still there — the rows were dropped, not the
 	// contents.
-	if !sameSet(uuidsOf(got), []string{"todo-in-proj", "todo-in-area", "todo-loose"}) {
-		t.Errorf("anytime: got %v, want the three to-dos", uuidsOf(got))
-	}
+	assertSet(t, got, []string{"todo-in-proj", "todo-in-area", "todo-loose"}, "anytime")
 
 	// today and upcoming still carry theirs.
 	for _, tc := range []struct{ view, project string }{
 		{"today", "proj-today"},
 		{"upcoming", "proj-upcoming"},
 	} {
-		rows, err := d.ListTasks(tc.view, TaskFilter{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		rows := mustList(t, d, tc.view, TaskFilter{})
 		found := false
 		for _, task := range rows {
 			if task.UUID == tc.project && task.Type == model.TypeProject {
@@ -2580,22 +2284,14 @@ func TestAnytimeLeavesOutToDosInDeferredProjects(t *testing.T) {
 	fx.Todo("in-anytime", "In anytime", 15, anytime(), inProject("proj-anytime"))
 	fx.Todo("loose", "Loose", 16, anytime())
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"in-anytime", "loose"}; !sameSet(uuidsOf(got), want) {
-		t.Errorf("anytime: got %v, want %v", uuidsOf(got), want)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
+	assertSet(t, got, []string{"in-anytime", "loose"}, "anytime")
 
 	for _, tc := range []struct{ view, uuid string }{
 		{"today", "in-someday-dated-today"},
 		{"upcoming", "in-someday-due-later"}, // issue #296
 	} {
-		rows, err := d.ListTasks(tc.view, TaskFilter{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		rows := mustList(t, d, tc.view, TaskFilter{})
 		if !slices.Contains(uuidsOf(rows), tc.uuid) {
 			t.Errorf("%s: got %v, want it to keep %s", tc.view, uuidsOf(rows), tc.uuid)
 		}
@@ -2635,20 +2331,14 @@ func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
 			fx.Heading("head-someday", "Someday heading", 4, anytime(), inProject("proj-someday"))
 			fx.Todo(tc.uuid, "Closed", 10, append([]dbtest.Opt{anytime(), completed(stop)}, tc.opts...)...)
 
-			logged, err := d.ListTasks("logbook", TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			logged := mustList(t, d, "logbook", TaskFilter{})
 			if slices.Contains(uuidsOf(logged), tc.uuid) {
 				t.Errorf("logbook = %v, want it held back", uuidsOf(logged))
 			}
 
 			held := 0
 			for _, view := range []string{"inbox", "today", "anytime", "upcoming", "someday"} {
-				got, err := d.ListTasks(view, TaskFilter{})
-				if err != nil {
-					t.Fatal(err)
-				}
+				got := mustList(t, d, view, TaskFilter{})
 				gotHeld := slices.Contains(uuidsOf(got), tc.uuid)
 				if want := slices.Contains(tc.heldBy, view); gotHeld != want {
 					t.Errorf("%s --include-completed = %v, want held there: %v", view, uuidsOf(got), want)
@@ -2660,10 +2350,7 @@ func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
 
 			// Its project lists it either way, as the app's project page does
 			// (issue #295), so the row is never stranded.
-			inProj, err := d.ListTasks("project", TaskFilter{Project: tc.project})
-			if err != nil {
-				t.Fatal(err)
-			}
+			inProj := mustList(t, d, "project", TaskFilter{Project: tc.project})
 			if !slices.Contains(uuidsOf(inProj), tc.uuid) {
 				t.Errorf("--project %s --include-completed = %v, want it listed", tc.project, uuidsOf(inProj))
 			}
@@ -2699,14 +2386,9 @@ func TestAnytimeGroupsByAreaThenProject(t *testing.T) {
 		('unfiled',   'Unfiled', 0, 0, 0, 1, 0, NULL,     NULL,        8),
 		('home-todo', 'Home',    0, 0, 0, 1, 0, NULL,     'ar-second', 2)`)
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
 	want := []string{"unfiled", "loose-1", "a1", "a2", "b1", "home-todo"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("anytime order: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "anytime order")
 }
 
 // A project with no area is grouped with the other no-area items at the top
@@ -2740,10 +2422,7 @@ func TestAreaLessProjectToDosLeadTheList(t *testing.T) {
 				('unfiled',    'Unfiled',   0, 0, 0, 1, 0, ?, 5, NULL,         NULL,      5)`,
 				today, today, today, today, today)
 
-			got, err := d.ListTasks(view, TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := mustList(t, d, view, TaskFilter{})
 			want := []string{"unfiled", "free1-todo", "free2-todo", "work-loose", "work-todo"}
 			if got := uuidsOf(got); !slices.Equal(got, want) {
 				t.Errorf("%s order: got %v, want %v", view, got, want)
@@ -2771,14 +2450,9 @@ func TestUpcomingOrdersByDateThenTodayIndex(t *testing.T) {
 		('soon-a',  'Tomorrow one', 0, 0, 0, 2, 0, ?, -800, 4)`,
 		later, tomorrow, later, tomorrow)
 
-	got, err := d.ListTasks("upcoming", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "upcoming", TaskFilter{})
 	want := []string{"soon-a", "soon-b", "late-a", "late-b"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("upcoming order: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "upcoming order")
 }
 
 // The app's Upcoming also lists an Anytime to-do that has no start date but
@@ -2804,26 +2478,16 @@ func TestUpcomingListsAnytimeToDosDueLater(t *testing.T) {
 	// A plain Anytime to-do with no deadline stays out.
 	fx.Todo("no-deadline", "No deadline", 7, anytime())
 
-	got, err := d.ListTasks("upcoming", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "upcoming", TaskFilter{})
 	want := []string{"due-tomorrow", "sched-tomorrow", "due-later", "sched-later"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("upcoming: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "upcoming")
 
 	// --on picks a row by the day Upcoming files it under, which for a
 	// deadline-only row is the deadline.
 	on := model.ThingsDate(later)
-	got, err = d.ListTasks("upcoming", TaskFilter{On: &on})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got = mustList(t, d, "upcoming", TaskFilter{On: &on})
 	want = []string{"due-later", "sched-later"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("upcoming --on: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "upcoming --on")
 }
 
 // The app's Today also lists a to-do with no start date once its deadline
@@ -2854,33 +2518,18 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 	fx.Todo("due-tomorrow", "Due tomorrow", 7, anytime(), deadline(tomorrow))
 	fx.Todo("no-deadline", "No deadline", 8, anytime())
 
-	got, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "today", TaskFilter{})
 	want := []string{"sched-today", "anytime-due-today", "anytime-overdue", "inbox-due-today", "inbox-overdue"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("today: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "today")
 
 	// Such a to-do is listed under today, the day Today shows it, so a date
 	// filter matches it on today rather than on its deadline.
 	on := model.ThingsDate(today)
-	got, err = d.ListTasks("today", TaskFilter{On: &on})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("today --on today: got %v, want %v", uuidsOf(got), want)
-	}
+	got = mustList(t, d, "today", TaskFilter{On: &on})
+	assertSet(t, got, want, "today --on today")
 	from := model.ThingsDate(int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1))))
-	got, err = d.ListTasks("today", TaskFilter{From: &from})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("today --from yesterday: got %v, want %v", uuidsOf(got), want)
-	}
+	got = mustList(t, d, "today", TaskFilter{From: &from})
+	assertSet(t, got, want, "today --from yesterday")
 }
 
 // Just after midnight, a to-do scheduled for the new day can still be
@@ -2914,29 +2563,16 @@ func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
 		{"someday", []string{"someday"}},
 	}
 	for _, c := range cases {
-		got, err := d.ListTasks(c.view, TaskFilter{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !sameSet(uuidsOf(got), c.want) {
-			t.Errorf("%s: got %v, want %v", c.view, uuidsOf(got), c.want)
-		}
+		got := mustList(t, d, c.view, TaskFilter{})
+		assertSet(t, got, c.want, "%s", c.view)
 	}
 
 	// The date filters follow the view: today --on today finds the row,
 	// and upcoming --on today has nothing to find.
 	on := model.ThingsDate(today)
-	got, err := d.ListTasks("today", TaskFilter{On: &on})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"stuck-today", "stuck-project", "anytime-today"}; !sameSet(uuidsOf(got), want) {
-		t.Errorf("today --on today: got %v, want %v", uuidsOf(got), want)
-	}
-	got, err = d.ListTasks("upcoming", TaskFilter{On: &on})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "today", TaskFilter{On: &on})
+	assertSet(t, got, []string{"stuck-today", "stuck-project", "anytime-today"}, "today --on today")
+	got = mustList(t, d, "upcoming", TaskFilter{On: &on})
 	if len(got) != 0 {
 		t.Errorf("upcoming --on today: got %v, want none", uuidsOf(got))
 	}
@@ -3026,13 +2662,8 @@ func TestAnytimeKeepsToDosOfProjectNotYetMoved(t *testing.T) {
 	fx.Todo("in-stuck-heading", "Under stuck heading", 11, anytime(), underHeading("head-stuck"))
 	fx.Todo("in-tomorrow", "In tomorrow's project", 12, anytime(), inProject("proj-tomorrow"))
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"in-stuck", "in-stuck-heading"}; !sameSet(uuidsOf(got), want) {
-		t.Errorf("anytime: got %v, want %v", uuidsOf(got), want)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
+	assertSet(t, got, []string{"in-stuck", "in-stuck-heading"}, "anytime")
 }
 
 // On a project's page the same row sorts with the to-dos for today, among
@@ -3049,14 +2680,9 @@ func TestProjectPageOrdersNotYetMovedRowAsToday(t *testing.T) {
 	fx.Todo("stuck-today", "Scheduled today, not yet moved", 2, somedayOn(today), inProject("proj"))
 	fx.Todo("anytime", "Anytime", 3, anytime(), inProject("proj"))
 
-	got, err := d.ListTasks("project", TaskFilter{Project: "proj"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "project", TaskFilter{Project: "proj"})
 	want := []string{"stuck-today", "anytime", "sched-tomorrow"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("project page: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "project page")
 }
 
 // An undated Inbox to-do whose deadline has come leaves the Inbox for Today,
@@ -3077,19 +2703,11 @@ func TestInboxLeavesOutToDosTodayHolds(t *testing.T) {
 	fx.Todo("inbox-due-tomorrow", "Inbox due tomorrow", 4, inbox(), deadline(tomorrow))
 	fx.Todo("inbox-suppressed", "Inbox suppressed", 5, inbox(), deadline(earlier), suppressed(earlier))
 
-	got, err := d.ListTasks("inbox", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "inbox", TaskFilter{})
 	want := []string{"inbox-plain", "inbox-due-tomorrow", "inbox-suppressed"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("inbox: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "inbox")
 
-	inToday, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	inToday := mustList(t, d, "today", TaskFilter{})
 	for _, u := range uuidsOf(inToday) {
 		if slices.Contains(uuidsOf(got), u) {
 			t.Errorf("%s is in both inbox and today", u)
@@ -3115,14 +2733,9 @@ func TestAnytimeListsInboxToDosTodayHolds(t *testing.T) {
 	fx.Todo("inbox-due-tomorrow", "Inbox due tomorrow", 4, inbox(), deadline(tomorrow))
 	fx.Todo("inbox-suppressed", "Inbox suppressed", 5, inbox(), deadline(earlier), suppressed(earlier))
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
 	want := []string{"inbox-due-today", "inbox-overdue"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("anytime: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "anytime")
 }
 
 // A project row has no parent project, so --project can never match it: the
@@ -3143,36 +2756,18 @@ func TestListTasksProjectRowsAndFilters(t *testing.T) {
 	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
 	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
-	byUUID, err := d.ListTasks("today", TaskFilter{Project: "proj-today"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byUUID), []string{"todo-in-proj"}) {
-		t.Errorf("--project proj-today: got %v, want [todo-in-proj]", uuidsOf(byUUID))
-	}
+	byUUID := mustList(t, d, "today", TaskFilter{Project: "proj-today"})
+	assertSet(t, byUUID, []string{"todo-in-proj"}, "--project proj-today")
 
-	byTitle, err := d.ListTasks("today", TaskFilter{Project: "Runbook audit"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byTitle), []string{"todo-in-proj"}) {
-		t.Errorf("--project 'Runbook audit': got %v, want [todo-in-proj]", uuidsOf(byTitle))
-	}
+	byTitle := mustList(t, d, "today", TaskFilter{Project: "Runbook audit"})
+	assertSet(t, byTitle, []string{"todo-in-proj"}, "--project 'Runbook audit'")
 
-	byArea, err := d.ListTasks("today", TaskFilter{Area: "area-work"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byArea := mustList(t, d, "today", TaskFilter{Area: "area-work"})
 	// todo-in-proj inherits area-work through proj-today (the pa join).
 	want := []string{"proj-today", "todo-in-proj", "todo-in-area"}
-	if !sameSet(uuidsOf(byArea), want) {
-		t.Errorf("--area area-work: got %v, want %v", uuidsOf(byArea), want)
-	}
+	assertSet(t, byArea, want, "--area area-work")
 
-	otherArea, err := d.ListTasks("today", TaskFilter{Area: "area-home"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	otherArea := mustList(t, d, "today", TaskFilter{Area: "area-home"})
 	if len(otherArea) != 0 {
 		t.Errorf("--area area-home: got %v, want none", uuidsOf(otherArea))
 	}
@@ -3203,24 +2798,14 @@ func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
 	fx.Tagged("proj-anytime", "tag-urgent")
 	fx.Tagged("todo-in-area", "tag-urgent")
 
-	byArea, err := d.ListTasks("project", TaskFilter{Area: "area-work"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byArea := mustList(t, d, "project", TaskFilter{Area: "area-work"})
 	// The area's three open projects, plus the to-do in one of them (through
 	// the pa join) and the loose to-do filed on the area itself.
 	wantArea := []string{"proj-today", "proj-upcoming", "proj-anytime", "todo-in-proj", "todo-in-area"}
-	if !sameSet(uuidsOf(byArea), wantArea) {
-		t.Errorf("--area area-work: got %v, want %v", uuidsOf(byArea), wantArea)
-	}
+	assertSet(t, byArea, wantArea, "--area area-work")
 
-	byTag, err := d.ListTasks("project", TaskFilter{Tag: "urgent"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byTag), []string{"proj-anytime", "todo-in-area"}) {
-		t.Errorf("--tag urgent: got %v, want [proj-anytime todo-in-area]", uuidsOf(byTag))
-	}
+	byTag := mustList(t, d, "project", TaskFilter{Tag: "urgent"})
+	assertSet(t, byTag, []string{"proj-anytime", "todo-in-area"}, "--tag urgent")
 	for _, task := range byTag {
 		if task.UUID == "proj-anytime" && task.Type != model.TypeProject {
 			t.Errorf("proj-anytime: got type %d, want %d", task.Type, model.TypeProject)
@@ -3228,13 +2813,8 @@ func TestListTasksCatchAllViewIncludesProjects(t *testing.T) {
 	}
 
 	// A project has no parent project, so --project still narrows to contents.
-	byProject, err := d.ListTasks("project", TaskFilter{Project: "proj-today"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byProject), []string{"todo-in-proj"}) {
-		t.Errorf("--project proj-today: got %v, want [todo-in-proj]", uuidsOf(byProject))
-	}
+	byProject := mustList(t, d, "project", TaskFilter{Project: "proj-today"})
+	assertSet(t, byProject, []string{"todo-in-proj"}, "--project proj-today")
 }
 
 // Widening the catch-all view to projects must not widen it past them:
@@ -3266,19 +2846,14 @@ func TestListTasksCatchAllViewExclusions(t *testing.T) {
 	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
 	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
-	got, err := d.ListTasks("project", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "project", TaskFilter{})
 	// Asserted as a whole set, not just as absences: a catch-all that returned
 	// nothing at all would satisfy every exclusion on its own.
 	want := []string{
 		"proj-today", "proj-upcoming", "proj-anytime",
 		"todo-in-proj", "todo-in-area", "todo-loose",
 	}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("catch-all view: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "catch-all view")
 }
 
 // The today ordering keys on the parent project's index, which a project row
@@ -3299,14 +2874,9 @@ func TestListTasksTodayOrderWithProjects(t *testing.T) {
 	fx.Todo("todo-in-area", "Call bank", 13, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(1))
 	fx.Todo("todo-loose", "Buy milk", 14, anytimeOn(today), todayIndexRef(today), todayIndex(7))
 
-	got, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "today", TaskFilter{})
 	want := []string{"todo-loose", "todo-in-area", "proj-today", "todo-in-proj"}
-	if !reflect.DeepEqual(uuidsOf(got), want) {
-		t.Errorf("today order: got %v, want %v", uuidsOf(got), want)
-	}
+	assertOrder(t, got, want, "today order")
 }
 
 // Today is arranged like Anytime and Someday — unfiled items, then areas, and
@@ -3332,14 +2902,9 @@ func TestTodayGroupsLooseTodosBeforeProjectTodos(t *testing.T) {
 		('other-ar', 'Other area',   0, 0, 0, 1, 0, ?, ?, NULL,     'ar-second', 4, -999)`,
 		today, today, today, today, today, today, today, today)
 
-	got, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "today", TaskFilter{})
 	want := []string{"unfiled", "loose", "in-proj", "other-ar"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("today order: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "today order")
 }
 
 // The app leaves a closed item where it was, struck through, rather than
@@ -3359,10 +2924,7 @@ func TestTodayInterleavesClosedItemsByTodayIndex(t *testing.T) {
 		('open-last',   'Three', 0, 0, 0, 1, 0, ?, ?, NULL, 3, -100)`,
 		today, today, today, today, stop, today, today)
 
-	got, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "today", TaskFilter{})
 	want := []string{"open-first", "closed-mid", "open-last"}
 	if got := uuidsOf(got); !slices.Equal(got, want) {
 		t.Errorf("today order: got %v, want %v — the closed row must stay in place", got, want)
@@ -3393,14 +2955,9 @@ func TestTodayOrdersByReferenceDateThenTodayIndex(t *testing.T) {
 		('yesterday',  'Five',  0, 0, 0, 1, 0, ?, ?, NULL, 5, -50)`,
 		today, earlier, today, today, today, today, stop, today, earlier, today, yesterday)
 
-	got, err := d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "today", TaskFilter{})
 	want := []string{"new-closed", "new-second", "yesterday", "old-first", "old-second"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("today order: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "today order")
 }
 
 // The app keeps an item closed today visible, struck through, in whatever list
@@ -3419,36 +2976,21 @@ func TestAnytimeIncludeCompleted(t *testing.T) {
 		('closed-earlier', 'Done yesterday', 0, 3, 0, 1, 0, NULL, ?,    4)`,
 		stopToday, stopToday, stopYesterday)
 
-	plain, err := d.ListTasks("anytime", TaskFilter{OpenOnly: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(plain), []string{"open-one"}) {
-		t.Errorf("anytime: got %v, want [open-one]", uuidsOf(plain))
-	}
+	plain := mustList(t, d, "anytime", TaskFilter{OpenOnly: true})
+	assertSet(t, plain, []string{"open-one"}, "anytime")
 
-	withClosed, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	withClosed := mustList(t, d, "anytime", TaskFilter{})
 	// The one closed yesterday stays out: Things filed it when the day rolled
 	// over. Cancelled counts as closed, the same as in today.
 	want := []string{"open-one", "closed-today", "cancelled-today"}
-	if !sameSet(uuidsOf(withClosed), want) {
-		t.Errorf("anytime --include-completed: got %v, want %v", uuidsOf(withClosed), want)
-	}
+	assertSet(t, withClosed, want, "anytime --include-completed")
 
 	// "Log Completed Now" files the day's closed items early, and the flag
 	// respects it here exactly as it does in today.
 	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
-	afterLog, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(afterLog), []string{"open-one"}) {
-		t.Errorf("after Log Completed Now: got %v, want [open-one]", uuidsOf(afterLog))
-	}
+	afterLog := mustList(t, d, "anytime", TaskFilter{})
+	assertSet(t, afterLog, []string{"open-one"}, "after Log Completed Now")
 }
 
 // Upcoming keeps a to-do closed today in place, struck through, until the day
@@ -3471,47 +3013,24 @@ func TestUpcomingIncludeCompleted(t *testing.T) {
 	// Closed today, but never in Upcoming: no date and no deadline.
 	fx.Todo("done-anytime", "Done in Anytime", 6, anytime(), completed(stopToday))
 
-	plain, err := d.ListTasks("upcoming", TaskFilter{OpenOnly: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(plain), []string{"open-later"}) {
-		t.Errorf("upcoming: got %v, want [open-later]", uuidsOf(plain))
-	}
+	plain := mustList(t, d, "upcoming", TaskFilter{OpenOnly: true})
+	assertSet(t, plain, []string{"open-later"}, "upcoming")
 
-	got, err := d.ListTasks("upcoming", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "upcoming", TaskFilter{})
 	want := []string{"open-later", "done-ahead", "dropped-ahead", "done-due-later"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("upcoming --include-completed: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "upcoming --include-completed")
 
 	// The Logbook withholds what Upcoming is holding, and takes the rest.
-	logged, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(logged), []string{"done-yesterday"}) {
-		t.Errorf("logbook: got %v, want [done-yesterday]", uuidsOf(logged))
-	}
+	logged := mustList(t, d, "logbook", TaskFilter{})
+	assertSet(t, logged, []string{"done-yesterday"}, "logbook")
 
 	// "Log Completed Now" files the day's closed items early, here as in
 	// today and anytime, and the Logbook takes them back.
 	future := model.TimeToUnix(testNow.Add(1 * time.Minute))
 	mustExec(t, d, `INSERT INTO TMSettings (uuid, manualLogDate) VALUES ('s', ?)`, future)
-	afterLog, err := d.ListTasks("upcoming", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(afterLog), []string{"open-later"}) {
-		t.Errorf("after Log Completed Now: got %v, want [open-later]", uuidsOf(afterLog))
-	}
-	loggedAfter, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	afterLog := mustList(t, d, "upcoming", TaskFilter{})
+	assertSet(t, afterLog, []string{"open-later"}, "after Log Completed Now")
+	loggedAfter := mustList(t, d, "logbook", TaskFilter{})
 	if len(loggedAfter) != 5 {
 		t.Errorf("logbook after Log Completed Now: got %v, want all five closed rows", uuidsOf(loggedAfter))
 	}
@@ -3531,21 +3050,13 @@ func TestTodayAndAnytimeAgreeOnJustClosedRows(t *testing.T) {
 		today, model.TimeToUnix(testNow))
 
 	for _, view := range []string{"today", "anytime"} {
-		got, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !sameSet(uuidsOf(got), []string{"scheduled-and-done"}) {
-			t.Errorf("%s --include-completed: got %v, want the row", view, uuidsOf(got))
-		}
+		got := mustList(t, d, view, TaskFilter{})
+		assertSet(t, got, []string{"scheduled-and-done"}, "%s --include-completed", view)
 	}
 
 	// And it is in neither list without the flag, nor in the logbook, which
 	// still holds nothing closed today.
-	logged, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	logged := mustList(t, d, "logbook", TaskFilter{})
 	if len(logged) != 0 {
 		t.Errorf("logbook: got %v, want empty — the row closed today", uuidsOf(logged))
 	}
@@ -3573,21 +3084,13 @@ func TestLogbookKeepsRepeatingTemplatesClosedToday(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, startDate, stopDate, project, "index") VALUES
 		('inside-template', 'Step', 0, 3, 0, 1, 0, NULL, ?, 'proj-template', 3)`, stopToday)
 
-	logged, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	logged := mustList(t, d, "logbook", TaskFilter{})
 	want := []string{"template", "inside-template"}
-	if !sameSet(uuidsOf(logged), want) {
-		t.Errorf("logbook: got %v, want %v", uuidsOf(logged), want)
-	}
+	assertSet(t, logged, want, "logbook")
 
 	// Neither list is showing them, which is why the Logbook has to.
 	for _, view := range []string{"today", "anytime"} {
-		got, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		got := mustList(t, d, view, TaskFilter{})
 		if len(got) != 0 {
 			t.Errorf("%s --include-completed: got %v, want empty", view, uuidsOf(got))
 		}
@@ -3621,19 +3124,14 @@ func TestIncludeCompletedFoldsClosedProjectChildren(t *testing.T) {
 				('unparented',   'Listed',    0, 3, 0, 1, 0, ?, ?, NULL,          7)`,
 				today, stopToday, today, stopToday, today, stopToday, today, stopToday)
 
-			got, err := d.ListTasks(view, TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := mustList(t, d, view, TaskFilter{})
 			// The open project is a row in today, which carries project rows;
 			// anytime carries none (issue #217). The logged one is in neither.
 			want := []string{"under-open", "unparented", "proj-open"}
 			if view != "today" {
 				want = want[:2]
 			}
-			if !sameSet(uuidsOf(got), want) {
-				t.Errorf("%s --include-completed: got %v, want %v", view, uuidsOf(got), want)
-			}
+			assertSet(t, got, want, "%s --include-completed", view)
 		})
 	}
 }
@@ -3675,51 +3173,26 @@ func TestNamedTrashedProjectLiftsTheTrashedParentGuard(t *testing.T) {
 
 			// Unfiltered, the guard still applies: the trashed project's child
 			// is not in the list.
-			all, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(all), []string{"under-live"}) {
-				t.Errorf("%s unfiltered: got %v, want [under-live]", tc.view, uuidsOf(all))
-			}
+			all := mustList(t, d, tc.view, TaskFilter{})
+			assertSet(t, all, []string{"under-live"}, "%s unfiltered", tc.view)
 
 			// Naming the trashed project returns its child.
-			named, err := d.ListTasks(tc.view, TaskFilter{Project: "proj-gone"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(named), []string{"under-gone"}) {
-				t.Errorf("%s --project proj-gone: got %v, want [under-gone]", tc.view, uuidsOf(named))
-			}
+			named := mustList(t, d, tc.view, TaskFilter{Project: "proj-gone"})
+			assertSet(t, named, []string{"under-gone"}, "%s --project proj-gone", tc.view)
 
 			// By title as well as by uuid, since --project takes either.
-			byTitle, err := d.ListTasks(tc.view, TaskFilter{Project: "Binned"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(byTitle), []string{"under-gone"}) {
-				t.Errorf("%s --project Binned: got %v, want [under-gone]", tc.view, uuidsOf(byTitle))
-			}
+			byTitle := mustList(t, d, tc.view, TaskFilter{Project: "Binned"})
+			assertSet(t, byTitle, []string{"under-gone"}, "%s --project Binned", tc.view)
 
 			// An untrashed project is unaffected: the lifted clause was true
 			// for it either way.
-			live, err := d.ListTasks(tc.view, TaskFilter{Project: "proj-live"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(live), []string{"under-live"}) {
-				t.Errorf("%s --project proj-live: got %v, want [under-live]", tc.view, uuidsOf(live))
-			}
+			live := mustList(t, d, tc.view, TaskFilter{Project: "proj-live"})
+			assertSet(t, live, []string{"under-live"}, "%s --project proj-live", tc.view)
 
 			// The child itself stays out of the trash: it was never thrown
 			// away on its own account.
-			binned, err := d.ListTasks("trash", TaskFilter{Project: "proj-gone"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(binned), []string{}) {
-				t.Errorf("%s: trash --project proj-gone: got %v, want none", tc.view, uuidsOf(binned))
-			}
+			binned := mustList(t, d, "trash", TaskFilter{Project: "proj-gone"})
+			assertSet(t, binned, []string{}, "%s: trash --project proj-gone", tc.view)
 		})
 	}
 }
@@ -3738,27 +3211,16 @@ func TestNamedTrashedProjectKeepsTheGuardOnTrash(t *testing.T) {
 		('kid-binned', 'Thrown away out of a binned project', 0, 0, 1, 1, 0, 'proj-gone', 2)`)
 
 	// Unfiltered, Trash is the project's own row and nothing beneath it.
-	all, err := d.ListTasks("trash", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(all), []string{"proj-gone"}) {
-		t.Errorf("trash unfiltered: got %v, want [proj-gone]", uuidsOf(all))
-	}
+	all := mustList(t, d, "trash", TaskFilter{})
+	assertSet(t, all, []string{"proj-gone"}, "trash unfiltered")
 
-	named, err := d.ListTasks("trash", TaskFilter{Project: "proj-gone"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	named := mustList(t, d, "trash", TaskFilter{Project: "proj-gone"})
 	if len(named) != 0 {
 		t.Errorf("trash --project proj-gone: got %v, want none", uuidsOf(named))
 	}
 
 	// And the catch-all's answer for the same project agrees.
-	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-gone"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	contents := mustList(t, d, "project", TaskFilter{Project: "proj-gone"})
 	if len(contents) != 0 {
 		t.Errorf("--project proj-gone: got %v, want none", uuidsOf(contents))
 	}
@@ -3778,13 +3240,8 @@ func TestNamedTrashedProjectLiftsTheGuardThroughAHeading(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, heading, "index") VALUES
 		('under-head', 'Under the heading', 0, 0, 0, 1, 0, 'head-1', 3)`)
 
-	got, err := d.ListTasks("anytime", TaskFilter{Project: "proj-gone"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(got), []string{"under-head"}) {
-		t.Errorf("anytime --project proj-gone: got %v, want [under-head]", uuidsOf(got))
-	}
+	got := mustList(t, d, "anytime", TaskFilter{Project: "proj-gone"})
+	assertSet(t, got, []string{"under-head"}, "anytime --project proj-gone")
 }
 
 // A closed child of a trashed project is in the Logbook's scope but folded out
@@ -3800,21 +3257,13 @@ func TestNamedTrashedProjectReachesItsClosedChildren(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, stopDate, project, "index") VALUES
 		('under-done', 'Closed under binned', 0, 3, 0, 1, 0, ?, 'proj-gone', 2)`, stopped)
 
-	all, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	all := mustList(t, d, "logbook", TaskFilter{})
 	if len(all) != 0 {
 		t.Errorf("logbook unfiltered: got %v, want none", uuidsOf(all))
 	}
 
-	named, err := d.ListTasks("logbook", TaskFilter{Project: "proj-gone"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(named), []string{"under-done"}) {
-		t.Errorf("logbook --project proj-gone: got %v, want [under-done]", uuidsOf(named))
-	}
+	named := mustList(t, d, "logbook", TaskFilter{Project: "proj-gone"})
+	assertSet(t, named, []string{"under-done"}, "logbook --project proj-gone")
 }
 
 // The fold makes a closed project one row rather than a row plus its contents.
@@ -3842,10 +3291,7 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 				today, stopToday, today, stopToday)
 
 			// Unfiltered, the fold still applies: under-done is folded away.
-			all, err := d.ListTasks(view, TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			all := mustList(t, d, view, TaskFilter{})
 			for _, task := range all {
 				if task.UUID == "under-done" {
 					t.Errorf("%s --include-completed: the fold should still hide under-done", view)
@@ -3853,39 +3299,21 @@ func TestNamedProjectLiftsTheFoldUnderIncludeCompleted(t *testing.T) {
 			}
 
 			// Naming the closed project returns its contents.
-			named, err := d.ListTasks(view, TaskFilter{Project: "proj-done"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(named), []string{"under-done"}) {
-				t.Errorf("%s --project proj-done --include-completed: got %v, want [under-done]", view, uuidsOf(named))
-			}
+			named := mustList(t, d, view, TaskFilter{Project: "proj-done"})
+			assertSet(t, named, []string{"under-done"}, "%s --project proj-done --include-completed", view)
 
 			// By title as well as by uuid, since --project takes either.
-			byTitle, err := d.ListTasks(view, TaskFilter{Project: "Finished"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(byTitle), []string{"under-done"}) {
-				t.Errorf("%s --project Finished: got %v, want [under-done]", view, uuidsOf(byTitle))
-			}
+			byTitle := mustList(t, d, view, TaskFilter{Project: "Finished"})
+			assertSet(t, byTitle, []string{"under-done"}, "%s --project Finished", view)
 
 			// An open project is unaffected: the lifted clause was true for it
 			// either way.
-			openNamed, err := d.ListTasks(view, TaskFilter{Project: "proj-open"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !sameSet(uuidsOf(openNamed), []string{"under-open"}) {
-				t.Errorf("%s --project proj-open: got %v, want [under-open]", view, uuidsOf(openNamed))
-			}
+			openNamed := mustList(t, d, view, TaskFilter{Project: "proj-open"})
+			assertSet(t, openNamed, []string{"under-open"}, "%s --project proj-open", view)
 
 			// And with OpenOnly nothing changes: the fold lives inside the
 			// closed branch, so a closed child stays out whoever named it.
-			noFlag, err := d.ListTasks(view, TaskFilter{Project: "proj-done", OpenOnly: true})
-			if err != nil {
-				t.Fatal(err)
-			}
+			noFlag := mustList(t, d, view, TaskFilter{Project: "proj-done", OpenOnly: true})
 			if len(noFlag) != 0 {
 				t.Errorf("%s --project proj-done (OpenOnly): got %v, want none", view, uuidsOf(noFlag))
 			}
@@ -3940,10 +3368,7 @@ func TestFilterValuesMatchLiterally(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := d.ListTasks("project", tc.filter)
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := mustList(t, d, "project", tc.filter)
 			if !sameSet(uuidsOf(got), tc.want) {
 				t.Errorf("got %v, want %v", uuidsOf(got), tc.want)
 			}
@@ -3951,22 +3376,12 @@ func TestFilterValuesMatchLiterally(t *testing.T) {
 	}
 
 	// Matching stays case-insensitive, as it was before the escaping.
-	got, err := d.ListTasks("project", TaskFilter{Project: "100% done"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(got), []string{"in-pct"}) {
-		t.Errorf("lowercased title: got %v, want [in-pct]", uuidsOf(got))
-	}
+	got := mustList(t, d, "project", TaskFilter{Project: "100% done"})
+	assertSet(t, got, []string{"in-pct"}, "lowercased title")
 
 	// A uuid still matches exactly, through the equality arm rather than LIKE.
-	byUUID, err := d.ListTasks("project", TaskFilter{Project: "proj-pct"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byUUID), []string{"in-pct"}) {
-		t.Errorf("by uuid: got %v, want [in-pct]", uuidsOf(byUUID))
-	}
+	byUUID := mustList(t, d, "project", TaskFilter{Project: "proj-pct"})
+	assertSet(t, byUUID, []string{"in-pct"}, "by uuid")
 }
 
 // The lift is scoped to a named project. A view filtered by area or tag alone
@@ -3996,10 +3411,7 @@ func TestAreaAndTagFiltersDoNotLiftTheFold(t *testing.T) {
 		{"tag", TaskFilter{Tag: "urgent"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := d.ListTasks("today", tc.filter)
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := mustList(t, d, "today", tc.filter)
 			for _, task := range got {
 				if task.UUID == "under-done" {
 					t.Errorf("--%s lifted the fold: got %v", tc.name, uuidsOf(got))
@@ -4030,10 +3442,7 @@ func TestIncludeCompletedKeepsOpenTodosUnderClosedProject(t *testing.T) {
 	}{
 		{"today", false}, {"today", true}, {"anytime", false}, {"anytime", true},
 	} {
-		got, err := d.ListTasks(tc.view, TaskFilter{OpenOnly: !tc.includeCompleted})
-		if err != nil {
-			t.Fatal(err)
-		}
+		got := mustList(t, d, tc.view, TaskFilter{OpenOnly: !tc.includeCompleted})
 		found := false
 		for _, task := range got {
 			if task.UUID == "still-open" {
@@ -4062,10 +3471,7 @@ func TestFoldedJustClosedRowIsReachableByProject(t *testing.T) {
 		VALUES ('folded', 'Folded', 0, 3, 0, 1, 0, ?, ?, 'proj-done', 2)`, today, stopToday)
 
 	for _, view := range []string{"today", "anytime", "logbook"} {
-		got, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		got := mustList(t, d, view, TaskFilter{})
 		for _, task := range got {
 			if task.UUID == "folded" {
 				t.Errorf("view %q lists the folded row", view)
@@ -4073,13 +3479,8 @@ func TestFoldedJustClosedRowIsReachableByProject(t *testing.T) {
 		}
 	}
 
-	contents, err := d.ListTasks("project", TaskFilter{Project: "proj-done"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(contents), []string{"folded"}) {
-		t.Errorf("--project proj-done: got %v, want [folded]", uuidsOf(contents))
-	}
+	contents := mustList(t, d, "project", TaskFilter{Project: "proj-done"})
+	assertSet(t, contents, []string{"folded"}, "--project proj-done")
 }
 
 // Someday takes the same arrangement. Its filter keeps only unparented rows,
@@ -4099,14 +3500,9 @@ func TestSomedayGroupsUnfiledThenAreas(t *testing.T) {
 		('unfiled',  'Unfiled',   0, 0, 0, 2, 0, NULL, NULL,        3),
 		('second-a', 'Home one',  0, 0, 0, 2, 0, NULL, 'ar-second', 0)`)
 
-	got, err := d.ListTasks("someday", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "someday", TaskFilter{})
 	want := []string{"unfiled", "first-a", "second-a", "second-b"}
-	if got := uuidsOf(got); !slices.Equal(got, want) {
-		t.Errorf("someday order: got %v, want %v", got, want)
-	}
+	assertOrder(t, got, want, "someday order")
 }
 
 // --include-completed carries project rows too: a project completed today and
@@ -4126,20 +3522,14 @@ func TestListTasksTodayIncludeCompletedProject(t *testing.T) {
 	fx.Project("proj-today", "Runbook audit", 5, anytimeOn(today), todayIndexRef(today), inArea("area-work"), todayIndex(2005))
 	fx.Project("proj-done", "Shipped", 20, anytimeOn(today), todayIndexRef(today), inArea("area-work"), completed(stopToday), todayIndex(9000))
 
-	got, err := d.ListTasks("today", TaskFilter{OpenOnly: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "today", TaskFilter{OpenOnly: true})
 	for _, task := range got {
 		if task.UUID == "proj-done" {
 			t.Fatal("completed project should be excluded under OpenOnly")
 		}
 	}
 
-	got, err = d.ListTasks("today", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got = mustList(t, d, "today", TaskFilter{})
 	found := false
 	for _, task := range got {
 		if task.UUID == "proj-done" {
@@ -4181,13 +3571,8 @@ func TestListTasksSomedayAndLogbookIncludeProjects(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
-			got, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatalf("ListTasks(%q): %v", tc.view, err)
-			}
-			if !sameSet(uuidsOf(got), tc.want) {
-				t.Errorf("view %q: got %v, want %v", tc.view, uuidsOf(got), tc.want)
-			}
+			got := mustList(t, d, tc.view, TaskFilter{})
+			assertSet(t, got, tc.want, "view %q", tc.view)
 			for _, task := range got {
 				if task.UUID != tc.project {
 					continue
@@ -4230,10 +3615,7 @@ func TestListTasksSomedayLogbookProjectExclusions(t *testing.T) {
 		"logbook": {"proj-logged-trashed", "head-logged"},
 	}
 	for view, uuids := range excluded {
-		got, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatalf("ListTasks(%q): %v", view, err)
-		}
+		got := mustList(t, d, view, TaskFilter{})
 		for _, uuid := range uuids {
 			for _, task := range got {
 				if task.UUID == uuid {
@@ -4245,13 +3627,8 @@ func TestListTasksSomedayLogbookProjectExclusions(t *testing.T) {
 
 	// The template itself still belongs to Repeating, which already carried
 	// project templates.
-	got, err := d.ListTasks("repeating", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating): %v", err)
-	}
-	if !sameSet(uuidsOf(got), []string{"proj-template"}) {
-		t.Errorf("repeating: got %v, want [proj-template]", uuidsOf(got))
-	}
+	got := mustList(t, d, "repeating", TaskFilter{})
+	assertSet(t, got, []string{"proj-template"}, "repeating")
 }
 
 // The Logbook orders by completion date, newest first, and a project row is
@@ -4266,14 +3643,9 @@ func TestListTasksLogbookOrderWithProject(t *testing.T) {
 	fx.Project("proj-logged", "Site rebuild", 3, anytime(), completed(stopLate))
 	fx.Todo("todo-logged", "Ship the CSS", 4, anytime(), completed(stopEarly))
 
-	got, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "logbook", TaskFilter{})
 	want := []string{"proj-logged", "todo-logged"}
-	if !reflect.DeepEqual(uuidsOf(got), want) {
-		t.Errorf("logbook order: got %v, want %v", uuidsOf(got), want)
-	}
+	assertOrder(t, got, want, "logbook order")
 }
 
 // A project row has no parent project, so --project can never match it in
@@ -4286,22 +3658,14 @@ func TestListTasksSomedayProjectRowsAndFilters(t *testing.T) {
 	fx.Project("proj-someday", "Learn Welsh", 1, someday(), inArea("area-work"))
 	fx.Todo("todo-someday", "Read a book", 2, someday(), inArea("area-work"))
 
-	byUUID, err := d.ListTasks("someday", TaskFilter{Project: "proj-someday"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byUUID := mustList(t, d, "someday", TaskFilter{Project: "proj-someday"})
 	if len(byUUID) != 0 {
 		t.Errorf("--project proj-someday: got %v, want none", uuidsOf(byUUID))
 	}
 
-	byArea, err := d.ListTasks("someday", TaskFilter{Area: "area-work"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byArea := mustList(t, d, "someday", TaskFilter{Area: "area-work"})
 	want := []string{"proj-someday", "todo-someday"}
-	if !sameSet(uuidsOf(byArea), want) {
-		t.Errorf("--area area-work: got %v, want %v", uuidsOf(byArea), want)
-	}
+	assertSet(t, byArea, want, "--area area-work")
 }
 
 // Things puts a trashed project in its Trash list, and `things projects`
@@ -4322,14 +3686,9 @@ func TestListTasksTrashIncludesProjects(t *testing.T) {
 	fx.Todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
 	fx.Heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
 
-	got, err := d.ListTasks("trash", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(trash): %v", err)
-	}
+	got := mustList(t, d, "trash", TaskFilter{})
 	want := []string{"trash-proj", "trash-proj-done", "trash-todo"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("trash: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "trash")
 
 	for _, task := range got {
 		if task.UUID != "trash-proj" && task.UUID != "trash-proj-done" {
@@ -4351,10 +3710,7 @@ func TestListTasksTrashProjectExclusions(t *testing.T) {
 	fx.Todo("live-todo", "Still to do", 5, anytime())
 	fx.Heading("trash-head", "Phase one", 6, inProject("trash-proj"), trashed())
 
-	got, err := d.ListTasks("trash", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(trash): %v", err)
-	}
+	got := mustList(t, d, "trash", TaskFilter{})
 	for _, uuid := range []string{"trash-head", "live-proj", "live-todo"} {
 		for _, task := range got {
 			if task.UUID == uuid {
@@ -4379,18 +3735,10 @@ func TestListTasksTrashProjectRowsAndFilters(t *testing.T) {
 	fx.Project("live-proj", "Still going", 4, anytime(), inArea("area-home"))
 	fx.Todo("live-todo", "Still to do", 5, anytime(), inArea("area-home"))
 
-	byArea, err := d.ListTasks("trash", TaskFilter{Area: "area-home"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byArea), []string{"trash-proj", "trash-proj-done", "trash-todo"}) {
-		t.Errorf("--area area-home: got %v", uuidsOf(byArea))
-	}
+	byArea := mustList(t, d, "trash", TaskFilter{Area: "area-home"})
+	assertSet(t, byArea, []string{"trash-proj", "trash-proj-done", "trash-todo"}, "--area area-home")
 
-	byUUID, err := d.ListTasks("trash", TaskFilter{Project: "trash-proj"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byUUID := mustList(t, d, "trash", TaskFilter{Project: "trash-proj"})
 	if len(byUUID) != 0 {
 		t.Errorf("--project trash-proj: got %v, want none", uuidsOf(byUUID))
 	}
@@ -4413,14 +3761,9 @@ func TestListTasksDeadlinesIncludeProjects(t *testing.T) {
 	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
 	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
-	got, err := d.ListTasks("deadlines", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(deadlines): %v", err)
-	}
+	got := mustList(t, d, "deadlines", TaskFilter{})
 	want := []string{"dl-todo-early", "dl-proj-mid", "dl-todo-late"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("deadlines: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "deadlines")
 
 	for _, task := range got {
 		if task.UUID != "dl-proj-mid" {
@@ -4448,14 +3791,9 @@ func TestListTasksDeadlinesOrderWithProject(t *testing.T) {
 	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2))
 	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
-	got, err := d.ListTasks("deadlines", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "deadlines", TaskFilter{})
 	want := []string{"dl-todo-early", "dl-proj-mid", "dl-todo-late"}
-	if !reflect.DeepEqual(uuidsOf(got), want) {
-		t.Errorf("deadlines order: got %v, want %v", uuidsOf(got), want)
-	}
+	assertOrder(t, got, want, "deadlines order")
 }
 
 // Widening deadlines to projects must not widen it past a deadline: a project
@@ -4484,10 +3822,7 @@ func TestListTasksDeadlinesProjectExclusions(t *testing.T) {
 	fx.Project("dl-proj-template", "Quarterly audit", 8, anytime(), deadline(jun1), repeats())
 	fx.Todo("dl-todo-in-template", "Pull the figures", 9, anytime(), deadline(jun1), inProject("dl-proj-template"))
 
-	got, err := d.ListTasks("deadlines", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(deadlines): %v", err)
-	}
+	got := mustList(t, d, "deadlines", TaskFilter{})
 	for _, uuid := range []string{
 		"dl-proj-none", "dl-proj-done", "dl-proj-trashed", "dl-head",
 		"dl-proj-template", "dl-todo-in-template",
@@ -4517,13 +3852,8 @@ func TestListTasksDeadlinesDateFilterMatchesProject(t *testing.T) {
 	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3))
 
 	on := model.ThingsDate(model.ThingsDateFromTime(time.Date(2026, 6, 2, 0, 0, 0, 0, time.Local)))
-	got, err := d.ListTasks("deadlines", TaskFilter{On: &on})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(got), []string{"dl-proj-mid"}) {
-		t.Errorf("deadlines --on: got %v, want [dl-proj-mid]", uuidsOf(got))
-	}
+	got := mustList(t, d, "deadlines", TaskFilter{On: &on})
+	assertSet(t, got, []string{"dl-proj-mid"}, "deadlines --on")
 }
 
 // A project carries its own area, so --area finds it; it has no parent
@@ -4543,18 +3873,10 @@ func TestListTasksDeadlinesProjectRowsAndFilters(t *testing.T) {
 	fx.Project("dl-proj-mid", "Migrate hosts", 2, anytime(), deadline(jun2), inArea("area-ops"))
 	fx.Todo("dl-todo-late", "File the form", 1, anytime(), deadline(jun3), inArea("area-ops"))
 
-	byArea, err := d.ListTasks("deadlines", TaskFilter{Area: "area-ops"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byArea), []string{"dl-todo-early", "dl-proj-mid", "dl-todo-late"}) {
-		t.Errorf("--area area-ops: got %v", uuidsOf(byArea))
-	}
+	byArea := mustList(t, d, "deadlines", TaskFilter{Area: "area-ops"})
+	assertSet(t, byArea, []string{"dl-todo-early", "dl-proj-mid", "dl-todo-late"}, "--area area-ops")
 
-	byUUID, err := d.ListTasks("deadlines", TaskFilter{Project: "dl-proj-mid"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byUUID := mustList(t, d, "deadlines", TaskFilter{Project: "dl-proj-mid"})
 	if len(byUUID) != 0 {
 		t.Errorf("--project dl-proj-mid: got %v, want none", uuidsOf(byUUID))
 	}
@@ -4580,14 +3902,9 @@ func TestListTasksLogbookIncludesCancelled(t *testing.T) {
 	fx.Todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
 	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
-	got, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(logbook): %v", err)
-	}
+	got := mustList(t, d, "logbook", TaskFilter{})
 	want := []string{"log-todo-done", "log-proj-cancel", "log-todo-cancel", "log-proj-done"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("logbook: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "logbook")
 
 	// status tells the two kinds of closure apart, for both types.
 	wantStatus := map[string]model.Status{
@@ -4628,14 +3945,9 @@ func TestListTasksLogbookCancelledOrder(t *testing.T) {
 	fx.Todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older))
 	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest))
 
-	got, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "logbook", TaskFilter{})
 	want := []string{"log-todo-done", "log-proj-cancel", "log-todo-cancel", "log-proj-done"}
-	if !reflect.DeepEqual(uuidsOf(got), want) {
-		t.Errorf("logbook order: got %v, want %v", uuidsOf(got), want)
-	}
+	assertOrder(t, got, want, "logbook order")
 }
 
 // Widening the Logbook to cancelled must not widen it to everything closed:
@@ -4652,10 +3964,7 @@ func TestListTasksLogbookCancelledExclusions(t *testing.T) {
 	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(older))
 	fx.Heading("log-head", "Phase one", 7, cancelled(older), inProject("log-proj-done"))
 
-	got, err := d.ListTasks("logbook", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(logbook): %v", err)
-	}
+	got := mustList(t, d, "logbook", TaskFilter{})
 	for _, uuid := range []string{"log-open", "log-cancel-trashed", "log-head"} {
 		for _, task := range got {
 			if task.UUID == uuid {
@@ -4684,19 +3993,11 @@ func TestListTasksLogbookCancelledFilters(t *testing.T) {
 	fx.Todo("log-todo-cancel", "Dropped task", 2, anytime(), cancelled(older), inArea("area-lab"))
 	fx.Project("log-proj-done", "Shipped it", 1, anytime(), completed(oldest), inArea("area-lab"))
 
-	byArea, err := d.ListTasks("logbook", TaskFilter{Area: "area-lab"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byArea := mustList(t, d, "logbook", TaskFilter{Area: "area-lab"})
 	want := []string{"log-todo-done", "log-proj-cancel", "log-todo-cancel", "log-proj-done"}
-	if !sameSet(uuidsOf(byArea), want) {
-		t.Errorf("--area area-lab: got %v, want %v", uuidsOf(byArea), want)
-	}
+	assertSet(t, byArea, want, "--area area-lab")
 
-	byUUID, err := d.ListTasks("logbook", TaskFilter{Project: "log-proj-cancel"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byUUID := mustList(t, d, "logbook", TaskFilter{Project: "log-proj-cancel"})
 	if len(byUUID) != 0 {
 		t.Errorf("--project log-proj-cancel: got %v, want none", uuidsOf(byUUID))
 	}
@@ -4736,10 +4037,7 @@ func TestListTasksCancelledStaysOutOfOpenViews(t *testing.T) {
 		today, stopped, tomorrow, stopped, stopped)
 
 	for _, view := range []string{"today", "upcoming", "anytime", "someday", "project"} {
-		got, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatalf("ListTasks(%q): %v", view, err)
-		}
+		got := mustList(t, d, view, TaskFilter{})
 		for _, task := range got {
 			if task.Status == model.StatusCancelled {
 				t.Errorf("view %q: cancelled row %s should not be listed", view, task.UUID)
@@ -4801,20 +4099,12 @@ func TestListTasksViewOrderIsTotalOnTiedKeys(t *testing.T) {
 			d, fx := newFixture(t)
 			tc.seed(fx)
 
-			first, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(uuidsOf(first), tc.want) {
-				t.Errorf("%s order: got %v, want %v", tc.view, uuidsOf(first), tc.want)
-			}
+			first := mustList(t, d, tc.view, TaskFilter{})
+			assertOrder(t, first, tc.want, "%s order", tc.view)
 
 			// The same listing read twice has to number the same rows the
 			// same way, which is the contract the write commands rely on.
-			second, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			second := mustList(t, d, tc.view, TaskFilter{})
 			if !reflect.DeepEqual(uuidsOf(second), uuidsOf(first)) {
 				t.Errorf("%s reread: got %v, want %v", tc.view, uuidsOf(second), uuidsOf(first))
 			}
@@ -4836,9 +4126,7 @@ func TestSearchTasksOrderIsTotalOnTiedIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"tie-any-a", "tie-any-b"}
-	if !reflect.DeepEqual(uuidsOf(got), want) {
-		t.Errorf("search order: got %v, want %v", uuidsOf(got), want)
-	}
+	assertOrder(t, got, want, "search order")
 }
 
 // The seeded-tie tests above cannot catch a missing uuid tiebreak on their own:
@@ -4897,14 +4185,9 @@ func TestListTasksSomedayExcludesProjectChildren(t *testing.T) {
 	fx.Todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
 	fx.Todo("sd-loose", "Deferred on its own", 8, someday())
 
-	got, err := d.ListTasks("someday", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(someday): %v", err)
-	}
+	got := mustList(t, d, "someday", TaskFilter{})
 	want := []string{"sd-parent-someday", "sd-loose-area", "sd-loose"}
-	if !sameSet(uuidsOf(got), want) {
-		t.Errorf("someday: got %v, want %v", uuidsOf(got), want)
-	}
+	assertSet(t, got, want, "someday")
 }
 
 // The discriminating case, called out on its own because it is the one the
@@ -4916,10 +4199,7 @@ func TestListTasksSomedayHidesChildOfSomedayProject(t *testing.T) {
 	fx.Project("sd-parent-someday", "Someday project", 2, someday())
 	fx.Todo("sd-in-someday", "Filed under someday", 4, someday(), inProject("sd-parent-someday"))
 
-	got, err := d.ListTasks("someday", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "someday", TaskFilter{})
 	uuids := uuidsOf(got)
 
 	var sawParent, sawChild bool
@@ -4949,10 +4229,7 @@ func TestListTasksSomedayExcludesHeadingNestedChildren(t *testing.T) {
 	fx.Heading("sd-head", "Phase one", 5, inProject("sd-parent-anytime"))
 	fx.Todo("sd-under-head", "Filed under a heading", 6, someday(), underHeading("sd-head"))
 
-	got, err := d.ListTasks("someday", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "someday", TaskFilter{})
 	for _, task := range got {
 		if task.UUID == "sd-under-head" {
 			t.Errorf("someday: sd-under-head reaches a project through its heading and should not list")
@@ -4972,22 +4249,14 @@ func TestListTasksSomedayKeepsUnparentedRows(t *testing.T) {
 	fx.Todo("sd-loose-area", "Deferred in an area", 7, someday(), inArea("area-den"))
 	fx.Todo("sd-loose", "Deferred on its own", 8, someday())
 
-	byArea, err := d.ListTasks("someday", TaskFilter{Area: "area-den"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(byArea), []string{"sd-parent-someday", "sd-loose-area"}) {
-		t.Errorf("--area area-den: got %v, want [sd-parent-someday sd-loose-area]", uuidsOf(byArea))
-	}
+	byArea := mustList(t, d, "someday", TaskFilter{Area: "area-den"})
+	assertSet(t, byArea, []string{"sd-parent-someday", "sd-loose-area"}, "--area area-den")
 
 	// --project can never match on this view now: every row that survives has
 	// no parent project. The CLI rejects the combination outright rather than
 	// print an empty list (see TestRunListSomedayRejectsProjectFilter); the
 	// query layer stays literal and simply matches nothing.
-	byProject, err := d.ListTasks("someday", TaskFilter{Project: "sd-parent-anytime"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	byProject := mustList(t, d, "someday", TaskFilter{Project: "sd-parent-anytime"})
 	if len(byProject) != 0 {
 		t.Errorf("--project sd-parent-anytime: got %v, want none", uuidsOf(byProject))
 	}
@@ -5007,10 +4276,7 @@ func TestListTasksProjectChildrenStayInOtherViews(t *testing.T) {
 	// someday-only rather than global.
 	fx.Todo("sd-anytime-child", "Inside, anytime", 9, anytime(), inProject("sd-parent-anytime"))
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
 	var found bool
 	for _, task := range got {
 		if task.UUID == "sd-anytime-child" {
@@ -5083,10 +4349,7 @@ func TestTaskQueryDecodesReminderTime(t *testing.T) {
 		t.Errorf("rem-1 ReminderTime = %v, want 09:30", got.ReminderTime)
 	}
 
-	tasks, err := d.ListTasks("inbox", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(inbox): %v", err)
-	}
+	tasks := mustList(t, d, "inbox", TaskFilter{})
 	seen := map[string]*string{}
 	for i := range tasks {
 		seen[tasks[i].UUID] = tasks[i].ReminderTime

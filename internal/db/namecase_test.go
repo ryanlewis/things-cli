@@ -31,13 +31,8 @@ func TestProjectFilterPrefersExactCase(t *testing.T) {
 	}
 	for _, tc := range cases {
 		for _, view := range []string{ViewProject, ViewAnytime} {
-			got, err := d.ListTasks(view, TaskFilter{Project: tc.ref})
-			if err != nil {
-				t.Fatalf("ListTasks(%s, --project %q): %v", view, tc.ref, err)
-			}
-			if !sameSet(uuidsOf(got), tc.want) {
-				t.Errorf("ListTasks(%s, --project %q) = %v, want %v", view, tc.ref, uuidsOf(got), tc.want)
-			}
+			got := mustList(t, d, view, TaskFilter{Project: tc.ref})
+			assertSet(t, got, tc.want, "ListTasks(%s, --project %q)", view, tc.ref)
 		}
 	}
 }
@@ -51,13 +46,8 @@ func TestProjectFilterTrashedExactCaseDoesNotHide(t *testing.T) {
 	fx.Todo("c-gone", "Weed beds", 3, anytime(), dbtest.InProject("p-gone"))
 	fx.Todo("c-open", "Mow lawn", 4, anytime(), dbtest.InProject("p-open"))
 
-	got, err := d.ListTasks(ViewProject, TaskFilter{Project: "Garden"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !sameSet(uuidsOf(got), []string{"c-gone", "c-open"}) {
-		t.Errorf("--project Garden = %v, want [c-gone c-open]", uuidsOf(got))
-	}
+	got := mustList(t, d, ViewProject, TaskFilter{Project: "Garden"})
+	assertSet(t, got, []string{"c-gone", "c-open"}, "--project Garden")
 }
 
 // --area and --tag take names the same way --project does: an exact-case
@@ -85,13 +75,8 @@ func TestAreaAndTagFiltersPreferExactCase(t *testing.T) {
 		{" Home ", []string{"t-upper", "t-lower"}},
 	}
 	for _, tc := range cases {
-		got, err := d.ListTasks(ViewAnytime, TaskFilter{Area: tc.ref})
-		if err != nil {
-			t.Fatalf("--area %q: %v", tc.ref, err)
-		}
-		if !sameSet(uuidsOf(got), tc.want) {
-			t.Errorf("--area %q = %v, want %v", tc.ref, uuidsOf(got), tc.want)
-		}
+		got := mustList(t, d, ViewAnytime, TaskFilter{Area: tc.ref})
+		assertSet(t, got, tc.want, "--area %q", tc.ref)
 	}
 	if got, err := d.ListTasks(ViewAnytime, TaskFilter{Area: "a-lower"}); err != nil || !sameSet(uuidsOf(got), []string{"t-lower"}) {
 		t.Errorf("--area a-lower = %v, %v, want [t-lower]", uuidsOf(got), err)
@@ -107,13 +92,8 @@ func TestAreaAndTagFiltersPreferExactCase(t *testing.T) {
 		{" Errand ", []string{"t-upper", "t-lower"}},
 	}
 	for _, tc := range tagCases {
-		got, err := d.ListTasks(ViewAnytime, TaskFilter{Tag: tc.ref})
-		if err != nil {
-			t.Fatalf("--tag %q: %v", tc.ref, err)
-		}
-		if !sameSet(uuidsOf(got), tc.want) {
-			t.Errorf("--tag %q = %v, want %v", tc.ref, uuidsOf(got), tc.want)
-		}
+		got := mustList(t, d, ViewAnytime, TaskFilter{Tag: tc.ref})
+		assertSet(t, got, tc.want, "--tag %q", tc.ref)
 	}
 }
 
@@ -181,10 +161,7 @@ func TestGetTaskPrefersExactCase(t *testing.T) {
 	fx.Project("p-lower", "garden", 4, anytime())
 
 	for ref, want := range map[string]string{"Water": "t-upper", "water": "t-lower", "Garden": "p-upper", "garden": "p-lower"} {
-		got, err := d.GetTask(ref)
-		if err != nil {
-			t.Fatalf("GetTask(%q): %v", ref, err)
-		}
+		got := mustGet(t, d, ref)
 		if got.UUID != want {
 			t.Errorf("GetTask(%q) = %q, want %q", ref, got.UUID, want)
 		}
@@ -250,13 +227,8 @@ func TestExactCaseIgnoresNormalisation(t *testing.T) {
 		{"tag NFD", TaskFilter{Tag: cafeNFD}, []string{"t-cafe"}},
 		{"tag NFC", TaskFilter{Tag: noelNFC}, []string{"t-noel"}},
 	} {
-		got, err := d.ListTasks(ViewAnytime, tc.filter)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
-		}
-		if !sameSet(uuidsOf(got), tc.want) {
-			t.Errorf("%s = %v, want %v", tc.name, uuidsOf(got), tc.want)
-		}
+		got := mustList(t, d, ViewAnytime, tc.filter)
+		assertSet(t, got, tc.want, "%s", tc.name)
 	}
 
 	for ref, want := range map[string]string{cafeNFD: "a-cafe", noelNFC: "a-noel"} {

@@ -30,18 +30,12 @@ func seedRepeatingPair(t *testing.T) *DB {
 func TestGetTaskByUUIDReportsRepeating(t *testing.T) {
 	d := seedRepeatingPair(t)
 
-	rep, err := d.GetTaskByUUID("rep-1")
-	if err != nil {
-		t.Fatalf("GetTaskByUUID(rep-1): %v", err)
-	}
+	rep := mustGetByUUID(t, d, "rep-1")
 	if !rep.Repeating {
 		t.Error("task with a recurrence rule: Repeating = false, want true")
 	}
 
-	one, err := d.GetTaskByUUID("one-1")
-	if err != nil {
-		t.Fatalf("GetTaskByUUID(one-1): %v", err)
-	}
+	one := mustGetByUUID(t, d, "one-1")
 	if one.Repeating {
 		t.Error("task without a recurrence rule: Repeating = true, want false")
 	}
@@ -52,10 +46,7 @@ func TestGetTaskByUUIDReportsRepeating(t *testing.T) {
 func TestListAndSearchReportRepeating(t *testing.T) {
 	d := seedRepeatingPair(t)
 
-	tasks, err := d.ListTasks("repeating", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating): %v", err)
-	}
+	tasks := mustList(t, d, "repeating", TaskFilter{})
 	if len(tasks) != 1 || tasks[0].UUID != "rep-1" || !tasks[0].Repeating {
 		t.Errorf("ListTasks(repeating) = %+v, want just rep-1 flagged repeating", tasks)
 	}
@@ -77,10 +68,7 @@ func TestTemplatesExcludedFromOpenViews(t *testing.T) {
 	d := seedRepeatingPair(t)
 
 	for _, view := range []string{"someday", "project"} {
-		tasks, err := d.ListTasks(view, TaskFilter{})
-		if err != nil {
-			t.Fatalf("ListTasks(%q): %v", view, err)
-		}
+		tasks := mustList(t, d, view, TaskFilter{})
 		if len(tasks) != 1 || tasks[0].UUID != "one-1" {
 			t.Errorf("ListTasks(%q) = %+v, want just one-1", view, uuidsOf(tasks))
 		}
@@ -92,18 +80,10 @@ func TestRepeatingViewHonoursFilters(t *testing.T) {
 	d := newTestDB(t)
 	seedTasks(t, d)
 
-	got, err := d.ListTasks("repeating", TaskFilter{Area: "Work"})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating, area=Work): %v", err)
-	}
-	if !sameSet(uuidsOf(got), []string{"t-repeat"}) {
-		t.Errorf("repeating --area Work = %v, want [t-repeat]", uuidsOf(got))
-	}
+	got := mustList(t, d, "repeating", TaskFilter{Area: "Work"})
+	assertSet(t, got, []string{"t-repeat"}, "repeating --area Work")
 
-	got, err = d.ListTasks("repeating", TaskFilter{Project: "Nonexistent"})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating, project=Nonexistent): %v", err)
-	}
+	got = mustList(t, d, "repeating", TaskFilter{Project: "Nonexistent"})
 	if len(got) != 0 {
 		t.Errorf("repeating --project Nonexistent = %v, want none", uuidsOf(got))
 	}
@@ -121,10 +101,7 @@ func TestRepeatingViewExcludesTrashedProject(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, project, "index", rt1_recurrenceRule) VALUES
 		('rep-orphan', 'Water plants', 0, 0, 0, 2, 0, 'proj-gone', 1, x'0102')`)
 
-	got, err := d.ListTasks("repeating", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating): %v", err)
-	}
+	got := mustList(t, d, "repeating", TaskFilter{})
 	if len(got) != 0 {
 		t.Errorf("ListTasks(repeating) = %v, want no templates from a trashed project", uuidsOf(got))
 	}
@@ -148,10 +125,7 @@ func TestRepeatingColumnAbsentDegradesGracefully(t *testing.T) {
 	if col := d.recurrenceCol(); col != "NULL" {
 		t.Errorf("recurrenceCol() = %q, want %q", col, "NULL")
 	}
-	task, err := d.GetTaskByUUID("t1")
-	if err != nil {
-		t.Fatalf("GetTaskByUUID: %v", err)
-	}
+	task := mustGetByUUID(t, d, "t1")
 	if task == nil || task.Repeating {
 		t.Errorf("got %+v, want a task with Repeating false", task)
 	}
@@ -159,17 +133,11 @@ func TestRepeatingColumnAbsentDegradesGracefully(t *testing.T) {
 	// With nothing identifiable as a template, the repeating view is empty
 	// and the exclusion the other views apply is a no-op rather than a
 	// filter that hides everything.
-	rep, err := d.ListTasks("repeating", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating): %v", err)
-	}
+	rep := mustList(t, d, "repeating", TaskFilter{})
 	if len(rep) != 0 {
 		t.Errorf("ListTasks(repeating) = %+v, want none", rep)
 	}
-	open, err := d.ListTasks("project", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(project): %v", err)
-	}
+	open := mustList(t, d, "project", TaskFilter{})
 	if len(open) != 1 || open[0].UUID != "t1" {
 		t.Errorf("ListTasks(project) = %v, want just t1", uuidsOf(open))
 	}
@@ -216,10 +184,7 @@ func TestRepeatingViewIncludesProjectTemplates(t *testing.T) {
 		('p-plain', 'Ship it',    1, 0, 0, 1, 0, 3),
 		('t-plain', 'Post letter', 0, 0, 0, 2, 0, 4)`)
 
-	got, err := d.ListTasks("repeating", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating): %v", err)
-	}
+	got := mustList(t, d, "repeating", TaskFilter{})
 	if want := []string{"t-tmpl", "p-tmpl"}; !slices.Equal(uuidsOf(got), want) {
 		t.Fatalf("ListTasks(repeating) = %v, want %v (to-dos before projects)", uuidsOf(got), want)
 	}
@@ -240,10 +205,7 @@ func TestRepeatingViewExcludesHeadings(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, "index", rt1_recurrenceRule) VALUES
 		('h-odd', 'A heading', 2, 0, 0, 1, 0, 1, x'0102')`)
 
-	got, err := d.ListTasks("repeating", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(repeating): %v", err)
-	}
+	got := mustList(t, d, "repeating", TaskFilter{})
 	if len(got) != 0 {
 		t.Errorf("ListTasks(repeating) = %v, want no headings", uuidsOf(got))
 	}
@@ -271,15 +233,10 @@ func TestTemplateChildExcludedFromSomeday(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, "index") VALUES
 		('t-toplevel', 'Deferred on its own', 0, 0, 0, 2, 0, 3)`)
 
-	got, err := d.ListTasks("someday", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(someday): %v", err)
-	}
+	got := mustList(t, d, "someday", TaskFilter{})
 	// p-real is a Someday project and lists as a row of its own; p-tmpl is a
 	// template and belongs to the repeating view.
-	if !sameSet(uuidsOf(got), []string{"t-toplevel", "p-real"}) {
-		t.Errorf("someday: got %v, want [t-toplevel p-real]", uuidsOf(got))
-	}
+	assertSet(t, got, []string{"t-toplevel", "p-real"}, "someday")
 }
 
 // A to-do inside a repeating project template must not list as an ordinary
@@ -331,14 +288,9 @@ func TestTemplateProjectChildrenExcludedFromOpenViews(t *testing.T) {
 				('t-child', 'Inside the template', 0, 0, 0, 'p-tmpl', 1, `+tc.values+`),
 				('t-plain', 'Inside a real one',   0, 0, 0, 'p-real', 2, `+tc.values+`)`)
 
-			got, err := d.ListTasks(tc.view, TaskFilter{})
-			if err != nil {
-				t.Fatalf("ListTasks(%q): %v", tc.view, err)
-			}
+			got := mustList(t, d, tc.view, TaskFilter{})
 			want := append([]string{"t-plain"}, tc.extra...)
-			if !sameSet(uuidsOf(got), want) {
-				t.Errorf("view %q: got %v, want %v — the template's child must not list", tc.view, uuidsOf(got), want)
-			}
+			assertSet(t, got, want, "view %q (the template's child must not list)", tc.view)
 		})
 	}
 }
@@ -358,10 +310,7 @@ func TestTemplateProjectChildrenExcludedThroughHeading(t *testing.T) {
 		(uuid, title, type, status, trashed, start, startBucket, heading, "index") VALUES
 		('t-child', 'Under the heading', 0, 0, 0, 1, 0, 'head-1', 1)`)
 
-	got, err := d.ListTasks("anytime", TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks(anytime): %v", err)
-	}
+	got := mustList(t, d, "anytime", TaskFilter{})
 	if len(got) != 0 {
 		t.Errorf("ListTasks(anytime) = %v, want no heading-nested children of a template project", uuidsOf(got))
 	}
@@ -398,10 +347,7 @@ func TestTemplateProjectChildrenReportRepeating(t *testing.T) {
 		"t-inst":  false,
 		"t-plain": false,
 	} {
-		got, err := d.GetTaskByUUID(uuid)
-		if err != nil {
-			t.Fatalf("GetTaskByUUID(%s): %v", uuid, err)
-		}
+		got := mustGetByUUID(t, d, uuid)
 		if got.Repeating != want {
 			t.Errorf("%s: Repeating = %v, want %v", uuid, got.Repeating, want)
 		}
@@ -426,10 +372,7 @@ func TestTrashAndLogbookKeepTemplateProjectChildren(t *testing.T) {
 		{"trash", "t-binned"},
 		{"logbook", "t-logged"},
 	} {
-		got, err := d.ListTasks(tc.view, TaskFilter{})
-		if err != nil {
-			t.Fatalf("ListTasks(%q): %v", tc.view, err)
-		}
+		got := mustList(t, d, tc.view, TaskFilter{})
 		if !sameSet(uuidsOf(got), []string{tc.want}) {
 			t.Errorf("view %q: got %v, want [%s]", tc.view, uuidsOf(got), tc.want)
 		}
