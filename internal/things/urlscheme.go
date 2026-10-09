@@ -7,27 +7,95 @@ import (
 	"strings"
 )
 
+// AddCommon holds the fields `add` and `add-project` share. AddParams and
+// AddProjectParams embed it.
+type AddCommon struct {
+	Title    string
+	Notes    string
+	When     string
+	Deadline string
+	Tags     string
+}
+
+// normalized checks the shared fields, with own holding the caller's checks
+// of its own fields, and returns c with When and Deadline canonicalised.
+func (c AddCommon) normalized(own ...error) (AddCommon, error) {
+	when, err := NormalizeWhen(c.When)
+	if err != nil {
+		return c, err
+	}
+	shared := []error{
+		validateString("title", c.Title),
+		validateNotes("notes", c.Notes),
+		validateTags("tags", c.Tags),
+	}
+	if err := firstErr(append(shared, own...)...); err != nil {
+		return c, err
+	}
+	deadline, err := NormalizeDeadline(c.Deadline)
+	if err != nil {
+		return c, err
+	}
+	c.When, c.Deadline = when, deadline
+	return c, nil
+}
+
+// values sets the shared keys.
+func (c AddCommon) values() url.Values {
+	v := url.Values{}
+	v.Set("title", c.Title)
+	setNonEmpty(v, "notes", c.Notes)
+	setNonEmpty(v, "when", c.When)
+	setNonEmpty(v, "deadline", c.Deadline)
+	setNonEmpty(v, "tags", c.Tags)
+	return v
+}
+
 type AddParams struct {
-	Title     string
-	Notes     string
-	When      string
-	Deadline  string
-	Tags      string
+	AddCommon
+
 	Checklist string
 	Heading   string
 	List      string
 	ListID    string
 }
 
+// Validate returns the error AddTask would refuse p with, so a caller can
+// refuse p before doing anything else, such as creating tags.
+func (p AddParams) Validate() error {
+	_, err := p.normalized()
+	return err
+}
+
+func (p AddParams) normalized() (AddParams, error) {
+	c, err := p.AddCommon.normalized(
+		validateChecklist("checklist", p.Checklist),
+		validateString("list", p.List),
+		validateString("heading", p.Heading),
+	)
+	p.AddCommon = c
+	return p, err
+}
+
 type AddProjectParams struct {
-	Title    string
-	Notes    string
-	When     string
-	Deadline string
-	Tags     string
-	Area     string
-	AreaID   string
-	Todos    string
+	AddCommon
+
+	Area   string
+	AreaID string
+	Todos  string
+}
+
+// Validate returns the error AddProject would refuse p with, so a caller can
+// refuse p before doing anything else, such as creating tags.
+func (p AddProjectParams) Validate() error {
+	_, err := p.normalized()
+	return err
+}
+
+func (p AddProjectParams) normalized() (AddProjectParams, error) {
+	c, err := p.AddCommon.normalized(validateString("area", p.Area))
+	p.AddCommon = c
+	return p, err
 }
 
 // openThingsURL hands a things:/// URL to `open -g` so writes don't steal
@@ -129,25 +197,11 @@ func Show(params ShowParams) error {
 }
 
 func AddProject(params AddProjectParams) error {
-	if err := validateAddProject(params); err != nil {
-		return err
-	}
-	when, err := NormalizeWhen(params.When)
+	params, err := params.normalized()
 	if err != nil {
 		return err
 	}
-	params.When = when
-	deadline, err := NormalizeDeadline(params.Deadline)
-	if err != nil {
-		return err
-	}
-	params.Deadline = deadline
-	v := url.Values{}
-	v.Set("title", params.Title)
-	setNonEmpty(v, "notes", params.Notes)
-	setNonEmpty(v, "when", params.When)
-	setNonEmpty(v, "deadline", params.Deadline)
-	setNonEmpty(v, "tags", params.Tags)
+	v := params.values()
 	setNonEmpty(v, "area", params.Area)
 	setNonEmpty(v, "area-id", params.AreaID)
 	setNonEmpty(v, "to-dos", params.Todos)
@@ -288,25 +342,11 @@ func UpdateProject(params UpdateProjectParams) error {
 }
 
 func AddTask(params AddParams) error {
-	if err := validateAdd(params); err != nil {
-		return err
-	}
-	when, err := NormalizeWhen(params.When)
+	params, err := params.normalized()
 	if err != nil {
 		return err
 	}
-	params.When = when
-	deadline, err := NormalizeDeadline(params.Deadline)
-	if err != nil {
-		return err
-	}
-	params.Deadline = deadline
-	v := url.Values{}
-	v.Set("title", params.Title)
-	setNonEmpty(v, "notes", params.Notes)
-	setNonEmpty(v, "when", params.When)
-	setNonEmpty(v, "deadline", params.Deadline)
-	setNonEmpty(v, "tags", params.Tags)
+	v := params.values()
 	setNonEmpty(v, "checklist-items", params.Checklist)
 	setNonEmpty(v, "list", params.List)
 	setNonEmpty(v, "list-id", params.ListID)

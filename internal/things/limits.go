@@ -19,19 +19,16 @@ const (
 	MaxStringLen      = 4000
 )
 
-func validateNotes(field, v string) error {
-	if n := utf8.RuneCountInString(v); n > MaxNotesLen {
-		return fmt.Errorf("%s: %d characters exceeds the %d-character limit", field, n, MaxNotesLen)
+func validateLen(field, v string, limit int) error {
+	if n := utf8.RuneCountInString(v); n > limit {
+		return fmt.Errorf("%s: %d characters exceeds the %d-character limit", field, n, limit)
 	}
 	return nil
 }
 
-func validateString(field, v string) error {
-	if n := utf8.RuneCountInString(v); n > MaxStringLen {
-		return fmt.Errorf("%s: %d characters exceeds the %d-character limit", field, n, MaxStringLen)
-	}
-	return nil
-}
+func validateNotes(field, v string) error { return validateLen(field, v, MaxNotesLen) }
+
+func validateString(field, v string) error { return validateLen(field, v, MaxStringLen) }
 
 func validateChecklist(field, v string) error {
 	if v == "" {
@@ -78,32 +75,12 @@ func truncate(s string) string {
 	return s
 }
 
-func optString(field string, p *string) error {
+// opt runs check on *p, and passes when p is nil.
+func opt(check func(field, v string) error, field string, p *string) error {
 	if p == nil {
 		return nil
 	}
-	return validateString(field, *p)
-}
-
-func optNotes(field string, p *string) error {
-	if p == nil {
-		return nil
-	}
-	return validateNotes(field, *p)
-}
-
-func optTags(field string, p *string) error {
-	if p == nil {
-		return nil
-	}
-	return validateTags(field, *p)
-}
-
-func optChecklist(field string, p *string) error {
-	if p == nil {
-		return nil
-	}
-	return validateChecklist(field, *p)
+	return check(field, *p)
 }
 
 func firstErr(errs ...error) error {
@@ -115,52 +92,32 @@ func firstErr(errs ...error) error {
 	return nil
 }
 
-func validateAdd(p AddParams) error {
-	return firstErr(
-		validateString("title", p.Title),
-		validateNotes("notes", p.Notes),
-		validateTags("tags", p.Tags),
-		validateChecklist("checklist", p.Checklist),
-		validateString("list", p.List),
-		validateString("heading", p.Heading),
-	)
-}
-
-func validateAddProject(p AddProjectParams) error {
-	return firstErr(
-		validateString("title", p.Title),
-		validateNotes("notes", p.Notes),
-		validateTags("tags", p.Tags),
-		validateString("area", p.Area),
-	)
-}
-
 // validate checks the fields shared by `update` and `update-project`.
 func (c UpdateCommon) validate() error {
 	return firstErr(
-		optString("title", c.Title),
-		optNotes("notes", c.Notes),
-		optNotes("prepend-notes", c.PrependNotes),
-		optNotes("append-notes", c.AppendNotes),
-		optTags("tags", c.Tags),
-		optTags("add-tags", c.AddTags),
+		opt(validateString, "title", c.Title),
+		opt(validateNotes, "notes", c.Notes),
+		opt(validateNotes, "prepend-notes", c.PrependNotes),
+		opt(validateNotes, "append-notes", c.AppendNotes),
+		opt(validateTags, "tags", c.Tags),
+		opt(validateTags, "add-tags", c.AddTags),
 	)
 }
 
 func validateUpdate(p UpdateParams) error {
 	return firstErr(
 		p.validate(),
-		optChecklist("checklist", p.Checklist),
-		optChecklist("prepend-checklist", p.PrependChecklist),
-		optChecklist("append-checklist", p.AppendChecklist),
-		optString("list", p.List),
-		optString("heading", p.Heading),
+		opt(validateChecklist, "checklist", p.Checklist),
+		opt(validateChecklist, "prepend-checklist", p.PrependChecklist),
+		opt(validateChecklist, "append-checklist", p.AppendChecklist),
+		opt(validateString, "list", p.List),
+		opt(validateString, "heading", p.Heading),
 	)
 }
 
 func validateUpdateProject(p UpdateProjectParams) error {
 	return firstErr(
 		p.validate(),
-		optString("area", p.Area),
+		opt(validateString, "area", p.Area),
 	)
 }

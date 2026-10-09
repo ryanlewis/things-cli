@@ -29,6 +29,7 @@ func parserOptions(cfg *config.File) []kong.Option {
 			"builtin_lists": strings.Join(things.BuiltinLists, ", "),
 			"skill_agents":  skill.AgentNames(),
 		},
+		helpVars,
 	}
 	opts = append(opts,
 		kong.NamedMapper("verifytimeout", verifyTimeoutMapper{}),

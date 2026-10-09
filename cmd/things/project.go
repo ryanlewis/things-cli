@@ -17,8 +17,8 @@ type ProjectCmd struct {
 type ProjectAddCmd struct {
 	Title    string `arg:"" required:"" help:"Project title."`
 	Notes    string `help:"Notes for the project."`
-	When     string `help:"Schedule: today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM, or RFC3339."`
-	Deadline string `help:"Deadline: a YYYY-MM-DD date or an English phrase such as \"next friday\". Keywords such as today and tomorrow are rejected."`
+	When     string `help:"${add_when_help}"`
+	Deadline string `help:"${add_deadline_help}"`
 	Tags     string `help:"Comma-separated tags."`
 	Area     string `help:"Area name or UUID."`
 	Todos    string `help:"Newline-separated initial tasks."`
@@ -27,19 +27,22 @@ type ProjectAddCmd struct {
 }
 
 func (c *ProjectAddCmd) Run(d *Deps) error {
-	if err := refuseBlankTitle(c.Title, "project", "added"); err != nil {
-		return err
+	params := things.AddProjectParams{
+		AddCommon: things.AddCommon{
+			Title:    c.Title,
+			Notes:    c.Notes,
+			When:     c.When,
+			Deadline: c.Deadline,
+			Tags:     c.Tags,
+		},
+		Area:  c.Area,
+		Todos: expandNewlines(c.Todos),
 	}
-	// Before --create-tags can create anything.
-	if _, err := things.NormalizeWhen(c.When); err != nil {
-		return err
-	}
-	if _, err := verifyTagStrings(d, c.TagFlags, &c.Tags); err != nil {
+	if err := preAdd(d, "project", params.AddCommon, params.Validate, c.TagFlags); err != nil {
 		return err
 	}
 	// Things matches area by title only; a uuid has to go as area-id.
-	area, areaID := c.Area, ""
-	target, read := projectArea(d, area, "it will create the project with no area")
+	target, read := projectArea(d, c.Area, "it will create the project with no area")
 	// Where Things will file the project, for the read-back: the area the
 	// title or uuid leads to, or none when it leads nowhere.
 	dest := createdDest{checked: true, list: target.UUID}
@@ -47,22 +50,13 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	case !read:
 		dest = createdDest{}
 	case target.ByUUID:
-		area, areaID = "", target.UUID
+		params.Area, params.AreaID = "", target.UUID
 	}
 	if target.UUID != "" {
-		noteTarget(d, area, "areas", target)
+		noteTarget(d, params.Area, "areas", target)
 	}
 	return applyAdd(d, model.TypeProject, c.Title, dest, c.When, func() error {
-		return things.AddProject(things.AddProjectParams{
-			Title:    c.Title,
-			Notes:    c.Notes,
-			When:     c.When,
-			Deadline: c.Deadline,
-			Tags:     c.Tags,
-			Area:     area,
-			AreaID:   areaID,
-			Todos:    expandNewlines(c.Todos),
-		})
+		return things.AddProject(params)
 	})
 }
 

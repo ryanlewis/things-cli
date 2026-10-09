@@ -27,7 +27,7 @@ func stubRunner(t *testing.T, fail bool) *[]string {
 func TestAddTaskMinimal(t *testing.T) {
 	captured := stubRunner(t, false)
 
-	err := AddTask(AddParams{Title: "Hello World"})
+	err := AddTask(AddParams{AddCommon: AddCommon{Title: "Hello World"}})
 	if err != nil {
 		t.Fatalf("AddTask: %v", err)
 	}
@@ -54,11 +54,13 @@ func TestAddTaskAllFields(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	err := AddTask(AddParams{
-		Title:     "T",
-		Notes:     "n",
-		When:      "today",
-		Deadline:  "2026-05-01",
-		Tags:      "a,b",
+		AddCommon: AddCommon{
+			Title:    "T",
+			Notes:    "n",
+			When:     "today",
+			Deadline: "2026-05-01",
+			Tags:     "a,b",
+		},
 		Checklist: "x\ny",
 		Heading:   "H",
 		List:      "Inbox",
@@ -97,7 +99,7 @@ func TestAddTaskAllFields(t *testing.T) {
 func TestAddTaskOmitsEmpty(t *testing.T) {
 	captured := stubRunner(t, false)
 
-	if err := AddTask(AddParams{Title: "only"}); err != nil {
+	if err := AddTask(AddParams{AddCommon: AddCommon{Title: "only"}}); err != nil {
 		t.Fatal(err)
 	}
 	u := (*captured)[2]
@@ -111,7 +113,7 @@ func TestAddTaskOmitsEmpty(t *testing.T) {
 func TestAddProjectMinimal(t *testing.T) {
 	captured := stubRunner(t, false)
 
-	if err := AddProject(AddProjectParams{Title: "Launch site"}); err != nil {
+	if err := AddProject(AddProjectParams{AddCommon: AddCommon{Title: "Launch site"}}); err != nil {
 		t.Fatalf("AddProject: %v", err)
 	}
 	if len(*captured) != 3 {
@@ -133,13 +135,15 @@ func TestAddProjectAllFields(t *testing.T) {
 	captured := stubRunner(t, false)
 
 	err := AddProject(AddProjectParams{
-		Title:    "P",
-		Notes:    "n",
-		When:     "today",
-		Deadline: "2026-05-01",
-		Tags:     "a,b",
-		Area:     "Work",
-		Todos:    "one\ntwo",
+		AddCommon: AddCommon{
+			Title:    "P",
+			Notes:    "n",
+			When:     "today",
+			Deadline: "2026-05-01",
+			Tags:     "a,b",
+		},
+		Area:  "Work",
+		Todos: "one\ntwo",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +174,7 @@ func TestAddProjectAllFields(t *testing.T) {
 func TestAddProjectOmitsEmpty(t *testing.T) {
 	captured := stubRunner(t, false)
 
-	if err := AddProject(AddProjectParams{Title: "only"}); err != nil {
+	if err := AddProject(AddProjectParams{AddCommon: AddCommon{Title: "only"}}); err != nil {
 		t.Fatal(err)
 	}
 	u := (*captured)[2]
@@ -184,7 +188,7 @@ func TestAddProjectOmitsEmpty(t *testing.T) {
 func TestAddProjectCommandFails(t *testing.T) {
 	stubRunner(t, true)
 
-	err := AddProject(AddProjectParams{Title: "p"})
+	err := AddProject(AddProjectParams{AddCommon: AddCommon{Title: "p"}})
 	if err == nil {
 		t.Fatal("expected error from failing command")
 	}
@@ -723,7 +727,7 @@ func TestShowCommandFails(t *testing.T) {
 func TestAddTaskCommandFails(t *testing.T) {
 	stubRunner(t, true)
 
-	err := AddTask(AddParams{Title: "t"})
+	err := AddTask(AddParams{AddCommon: AddCommon{Title: "t"}})
 	if err == nil {
 		t.Fatal("expected error from failing command")
 	}

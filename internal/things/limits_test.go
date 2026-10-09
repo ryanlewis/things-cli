@@ -136,21 +136,23 @@ func TestValidateNotes_CountsRunesNotBytes(t *testing.T) {
 }
 
 func TestValidateAdd(t *testing.T) {
-	if err := validateAdd(AddParams{Title: repeat(MaxStringLen + 1)}); err == nil {
+	if err := (AddParams{AddCommon: AddCommon{Title: repeat(MaxStringLen + 1)}}).Validate(); err == nil {
 		t.Fatal("expected title limit error")
 	}
-	if err := validateAdd(AddParams{Notes: repeat(MaxNotesLen + 1)}); err == nil {
+	if err := (AddParams{AddCommon: AddCommon{Notes: repeat(MaxNotesLen + 1)}}).Validate(); err == nil {
 		t.Fatal("expected notes limit error")
 	}
-	if err := validateAdd(AddParams{Checklist: checklist(MaxChecklistItems + 1)}); err == nil {
+	if err := (AddParams{Checklist: checklist(MaxChecklistItems + 1)}).Validate(); err == nil {
 		t.Fatal("expected checklist limit error")
 	}
-	if err := validateAdd(AddParams{
-		Title:     "ok",
-		Notes:     repeat(MaxNotesLen),
+	if err := (AddParams{
+		AddCommon: AddCommon{
+			Title: "ok",
+			Notes: repeat(MaxNotesLen),
+			Tags:  "one,two",
+		},
 		Checklist: checklist(MaxChecklistItems),
-		Tags:      "one,two",
-	}); err != nil {
+	}).Validate(); err != nil {
 		t.Fatalf("valid params should pass: %v", err)
 	}
 }
@@ -202,8 +204,8 @@ func TestRejectsBeforeOpen(t *testing.T) {
 		name string
 		call func() error
 	}{
-		{"AddTask", func() error { return AddTask(AddParams{Notes: bigNotes}) }},
-		{"AddProject", func() error { return AddProject(AddProjectParams{Notes: bigNotes}) }},
+		{"AddTask", func() error { return AddTask(AddParams{AddCommon: AddCommon{Notes: bigNotes}}) }},
+		{"AddProject", func() error { return AddProject(AddProjectParams{AddCommon: AddCommon{Notes: bigNotes}}) }},
 		{"UpdateTask", func() error {
 			return UpdateTask(UpdateParams{UpdateCommon: UpdateCommon{ID: "x", AuthToken: "t", Notes: &bigNotes}})
 		}},

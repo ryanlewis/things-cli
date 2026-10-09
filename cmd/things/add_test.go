@@ -482,7 +482,9 @@ func TestAddNotFoundSearchHintKeepsGlobalFlags(t *testing.T) {
 		Stderr: io.Discard,
 	}
 
-	err := applyAdd(d, model.TypeTask, "Buy oat milk", createdDest{}, "", func() error { return things.AddTask(things.AddParams{Title: "Buy oat milk"}) })
+	err := applyAdd(d, model.TypeTask, "Buy oat milk", createdDest{}, "", func() error {
+		return things.AddTask(things.AddParams{AddCommon: things.AddCommon{Title: "Buy oat milk"}})
+	})
 	want := "things --db '/tmp/my things.sqlite' --config /tmp/c.toml search 'Buy oat milk'"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("err = %v, want the hint %q", err, want)
@@ -1073,6 +1075,39 @@ func TestImpossibleWhenRefusedUpFront(t *testing.T) {
 		}
 		if *calls != 0 {
 			t.Errorf("%v issued %d writes, want none", args, *calls)
+		}
+	}
+}
+
+// An add whose fields the URL scheme would refuse, a value over a length
+// limit or a keyword deadline, is refused before --create-tags creates the
+// unknown tag over AppleScript: no command runs at all.
+func TestAddInvalidRefusedBeforeTagsCreated(t *testing.T) {
+	long := strings.Repeat("a", things.MaxStringLen+1)
+	longNotes := strings.Repeat("a", things.MaxNotesLen+1)
+	tags := []string{"--create-tags", "--tags", "Brandnew"}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"add", long}, "title: "},
+		{[]string{"add", "Post letter", "--notes", longNotes}, "notes: "},
+		{[]string{"add", "Post letter", "--heading", long}, "heading: "},
+		{[]string{"add", "Post letter", "--deadline", "today"}, "--deadline does not accept keywords"},
+		{[]string{"project", "add", long}, "title: "},
+		{[]string{"project", "add", "Launch", "--area", long}, "area: "},
+		{[]string{"project", "add", "Launch", "--deadline", "tomorrow"}, "--deadline does not accept keywords"},
+	} {
+		fastVerify(t)
+		database, _ := seedWritable(t)
+		calls := stubExecDropping(t)
+		args := append(slices.Clone(tc.args), tags...)
+		_, _, err := runStreams(t, database, args...)
+		if err == nil || !strings.HasPrefix(err.Error(), tc.want) {
+			t.Errorf("%.60v = %v, want an error starting %q", args, err, tc.want)
+		}
+		if *calls != 0 {
+			t.Errorf("%.60v issued %d commands, want none", args, *calls)
 		}
 	}
 }
