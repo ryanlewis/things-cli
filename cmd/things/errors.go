@@ -476,9 +476,9 @@ type payloader interface {
 	fillPayload(*jsonErrorPayload)
 }
 
-// errorPayload classifies err into the JSON shape. It is the single place that
-// maps Go error types onto the wire format: a new error type implements
-// payloader rather than formatting JSON at a call site.
+// errorPayload classifies err into the JSON shape. Each error type here fills
+// its own fields through payloader, and errorPayload maps internal/db's: a new
+// error type implements payloader rather than formatting JSON at a call site.
 //
 // The first error in err's chain that is a payloader fills the payload. No
 // error here wraps another payloader, so there is only ever one to find. An
@@ -520,7 +520,6 @@ func errorPayload(err error) jsonErrorPayload {
 // a refusal sent nothing, so the payload can be fixed and re-run whole, while
 // a partially applied import already changed things and must be re-run with
 // only the items named here.
-
 func (e *importRefusalError) fillPayload(p *jsonErrorPayload) {
 	p.Error = "import refused"
 	p.Items = e.jsonItems()
