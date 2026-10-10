@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
@@ -27,11 +28,12 @@ func (c *AddCmd) Run(d *Deps) error {
 	if list == "" {
 		list = c.Project
 	}
+	when := things.ResolveWhen(c.When, clock.Now())
 	params := things.AddParams{
 		AddCommon: things.AddCommon{
 			Title:    c.Title,
 			Notes:    c.Notes,
-			When:     c.When,
+			When:     when,
 			Deadline: c.Deadline,
 			Tags:     c.Tags,
 		},
@@ -47,7 +49,7 @@ func (c *AddCmd) Run(d *Deps) error {
 	if target.ByUUID {
 		params.List, params.ListID = "", target.UUID
 	}
-	return applyAdd(d, model.TypeTask, c.Title, dest, c.When, func() error {
+	return applyAdd(d, model.TypeTask, c.Title, dest, c.When, when, func() error {
 		return things.AddTask(params)
 	})
 }

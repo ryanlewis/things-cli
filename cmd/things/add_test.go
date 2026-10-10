@@ -483,7 +483,7 @@ func TestAddNotFoundSearchHintKeepsGlobalFlags(t *testing.T) {
 		Stderr: io.Discard,
 	}
 
-	err := applyAdd(d, model.TypeTask, "Buy oat milk", createdDest{}, "", func() error {
+	err := applyAdd(d, model.TypeTask, "Buy oat milk", createdDest{}, "", "", func() error {
 		return things.AddTask(things.AddParams{AddCommon: things.AddCommon{Title: "Buy oat milk"}})
 	})
 	want := "things --db '/tmp/my things.sqlite' --config /tmp/c.toml search 'Buy oat milk'"
@@ -1232,6 +1232,72 @@ func TestWhen12HourReadBack(t *testing.T) {
 			_, stderr, err = runStreams(t, database, "add", "Buy oat milk", "--when", in)
 			if err == nil || !strings.Contains(err.Error(), "add did not apply as sent") || strings.Contains(stderr, "did not understand") {
 				t.Errorf("add --when %s = %v, stderr %q; want it misfiled", in, err, stderr)
+			}
+		})
+	}
+}
+
+// A date or today or tomorrow with a time after the @ is sent as the
+// YYYY-MM-DD@HH:MM Things was measured with, and read back like one: an add
+// that lands with no start date, or an edit Things applies without moving the
+// item, is misfiled instead of confirmed unchecked. Messages name the value as
+// typed.
+func TestWhenDatedTimeReadBack(t *testing.T) {
+	date := func(days int) string { return testNow.AddDate(0, 0, days).Format("2006-01-02") }
+	later, year := date(2), testNow.Format("2006")
+	for in, sent := range map[string]string{
+		"today@6pm":       date(0) + "@18:00",
+		"TODAY@9:30PM":    date(0) + "@21:30",
+		"tomorrow@18:00":  date(1) + "@18:00",
+		"tomorrow@9:05":   date(1) + "@09:05",
+		later + "@9pm":    later + "@21:00",
+		later + "@9:30":   later + "@09:30",
+		year + "-1-5@6am": year + "-01-05@06:00",
+	} {
+		t.Run(in, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			var urls []string
+			prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+				urls = append(urls, strings.Join(args, " "))
+				bumpModificationDates(t, sqlDB)
+				return exec.Command("true")
+			})
+			t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+			_, _, err := runStreams(t, database, "--json", "edit", "one-1", "--when", in)
+			if err == nil || !strings.Contains(err.Error(), "edit did not apply as sent") || !strings.Contains(err.Error(), strconv.Quote(in)) {
+				t.Errorf("edit --when %s = %v; want it misfiled, naming the value as typed", in, err)
+			}
+			if want := "when=" + url.QueryEscape(sent); len(urls) != 1 || !strings.Contains(urls[0], want) {
+				t.Errorf("edit --when %s sent %q, want %s", in, urls, want)
+			}
+
+			for _, add := range [][]string{{"add", "Buy oat milk"}, {"project", "add", "Buy oat milk"}} {
+				typ := model.TypeTask
+				if add[0] == "project" {
+					typ = model.TypeProject
+				}
+				uuid := "new-" + add[0]
+				urls = nil
+				prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+					urls = append(urls, strings.Join(args, " "))
+					now := model.TimeToUnix(time.Now())
+					if _, err := sqlDB.Exec(`INSERT INTO TMTask (uuid, title, type, status, trashed, start, creationDate, userModificationDate) VALUES (?, 'Buy oat milk', ?, 0, 0, 0, ?, ?)`, uuid, int(typ), now, now); err != nil {
+						t.Errorf("simulating Things add: %v", err)
+					}
+					return exec.Command("true")
+				})
+				t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+				_, _, err = runStreams(t, database, append(add, "--when", in)...)
+				if err == nil || !strings.Contains(err.Error(), "add did not apply as sent") || !strings.Contains(err.Error(), strconv.Quote(in)) {
+					t.Errorf("%s --when %s = %v; want it misfiled, naming the value as typed", add[0], in, err)
+				}
+				if want := "when=" + url.QueryEscape(sent); len(urls) != 1 || !strings.Contains(urls[0], want) {
+					t.Errorf("%s --when %s sent %q, want %s", add[0], in, urls, want)
+				}
+				if _, err := sqlDB.Exec(`DELETE FROM TMTask WHERE uuid = ?`, uuid); err != nil {
+					t.Fatal(err)
+				}
 			}
 		})
 	}

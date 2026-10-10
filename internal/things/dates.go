@@ -151,6 +151,18 @@ func (c clockTime) real() bool {
 	return c.hour <= 23 && c.minute <= 59
 }
 
+// hhmm writes c, a time of day that is real, as HH:MM.
+func (c clockTime) hhmm() string {
+	hour := c.hour
+	if c.half != "" {
+		hour %= 12
+		if strings.EqualFold(c.half, "pm") {
+			hour += 12
+		}
+	}
+	return fmt.Sprintf("%02d:%02d", hour, c.minute)
+}
+
 // clock24 rewrites v, a 12-hour time of day clockShape accepts (6pm,
 // 9:30 PM, 12am), as HH:MM. Things was measured with HH:MM times only, so
 // that is the form sent and read back; how it reads 6pm was not measured.
@@ -159,11 +171,47 @@ func clock24(v string) (string, bool) {
 	if !ok || c.half == "" || !c.real() {
 		return "", false
 	}
-	hour := c.hour % 12
-	if strings.EqualFold(c.half, "pm") {
-		hour += 12
+	return c.hhmm(), true
+}
+
+// ResolveWhen returns the --when value to send for v when it is sent at now.
+// A date, today or tomorrow with a time after the @ is rewritten to
+// YYYY-MM-DD@HH:MM, the date and time form Things was measured with: today
+// and tomorrow become their dates at now, and the time becomes HH:MM (6pm is
+// 18:00). How Things reads a keyword or a 12-hour time after an @ was not
+// measured. So tomorrow sent just before midnight is the day after the one
+// it was sent on, whenever Things reads it. Any other value is returned as it
+// is: evening with a time too, since a date and time today files the item in
+// the day part, not the evening, and one NormalizeWhen refuses.
+func ResolveWhen(v string, now time.Time) string {
+	n, err := NormalizeWhen(v)
+	if err != nil {
+		return v
 	}
-	return fmt.Sprintf("%02d:%02d", hour, c.minute), true
+	day, clock, timed := strings.Cut(n, "@")
+	if !timed {
+		return v
+	}
+	c, ok := clockParts(clock)
+	if !ok || !c.real() {
+		return v
+	}
+	now = now.In(time.Local)
+	var date time.Time
+	switch m := whenDateShape.FindStringSubmatch(day); {
+	case m != nil && m[4] == "":
+		year, _ := strconv.Atoi(m[1])
+		month, _ := strconv.Atoi(m[2])
+		dd, _ := strconv.Atoi(m[3])
+		date = time.Date(year, time.Month(month), dd, 12, 0, 0, 0, time.Local)
+	case strings.EqualFold(day, "today"):
+		date = now
+	case strings.EqualFold(day, "tomorrow"):
+		date = now.AddDate(0, 0, 1)
+	default:
+		return v
+	}
+	return date.Format("2006-01-02") + "@" + c.hhmm()
 }
 
 // WhenDateOrTime reports whether v, a value NormalizeWhen returned, is a

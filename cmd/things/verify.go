@@ -589,11 +589,12 @@ var unconfirmedMsg = map[string]string{
 // same place at the same moment — is reported unconfirmed with the
 // candidates rather than guessed. Under
 // --no-verify, or when the database cannot be read, the write still goes out
-// and the output says it is unconfirmed. when is the --when value, "" for
-// none: the item found must be filed where it says (whenCheck). Things
+// and the output says it is unconfirmed. when is the --when value as typed, "" for
+// none, and sentAs the value write sends (things.ResolveWhen): the item
+// found must be filed where that says (whenCheck). Things
 // creates the item in one write, so a new item filed anywhere else is the
 // write's and is reported as such, not waited on.
-func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when string, write func() error) error {
+func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when, sentAs string, write func() error) error {
 	if d.NoVerify {
 		if err := write(); err != nil {
 			return err
@@ -623,7 +624,7 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when 
 
 	var whenSent *whenCheck
 	if strings.TrimSpace(when) != "" {
-		whenSent = &whenCheck{value: when, sent: clock.Now()}
+		whenSent = &whenCheck{value: when, sentAs: sentAs, sent: clock.Now()}
 	}
 	if err := write(); err != nil {
 		return err

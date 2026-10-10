@@ -243,3 +243,45 @@ func TestKnownWhenWord(t *testing.T) {
 		}
 	}
 }
+
+// A date, today or tomorrow with a time after the @ is sent as
+// YYYY-MM-DD@HH:MM, with today and tomorrow read at the instant it is sent.
+// Anything else goes as typed.
+func TestResolveWhen(t *testing.T) {
+	now := time.Date(2026, 10, 10, 14, 0, 0, 0, time.Local)
+	beforeMidnight := time.Date(2026, 10, 10, 23, 59, 59, 0, time.Local)
+	cases := []struct {
+		in   string
+		now  time.Time
+		want string
+	}{
+		{"today@6pm", now, "2026-10-10@18:00"},
+		{"Today@18:00", now, "2026-10-10@18:00"},
+		{" TOMORROW@9:30 PM ", now, "2026-10-11@21:30"},
+		{"tomorrow@12am", now, "2026-10-11@00:00"},
+		{"today@9:05", now, "2026-10-10@09:05"},
+		// tomorrow is the day after the one it was sent on, even when
+		// Things reads it after midnight.
+		{"tomorrow@6pm", beforeMidnight, "2026-10-11@18:00"},
+		{"today@6pm", beforeMidnight, "2026-10-10@18:00"},
+		{"2026-10-12@9pm", now, "2026-10-12@21:00"},
+		{"2026-1-5@6:30am", now, "2026-01-05@06:30"},
+		{"2026-10-12@09:30", now, "2026-10-12@09:30"},
+		{"2026-10-09T10:00:00+05:00", now, "2026-10-09@10:00"},
+		// Not resolved.
+		{"evening@6pm", now, "evening@6pm"},
+		{"friday@9pm", now, "friday@9pm"},
+		{"next friday@noon", now, "next friday@noon"},
+		{"today", now, "today"},
+		{"6pm", now, "6pm"},
+		{"2026-10-12", now, "2026-10-12"},
+		{"today@25:00", now, "today@25:00"},
+		{"someday@18:00", now, "someday@18:00"},
+		{"", now, ""},
+	}
+	for _, tc := range cases {
+		if got := ResolveWhen(tc.in, tc.now); got != tc.want {
+			t.Errorf("ResolveWhen(%q, %s) = %q, want %q", tc.in, tc.now.Format(time.Kitchen), got, tc.want)
+		}
+	}
+}

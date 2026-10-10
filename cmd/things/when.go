@@ -321,14 +321,18 @@ func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
 	return p.bucket != 1 || task.StartBucket == 1
 }
 
-// whenCheck is the --when part of a read-back: the value sent and when it was
-// sent. before is the item as read before the write when it was a row Things
+// whenCheck is the --when part of a read-back: the value, as typed and as
+// sent, and when it was sent. before is the item as read before the write when it was a row Things
 // had not moved into today yet or one in Today from an earlier day (heldIn),
 // nil otherwise; carried says it was the second. whenOnly says the edit
 // changes nothing but --when, so such a row Things left as it was, with
 // nothing recorded, is the edit applied (unmovedKeeps).
 type whenCheck struct {
-	value    string
+	value string
+	// sentAs is the value as sent when things.ResolveWhen rewrote it, ""
+	// when it went as value. It is what the read-back judges; messages
+	// name value, as typed.
+	sentAs   string
 	sent     time.Time
 	before   *model.Task
 	carried  bool
@@ -354,12 +358,20 @@ func (c *whenCheck) holds(t *model.Task, now time.Time) bool {
 	if c == nil {
 		return true
 	}
-	p, ok := placeWhen(c.value, c.sent)
+	p, ok := placeWhen(c.judged(), c.sent)
 	if !ok || c.landed(p, c.sent, t) {
 		return true
 	}
-	p, ok = placeWhen(c.value, now)
+	p, ok = placeWhen(c.judged(), now)
 	return ok && c.landed(p, now, t)
+}
+
+// judged is the value as sent, which the read-back judges.
+func (c *whenCheck) judged() string {
+	if c.sentAs != "" {
+		return c.sentAs
+	}
+	return c.value
 }
 
 // landed reports whether t is where p, read at now, puts it.
@@ -389,7 +401,7 @@ func (c *whenCheck) keptQuietly(t *model.Task, now time.Time) bool {
 		return false
 	}
 	for _, at := range []time.Time{c.sent, now} {
-		if p, ok := placeWhen(c.value, at); ok && c.kept(p, at, t) {
+		if p, ok := placeWhen(c.judged(), at); ok && c.kept(p, at, t) {
 			return true
 		}
 	}

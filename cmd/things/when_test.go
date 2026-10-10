@@ -246,7 +246,7 @@ func TestMisfiledAddHint(t *testing.T) {
 	stubExecAdding(t, sqlDB, createdRow{uuid: "new-p", title: "Launch", typ: model.TypeProject, extra: "start = 1"})
 	d := &Deps{DB: database, DBPath: "/tmp/x.sqlite", Stdout: io.Discard, Stderr: io.Discard}
 
-	err := applyAdd(d, model.TypeProject, "Launch", createdDest{}, "someday", func() error {
+	err := applyAdd(d, model.TypeProject, "Launch", createdDest{}, "someday", "", func() error {
 		return things.AddProject(things.AddProjectParams{AddCommon: things.AddCommon{Title: "Launch", When: "someday"}})
 	})
 	if err == nil {
