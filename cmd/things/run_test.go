@@ -996,6 +996,24 @@ func TestRunProjectEditRefusesClosedProjectTitle(t *testing.T) {
 	}
 }
 
+// A title only a to-do in the Trash carries is still the wrong kind for
+// `project edit`: it is refused as not a project, as `open --project` does,
+// rather than as trashed.
+func TestRunProjectEditRefusesTrashedTodoAsWrongKind(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("todo-old", "Launch v0", 1, dbtest.Anytime(), dbtest.Trashed())
+	captured := stubExec(t)
+	err := runWith(t, db.NewFromSQL(sqlDB), "--json", "project", "edit", "Launch v0", "--notes", "x")
+	if len(*captured) != 0 {
+		t.Errorf("nothing should be sent, got %v", *captured)
+	}
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "not a project" || payload.UUID != "todo-old" {
+		t.Errorf("payload = %s, want not a project naming todo-old", raw)
+	}
+}
+
 func TestIsInteractiveStdinPipe(t *testing.T) {
 	// In `go test`, stdin is typically not a TTY. Just call it for coverage;
 	// don't assert on the result since test runners vary.
