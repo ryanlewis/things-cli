@@ -22,6 +22,25 @@ var (
 	ProjectFields = jsonKeys(reflect.TypeFor[model.Project]())
 )
 
+// TaskDefaultFields and ProjectDefaultFields are what a JSON listing prints
+// when --fields is not given: the keys an agent picks an item by and acts on,
+// in record order. Notes, the parent uuids and the app's own bookkeeping are
+// left out; `--fields all` or `things show <uuid> -j` has them.
+var (
+	TaskDefaultFields = []string{
+		"uuid", "title", "type", "status", "start", "startDate", "reminderTime",
+		"deadline", "stopDate", "projectTitle", "areaTitle", "headingTitle",
+		"tags", "repeating", "checklistProgress",
+	}
+	ProjectDefaultFields = []string{
+		"uuid", "title", "status", "start", "startDate", "deadline", "areaTitle",
+		"tags", "taskCount", "openCount",
+	}
+)
+
+// AllFields is the --fields value that asks for the full record.
+const AllFields = "all"
+
 // jsonKeys lists the keys encoding/json writes for struct type t. The model
 // types have no embedded or untagged exported fields, so the tag name is
 // the whole rule.
@@ -43,8 +62,9 @@ func jsonKeys(t reflect.Type) []string {
 	return keys
 }
 
-// UnknownFieldError is a --fields list naming a key the rows do not have.
-// Kind is "task" or "project", the kind of row the listing prints.
+// UnknownFieldError is a --fields list naming a key the rows do not have,
+// or naming no key at all, when Unknown is empty. Kind is "task" or
+// "project", the kind of row the listing prints.
 type UnknownFieldError struct {
 	Kind    string
 	Unknown []string
@@ -52,6 +72,9 @@ type UnknownFieldError struct {
 }
 
 func (e *UnknownFieldError) Error() string {
+	if len(e.Unknown) == 0 {
+		return fmt.Sprintf("--fields names no fields; valid fields: %s", strings.Join(e.Valid, ", "))
+	}
 	quoted := make([]string, len(e.Unknown))
 	for i, u := range e.Unknown {
 		quoted[i] = fmt.Sprintf("%q", u)
@@ -68,11 +91,18 @@ func (e *UnknownFieldError) Error() string {
 // valid. Each name is trimmed and a repeat is dropped, keeping the first, so
 // the result is the order the caller asked for. A name not in valid is an
 // *UnknownFieldError naming every such name; a list with no names at all is
-// refused too, since printing empty objects is never what was meant.
+// one too, with none unknown, since printing empty objects is never what was
+// meant. AllFields on its own is nil, the full record; with other names it is
+// refused, since it already names them.
 func ParseFields(raw, kind string, valid []string) ([]string, error) {
 	var fields, unknown []string
+	all := false
 	for name := range strings.SplitSeq(raw, ",") {
 		name = strings.TrimSpace(name)
+		if name == AllFields {
+			all = true
+			continue
+		}
 		if name == "" || slices.Contains(fields, name) || slices.Contains(unknown, name) {
 			continue
 		}
@@ -87,8 +117,14 @@ func ParseFields(raw, kind string, valid []string) ([]string, error) {
 		// TaskFields or ProjectFields it was given.
 		return nil, &UnknownFieldError{Kind: kind, Unknown: unknown, Valid: slices.Clone(valid)}
 	}
+	if all {
+		if len(fields) > 0 {
+			return nil, fmt.Errorf("--fields %s prints the full record, so it takes no other names", AllFields)
+		}
+		return nil, nil
+	}
 	if len(fields) == 0 {
-		return nil, fmt.Errorf("--fields names no fields; valid fields: %s", strings.Join(valid, ", "))
+		return nil, &UnknownFieldError{Kind: kind, Valid: slices.Clone(valid)}
 	}
 	return fields, nil
 }

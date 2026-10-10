@@ -124,10 +124,62 @@ func TestParseFieldsIsCaseSensitive(t *testing.T) {
 	}
 }
 
+// An empty list is refused with the valid names, as an unknown one is, so a
+// caller can read them off the error either way.
 func TestParseFieldsRejectsEmpty(t *testing.T) {
 	for _, raw := range []string{"", " ", ",", " , "} {
-		if _, err := ParseFields(raw, "task", TaskFields); err == nil {
-			t.Errorf("ParseFields(%q) accepted a list naming no fields", raw)
+		_, err := ParseFields(raw, "task", TaskFields)
+		var ufe *UnknownFieldError
+		if !errors.As(err, &ufe) {
+			t.Errorf("ParseFields(%q) err = %v, want *UnknownFieldError", raw, err)
+			continue
+		}
+		if len(ufe.Unknown) != 0 || !slices.Equal(ufe.Valid, TaskFields) {
+			t.Errorf("ParseFields(%q) Unknown/Valid = %v/%v", raw, ufe.Unknown, ufe.Valid)
+		}
+		if msg := err.Error(); !strings.Contains(msg, "names no fields") || !strings.Contains(msg, "projectTitle") {
+			t.Errorf("ParseFields(%q) message = %q", raw, msg)
+		}
+	}
+}
+
+// all on its own is the full record, which a nil list means.
+func TestParseFieldsAll(t *testing.T) {
+	for _, raw := range []string{"all", " all ", "all,all", "all,"} {
+		got, err := ParseFields(raw, "task", TaskFields)
+		if err != nil || got != nil {
+			t.Errorf("ParseFields(%q) = %v, %v; want nil, nil", raw, got, err)
+		}
+	}
+	for _, raw := range []string{"all,uuid", "title,all"} {
+		if _, err := ParseFields(raw, "task", TaskFields); err == nil || !strings.Contains(err.Error(), "full record") {
+			t.Errorf("ParseFields(%q) err = %v, want all-with-names refusal", raw, err)
+		}
+	}
+}
+
+// Each default is a key the full record prints, given once and in record
+// order, so the default output reads as a cut of the full one. all must not
+// be a key, or --fields all would be ambiguous.
+func TestDefaultFieldsAreValidKeys(t *testing.T) {
+	for _, c := range []struct {
+		kind            string
+		defaults, valid []string
+	}{{"task", TaskDefaultFields, TaskFields}, {"project", ProjectDefaultFields, ProjectFields}} {
+		last := -1
+		for _, name := range c.defaults {
+			i := slices.Index(c.valid, name)
+			if i < 0 {
+				t.Errorf("%s default %q is not a valid key", c.kind, name)
+				continue
+			}
+			if i <= last {
+				t.Errorf("%s default %q is repeated or out of record order", c.kind, name)
+			}
+			last = i
+		}
+		if slices.Contains(c.valid, AllFields) {
+			t.Errorf("%s rows have a key named %q", c.kind, AllFields)
 		}
 	}
 }
