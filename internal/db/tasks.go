@@ -43,9 +43,16 @@ type TaskFilter struct {
 // keeps one too, and so does a tag (see completesWithFilter).
 func CompletableView(view string, projectNamed, areaNamed, tagNamed bool) bool {
 	spec := views[view]
-	return spec.showsUnlogged ||
-		(projectNamed && spec.widensToProjectContents) ||
-		((areaNamed || tagNamed) && spec.completesWithFilter)
+	return spec.widensStatus(areaNamed, tagNamed) ||
+		(projectNamed && spec.widensToProjectContents)
+}
+
+// widensStatus reports whether the view's status test widens past the open
+// rows to those closed and not yet logged, when completed rows are asked for.
+// It does on the views that show unlogged rows, and on the one that
+// completesWithFilter once --area or --tag names something.
+func (s viewSpec) widensStatus(areaNamed, tagNamed bool) bool {
+	return s.showsUnlogged || ((areaNamed || tagNamed) && s.completesWithFilter)
 }
 
 // CompletableViewNames lists those views in a stable order, for error text.
@@ -725,7 +732,7 @@ type whereOpts struct {
 // where composes the view's WHERE clause.
 func (s viewSpec) where(o whereOpts) string {
 	status := s.status
-	if o.includeCompleted && (s.showsUnlogged || ((o.areaNamed || o.tagNamed) && s.completesWithFilter)) {
+	if o.includeCompleted && s.widensStatus(o.areaNamed, o.tagNamed) {
 		// Only an area's page folds a project closed today into its row.
 		o.foldsUnlogged = !s.showsUnlogged && o.areaNamed
 		status = openOrJustClosed(o)
