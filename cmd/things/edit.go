@@ -651,7 +651,7 @@ func runStatusChange(d *Deps, ref string, yes bool, want model.Status) error {
 		}
 		write = func() error { return sc.projectWrite(task.UUID) }
 	}
-	return applyStatusWrite(d, database, task, want, write)
+	return applyEdit(d, database, task, false, false, want, false, nil, write)
 }
 
 // refuseTrashed refuses a write to an item in the Trash (trashedError). It
