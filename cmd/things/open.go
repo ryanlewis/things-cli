@@ -77,6 +77,18 @@ func (c *OpenCmd) Run(d *Deps) error {
 		if err := refuseHiddenInTrash(ref, task); err != nil {
 			return err
 		}
+		// --project names a project; a to-do it reaches is refused the way
+		// `project edit` refuses one.
+		if c.Project != "" && task.Type != model.TypeProject {
+			return &wrongKindError{
+				Token: "not a project",
+				Kind:  task.Type.String(),
+				Query: ref,
+				UUID:  task.UUID,
+				Title: task.Title,
+				Retry: "things open",
+			}
+		}
 		params.ID = task.UUID
 	}
 
