@@ -1258,6 +1258,13 @@ func TestImportChecksWhen(t *testing.T) {
 		{name: "timedMisfiled", attrs: `"when":"tomorrow@9am"`, fail: true, reason: "misfiled", landed: "in inbox with no start date",
 			message: `[0]: task "Pay rent" (new-1) was created, but its when "tomorrow@9am" did not file it there: it is in inbox with no start date`},
 		{name: "timedLanded", attrs: `"when":"tomorrow@9am"`, extra: tomorrow},
+		// A weekday goes as its date, so one that did not land is caught.
+		{name: "weekdayMisfiled", attrs: `"when":"friday@9pm"`, fail: true, reason: "misfiled", landed: "in inbox with no start date",
+			message: `[0]: task "Pay rent" (new-1) was created, but its when "friday@9pm" did not file it there: it is in inbox with no start date`},
+		// A value the read-back cannot check is reported as add reports
+		// it: not confirmed, and the import exits 0.
+		{name: "unchecked", attrs: `"when":"fri"`, extra: tomorrow, reason: "when", landed: "scheduled for " + testNow.AddDate(0, 0, 1).Format("2006-01-02"),
+			message: `Created, not confirmed (when not checked): [0] "Pay rent" (new-1), scheduled for ` + testNow.AddDate(0, 0, 1).Format("2006-01-02")},
 		{name: "noWhen", attrs: `"deadline":"` + past + `"`},
 		{name: "closedNotChecked", attrs: `"when":"today","completed":true`, extra: "status = 3"},
 	} {
