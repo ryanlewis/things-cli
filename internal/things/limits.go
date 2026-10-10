@@ -35,32 +35,29 @@ func validateChecklist(field, v string) error {
 		return nil
 	}
 	// TrimRight so a trailing newline isn't counted as an extra item.
-	trimmed := strings.TrimRight(v, "\n")
-	n := strings.Count(trimmed, "\n") + 1
-	if n > MaxChecklistItems {
+	items := strings.Split(strings.TrimRight(v, "\n"), "\n")
+	if n := len(items); n > MaxChecklistItems {
 		return fmt.Errorf("%s: %d items exceeds the %d-item limit", field, n, MaxChecklistItems)
 	}
-	return validateItems(field, trimmed)
+	return validateEach(field, "item", items)
 }
 
 // validateItems checks each line of v, a newline-separated list of items,
 // against the string limit.
 func validateItems(field, v string) error {
-	for _, item := range strings.Split(v, "\n") {
-		if c := utf8.RuneCountInString(item); c > MaxStringLen {
-			return fmt.Errorf("%s: item %q (%d characters) exceeds the %d-character limit", field, truncate(item), c, MaxStringLen)
-		}
-	}
-	return nil
+	return validateEach(field, "item", strings.Split(v, "\n"))
 }
 
 func validateTags(field, v string) error {
-	if v == "" {
-		return nil
-	}
-	for _, t := range SplitTags(v) {
-		if c := utf8.RuneCountInString(t); c > MaxStringLen {
-			return fmt.Errorf("%s: tag %q (%d characters) exceeds the %d-character limit", field, truncate(t), c, MaxStringLen)
+	return validateEach(field, "tag", SplitTags(v))
+}
+
+// validateEach checks each of values against the string limit, calling the
+// first one over it a noun ("item", "tag") in the error.
+func validateEach(field, noun string, values []string) error {
+	for _, v := range values {
+		if c := utf8.RuneCountInString(v); c > MaxStringLen {
+			return fmt.Errorf("%s: %s %q (%d characters) exceeds the %d-character limit", field, noun, truncate(v), c, MaxStringLen)
 		}
 	}
 	return nil
