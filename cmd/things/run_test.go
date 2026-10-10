@@ -644,6 +644,58 @@ func TestRunOpenTagNotFound(t *testing.T) {
 	}
 }
 
+// `open --project` names a project, so a ref that resolves to a to-do is
+// refused the way `project edit` refuses one, rather than opening the to-do.
+func TestRunOpenProjectRefusesTodoReference(t *testing.T) {
+	for _, ref := range []string{"Buy milk", "1", "task-1"} {
+		for _, mode := range []string{"plain", "json"} {
+			t.Run(ref+" "+mode, func(t *testing.T) {
+				database := seedFullDB(t)
+				isolateHome(t)
+				seedCache(t, time.Minute, "things today", "task-1")
+				captured := stubExec(t)
+
+				args := []string{"open", "--project", ref}
+				if mode == "json" {
+					args = append([]string{"--json"}, args...)
+				}
+				err := runWith(t, database, args...)
+				if err == nil {
+					t.Fatal("expected open --project to refuse a to-do reference")
+				}
+				if len(*captured) != 0 {
+					t.Errorf("nothing should be opened, got %v", *captured)
+				}
+				if want := `"Buy milk" is a task; use things open`; err.Error() != want {
+					t.Errorf("message = %q, want %q", err.Error(), want)
+				}
+				payload, raw := decodePayload(t, err)
+				if payload.Error != "not a project" || payload.Kind != "task" || payload.Query != ref || payload.UUID != "task-1" {
+					t.Errorf("payload = %s, want not a project naming task-1", raw)
+				}
+			})
+		}
+	}
+}
+
+func TestRunOpenProjectOpensProject(t *testing.T) {
+	for _, ref := range []string{"Chores", "1", "proj-1"} {
+		t.Run(ref, func(t *testing.T) {
+			database := seedFullDB(t)
+			isolateHome(t)
+			seedCache(t, time.Minute, "things projects", "proj-1")
+			captured := stubExec(t)
+
+			if err := runWith(t, database, "open", "--project", ref); err != nil {
+				t.Fatalf("open --project %s: %v", ref, err)
+			}
+			if !strings.Contains(strings.Join(*captured, " "), "proj-1") {
+				t.Errorf("opened %v, want proj-1", *captured)
+			}
+		})
+	}
+}
+
 func TestConfirmActionNonInteractive(t *testing.T) {
 	if confirmAction(&Deps{}, "Really?") {
 		t.Error("expected false in non-interactive test run")
