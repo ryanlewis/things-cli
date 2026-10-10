@@ -15,7 +15,8 @@ import (
 // format and goes as given.
 
 // addTargetName is db.AddTarget with that rule applied to list and heading.
-// It returns the list and heading to send.
+// It returns the list and heading to send. An area has no headings, so a
+// heading is not retried in one.
 func addTargetName(database *db.DB, list, heading string) (target db.Target, headingFound bool, sentList, sentHeading string, err error) {
 	target, headingFound, err = database.AddTarget(list, heading)
 	if err != nil {
@@ -31,7 +32,7 @@ func addTargetName(database *db.DB, list, heading string) (target db.Target, hea
 			target, headingFound, sentList = t, f, trimmed
 		}
 	}
-	if trimmed, ok := trimmedName(heading); ok && target.UUID != "" && !headingFound {
+	if trimmed, ok := trimmedName(heading); ok && target.UUID != "" && !target.Area && !headingFound {
 		id, err := database.HeadingTarget(target.UUID, trimmed)
 		if err != nil {
 			return db.Target{}, false, list, heading, err

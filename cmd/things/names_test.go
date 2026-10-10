@@ -28,6 +28,7 @@ func TestTargetNamesSentTrimmedWhenOnlyThatMatches(t *testing.T) {
 		{"projectAdd", []string{"project", "add", "Launch", "--area", " Personal "}, []string{"area=Personal"}},
 		{"projectAddPaddedTitle", []string{"project", "add", "Launch", "--area", "Errands "}, []string{"area=Errands%20"}},
 		{"edit", []string{"edit", "one-1", "--list", " Tools ", "--heading", " Setup "}, []string{"list=Tools", "heading=Setup"}},
+		{"editListIDHeading", []string{"edit", "one-1", "--list-id", "proj-1", "--heading", " Setup "}, []string{"heading=Setup"}},
 		{"editOwnHeading", []string{"edit", "tool-1", "--heading", " Setup "}, []string{"heading=Setup"}},
 		{"editUnknown", []string{"edit", "one-1", "--list", " Nowhere "}, []string{"list=%20Nowhere%20"}},
 		{"projectEdit", []string{"project", "edit", "garden-1", "--area", " Personal "}, []string{"area=Personal"}},
