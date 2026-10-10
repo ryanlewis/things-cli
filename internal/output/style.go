@@ -163,7 +163,8 @@ func daysFromToday(d *model.ThingsDate, now time.Time) int {
 	today := clock.DayStart(now)
 	// Noon on d's date, read from the encoding rather than through ToTime,
 	// whose midnight can be skipped and land on the day before.
-	noon := time.Date(int(*d>>16), time.Month((int(*d)>>12)&0xF), (int(*d)>>7)&0x1F, 12, 0, 0, 0, time.Local)
+	year, month, day := d.Date()
+	noon := time.Date(year, month, day, 12, 0, 0, 0, time.Local)
 	target := clock.DayStart(noon)
 	return int(math.Round(target.Sub(today).Hours() / 24))
 }
