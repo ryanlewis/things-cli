@@ -95,6 +95,12 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 	// number from being one: ` 12` is row 12, or refused as not a row, and
 	// never a title fragment.
 	kind, digits := classifyRef(ref)
+	// noun names what was looked up in a not-found error, so `open --project
+	// 99` reports a project not found, as a title miss already does.
+	noun := "task"
+	if projects {
+		noun = "project"
+	}
 	var last cache.LastList
 	var cacheErr error
 	if kind != refPlain {
@@ -127,9 +133,9 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 				return t, nil
 			}
 			return nil, &notFoundError{
-				Kind:  "task",
+				Kind:  noun,
 				Query: ref,
-				msg:   fmt.Sprintf("task #%d no longer exists (stale list cache — re-run list)", n),
+				msg:   fmt.Sprintf("%s #%d no longer exists (stale list cache — re-run list)", noun, n),
 			}
 		}
 	}
@@ -178,14 +184,14 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 
 	switch {
 	case kind == refRow && errors.As(err, &notFound):
-		return nil, notARowError(ref, last, cacheErr)
+		return nil, notARowError(noun, ref, last, cacheErr)
 	case kind == refRowLike && errors.As(err, &notFound):
-		return nil, markedRowError(ref, digits, last, cacheErr)
+		return nil, markedRowError(noun, ref, digits, last, cacheErr)
 	case uuidShaped && errors.As(err, &notFound):
 		return nil, &notFoundError{
-			Kind:  "task",
+			Kind:  noun,
 			Query: ref,
-			msg:   fmt.Sprintf("%q looks like a uuid, but no item has that uuid and no task has exactly that title; uuids are case-sensitive, so copy the uuid exactly as a listing prints it. If you meant part of a title, pass a shorter or longer part of it, or the full title", ref),
+			msg:   fmt.Sprintf("%q looks like a uuid, but no item has that uuid and no %s has exactly that title; uuids are case-sensitive, so copy the uuid exactly as a listing prints it. If you meant part of a title, pass a shorter or longer part of it, or the full title", ref, noun),
 		}
 	}
 
@@ -366,32 +372,34 @@ func rowMarker(prefix string) bool {
 }
 
 // markedRowError refuses a row-like ref that is not the exact title of a
-// task. It suggests the bare number only when the last list has a row N.
-func markedRowError(ref, digits string, last cache.LastList, cacheErr error) error {
-	msg := fmt.Sprintf("%q is not a row reference and no task has exactly that title; ", ref)
+// task, or of a project when noun says so. It suggests the bare number only
+// when the last list has a row N.
+func markedRowError(noun, ref, digits string, last cache.LastList, cacheErr error) error {
+	msg := fmt.Sprintf("%q is not a row reference and no %s has exactly that title; ", ref, noun)
 	if n, err := strconv.Atoi(digits); err == nil && cacheErr == nil && n >= 1 && n <= len(last.UUIDs) {
 		msg += fmt.Sprintf("if you meant row %d of the last list, use %d, otherwise ", n, n)
 	}
-	msg += "pass the task's uuid or full title"
-	return &notFoundError{Kind: "task", Query: ref, msg: msg}
+	msg += fmt.Sprintf("pass the %s's uuid or full title", noun)
+	return &notFoundError{Kind: noun, Query: ref, msg: msg}
 }
 
 // notARowError refuses an all-digit ref that is not a row in the last list and
-// is not the exact title of a task (issue #375). It reads as a not-found, and
-// says to re-run the list rather than leave the user to guess what was tried.
-func notARowError(ref string, last cache.LastList, cacheErr error) error {
+// is not the exact title of a task, or of a project when noun says so (issue
+// #375). It reads as a not-found, and says to re-run the list rather than
+// leave the user to guess what was tried.
+func notARowError(noun, ref string, last cache.LastList, cacheErr error) error {
 	msg := fmt.Sprintf("%q is not a row in the last list", ref)
 	if cacheErr != nil {
-		msg = fmt.Sprintf("no task is titled %q, and there is no last list for it to be a row of", ref)
+		msg = fmt.Sprintf("no %s is titled %q, and there is no last list for it to be a row of", noun, ref)
 	} else if len(last.UUIDs) > 0 {
 		msg += fmt.Sprintf(" (it has %s)", plural(len(last.UUIDs), "row"))
 	}
 	if cacheErr == nil && last.Command != "" {
-		msg += fmt.Sprintf(". Re-run `%s` and use the new row number, or pass the task's uuid or full title.", last.Command)
+		msg += fmt.Sprintf(". Re-run `%s` and use the new row number, or pass the %s's uuid or full title.", last.Command, noun)
 	} else {
-		msg += ". Re-run your listing and use the row number, or pass the task's uuid or full title."
+		msg += fmt.Sprintf(". Re-run your listing and use the row number, or pass the %s's uuid or full title.", noun)
 	}
-	return &notFoundError{Kind: "task", Query: ref, msg: msg}
+	return &notFoundError{Kind: noun, Query: ref, msg: msg}
 }
 
 // cacheTaskUUIDs records the listing's task UUIDs so a later numeric ref
