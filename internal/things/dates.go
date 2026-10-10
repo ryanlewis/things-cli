@@ -117,47 +117,53 @@ func KnownWhenWord(v string) bool {
 // writes 9:30PM and 6pm, and more space than one was never measured, so it
 // is refused rather than sent.
 func clockShape(v string) (shaped, real bool) {
+	c, ok := clockParts(v)
+	return ok, ok && c.real()
+}
+
+// clockTime is a time of day as written: its hour, minute, am or pm (empty for
+// a 24-hour time), and the space before the am or pm.
+type clockTime struct {
+	hour, minute int
+	half, space  string
+}
+
+// clockParts splits v, when it is shaped like a time of day
+// (whenClockShape or whenClock12Shape), into its parts.
+func clockParts(v string) (clockTime, bool) {
 	if m := whenClockShape.FindStringSubmatch(v); m != nil {
 		hour, _ := strconv.Atoi(m[1])
 		minute, _ := strconv.Atoi(m[2])
-		if m[4] != "" {
-			return true, hour >= 1 && hour <= 12 && minute <= 59 && len(m[3]) <= 1
-		}
-		return true, hour <= 23 && minute <= 59
+		return clockTime{hour: hour, minute: minute, half: m[4], space: m[3]}, true
 	}
 	if m := whenClock12Shape.FindStringSubmatch(v); m != nil {
 		hour, _ := strconv.Atoi(m[1])
-		return true, hour >= 1 && hour <= 12 && len(m[2]) <= 1
+		return clockTime{hour: hour, half: m[3], space: m[2]}, true
 	}
-	return false, false
+	return clockTime{}, false
+}
+
+// real reports whether c names a time of day (see clockShape).
+func (c clockTime) real() bool {
+	if c.half != "" {
+		return c.hour >= 1 && c.hour <= 12 && c.minute <= 59 && len(c.space) <= 1
+	}
+	return c.hour <= 23 && c.minute <= 59
 }
 
 // clock24 rewrites v, a 12-hour time of day clockShape accepts (6pm,
 // 9:30 PM, 12am), as HH:MM. Things was measured with HH:MM times only, so
 // that is the form sent and read back; how it reads 6pm was not measured.
 func clock24(v string) (string, bool) {
-	if _, real := clockShape(v); !real {
+	c, ok := clockParts(v)
+	if !ok || c.half == "" || !c.real() {
 		return "", false
 	}
-	var hour, minute int
-	var half string
-	if m := whenClockShape.FindStringSubmatch(v); m != nil {
-		hour, _ = strconv.Atoi(m[1])
-		minute, _ = strconv.Atoi(m[2])
-		half = m[4]
-	} else {
-		m := whenClock12Shape.FindStringSubmatch(v)
-		hour, _ = strconv.Atoi(m[1])
-		half = m[3]
-	}
-	if half == "" {
-		return "", false
-	}
-	hour %= 12
-	if strings.EqualFold(half, "pm") {
+	hour := c.hour % 12
+	if strings.EqualFold(c.half, "pm") {
 		hour += 12
 	}
-	return fmt.Sprintf("%02d:%02d", hour, minute), true
+	return fmt.Sprintf("%02d:%02d", hour, c.minute), true
 }
 
 // WhenDateOrTime reports whether v, a value NormalizeWhen returned, is a
