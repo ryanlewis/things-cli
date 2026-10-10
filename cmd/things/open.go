@@ -74,11 +74,9 @@ func (c *OpenCmd) Run(d *Deps) error {
 		if err != nil {
 			return err
 		}
-		if err := refuseHiddenInTrash(ref, task); err != nil {
-			return err
-		}
 		// --project names a project; a to-do it reaches is refused the way
-		// `project edit` refuses one.
+		// `project edit` refuses one. This runs before the Trash check: a
+		// to-do is never what --project asks for, whether hidden or not.
 		if c.Project != "" && task.Type != model.TypeProject {
 			return &wrongKindError{
 				Token: "not a project",
@@ -88,6 +86,9 @@ func (c *OpenCmd) Run(d *Deps) error {
 				Title: task.Title,
 				Retry: "things open",
 			}
+		}
+		if err := refuseHiddenInTrash(ref, task); err != nil {
+			return err
 		}
 		params.ID = task.UUID
 	}

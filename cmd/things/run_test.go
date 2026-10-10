@@ -678,6 +678,21 @@ func TestRunOpenProjectRefusesTodoReference(t *testing.T) {
 	}
 }
 
+// A to-do hidden in a trashed project is refused as the wrong kind before it
+// is refused as trashed: no to-do is what --project asks for.
+func TestRunOpenProjectRefusesHiddenToDoAsWrongKind(t *testing.T) {
+	database, _ := seedTrashedProject(t)
+	captured := stubExec(t)
+	err := runWith(t, database, "open", "--project", "binchild-1")
+	if len(*captured) != 0 {
+		t.Errorf("nothing should be opened, got %v", *captured)
+	}
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "not a project" || payload.UUID != "binchild-1" {
+		t.Errorf("payload = %s, want not a project naming binchild-1", raw)
+	}
+}
+
 func TestRunOpenProjectOpensProject(t *testing.T) {
 	for _, ref := range []string{"Chores", "1", "proj-1"} {
 		t.Run(ref, func(t *testing.T) {
