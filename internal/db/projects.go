@@ -31,7 +31,7 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted, openOnly bool) ([
 		LEFT JOIN TMArea a ON t.area = a.uuid
 		LEFT JOIN TMTaskTag tt ON tt.tasks = t.uuid
 		LEFT JOIN TMTag tag ON tt.tags = tag.uuid
-		WHERE t.type = 1 AND t.trashed = 0
+		WHERE t.type = 1 AND ` + untrashedRows + `
 	`
 	var args []any
 
