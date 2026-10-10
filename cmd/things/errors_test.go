@@ -457,38 +457,32 @@ func TestCommandsEmitJSONErrors(t *testing.T) {
 // knows which command the uuid it picks belongs to. `project edit` matches
 // projects alone by title, so it takes the project instead.
 func TestSharedTitleIsAmbiguousForEdit(t *testing.T) {
-	for _, args := range [][]string{
-		{"--json", "edit", "Chores", "--title", "New"},
-	} {
-		t.Run(args[1], func(t *testing.T) {
-			stubTTY(t, true)
-			sqlDB := dbtest.NewSQL(t)
-			fx := dbtest.NewFixture(t, sqlDB)
-			fx.Project("proj-chores", "Chores", 0)
-			fx.Todo("todo-chores", "Chores", 1)
+	stubTTY(t, true)
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-chores", "Chores", 0)
+	fx.Todo("todo-chores", "Chores", 1)
 
-			err := runWith(t, db.NewFromSQL(sqlDB), args...)
-			if err == nil {
-				t.Fatalf("run %v: expected an error", args)
-			}
-			payload, raw := decodePayload(t, err)
-			if payload.Error != "ambiguous task" {
-				t.Fatalf("error = %q, want %q (%s)", payload.Error, "ambiguous task", raw)
-			}
-			byUUID := map[string]jsonErrorMatch{}
-			for _, m := range payload.Matches {
-				byUUID[m.UUID] = m
-			}
-			if len(byUUID) != 2 {
-				t.Fatalf("matches = %+v, want both rows", payload.Matches)
-			}
-			if got := byUUID["proj-chores"].Type; got != model.TypeProject {
-				t.Errorf("proj-chores type = %v (%s)", got, raw)
-			}
-			if got := byUUID["todo-chores"].Type; got != model.TypeTask {
-				t.Errorf("todo-chores type = %v (%s)", got, raw)
-			}
-		})
+	err := runWith(t, db.NewFromSQL(sqlDB), "--json", "edit", "Chores", "--title", "New")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "ambiguous task" {
+		t.Fatalf("error = %q, want %q (%s)", payload.Error, "ambiguous task", raw)
+	}
+	byUUID := map[string]jsonErrorMatch{}
+	for _, m := range payload.Matches {
+		byUUID[m.UUID] = m
+	}
+	if len(byUUID) != 2 {
+		t.Fatalf("matches = %+v, want both rows", payload.Matches)
+	}
+	if got := byUUID["proj-chores"].Type; got != model.TypeProject {
+		t.Errorf("proj-chores type = %v (%s)", got, raw)
+	}
+	if got := byUUID["todo-chores"].Type; got != model.TypeTask {
+		t.Errorf("todo-chores type = %v (%s)", got, raw)
 	}
 }
 

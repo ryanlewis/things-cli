@@ -346,9 +346,9 @@ func runEdit[P interface {
 	if err != nil {
 		return err
 	}
-	if err := refuseTrashed(ref, task, "edited"); err != nil {
-		return err
-	}
+	// The kind is checked before the Trash, as `open --project` does: the
+	// wrong kind of item is never what the command asks for, whether it is
+	// in the Trash or not.
 	if (task.Type == model.TypeProject) != kind.project {
 		return &wrongKindError{
 			Token: kind.token,
@@ -358,6 +358,9 @@ func runEdit[P interface {
 			Title: task.Title,
 			Retry: kind.retry,
 		}
+	}
+	if err := refuseTrashed(ref, task, "edited"); err != nil {
+		return err
 	}
 	// The status flags go through the guard `complete` and `cancel` use. A
 	// status the item already has is dropped from the write, and the rest of

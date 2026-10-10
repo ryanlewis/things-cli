@@ -774,8 +774,9 @@ before anything is written, because `things:///update` cannot address one —
 use `things project edit` instead. `project edit` refuses a task the same
 way, pointing back at `things edit`. Its titles match projects only, so a to-do
 sharing a project's title, or the part of it typed, does not make the lookup
-ambiguous. When no project matches, a title that only one to-do has is refused
-as `not a project`; several to-dos, or none, are a project not found.
+ambiguous. When no project matches, a title or fragment that only one to-do
+matches is refused as `not a project`, even when that to-do is in the Trash;
+several to-dos, or none, are a project not found.
 
 `things project edit` takes most of the same flags (`--title`, `--notes`,
 `--prepend-notes`/`--append-notes`, `--when`, `--deadline`, `--tags`,
