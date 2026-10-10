@@ -103,14 +103,10 @@ func styledChecklist(c *model.ChecklistProgress) string {
 }
 
 func styledProjectIcon(p model.Project) string {
-	icon := projectIcon(p)
-	if p.Status == model.StatusCancelled {
-		return statusCancelledStyle.Render(icon)
+	if p.Status.Closed() {
+		return styledStatus(p.Status)
 	}
-	if p.Status == model.StatusCompleted {
-		return statusDoneStyle.Render(icon)
-	}
-	return projectStyle.Render(icon)
+	return projectStyle.Render(projectIcon(p))
 }
 
 // styledDate formats and colours a date based on its proximity to today.
