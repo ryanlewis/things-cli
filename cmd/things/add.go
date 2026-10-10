@@ -86,7 +86,7 @@ func preAdd(d *Deps, kind string, p addParams, flags TagFlags) error {
 func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 	if list == "" {
 		if heading != "" {
-			fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list or --project; Things will ignore it and put the to-do in the Inbox\n", heading)
+			fmt.Fprintf(d.errOut(), "warning: %s\n", headingNeedsList("--heading", heading, "--list or --project", "put the to-do in the Inbox"))
 		}
 		return db.Target{}, createdDest{checked: true}
 	}

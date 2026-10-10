@@ -602,7 +602,7 @@ nothing matches it creates the project with no area. `project add` warns on
 stderr when that will happen, then sends the project anyway:
 
 ```
-warning: Things has no area called "Nowhere"; it will create the project with no area
+warning: Things finds no area called "Nowhere"; it will create the project with no area
 ```
 
 Each line of `--todos`, like each `--checklist` item, may be at most 4000
@@ -685,7 +685,7 @@ warning: Things has no heading with id "abc123"; the to-do will stay where it is
 warning: Things has no heading with id "abc123"; it will ignore --heading-id
 warning: "Tools" has no heading "Later"; Things will move the to-do there without a heading
 warning: "Tools" has no heading "Later"; Things will leave the to-do where it is
-warning: --heading "Later" needs --list: the to-do is not in a project, so Things will leave it where it is
+warning: --heading "Later" needs --list, as the to-do is not in a project; Things will ignore it and leave the to-do where it is
 ```
 
 When the move files the to-do somewhere new, `edit` notes the same things
@@ -834,8 +834,8 @@ one Things will use, as `project add` does, unless the project is already
 there. A move to the area the project is already in counts as no change.
 
 ```
-warning: Things has no area called "Nowhere"; the project will stay where it is
-warning: Things has no area with id "abc123"; the project will stay where it is
+warning: Things finds no area called "Nowhere"; the project will stay where it is
+warning: Things finds no area with id "abc123"; the project will stay where it is
 ```
 
 ## Tags must already exist

@@ -635,17 +635,17 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"unknownHeadingIDWithList", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "nope"}, `no heading with id "nope"; it will ignore --heading-id`, false},
 		{"unknownHeading", []string{"edit", "one-1", "--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will move the to-do there without a heading`, false},
 		{"paddedHeading", []string{"edit", "one-1", "--list", "Tools", "--heading", " Setup "}, `"Tools" has no heading " Setup "`, false},
-		{"unknownHeadingInListID", []string{"edit", "one-1", "--list-id", "proj-1", "--heading", "Later"}, `"proj-1" has no heading "Later"`, false},
+		{"unknownHeadingInListID", []string{"edit", "one-1", "--list-id", "proj-1", "--heading", "Later"}, `"Tools" has no heading "Later"`, false},
 		{"knownHeadingInListID", []string{"edit", "one-1", "--list-id", "proj-1", "--heading", "Setup"}, "", false},
-		{"unknownHeadingInListUUID", []string{"edit", "one-1", "--list", "proj-1", "--heading", "Later"}, `"proj-1" has no heading "Later"`, false},
-		{"headingInAreaUUID", []string{"edit", "one-1", "--list", "area-1", "--heading", "Setup"}, `"area-1" has no heading "Setup"`, false},
+		{"unknownHeadingInListUUID", []string{"edit", "one-1", "--list", "proj-1", "--heading", "Later"}, `"Tools" has no heading "Later"`, false},
+		{"headingInAreaUUID", []string{"edit", "one-1", "--list", "area-1", "--heading", "Setup"}, `"Personal" has no heading "Setup"`, false},
 		{"headingOnlyKnown", []string{"edit", "tool-1", "--heading", "SETUP"}, "", false},
 		// Of two headings that differ only in case, Things files the to-do
 		// under the one with the lower uuid, whichever case was sent.
 		{"caseTwinHeading", []string{"edit", "twin-todo", "--heading", "SETUP"}, "", false},
 		{"caseTwinListAndHeading", []string{"edit", "twin-todo", "--list", "Tools", "--heading", "SETUP"}, "", false},
 		{"headingOnlyUnknown", []string{"edit", "tool-1", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will leave the to-do where it is`, true},
-		{"headingOnlyNoProject", []string{"edit", "one-1", "--heading", "Setup"}, `--heading "Setup" needs --list: the to-do is not in a project, so Things will leave it where it is`, true},
+		{"headingOnlyNoProject", []string{"edit", "one-1", "--heading", "Setup"}, `--heading "Setup" needs --list, as the to-do is not in a project; Things will ignore it and leave the to-do where it is`, true},
 		{"headingID", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "head-1"}, "", false},
 		// Measured in Things 3: an empty heading alone clears the heading,
 		// and an empty list unfiles the to-do into Anytime. Both are sent
