@@ -54,15 +54,18 @@ func CancelProject(uuid string) error {
 // turn the rest of the name into script. A UUID the CLI read out of the
 // database goes through it too, so no script interpolates a raw string.
 func appleScriptString(s string) string {
-	r := strings.NewReplacer(
-		`\`, `\\`,
-		`"`, `\"`,
-		"\n", `\n`,
-		"\r", `\r`,
-		"\t", `\t`,
-	)
-	return `"` + r.Replace(s) + `"`
+	return `"` + appleScriptEscaper.Replace(s) + `"`
 }
+
+// appleScriptEscaper escapes the characters appleScriptString cannot put
+// into a string literal as they are.
+var appleScriptEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	`"`, `\"`,
+	"\n", `\n`,
+	"\r", `\r`,
+	"\t", `\t`,
+)
 
 // CreateTag creates a tag in Things. The URL scheme cannot create tags — it
 // applies only ones that already exist — so this is the only route.
