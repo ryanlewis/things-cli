@@ -118,7 +118,7 @@ A JSON listing prints a default set of keys per row, enough to pick an
 item and act on its `uuid`; notes, the parent uuids and Things' own
 bookkeeping are left out. `--fields` names the keys you want instead, in
 that order: `things anytime -j --fields uuid,title,projectTitle,deadline`.
-`--fields all` prints every key, as `--json` did by default in v0.10.0 and
+`-f` is the short form. `--fields all` prints every key, as `--json` did by default in v0.10.0 and
 earlier, and `things show <uuid> -j` prints one item's full record. It
 works on the task listings, `search` and `projects`, and needs `--json`. An
 unknown name fails with the list of valid ones. See the

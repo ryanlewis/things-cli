@@ -48,7 +48,7 @@ Every command that reads or writes Things accepts `--json` / `-j`; `version`, `c
 - `logbook` is everything closed, not just everything finished: cancelled items sit beside completed ones, as they do in the app's Logbook. Split them on `"status"` — `"completed"` or `"cancelled"`; plain output prints `[x]` and `[~]`. Filter with `jq '.[] | select(.status=="completed")'` when you mean finished rather than closed.
 - `things projects` also reports `taskCount` and `openCount`. `taskCount` is every untrashed task in the project; `openCount` is the ones still open. The difference is the ones that are no longer open, which means completed or cancelled. Tasks filed under a project heading count towards both; the heading rows themselves never do, and neither do trashed tasks or checklist items. Both numbers are Things' own bookkeeping, read straight from the database rather than recounted by the CLI.
 - **A `-j` listing prints a default set of keys, not the full record.** Task rows carry `uuid`, `title`, `type`, `status`, `start`, `startBucket`, `startDate`, `reminderTime`, `deadline`, `stopDate`, `projectTitle`, `projectTrashed`, `areaTitle`, `headingTitle`, `tags`, `repeating` and `checklistProgress`; `things projects` rows carry `uuid`, `title`, `status`, `start`, `startDate`, `deadline`, `areaTitle`, `tags`, `taskCount` and `openCount` (each left out when the row has no value, as before). `notes`, the parent uuids (`projectUUID`, `areaUUID`, `headingUUID`), `creationDate`, `index`, `todayIndex`, `trashed`, and `startBucket` on a `things projects` row, are not in a listing unless you ask: read one item's notes with `things show <uuid> -j`, or pass `--fields all` for every key of every row. **This changed:** before, `-j` printed every key. This applies to the task listings, `search` and `projects`; `show` is always the full record.
-- **Pick keys with `--fields`.** `things anytime -a "Area" -j --fields uuid,title,projectTitle,deadline,tags` prints only those keys of each row, in that order; `--fields all` prints the full record and takes no other names. Names are the JSON keys exactly as printed (`projectTitle`, not `project`); a row leaves out a key the full record would leave out. An unknown name, or an empty list, fails before anything is read with `{"error": "unknown field", "kind": "task", "unknown": [...], "valid": [...]}` (no `unknown` for an empty list), so read `valid` and retry. It needs `--json`.
+- **Pick keys with `--fields`.** `things anytime -a "Area" -j --fields uuid,title,projectTitle,deadline,tags` prints only those keys of each row, in that order; `--fields all` prints the full record and takes no other names. Names are the JSON keys exactly as printed (`projectTitle`, not `project`); a row leaves out a key the full record would leave out. An unknown name, or an empty list, fails before anything is read with `{"error": "unknown field", "kind": "task", "unknown": [...], "valid": [...]}` (no `unknown` for an empty list), so read `valid` and retry. `-f` is the short form; prefer the long `--fields` in scripts. It needs `--json`.
 - Human output is styled and column-aligned; colour auto-disables when piping or under `NO_COLOR`. `--color=always|never` overrides. JSON is unaffected.
 
 **A failure under `--json` prints one JSON object to stdout and exits non-zero.** Branch on the exit status and read the failure off stdout — not stderr. On success the read commands print their result there. Of the write commands, `add`, `project add`, `edit`, `project edit`, `complete` and `cancel` print the item (rule 3), `tag add` reports what it created and what it skipped, and the rest print nothing. `error` is a stable token; `message` is the human text.
@@ -178,7 +178,7 @@ The user may have a TOML file at `~/.config/things-cli/config.toml` (or `$XDG_CO
 Global flags, valid on every command: `-j/--json`, `--color=auto|always|never`, `--db PATH`, `--config PATH`, `--no-verify`, `--verify-timeout DURATION` (how long a write's read-back waits, default `5s`; must be above zero — use `--no-verify` to skip it), `--no-hints`, `-v/--version`.
 
 ```
-things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--open-only] [--fields KEYS]
+things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--open-only] [-f|--fields KEYS]
     # views: today, inbox, upcoming, anytime, someday, repeating, logbook, trash, deadlines
     # shortcut: `things today`, `things inbox`, etc.
     # bare `things` is today — but --project/--area/--tag alone list every open
@@ -295,7 +295,7 @@ things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D]
     # page does, and lists that project's row instead.
 
 things show <task> [--agent]    # detail; --agent prints a Markdown brief (see below)
-things projects [-a|--area A] [--completed] [--open-only] [--fields KEYS]
+things projects [-a|--area A] [--completed] [--open-only] [-f|--fields KEYS]
     # open projects plus those closed and not yet logged (as the app's list
     # still shows them; "status" tells them apart), unless --open-only;
     # --completed lists every closed project too.
@@ -303,7 +303,7 @@ things projects [-a|--area A] [--completed] [--open-only] [--fields KEYS]
     # plus taskCount/openCount in JSON
 things areas
 things tags
-things search <query> [--fields KEYS]  # titles and notes, matched literally; a lookup, not a view
+things search <query> [-f|--fields KEYS]  # titles and notes, matched literally; a lookup, not a view
     # skips trashed rows and tasks of a project in the trash, as the app does
 
 things tag add <name>...        # create tags; existing names are skipped
