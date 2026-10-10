@@ -306,7 +306,7 @@ func TestDefaultFieldsAccountForEveryKey(t *testing.T) {
 		defaults, omitted, valid []string
 	}{
 		{"task", TaskDefaultFields, []string{
-			"notes", "startBucket", "creationDate", "trashed", "projectUUID",
+			"notes", "creationDate", "trashed", "projectUUID",
 			"areaUUID", "headingUUID", "index", "todayIndex",
 		}, TaskFields},
 		{"project", ProjectDefaultFields, []string{"startBucket", "areaUUID"}, ProjectFields},

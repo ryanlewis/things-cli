@@ -28,8 +28,8 @@ var (
 // left out; `--fields all` or `things show <uuid> -j` has them.
 var (
 	TaskDefaultFields = []string{
-		"uuid", "title", "type", "status", "start", "startDate", "reminderTime",
-		"deadline", "stopDate", "projectTitle", "projectTrashed", "areaTitle",
+		"uuid", "title", "type", "status", "start", "startBucket", "startDate",
+		"reminderTime", "deadline", "stopDate", "projectTitle", "projectTrashed", "areaTitle",
 		"headingTitle",
 		"tags", "repeating", "checklistProgress",
 	}
