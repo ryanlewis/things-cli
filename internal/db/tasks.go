@@ -414,7 +414,12 @@ var parentNotClosedOrUnlogged = "(" + parentNotClosed + " OR (" + parentCloseUnl
 // closed project is a different question and a riskier one — dropping it would
 // take real work out of Today — and issue #249 does not ask it. There was no
 // such row in the data on 10 Sep 2026 to measure the app's answer against.
-func openOrJustClosed(o whereOpts) string {
+//
+// foldsUnlogged keeps the fold for a project closed and not yet logged.
+// An area's page does that: measured on 3 and 4 Oct 2026, it held a
+// project closed that day as one row, and none of its to-dos, which the
+// lists themselves went on showing in place.
+func openOrJustClosed(o whereOpts, foldsUnlogged bool) string {
 	if !o.includeCompleted {
 		return openRows
 	}
@@ -427,7 +432,7 @@ func openOrJustClosed(o whereOpts) string {
 	switch {
 	case o.projectNamed:
 		return openOrUnlogged("")
-	case o.foldsUnlogged:
+	case foldsUnlogged:
 		return openOrUnlogged(parentNotClosed)
 	default:
 		return openOrUnlogged(parentNotClosedOrUnlogged)
@@ -721,12 +726,6 @@ type whereOpts struct {
 	// completesWithFilter.
 	areaNamed bool
 	tagNamed  bool
-
-	// foldsUnlogged keeps the fold for a project closed and not yet logged.
-	// An area's page does that: measured on 3 and 4 Oct 2026, it held a
-	// project closed that day as one row, and none of its to-dos, which the
-	// lists themselves went on showing in place.
-	foldsUnlogged bool
 }
 
 // where composes the view's WHERE clause.
@@ -734,8 +733,7 @@ func (s viewSpec) where(o whereOpts) string {
 	status := s.status
 	if o.includeCompleted && s.widensStatus(o.areaNamed, o.tagNamed) {
 		// Only an area's page folds a project closed today into its row.
-		o.foldsUnlogged = !s.showsUnlogged && o.areaNamed
-		status = openOrJustClosed(o)
+		status = openOrJustClosed(o, !s.showsUnlogged && o.areaNamed)
 	}
 	parts := make([]string, 0, 4+len(s.extra))
 	for _, p := range []string{s.scope, status, s.trashed} {
@@ -1157,7 +1155,7 @@ func ValidView(name string) bool {
 // ahead of their date out of Upcoming among them (issue #295). The project is
 // named, so the closed-parent fold does not apply.
 func closedProjectContents(includeCompleted bool) string {
-	status := openOrJustClosed(whereOpts{includeCompleted: includeCompleted, projectNamed: true})
+	status := openOrJustClosed(whereOpts{includeCompleted: includeCompleted, projectNamed: true}, false)
 	return "(" + parentClosedOrTrashed + " OR " + status + ") AND t.trashed = 0 AND " + todoOrProject
 }
 
