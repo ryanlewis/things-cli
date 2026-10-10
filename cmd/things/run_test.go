@@ -734,6 +734,25 @@ func TestRunOpenProjectIgnoresTodoTitles(t *testing.T) {
 	}
 }
 
+// When no project matches, several to-dos that do are not offered as
+// candidates: the ref is a project not found.
+func TestRunOpenProjectNoProjectAmongTodos(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Todo("todo-blog", "Launch blog", 1, dbtest.Anytime())
+	fx.Todo("todo-site", "Launch site", 2, dbtest.Anytime())
+	database := db.NewFromSQL(sqlDB)
+	captured := stubExec(t)
+	err := runWith(t, database, "open", "--project", "Launch")
+	if len(*captured) != 0 {
+		t.Errorf("nothing should be opened, got %v", *captured)
+	}
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "not found" || payload.Kind != "project" || payload.Query != "Launch" {
+		t.Errorf("payload = %s, want a project not found", raw)
+	}
+}
+
 func TestConfirmActionNonInteractive(t *testing.T) {
 	if confirmAction(&Deps{}, "Really?") {
 		t.Error("expected false in non-interactive test run")
