@@ -745,7 +745,7 @@ Both the refusal and the read-back failure carry their per-item detail in the er
 | --- | --- |
 | Keyword | `today`, `tomorrow`, `evening`, `anytime`, `someday` |
 | Date | `2026-05-01` |
-| Time | `HH:MM` (`21:30`) or `H:MMam` / `H:MMpm` (`9:30PM`) |
+| Time | `HH:MM` (`21:30`) or a 12-hour time (`9:30PM`, `6pm`), sent to Things as `HH:MM` |
 | Date + time | `2026-05-01@09:30` |
 | RFC3339 | `2026-05-01T09:30:00Z` (rewritten to `YYYY-MM-DD@HH:MM`; offset preserved as wall-clock, no conversion to local time) |
 | Natural language | `friday`, `next monday` (English locales only; passed through verbatim) |
