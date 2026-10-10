@@ -316,6 +316,7 @@ func refuseBlankTitle(title, kind, done string) error {
 // still reaches the candidates for the JSON payload.
 type ambiguousRefError struct {
 	msg   string
+	kind  string // "task", or "project" for a project lookup
 	inner *db.AmbiguousTaskError
 }
 
@@ -323,18 +324,27 @@ func (e *ambiguousRefError) Error() string { return e.msg }
 
 func (e *ambiguousRefError) Unwrap() error { return e.inner }
 
+// refNoun is the item kind a ref error names: kind, or "task" when unset.
+func refNoun(kind string) string {
+	if kind == "" {
+		return "task"
+	}
+	return kind
+}
+
 // cacheRef is what the errors refusing a row number over the last-list cache
 // share: staleCacheError, otherDBCacheError and unreadableCacheError embed
 // it. They share the "stale list cache" token too, because the remedy is the
 // same for all three: re-list and use the new row number or the uuid.
 // Re-listing also rewrites a cache file that could not be read.
 type cacheRef struct {
+	Kind  string // "task", or "project" for a project lookup
 	Query string // the reference as typed, e.g. "2"
 }
 
 func (e *cacheRef) fillPayload(p *jsonErrorPayload) {
 	p.Error = "stale list cache"
-	p.Kind = "task"
+	p.Kind = refNoun(e.Kind)
 	p.Query = e.Query
 }
 
@@ -350,7 +360,7 @@ type staleCacheError struct {
 
 func (e *staleCacheError) Error() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "task #%d comes from a stale list cache", e.Row)
+	fmt.Fprintf(&b, "%s #%d comes from a stale list cache", refNoun(e.Kind), e.Row)
 	if e.Last.WrittenAt.IsZero() {
 		// A file written before 0.8.0 records no time, so there is nothing
 		// to age it by and no listing to name.
@@ -363,7 +373,7 @@ func (e *staleCacheError) Error() string {
 			b.WriteString(". Re-run your listing")
 		}
 	}
-	b.WriteString(" and use the new row number, or pass the task's uuid.")
+	fmt.Fprintf(&b, " and use the new row number, or pass the %s's uuid.", refNoun(e.Kind))
 	return b.String()
 }
 
@@ -377,7 +387,7 @@ type unreadableCacheError struct {
 }
 
 func (e *unreadableCacheError) Error() string {
-	return fmt.Sprintf("%q may be a row of the last list, but %v; run a listing again or use the task's title or uuid", e.Query, e.Err)
+	return fmt.Sprintf("%q may be a row of the last list, but %v; run a listing again or use the %s's title or uuid", e.Query, e.Err, refNoun(e.Kind))
 }
 
 func (e *unreadableCacheError) Unwrap() error { return e.Err }
@@ -386,16 +396,17 @@ func (e *unreadableCacheError) Unwrap() error { return e.Err }
 // it would match every task, or every untitled one, so it is refused before
 // any lookup.
 type emptyRefError struct {
+	Kind  string // "task", or "project" for a project lookup
 	Query string
 }
 
 func (e *emptyRefError) Error() string {
-	return "the task reference is empty; pass a row number, a uuid or a title"
+	return fmt.Sprintf("the %s reference is empty; pass a row number, a uuid or a title", refNoun(e.Kind))
 }
 
 func (e *emptyRefError) fillPayload(p *jsonErrorPayload) {
 	p.Error = "empty reference"
-	p.Kind = "task"
+	p.Kind = refNoun(e.Kind)
 	p.Query = e.Query
 }
 
@@ -411,7 +422,7 @@ type otherDBCacheError struct {
 
 func (e *otherDBCacheError) Error() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "task #%d comes from a listing of a different database", e.Row)
+	fmt.Fprintf(&b, "%s #%d comes from a listing of a different database", refNoun(e.Kind), e.Row)
 	listing := "the listing"
 	if e.Last.Command != "" {
 		listing = fmt.Sprintf("`%s`", e.Last.Command)
@@ -425,7 +436,7 @@ func (e *otherDBCacheError) Error() string {
 	if e.Current != "" {
 		fmt.Fprintf(&b, ", and this command reads %s", e.Current)
 	}
-	b.WriteString(". Re-run the listing against this database and use the new row number, or pass the task's uuid.")
+	fmt.Fprintf(&b, ". Re-run the listing against this database and use the new row number, or pass the %s's uuid.", refNoun(e.Kind))
 	return b.String()
 }
 
@@ -492,6 +503,9 @@ func errorPayload(err error) jsonErrorPayload {
 	if errors.As(err, &ambig) {
 		payload.Error = "ambiguous task"
 		payload.Kind = "task"
+		if ref := (*ambiguousRefError)(nil); errors.As(err, &ref) && ref.kind != "" {
+			payload.Kind = ref.kind
+		}
 		payload.Query = ambig.Query
 		payload.Matches = matchList(ambig.Matches)
 		return payload

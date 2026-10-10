@@ -1023,6 +1023,38 @@ func TestRunProjectRefNotFoundKind(t *testing.T) {
 	}
 }
 
+// The other refusals of a project ref name a project too: a stale row, an
+// empty ref and a title several projects share.
+func TestRunProjectRefRefusalKind(t *testing.T) {
+	cases := []struct{ name, ref, token, want string }{
+		{"stale row", "1", "stale list cache", "project #1 comes from a stale list cache"},
+		{"empty", " ", "empty reference", "the project reference is empty"},
+		{"ambiguous", "Launch", "ambiguous task", `ambiguous project "Launch" — matches 2 projects`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			isolateHome(t)
+			seedCache(t, 5*time.Hour, "things projects", "proj-v2")
+			sqlDB := dbtest.NewSQL(t)
+			f := dbtest.NewFixture(t, sqlDB)
+			f.Project("proj-v2", "Launch v2", 0)
+			f.Project("proj-v3", "Launch v3", 1)
+			stubExec(t)
+			err := runWith(t, db.NewFromSQL(sqlDB), "open", "--project", c.ref)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("err = %v, want it to contain %q", err, c.want)
+			}
+			if strings.Contains(err.Error(), "task") {
+				t.Errorf("err = %q, says task for a project lookup", err)
+			}
+			payload, raw := decodePayload(t, err)
+			if payload.Error != c.token || payload.Kind != "project" {
+				t.Errorf("payload = %s, want %q of kind project", raw, c.token)
+			}
+		})
+	}
+}
+
 // The write rules still hold for a title only a closed project carries: the
 // edit is refused, not sent to it.
 func TestRunProjectEditRefusesClosedProjectTitle(t *testing.T) {
