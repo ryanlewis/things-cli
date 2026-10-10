@@ -11,6 +11,7 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -661,5 +662,20 @@ func TestVerifyStatusReportsTheItemThatDidNotChange(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q missing %q", err, want)
 		}
+	}
+}
+
+// The read-back window starts from clock.Now, the clock import's refusal of
+// a future creation-date reads, not the wall clock.
+func TestSnapshotCreatedReadsClock(t *testing.T) {
+	database, _ := seedWritable(t)
+	pinned := time.Date(2026, 10, 10, 9, 0, 0, 0, time.Local)
+	t.Cleanup(clock.Pin(pinned))
+	snap, err := snapshotCreated(database, []model.TaskType{model.TypeTask})
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if want := pinned.Add(-createdSlack); !snap.since.Equal(want) {
+		t.Errorf("since = %s, want %s", snap.since, want)
 	}
 }

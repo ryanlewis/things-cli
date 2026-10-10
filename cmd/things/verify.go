@@ -483,9 +483,11 @@ type createdSnapshot struct {
 }
 
 // snapshotCreated records the items of each of types created in the last
-// createdSlack, just before a write that creates items.
+// createdSlack, just before a write that creates items. It reads clock.Now,
+// as import's refusal of a future creation-date does, so the two agree on
+// now.
 func snapshotCreated(database *db.DB, types []model.TaskType) (createdSnapshot, error) {
-	snap := createdSnapshot{since: time.Now().Add(-createdSlack), before: map[string]struct{}{}}
+	snap := createdSnapshot{since: clock.Now().Add(-createdSlack), before: map[string]struct{}{}}
 	for _, typ := range types {
 		existing, err := database.TasksCreatedSince(typ, snap.since)
 		if err != nil {
