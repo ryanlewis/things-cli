@@ -20,48 +20,44 @@ import (
 // them.
 var importDateAttrs = []string{"creation-date", "completion-date"}
 
-// badImportDates returns each date attribute of item, a payload object, that
+// problems is what is wrong with a payload item in one respect: a line for
+// each problem, and the attribute each is about.
+type problems struct{ lines, names []string }
+
+// add records line, a problem with the attribute name.
+func (p *problems) add(name, line string) {
+	p.lines = append(p.lines, line)
+	p.names = append(p.names, name)
+}
+
+// importDates returns the date attributes of item, a payload object, that
 // Things rejects the whole payload over (see creationDateShape), as
-// `name: value` with the value in JSON, and the attribute names. Measured in
-// Things 3: a bad date on a heading or a checklist item rejects the payload
-// as one on a to-do or project does.
-func badImportDates(item map[string]any) (lines, names []string) {
+// `name: value` with the value in JSON, and those later than now, as
+// `name: value (instant)`. Measured in Things 3: a bad date on a heading or
+// a checklist item rejects the payload as one on a to-do or project does. A
+// creation-date or completion-date in the future (measured 9 Oct 2026) is
+// saved as now, so the item gets a date the payload did not give it. That
+// includes an hour past 23 that rolls into the future, such as today's date
+// at 25:00. datedSlack spares a date stamped a moment ahead, which Things
+// saves within a minute of what was asked.
+func importDates(item map[string]any, now time.Time) (bad, future problems) {
 	if itemType, _ := item["type"].(string); !importItemTypes[strings.TrimSpace(itemType)] {
-		return nil, nil
+		return bad, future
 	}
 	attrs, _ := item["attributes"].(map[string]any)
 	for _, name := range importDateAttrs {
 		raw := attrs[name]
-		if _, ok := parseThingsDate(raw); ok || raw == nil {
+		if raw == nil {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("%s: %s", name, jsonText(raw)))
-		names = append(names, name)
-	}
-	return lines, names
-}
-
-// futureImportDates returns each date attribute of item, a payload object,
-// that is later than now, as badImportDates does, with the instant it reads
-// as. Measured in Things 3 (9 Oct 2026): a creation-date or completion-date
-// in the future is saved as now, so the item gets a date the payload did not
-// give it. That includes an hour past 23 that rolls into the future, such as
-// today's date at 25:00. datedSlack spares a date stamped a moment ahead,
-// which Things saves within a minute of what was asked.
-func futureImportDates(item map[string]any, now time.Time) (lines, names []string) {
-	if itemType, _ := item["type"].(string); !importItemTypes[strings.TrimSpace(itemType)] {
-		return nil, nil
-	}
-	attrs, _ := item["attributes"].(map[string]any)
-	for _, name := range importDateAttrs {
-		at, ok := parseThingsDate(attrs[name])
-		if !ok || !at.After(now.Add(datedSlack)) {
-			continue
+		switch at, ok := parseThingsDate(raw); {
+		case !ok:
+			bad.add(name, fmt.Sprintf("%s: %s", name, jsonText(raw)))
+		case at.After(now.Add(datedSlack)):
+			future.add(name, fmt.Sprintf("%s: %s (%s)", name, jsonText(raw), at.UTC().Format(time.RFC3339)))
 		}
-		lines = append(lines, fmt.Sprintf("%s: %s (%s)", name, jsonText(attrs[name]), at.UTC().Format(time.RFC3339)))
-		names = append(names, name)
 	}
-	return lines, names
+	return bad, future
 }
 
 // jsonText is v as JSON, the form the refusal messages quote a payload value
@@ -165,11 +161,11 @@ func realDate(v string) string {
 
 // badImportSchedule returns each when or deadline of item, a payload to-do
 // or project created or updated, that Things would misread (see
-// checkScheduleValue), as `name: value (why)`, and the attribute names. A
-// value that is not a string is left to the type checks.
-func badImportSchedule(item map[string]any) (lines, names []string) {
+// checkScheduleValue), as `name: value (why)`. A value that is not a string
+// is left to the type checks.
+func badImportSchedule(item map[string]any) (bad problems) {
 	if _, ok := payloadType(item); !ok {
-		return nil, nil
+		return bad
 	}
 	attrs, _ := item["attributes"].(map[string]any)
 	for _, name := range []string{"when", "deadline"} {
@@ -178,11 +174,10 @@ func badImportSchedule(item map[string]any) (lines, names []string) {
 			continue
 		}
 		if why := checkScheduleValue(name, v); why != "" {
-			lines = append(lines, fmt.Sprintf("%s: %s (%s)", name, jsonText(v), why))
-			names = append(names, name)
+			bad.add(name, fmt.Sprintf("%s: %s (%s)", name, jsonText(v), why))
 		}
 	}
-	return lines, names
+	return bad
 }
 
 // importDestAttrs are the destination attributes of a to-do or project.
@@ -190,24 +185,23 @@ var importDestAttrs = []string{"list", "list-id", "heading", "heading-id", "area
 
 // badImportTypes returns each destination attribute of item, a payload object
 // that creates a to-do or project, that is neither a string nor null, as
-// `name: value` with the value in JSON, and the attribute names. Measured in
-// Things 3: a number, boolean or array there makes it reject the whole
-// payload. Update items were not measured, so they are not checked.
-func badImportTypes(item map[string]any) (lines, names []string) {
+// `name: value` with the value in JSON. Measured in Things 3: a number,
+// boolean or array there makes it reject the whole payload. Update items
+// were not measured, so they are not checked.
+func badImportTypes(item map[string]any) (bad problems) {
 	_, task := payloadType(item)
 	if op, _ := item["operation"].(string); !task || (op != "" && op != "create") {
-		return nil, nil
+		return bad
 	}
 	attrs, _ := item["attributes"].(map[string]any)
 	for _, name := range importDestAttrs {
 		switch raw := attrs[name]; raw.(type) {
 		case nil, string:
 		default:
-			lines = append(lines, fmt.Sprintf("%s: %s", name, jsonText(raw)))
-			names = append(names, name)
+			bad.add(name, fmt.Sprintf("%s: %s", name, jsonText(raw)))
 		}
 	}
-	return lines, names
+	return bad
 }
 
 // restrictedImportAttrs names the attributes in an update item's `attributes`
@@ -468,14 +462,13 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 		shape := shapes[path]
 		dupKeys := dups[path]
 		v, _ := raw.(map[string]any)
-		var dateLines, dateNames, schedLines, schedNames, futureLines, futureNames, typeLines, typeNames []string
+		var dates, schedule, future, types problems
 		if v != nil {
-			dateLines, dateNames = badImportDates(v)
-			schedLines, schedNames = badImportSchedule(v)
-			futureLines, futureNames = futureImportDates(v, now)
-			typeLines, typeNames = badImportTypes(v)
+			dates, future = importDates(v, now)
+			schedule = badImportSchedule(v)
+			types = badImportTypes(v)
 		}
-		if len(dateLines) > 0 || len(schedLines) > 0 || len(futureLines) > 0 || len(typeLines) > 0 || len(dupKeys) > 0 || !shape.empty() {
+		if len(dates.lines) > 0 || len(schedule.lines) > 0 || len(future.lines) > 0 || len(types.lines) > 0 || len(dupKeys) > 0 || !shape.empty() {
 			if !refused {
 				// Any type but project is reported as a task.
 				typ, _ := payloadType(v)
@@ -492,16 +485,16 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 					}
 				}
 			}
-			it.Blocked = slices.Concat(it.Blocked, dateNames, schedNames, futureNames, typeNames, shape.typeNames, shape.itemNames, shape.ignoredNames, dupKeys, shape.longNames)
+			it.Blocked = slices.Concat(it.Blocked, dates.names, schedule.names, future.names, types.names, shape.types.names, shape.items.names, shape.ignored.names, dupKeys, shape.long.names)
 			if shape.blank {
 				it.Blocked = append(it.Blocked, "title")
 			}
 			// An attribute refused for two reasons, such as a title given
 			// twice and too long, is named once.
 			it.Blocked = uniqueInOrder(it.Blocked)
-			it.dates, it.schedule, it.future, it.types = dateLines, schedLines, futureLines, append(typeLines, shape.types...)
-			it.shape, it.ignored, it.blank = shape.items, shape.ignored, shape.blank
-			it.long = shape.long
+			it.dates, it.schedule, it.future, it.types = dates.lines, schedule.lines, future.lines, append(types.lines, shape.types.lines...)
+			it.shape, it.ignored, it.blank = shape.items.lines, shape.ignored.lines, shape.blank
+			it.long = shape.long.lines
 			for _, key := range dupKeys {
 				it.dups = append(it.dups, fmt.Sprintf("%s: given twice", key))
 			}

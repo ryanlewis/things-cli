@@ -85,16 +85,16 @@ var importAttrKinds = []struct{ name, kind string }{
 type importShape struct {
 	// items is each way the item is not one Things takes, as `name: why`:
 	// not an object, a type or operation it does not know or allow there,
-	// no attributes. itemNames are the attributes they are about.
-	items, itemNames []string
+	// no attributes.
+	items problems
 	// types is each attribute with the wrong JSON kind, as `name: value`.
-	types, typeNames []string
+	types problems
 	// ignored is each attribute Things takes on another type of item and
 	// ignores on this one, as `name: why`.
-	ignored, ignoredNames []string
+	ignored problems
 	// long is each title or notes longer than Things keeps, as
 	// `name: N characters`.
-	long, longNames []string
+	long problems
 	// blank is set for a to-do or project created with no title, or only
 	// whitespace. Things creates it, untitled, which an agent almost never
 	// means.
@@ -102,7 +102,7 @@ type importShape struct {
 }
 
 func (s importShape) empty() bool {
-	return len(s.items) == 0 && len(s.types) == 0 && len(s.ignored) == 0 && len(s.long) == 0 && !s.blank
+	return len(s.items.lines) == 0 && len(s.types.lines) == 0 && len(s.ignored.lines) == 0 && len(s.long.lines) == 0 && !s.blank
 }
 
 // importIgnoredAttrs are the attributes Things takes on one type of created
@@ -145,7 +145,7 @@ func importShapes(payload []any) (map[string]importShape, int) {
 				count++
 			}
 			if !ok {
-				shapes[path] = importShape{items: []string{fmt.Sprintf("not an object: %s", jsonText(raw))}}
+				shapes[path] = importShape{items: problems{lines: []string{fmt.Sprintf("not an object: %s", jsonText(raw))}}}
 				continue
 			}
 			if s := checkImportItem(item, slot); !s.empty() {
@@ -180,8 +180,7 @@ func importShapes(payload []any) (map[string]importShape, int) {
 func checkImportItem(item map[string]any, slot importSlot) importShape {
 	var s importShape
 	bad := func(name, format string, args ...any) {
-		s.items = append(s.items, name+": "+fmt.Sprintf(format, args...))
-		s.itemNames = append(s.itemNames, name)
+		s.items.add(name, name+": "+fmt.Sprintf(format, args...))
 	}
 
 	create := true
@@ -219,8 +218,7 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 	case rawAttrs == nil:
 		return s
 	case !isObject:
-		s.types = append(s.types, "attributes: "+jsonText(rawAttrs))
-		s.typeNames = append(s.typeNames, "attributes")
+		s.types.add("attributes", "attributes: "+jsonText(rawAttrs))
 		return s
 	case !create:
 		return s
@@ -228,22 +226,19 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 
 	ignored, hasIgnored := importIgnoredAttrs[itemType]
 	if hasIgnored && attrs[ignored.name] != nil {
-		s.ignored = append(s.ignored, fmt.Sprintf("%s: %s", ignored.name, ignored.why))
-		s.ignoredNames = append(s.ignoredNames, ignored.name)
+		s.ignored.add(ignored.name, fmt.Sprintf("%s: %s", ignored.name, ignored.why))
 	}
 	for _, a := range importAttrKinds {
 		raw := attrs[a.name]
 		if raw == nil || hasKind(raw, a.kind) || (hasIgnored && a.name == ignored.name) {
 			continue
 		}
-		s.types = append(s.types, fmt.Sprintf("%s: %s", a.name, jsonText(raw)))
-		s.typeNames = append(s.typeNames, a.name)
+		s.types.add(a.name, fmt.Sprintf("%s: %s", a.name, jsonText(raw)))
 	}
 	for _, l := range importLengthLimits {
 		if v, ok := attrs[l.name].(string); ok {
 			if n := utf8.RuneCountInString(v); n > l.max {
-				s.long = append(s.long, fmt.Sprintf("%s: %d characters, over %d", l.name, n, l.max))
-				s.longNames = append(s.longNames, l.name)
+				s.long.add(l.name, fmt.Sprintf("%s: %d characters, over %d", l.name, n, l.max))
 			}
 		}
 	}
