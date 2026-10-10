@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/config"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/db/dbtest"
@@ -1187,12 +1188,13 @@ func checkWhenUnchecked(t *testing.T, stdout, stderr, uuid, title, value string,
 	}
 }
 
-// A --when the read-back cannot place, a weekday name, a weekday or evening
-// with a time, is reported not confirmed for add and project add, whatever
-// date Things gave the item. A value it can place is judged as before.
+// A --when the read-back cannot place, an abbreviated weekday or a phrase
+// Things understood, is reported not confirmed for add and project add,
+// whatever date Things gave the item. A value it can place is judged as
+// before.
 func TestAddWhenUnplaced(t *testing.T) {
 	dated := "start = 2, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3))))
-	for _, value := range []string{"friday", "friday@18:00", "evening@6pm"} {
+	for _, value := range []string{"fri", "fri@18:00", "next friday"} {
 		for _, typ := range []model.TaskType{model.TypeTask, model.TypeProject} {
 			for _, asJSON := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/%s/json=%v", value, typ, asJSON), func(t *testing.T) {
@@ -1268,17 +1270,17 @@ func TestEditWhenPhrase(t *testing.T) {
 
 // An edit with a --when the read-back cannot place, which Things applied, is
 // reported not confirmed, with where the item is. One it can place prints the
-// item as before. --notes keeps a weekday with a time, which an edit of
-// --when alone treats as a phrase (TestEditWhenPhrase), read back.
+// item as before. --notes keeps a phrase, which an edit of --when alone does
+// not read back (TestEditWhenPhrase), read back.
 func TestEditWhenUnplaced(t *testing.T) {
 	friday := strconv.Itoa(int(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3))))
 	for _, tc := range []struct {
 		value  string
 		placed bool
 	}{
-		{"friday", false},
-		{"friday@18:00", false},
-		{"evening@6pm", false},
+		{"fri", false},
+		{"fri@18:00", false},
+		{"next friday", false},
 		{testNow.AddDate(0, 0, 3).Format("2006-01-02"), true},
 	} {
 		for _, asJSON := range []bool{false, true} {
@@ -1414,5 +1416,90 @@ func TestWhenDatedTimeReadBack(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A weekday name, alone or with a time, is sent as the date Things gives it,
+// the next such day strictly after today, and evening with a time as
+// evening@HH:MM. add, project add and edit then read the item back like a
+// date or this evening: filed there it is confirmed, filed elsewhere it is
+// misfiled. Measured in Things 3 on Saturday 10 Oct 2026; the clock here is
+// pinned to the Saturday before.
+func TestWhenWeekdayEveningReadBack(t *testing.T) {
+	sat := time.Date(2026, 10, 3, 14, 0, 0, 0, time.Local)
+	t.Cleanup(clock.Pin(sat))
+	day := func(d int) string { return strconv.Itoa(int(model.ThingsDateFromTime(sat.AddDate(0, 0, d)))) }
+	dated := func(d int) string { return "start = 2, startDate = " + day(d) }
+	evening := func(bucket int) string {
+		return fmt.Sprintf("start = 1, startDate = %s, startBucket = %d", day(0), bucket)
+	}
+	for _, tc := range []struct {
+		in, sent, lands, misfiled string
+	}{
+		{"friday@9pm", "2026-10-09@21:00", dated(6), dated(3)},
+		{"Friday", "2026-10-09", dated(6), dated(3)},
+		{"sunday@9am", "2026-10-04@09:00", dated(1), dated(8)},
+		// Today's weekday is a week on, whether or not the time has passed.
+		{"saturday", "2026-10-10", dated(7), evening(0)},
+		{"saturday@9am", "2026-10-10@09:00", dated(7), evening(0)},
+		{"saturday@9pm", "2026-10-10@21:00", dated(7), evening(0)},
+		// evening keeps the item this evening, a past time included.
+		{"evening@6pm", "evening@18:00", evening(1), evening(0)},
+		{"evening@9am", "evening@09:00", evening(1), dated(1)},
+	} {
+		for _, landed := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/lands=%v", tc.in, landed), func(t *testing.T) {
+				row := tc.lands
+				if !landed {
+					row = tc.misfiled
+				}
+				fastVerify(t)
+				database, sqlDB := seedWritable(t)
+				var urls []string
+				stub := func(apply ...string) {
+					prev := things.SetExecCommandForTest(func(_ string, a ...string) *exec.Cmd {
+						urls = append(urls, strings.Join(a, " "))
+						for _, q := range apply {
+							if _, err := sqlDB.Exec(q); err != nil {
+								t.Errorf("simulating Things write: %v", err)
+							}
+						}
+						return exec.Command("true")
+					})
+					t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+				}
+				check := func(cmd string, err error, stderr string) {
+					t.Helper()
+					if want := "when=" + url.QueryEscape(tc.sent); len(urls) != 1 || !strings.Contains(urls[0], want) {
+						t.Errorf("%s sent %q, want %s", cmd, urls, want)
+					}
+					switch {
+					case landed && (err != nil || strings.Contains(stderr, "cannot check")):
+						t.Errorf("%s --when %s = %v, stderr %q; want it confirmed", cmd, tc.in, err, stderr)
+					case !landed && (err == nil || !strings.Contains(err.Error(), "did not apply as sent") || !strings.Contains(err.Error(), strconv.Quote(tc.in))):
+						t.Errorf("%s --when %s = %v; want it misfiled, naming the value as typed", cmd, tc.in, err)
+					}
+				}
+
+				stub(`UPDATE TMTask SET ` + row + `, userModificationDate = COALESCE(userModificationDate, 0) + 1 WHERE uuid = 'one-1'`)
+				_, stderr, err := runStreams(t, database, "--json", "edit", "one-1", "--when", tc.in)
+				check("edit", err, stderr)
+
+				for _, add := range [][]string{{"add"}, {"project", "add"}} {
+					typ := model.TypeTask
+					if len(add) == 2 {
+						typ = model.TypeProject
+					}
+					urls = nil
+					uuid := "new-" + typ.String()
+					now := strconv.FormatFloat(model.TimeToUnix(time.Now()), 'f', -1, 64)
+					stub(fmt.Sprintf(`INSERT INTO TMTask (uuid, title, type, status, trashed, start, creationDate, userModificationDate) VALUES ('%s', 'Buy oat milk', %d, 0, 0, 0, %s, %s)`, uuid, int(typ), now, now),
+						`UPDATE TMTask SET `+row+` WHERE uuid = '`+uuid+`'`)
+					args := append(append([]string{"--json"}, add...), "Buy oat milk", "--when", tc.in)
+					_, stderr, err := runStreams(t, database, args...)
+					check(strings.Join(add, " "), err, stderr)
+				}
+			})
+		}
 	}
 }

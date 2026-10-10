@@ -15,10 +15,9 @@ var whenKeywords = []string{"today", "tomorrow", "evening", "anytime", "someday"
 // allowlisted so the typo detector never mistakes them for a keyword — e.g.
 // "monday" is Levenshtein distance 2 from "today" and would otherwise be
 // rejected as a typo. Abbreviations are included for the same reason.
-var weekdayWords = []string{
-	"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+var weekdayWords = append(slices.Clone(weekdayNames),
 	"mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun",
-}
+)
 
 func isWhenKeyword(s string) bool {
 	return slices.Contains(whenKeywords, s)
@@ -180,23 +179,31 @@ func clock24(v string) (string, bool) {
 // and tomorrow become their dates at now, and the time becomes HH:MM (6pm is
 // 18:00). How Things reads a keyword or a 12-hour time after an @ was not
 // measured. So tomorrow sent just before midnight is the day after the one
-// it was sent on, whenever Things reads it. Any other value is returned as it
-// is: evening with a time too, since a date and time today files the item in
-// the day part, not the evening, and one NormalizeWhen refuses.
+// it was sent on, whenever Things reads it.
+//
+// A weekday name (weekdayDate), alone or with a time, is rewritten to the
+// date Things gives it, YYYY-MM-DD or YYYY-MM-DD@HH:MM. evening with a time
+// is sent as evening@HH:MM: a date and time today files the item in the day
+// part, not the evening. Any other value is returned as it is, and so is one
+// NormalizeWhen refuses.
 func ResolveWhen(v string, now time.Time) string {
 	n, err := NormalizeWhen(v)
 	if err != nil {
 		return v
 	}
+	now = now.In(time.Local)
 	day, clock, timed := strings.Cut(n, "@")
+	wd, weekday := weekdayName(day)
 	if !timed {
+		if weekday {
+			return weekdayDate(now, wd).Format("2006-01-02")
+		}
 		return v
 	}
 	c, ok := clockParts(clock)
 	if !ok || !c.real() {
 		return v
 	}
-	now = now.In(time.Local)
 	var date time.Time
 	switch m := whenDateShape.FindStringSubmatch(day); {
 	case m != nil && m[4] == "":
@@ -208,21 +215,55 @@ func ResolveWhen(v string, now time.Time) string {
 		date = now
 	case strings.EqualFold(day, "tomorrow"):
 		date = now.AddDate(0, 0, 1)
+	case strings.EqualFold(day, "evening"):
+		return "evening@" + c.hhmm()
+	case weekday:
+		date = weekdayDate(now, wd)
 	default:
 		return v
 	}
 	return date.Format("2006-01-02") + "@" + c.hhmm()
 }
 
+// weekdayNames are the day names ResolveWhen rewrites to a date, in
+// time.Weekday order. Abbreviations (fri) were not measured, so they go to
+// Things as typed.
+var weekdayNames = []string{"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
+
+// weekdayName reports the day v, in any case, names, if it is one of
+// weekdayNames.
+func weekdayName(v string) (time.Weekday, bool) {
+	i := slices.Index(weekdayNames, strings.ToLower(v))
+	return time.Weekday(i), i >= 0
+}
+
+// weekdayDate is the date Things gives a weekday name sent at now: the next
+// such day strictly after today, so the name of today is a week on.
+// Measured in Things 3 on Saturday 10 Oct 2026: friday, friday@9pm and
+// monday@9pm went to 16 and 12 Oct, and saturday, saturday@9am and
+// saturday@9pm to 17 Oct, the time only setting the reminder.
+func weekdayDate(now time.Time, wd time.Weekday) time.Time {
+	days := (int(wd)-int(now.Weekday())+6)%7 + 1
+	return time.Date(now.Year(), now.Month(), now.Day()+days, 12, 0, 0, 0, time.Local)
+}
+
+// TimedWhenWord reports whether v, in any case, is a word --when takes a
+// time after: a TimedWhenKeyword or a weekday name ResolveWhen rewrites.
+func TimedWhenWord(v string) bool {
+	_, weekday := weekdayName(v)
+	return weekday || TimedWhenKeyword(v)
+}
+
 // WhenDateOrTime reports whether v, a value NormalizeWhen returned, is a
-// date, a time of day, or a date or keyword with a time after an @
-// (checkWhenShape's shapes), as opposed to a keyword alone or a free phrase.
+// date, a time of day, or a date, keyword or weekday name with a time after
+// an @ (checkWhenShape's shapes), as opposed to a keyword alone or a free
+// phrase.
 func WhenDateOrTime(v string) bool {
 	day, clock, timed := strings.Cut(v, "@")
 	if timed {
 		shaped, _ := clockShape(clock)
 		m := whenDateShape.FindStringSubmatch(day)
-		return shaped && (m != nil && m[4] == "" || TimedWhenKeyword(day))
+		return shaped && (m != nil && m[4] == "" || TimedWhenWord(day))
 	}
 	if m := whenDateShape.FindStringSubmatch(v); m != nil {
 		return m[4] == ""
@@ -265,8 +306,9 @@ func impossibleWhen(reason WhenReason, format string, args ...any) error {
 
 // checkWhenShape refuses a value shaped like a date or a time of day that
 // names none: a month or day that does not exist, an hour or minute out of
-// range, a date followed by T that is not an ISO 8601 date-time, or a date
-// or a keyword with something after the @ that is not a time of day.
+// range, a date followed by T that is not an ISO 8601 date-time, or a date,
+// a keyword or a weekday name (TimedWhenWord) with something after the @
+// that is not a time of day.
 // Measured in Things 3 on 9 Oct 2026, Things saves such a value as something
 // else with no warning (2026-13-01 lands in Today, tomorrow@25:00 lands
 // tomorrow with no reminder, someday@18:00 in Someday). Any other value
@@ -299,7 +341,7 @@ func checkWhenShape(v string) error {
 		switch low := strings.ToLower(day); {
 		case low == "anytime" || low == "someday":
 			return impossibleWhen(WhenTimeIgnored, "invalid --when value %q: Things ignores a time after %s", v, low)
-		case !TimedWhenKeyword(low):
+		case !TimedWhenWord(low):
 			// Something else before the @: a phrase.
 			return nil
 		}

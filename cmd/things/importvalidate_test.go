@@ -11,7 +11,7 @@ func TestCheckScheduleValue(t *testing.T) {
 	const (
 		badTime   = "not a real time of day after the @"
 		badDate   = "not a real date"
-		badBefore = "before the @ must be today, tomorrow, evening or a date as YYYY-MM-DD"
+		badBefore = "before the @ must be today, tomorrow, evening, a weekday name such as friday or a date as YYYY-MM-DD"
 		notDate   = "not a date as YYYY-MM-DD, or a date and time as YYYY-MM-DD@HH:MM"
 		ignored   = "Things ignores a time after anytime or someday"
 	)
@@ -51,7 +51,10 @@ func TestCheckScheduleValue(t *testing.T) {
 		{"when", "2026-13-01@6pm", badDate},
 		{"when", "2026-10-10@25:00", badTime},
 		{"when", "next friday@18:00", badBefore},
-		{"when", "friday@6pm", badBefore},
+		// A weekday name goes as its date (resolveImportWhens).
+		{"when", "friday@6pm", ""},
+		{"when", "Friday@25:00", badTime},
+		{"when", "fri@6pm", badBefore},
 		// No @.
 		{"when", "2026-10-10", ""},
 		{"when", "2026-1-5", notDate},

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -32,6 +33,9 @@ const (
 //     tomorrow when it has passed. A date and time sets it on that date, or
 //     today when the date is past. Either files it in the day part, not the
 //     evening, when the day is today.
+//   - evening with a time (evening@18:00) files it this evening, today, and
+//     sets the reminder at that time, one already past included. Measured
+//     with things:///add on 10 Oct 2026.
 type whenPlace struct {
 	start model.Start // the start of an item with no start date
 	day   model.ThingsDate
@@ -50,61 +54,113 @@ func parseClock(s string) (int, bool) {
 	return t.Hour()*60 + t.Minute(), true
 }
 
-// placeWhen returns where value files an item when Things reads it at now. ok
-// is false for a value whose outcome is not worked out here: an English
-// phrase, a time other than HH:MM, a time within a minute of now, which lands
-// today or tomorrow depending on when Things reads it, or a time within an
-// hour of a daylight-saving change, where how Things reads the wall clock was
-// not measured.
-func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
+// whenKind is the form of a --when value placeWhen works out.
+type whenKind int
+
+const (
+	whenWord         whenKind = iota // a keyword, or an empty value
+	whenClock                        // HH:MM
+	whenDate                         // YYYY-MM-DD
+	whenDateClock                    // YYYY-MM-DD@HH:MM
+	whenEveningClock                 // evening@HH:MM
+)
+
+// whenForm is a --when value, as sent, read into its parts: the keyword for
+// whenWord, the date for whenDate and whenDateClock, and the time in minutes
+// after midnight for the forms with one.
+type whenForm struct {
+	kind  whenKind
+	word  string
+	date  time.Time
+	clock int
+}
+
+// parseWhen reads value, as sent, into the form placeWhen works out where it
+// files an item. ok is false for any other value: an abbreviated weekday
+// (fri), a word with a time after the @ that things.ResolveWhen did not
+// rewrite, or an English phrase. The read-back checks only the forms parsed
+// here, which is what whenPlaced reports.
+func parseWhen(value string) (f whenForm, ok bool) {
 	v, err := things.NormalizeWhen(value)
 	if err != nil {
+		return whenForm{}, false
+	}
+	switch v {
+	case "", "anytime", "someday", "today", "evening", "tomorrow":
+		return whenForm{kind: whenWord, word: v}, true
+	}
+	if clock, ok := parseClock(v); ok {
+		return whenForm{kind: whenClock, clock: clock}, true
+	}
+	if day, clockPart, ok := strings.Cut(v, "@"); ok && strings.EqualFold(day, "evening") {
+		clock, ok := parseClock(clockPart)
+		return whenForm{kind: whenEveningClock, clock: clock}, ok
+	}
+	f = whenForm{kind: whenDate}
+	datePart := v
+	if len(v) == len("2006-01-02@15:04") && v[10] == '@' {
+		clock, ok := parseClock(v[11:])
+		if !ok {
+			return whenForm{}, false
+		}
+		f = whenForm{kind: whenDateClock, clock: clock}
+		datePart = v[:10]
+	}
+	if f.date, err = time.ParseInLocation("2006-01-02", datePart, time.Local); err != nil {
+		return whenForm{}, false
+	}
+	return f, true
+}
+
+// placeWhen returns where value files an item when Things reads it at now. ok
+// is false for a value whose outcome is not worked out here: one parseWhen
+// does not read, a time within a minute of now, which lands today or tomorrow
+// depending on when Things reads it, or a time within an hour of a
+// daylight-saving change, where how Things reads the wall clock was not
+// measured.
+func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
+	f, ok := parseWhen(value)
+	if !ok {
 		return whenPlace{}, false
 	}
 	today := model.ThingsDateFromTime(now)
-	switch v {
-	case "", "anytime":
-		return whenPlace{start: model.StartAnytime, reminder: reminderKept}, true
-	case "someday":
-		return whenPlace{start: model.StartSomeday, reminder: reminderKept}, true
-	case "today":
-		return whenPlace{day: today, bucket: 0, reminder: reminderNone}, true
-	case "evening":
-		return whenPlace{day: today, bucket: 1, reminder: reminderNone}, true
-	case "tomorrow":
+	switch f.kind {
+	case whenWord:
+		switch f.word {
+		case "", "anytime":
+			return whenPlace{start: model.StartAnytime, reminder: reminderKept}, true
+		case "someday":
+			return whenPlace{start: model.StartSomeday, reminder: reminderKept}, true
+		case "today":
+			return whenPlace{day: today, bucket: 0, reminder: reminderNone}, true
+		case "evening":
+			return whenPlace{day: today, bucket: 1, reminder: reminderNone}, true
+		}
 		return whenPlace{day: model.ThingsDateFromTime(now.AddDate(0, 0, 1)), bucket: -1, reminder: reminderKept}, true
-	}
-	if clock, ok := parseClock(v); ok {
+	case whenClock:
 		if nearOffsetChange(now) {
 			return whenPlace{}, false
 		}
-		at := time.Date(now.Year(), now.Month(), now.Day(), clock/60, clock%60, 0, 0, time.Local)
+		at := time.Date(now.Year(), now.Month(), now.Day(), f.clock/60, f.clock%60, 0, 0, time.Local)
 		switch {
 		case at.Sub(now) > time.Minute:
-			return whenPlace{day: today, bucket: 0, reminder: clock}, true
+			return whenPlace{day: today, bucket: 0, reminder: f.clock}, true
 		case now.Sub(at) > time.Minute:
-			return whenPlace{day: model.ThingsDateFromTime(now.AddDate(0, 0, 1)), bucket: -1, reminder: clock}, true
+			return whenPlace{day: model.ThingsDateFromTime(now.AddDate(0, 0, 1)), bucket: -1, reminder: f.clock}, true
 		}
 		return whenPlace{}, false
+	case whenEveningClock:
+		// Measured in Things 3 on 10 Oct 2026: evening with any time,
+		// one already past included, files the item this evening, today,
+		// with the reminder at that time.
+		return whenPlace{day: today, bucket: 1, reminder: f.clock}, true
 	}
-	datePart, clockPart, timed := v, "", false
-	if len(v) == len("2006-01-02@15:04") && v[10] == '@' {
-		datePart, clockPart, timed = v[:10], v[11:], true
-	}
-	date, err := time.ParseInLocation("2006-01-02", datePart, time.Local)
-	if err != nil {
-		return whenPlace{}, false
-	}
-	day := model.ThingsDateFromTime(date)
-	if timed {
-		clock, ok := parseClock(clockPart)
-		if !ok {
-			return whenPlace{}, false
-		}
+	day := model.ThingsDateFromTime(f.date)
+	if f.kind == whenDateClock {
 		if day <= today {
-			return whenPlace{day: today, bucket: 0, reminder: clock}, true
+			return whenPlace{day: today, bucket: 0, reminder: f.clock}, true
 		}
-		return whenPlace{day: day, bucket: -1, reminder: clock}, true
+		return whenPlace{day: day, bucket: -1, reminder: f.clock}, true
 	}
 	switch {
 	case day < today:
@@ -115,33 +171,12 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 	return whenPlace{day: day, bucket: -1, reminder: reminderKept}, true
 }
 
-// whenPlaced reports whether value, as sent, is one placeWhen works out where
-// it files an item: anytime, someday, today, evening, tomorrow, an empty
-// value, an HH:MM time, a date, or a date and time. The read-back checks only
-// these; for any other value, a weekday name, a word other than a date with
-// a time after the @ (evening@18:00, friday@18:00) or an English phrase, it
-// confirms only that Things applied the write, so the item is reported not
-// confirmed (whenUnchecked).
+// whenPlaced reports whether value, as sent, is one the read-back checks
+// (parseWhen). For any other value it confirms only that Things applied the
+// write, so the item is reported not confirmed (whenUnchecked).
 func whenPlaced(value string) bool {
-	v, err := things.NormalizeWhen(value)
-	if err != nil {
-		return false
-	}
-	switch v {
-	case "", "anytime", "someday", "today", "evening", "tomorrow":
-		return true
-	}
-	if _, ok := parseClock(v); ok {
-		return true
-	}
-	if len(v) == len("2006-01-02@15:04") && v[10] == '@' {
-		if _, ok := parseClock(v[11:]); !ok {
-			return false
-		}
-		v = v[:10]
-	}
-	_, err = time.ParseInLocation("2006-01-02", v, time.Local)
-	return err == nil
+	_, ok := parseWhen(value)
+	return ok
 }
 
 // whenUnchecked is the reason an add or edit gives for an item reported not
@@ -455,6 +490,9 @@ const (
 	// whenNotUnderstood is an item sent a free phrase (whenPhrase) that
 	// has no start date: Things did not understand the phrase.
 	whenNotUnderstood
+	// whenUnplaced is an item sent a value the read-back cannot check
+	// (whenPlaced), which it reports not confirmed.
+	whenUnplaced
 )
 
 // verdict judges t, a new item read at now, against c. add and import both
@@ -466,6 +504,8 @@ func (c *whenCheck) verdict(t *model.Task, now time.Time) whenVerdict {
 		return whenNotFiled
 	case c != nil && whenPhrase(c.value) && t.StartDate == nil:
 		return whenNotUnderstood
+	case c != nil && !whenPlaced(c.judged()):
+		return whenUnplaced
 	}
 	return whenFiled
 }

@@ -172,7 +172,7 @@ func TestNormalizeDeadlineRejects(t *testing.T) {
 // so add and edit give the same error before anything is sent. Phrases and
 // valid dates and times still pass.
 func TestNormalizeWhenRejectsImpossibleDatesAndTimes(t *testing.T) {
-	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am", "2026-10-09T25:00:00Z", "2026-10-09T10:00:00+200", "2026-10-09T25:00", "tomorrow@25:00", "today@18:60", "Evening@13pm", "today@noon", "2026-10-09@soon", "someday@18:00", "anytime@9am", "today@6  pm", "today@9:30  pm", "9:30  pm"} {
+	for _, in := range []string{"2026-13-01", "2026-00-10", "2026-02-30", "2026-04-31", "2026-13-01@09:00", "2026-05-01@25:00", "2026-05-01@09:60", "25:00", "9:75", "13:30pm", "0:30am", "2026-10-09T25:00:00Z", "2026-10-09T10:00:00+200", "2026-10-09T25:00", "tomorrow@25:00", "today@18:60", "Evening@13pm", "friday@25:00", "Monday@noon", "today@noon", "2026-10-09@soon", "someday@18:00", "anytime@9am", "today@6  pm", "today@9:30  pm", "9:30  pm"} {
 		if _, err := NormalizeWhen(in); err == nil || !strings.Contains(err.Error(), "invalid --when value") {
 			t.Errorf("NormalizeWhen(%q) = %v, want it refused", in, err)
 		}
@@ -244,9 +244,10 @@ func TestKnownWhenWord(t *testing.T) {
 	}
 }
 
-// A date, today or tomorrow with a time after the @ is sent as
-// YYYY-MM-DD@HH:MM, with today and tomorrow read at the instant it is sent.
-// Anything else goes as typed.
+// A date, today, tomorrow or a weekday name with a time after the @ is sent
+// as YYYY-MM-DD@HH:MM, and a weekday name alone as YYYY-MM-DD, read at the
+// instant it is sent. evening with a time is sent as evening@HH:MM. Anything
+// else goes as typed.
 func TestResolveWhen(t *testing.T) {
 	now := time.Date(2026, 10, 10, 14, 0, 0, 0, time.Local)
 	beforeMidnight := time.Date(2026, 10, 10, 23, 59, 59, 0, time.Local)
@@ -268,9 +269,23 @@ func TestResolveWhen(t *testing.T) {
 		{"2026-1-5@6:30am", now, "2026-01-05@06:30"},
 		{"2026-10-12@09:30", now, "2026-10-12@09:30"},
 		{"2026-10-09T10:00:00+05:00", now, "2026-10-09@10:00"},
+		// evening keeps its word, so the item stays in the evening.
+		{"evening@6pm", now, "evening@18:00"},
+		{"Evening@9am", now, "evening@09:00"},
+		// A weekday is the next such day strictly after today (a Saturday),
+		// whether or not the time has passed.
+		{"friday@9pm", now, "2026-10-16@21:00"},
+		{"friday", now, "2026-10-16"},
+		{"Monday@9pm", now, "2026-10-12@21:00"},
+		{"sunday@9am", now, "2026-10-11@09:00"},
+		{"saturday", now, "2026-10-17"},
+		{"saturday@9am", now, "2026-10-17@09:00"},
+		{"saturday@9pm", now, "2026-10-17@21:00"},
+		{"sunday", beforeMidnight, "2026-10-11"},
 		// Not resolved.
-		{"evening@6pm", now, "evening@6pm"},
-		{"friday@9pm", now, "friday@9pm"},
+		{"fri@9pm", now, "fri@9pm"},
+		{"fri", now, "fri"},
+		{"friday@25:00", now, "friday@25:00"},
 		{"next friday@noon", now, "next friday@noon"},
 		{"today", now, "today"},
 		{"6pm", now, "6pm"},

@@ -84,7 +84,9 @@ const whenMisfiled = "misfiled"
 
 // whenIgnored is the verdict on a created item whose `when` is a free phrase
 // Things did not understand: the item was given no start date. As an add with
-// such a --when, the item is there and the import does not fail over it.
+// such a --when, the item is there and the import does not fail over it. It
+// is also the verdict, marked unchecked, on one whose `when` the read-back
+// cannot check (whenPlaced), as an add reports such a --when.
 const whenIgnored = "when"
 
 // createdWhere is each created item whose verdict meets keep, in payload
@@ -191,6 +193,9 @@ type importCreated struct {
 	Landed string `json:"landed,omitempty"`
 
 	detail string // why a failing item is missing or unconfirmed, for the plain-text error
+	// unchecked marks a whenIgnored item whose when the read-back cannot
+	// check, rather than one Things did not understand.
+	unchecked bool
 }
 
 // applyImport sends write, the import, passing it the time it is sent, then
@@ -538,7 +543,8 @@ func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate,
 // file it, sent at sent, keeping its uuid, as applyAdd does for --when. It
 // judges the when as sent (things.ResolveWhen, resolveImportWhens): a
 // keyword or date that did not land is "misfiled", and a free phrase that
-// left the item with no start date is "when". Things files a to-do whose
+// left the item with no start date is "when", as is, marked unchecked, a
+// value the read-back cannot check (whenPlaced). Things files a to-do whose
 // `when` it applies with a deadline already past in the Inbox, measured on
 // 9 Oct 2026, and nothing in the import says so, so only the read-back can
 // tell. An item the payload completes or cancels is not checked, nor one in
@@ -560,10 +566,16 @@ func checkWhens(out []importCreated, creates []importCreate, found map[createdWa
 			out[i].Confirmed, out[i].Reason = false, whenMisfiled
 		case whenNotUnderstood:
 			out[i].Confirmed, out[i].Reason = false, whenIgnored
+		case whenUnplaced:
+			// Reported as an add reports it; the import does not fail.
+			out[i].Confirmed, out[i].Reason, out[i].unchecked = false, whenIgnored, true
 		default:
 			continue
 		}
 		out[i].Landed = describeStart(row)
+		if out[i].unchecked {
+			continue
+		}
 		out[i].detail = fmt.Sprintf("%s %q (%s) was created, but its when %q did not file it there: it is %s", c.typ, c.title, out[i].UUID, c.when, out[i].Landed)
 	}
 }
@@ -586,13 +598,21 @@ func (c importCreated) line() string {
 	case c.Confirmed:
 		return fmt.Sprintf("Created and confirmed: %s %q (%s)", c.Path, c.Title, c.UUID)
 	case len(c.Candidates) > 0:
-		return fmt.Sprintf("%s: %s %q (%s)", unconfirmedMsg[c.Reason], c.Path, c.Title, strings.Join(c.Candidates, ", "))
+		return fmt.Sprintf("%s: %s %q (%s)", c.msg(), c.Path, c.Title, strings.Join(c.Candidates, ", "))
 	case c.UUID != "" && c.Landed != "":
-		return fmt.Sprintf("%s: %s %q (%s), %s", unconfirmedMsg[c.Reason], c.Path, c.Title, c.UUID, c.Landed)
+		return fmt.Sprintf("%s: %s %q (%s), %s", c.msg(), c.Path, c.Title, c.UUID, c.Landed)
 	case c.UUID != "":
-		return fmt.Sprintf("%s: %s %q (%s)", unconfirmedMsg[c.Reason], c.Path, c.Title, c.UUID)
+		return fmt.Sprintf("%s: %s %q (%s)", c.msg(), c.Path, c.Title, c.UUID)
 	}
-	return fmt.Sprintf("%s: %s %q", unconfirmedMsg[c.Reason], c.Path, c.Title)
+	return fmt.Sprintf("%s: %s %q", c.msg(), c.Path, c.Title)
+}
+
+// msg is the start of the line c prints when it is not confirmed.
+func (c importCreated) msg() string {
+	if c.unchecked {
+		return "Created, not confirmed (when not checked)"
+	}
+	return unconfirmedMsg[c.Reason]
 }
 
 // printImportCreated reports each created item, a line per item or, under

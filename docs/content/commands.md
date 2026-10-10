@@ -564,8 +564,8 @@ token is `blank-title`, as `import` reports the same title. `edit --title`,
 `--when` accepts a keyword (`today`, `tomorrow`, `evening`, `anytime`,
 `someday`), a date `YYYY-MM-DD`, a time `HH:MM` or a 12-hour time
 (`21:30`, `9:30PM`, `6pm`), a date+time `YYYY-MM-DD@HH:MM`, an RFC3339 timestamp,
-or an English phrase such as `friday` or `next monday`, which Things reads
-itself. An RFC3339 timestamp keeps its wall-clock time and ignores its
+a weekday name such as `friday`, alone or with a time (`friday@9pm`), or an
+English phrase such as `next monday`, which Things reads itself. An RFC3339 timestamp keeps its wall-clock time and ignores its
 offset: `2026-05-01T09:00:00+05:00` sets a 09:00 reminder in your local
 time, not the local time of 09:00 at +05:00. `--deadline` accepts a
 `YYYY-MM-DD` date or an English phrase such as `next friday`; the `--when`
@@ -578,8 +578,14 @@ or `tomorrow` with a time after the `@` is sent as the measured
 `2026-10-12@21:00`, and each is read back like a date and time. Today and
 tomorrow are the dates when the command runs, so `tomorrow@6pm` sent just
 before midnight is the next day, even if Things reads it after midnight.
-`evening@6pm` and anything else with an `@` are sent as typed and not
-checked.
+A weekday name, in any case, is sent as the date Things gives it, the next
+such day strictly after today, so on a Saturday `saturday` is next
+Saturday: `friday` goes as that `YYYY-MM-DD`, and `friday@9pm` as that date
+at `21:00`, whether or not the time has passed. Each is read back like a
+date. `evening` with a time is sent as `evening@HH:MM` (`evening@6pm` as
+`evening@18:00`), since a date and time today would file the item in the
+day part, and is read back as this evening, today, any time included.
+Abbreviations such as `fri` are sent as typed and not checked.
 
 Things files the to-do by matching `--list` (or `--project`) against the
 titles of the projects and areas it shows, and `--heading` against the
@@ -794,9 +800,8 @@ naming the item they found; search for the title before adding it again,
 since another add of the same title at the same moment can be the one
 found. Under `--json` either error is one object with `"error":
 "misfiled"`, the item's `"uuid"` and where it `"landed"`. A value the CLI
-cannot place, a weekday name (`friday`), a weekday or `evening` with a time
-(`friday@18:00`, `evening@6pm`) or an English phrase, is not checked
-against a place. Once Things has applied the write, `add`, `project add`
+cannot place, an abbreviated weekday (`fri`) or an English phrase that
+Things understood, is not checked against a place. Once Things has applied the write, `add`, `project add`
 and `edit` warn on stderr with where the item is, print `Created, not
 confirmed (--when not checked): "…" (uuid)` (`Applied, not confirmed …`
 for an edit) and exit 0; under `--json`, `{"uuid", "title", "confirmed":
@@ -1003,16 +1008,16 @@ deadline are refused. The Things JSON format is narrower than the URL
 `add` uses: its documentation names only the keywords, a date and a date
 and time. So a value that starts with a digit must be a real date,
 `YYYY-MM-DD`, and a `deadline` has no time. A `when` with an `@` must
-have `today`, `tomorrow`, `evening` or a real `YYYY-MM-DD` before it and a
+have `today`, `tomorrow`, `evening`, a weekday name or a real `YYYY-MM-DD` before it and a
 real time of day, such as `18:00`, `9:30PM` or `6pm`, after it: Things
 files `tomorrow@25:00` tomorrow with no reminder, and ignores the time in
 `someday@18:00` and `anytime@…`, so these are refused, as is a phrase
-with a time such as `next friday@18:00`. A date, `today` or `tomorrow`
-with a time is sent as `add` sends it, as `YYYY-MM-DD@HH:MM`: `today@6pm`
-goes as today's date at `18:00`. A bare time and an RFC 3339
-timestamp are refused. The keywords, weekday names
-and English phrases such as `next week` are sent as they are, as `add`
-sends them; how Things reads a phrase in a payload was not measured. Update
+with a time such as `next friday@18:00`. A date, `today`, `tomorrow` or a
+weekday name with a time is sent as `add` sends it, as `YYYY-MM-DD@HH:MM`:
+`today@6pm` goes as today's date at `18:00`. A weekday name alone goes as
+its date, and `evening` with a time as `evening@HH:MM`. A bare time and an
+RFC 3339 timestamp are refused. The keywords and English phrases such as
+`next week` are sent as they are, as `add` sends them; how Things reads a phrase in a payload was not measured. Update
 items are checked too.
 
 Things also rejects the whole payload, showing an error and creating
@@ -1186,8 +1191,10 @@ an unconfirmed `add` does, and no `uuid` unless the reason is
   payload completes or cancels, or one inside a project it completes or
   cancels, is not checked against its `when`.
 - `when`: the item's `when` is a free phrase Things did not understand, so
-  the new item has no start date. It carries its `uuid` and `landed`, and
-  the import exits 0, as `add` does with such a `--when`.
+  the new item has no start date, or one the CLI cannot place, such as
+  `fri` or `next week`, so where it filed the item is not checked (the line
+  says `Created, not confirmed (when not checked)`). It carries its `uuid`
+  and `landed`, and the import exits 0, as `add` does with such a `--when`.
 
 The first four, and `when`, exit 0 with the list printed. Any `not-found` item, or a
 `shares-dated-title` item with too few new items to account for it, makes

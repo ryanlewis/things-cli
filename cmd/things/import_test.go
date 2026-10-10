@@ -161,8 +161,9 @@ func TestRunImportReadsDepsStdin(t *testing.T) {
 	}
 }
 
-// Each when in an item's attributes goes as add sends --when: a date or
-// keyword with a time as YYYY-MM-DD@HH:MM, in a project's items and an
+// Each when in an item's attributes goes as add sends --when: a date,
+// keyword or weekday with a time as YYYY-MM-DD@HH:MM, a weekday alone as its
+// date and evening with a time as evening@HH:MM, in a project's items and an
 // update alike. Every other value, and every other byte, goes as given.
 func TestResolveImportWhens(t *testing.T) {
 	now := time.Date(2026, 10, 10, 9, 0, 0, 0, time.Local)
@@ -175,6 +176,8 @@ func TestResolveImportWhens(t *testing.T) {
 			`[{"type":"project","attributes":{"title":"P","when":"2026-10-12@19:00","items":[{"type":"to-do","attributes":{"title":"a","when":"2026-10-10@18:00"}}]}},{"type":"to-do","operation":"update","id":"x","attributes":{"when":"2026-10-11@08:00"}}]`},
 		{"unresolved kept", `[{"type":"to-do","attributes":{"title":"today@6pm","when":"evening@18:00","notes":"when"}},{"type":"to-do","attributes":{"when":"today"}}]`,
 			`[{"type":"to-do","attributes":{"title":"today@6pm","when":"evening@18:00","notes":"when"}},{"type":"to-do","attributes":{"when":"today"}}]`},
+		{"weekday and evening", `[{"type":"to-do","attributes":{"when":"friday@9pm"}},{"type":"to-do","attributes":{"when":"saturday"}},{"type":"to-do","attributes":{"when":"evening@6pm"}},{"type":"to-do","attributes":{"when":"fri"}}]`,
+			`[{"type":"to-do","attributes":{"when":"2026-10-16@21:00"}},{"type":"to-do","attributes":{"when":"2026-10-17"}},{"type":"to-do","attributes":{"when":"evening@18:00"}},{"type":"to-do","attributes":{"when":"fri"}}]`},
 		{"outside attributes", `[{"type":"to-do","when":"today@6pm","attributes":{"title":"a"}}]`,
 			`[{"type":"to-do","when":"today@6pm","attributes":{"title":"a"}}]`},
 		{"escapes kept", `[{"type":"to-do","attributes":{"title":"é \"q\"","when":"today@6pm","tags":[1,2.50]}}]`,

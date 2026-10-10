@@ -165,7 +165,7 @@ func TestImportRefusesShapesThingsRejects(t *testing.T) {
 		{"when anytime with a time", `[{"type":"project","attributes":{"title":"P","when":"Anytime@9am"}}]`,
 			"[0]", "when", "invalid-date", `[0] when: "Anytime@9am" (Things ignores a time after anytime or someday)`},
 		{"when a phrase with a time", `[{"type":"to-do","attributes":{"title":"a","when":"next friday@18:00"}}]`,
-			"[0]", "when", "invalid-date", `[0] when: "next friday@18:00" (before the @ must be today, tomorrow, evening or a date as YYYY-MM-DD)`},
+			"[0]", "when", "invalid-date", `[0] when: "next friday@18:00" (before the @ must be today, tomorrow, evening, a weekday name such as friday or a date as YYYY-MM-DD)`},
 		{"when a bad date with a time", `[{"type":"to-do","attributes":{"title":"a","when":"2026-02-30@18:00"}}]`,
 			"[0]", "when", "invalid-date", `[0] when: "2026-02-30@18:00" (not a real date)`},
 		{"when 13pm", `[{"type":"to-do","attributes":{"title":"a","when":"evening@13pm"}}]`,

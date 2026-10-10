@@ -673,11 +673,9 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when,
 		// failure, but the --when was not applied and the caller has to
 		// know.
 		fmt.Fprintf(d.errOut(), "warning: Things did not understand --when %q; the %s was created %s\n", when, kindNoun(typ), describeStart(item))
-	default:
-		if whenSent != nil && !whenPlaced(whenSent.judged()) {
-			fmt.Fprintf(d.errOut(), "warning: the CLI cannot check where --when %q files an item, so the %s is not confirmed; it was created %s. Run `%s` to check\n", when, kindNoun(typ), describeStart(item), strings.Join(thingsCmd(d, "show", item.UUID), " "))
-			return printUnconfirmedEdit(d, item, whenUnchecked, "Created, not confirmed (--when not checked)")
-		}
+	case whenUnplaced:
+		fmt.Fprintf(d.errOut(), "warning: the CLI cannot check where --when %q files an item, so the %s is not confirmed; it was created %s. Run `%s` to check\n", when, kindNoun(typ), describeStart(item), strings.Join(thingsCmd(d, "show", item.UUID), " "))
+		return printUnconfirmedEdit(d, item, whenUnchecked, "Created, not confirmed (--when not checked)")
 	}
 	return printItem(d, database, item)
 }

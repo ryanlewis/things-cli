@@ -90,10 +90,11 @@ var importScheduleNumeric = regexp.MustCompile(`^\d`)
 // someday@18:00 in Someday, deadline 2026-13-01 on 1 Jan 2026 and deadline
 // someday as no deadline. So a value that starts with a digit must be a real
 // date, YYYY-MM-DD; a deadline has no time; and a when with an @ must be
-// today, tomorrow, evening or a real YYYY-MM-DD before it, and a real time of
-// day after it. Anything else, keywords, weekdays and English phrases such
-// as next friday (measured: filed on that day), is passed through as `add`
-// passes it.
+// today, tomorrow, evening, a weekday name or a real YYYY-MM-DD before it,
+// and a real time of day after it (a weekday name goes as its date,
+// resolveImportWhens). Anything else, keywords, weekdays and English phrases
+// such as next friday (measured: filed on that day), is passed through as
+// `add` passes it.
 func checkScheduleValue(name, value string) string {
 	v := strings.TrimSpace(value)
 	normalize := things.NormalizeWhen
@@ -136,13 +137,13 @@ func checkScheduleValue(name, value string) string {
 	switch {
 	case impossible != nil && impossible.Reason == things.WhenTimeIgnored:
 		return "Things ignores a time after anytime or someday"
-	case things.TimedWhenKeyword(day):
+	case things.TimedWhenWord(day):
 	case importScheduleDate.MatchString(day):
 		if badDate {
 			return "not a real date"
 		}
 	default:
-		return "before the @ must be today, tomorrow, evening or a date as YYYY-MM-DD"
+		return "before the @ must be today, tomorrow, evening, a weekday name such as friday or a date as YYYY-MM-DD"
 	}
 	if impossible != nil && impossible.Reason == things.WhenBadClock {
 		return "not a real time of day after the @"
@@ -271,7 +272,7 @@ const (
 var refusalKinds = [numRefusalKinds]struct{ reason, header string }{
 	kindRepeating: {"repeating", ""},
 	kindDate:      {"invalid-date", "Things rejects the whole payload over a creation-date or completion-date that is not a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00"},
-	kindSchedule:  {"invalid-date", "Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A misspelt keyword, or a keyword as a deadline, is refused. A when or deadline that starts with a digit must be a date as YYYY-MM-DD, and a deadline has no time. A when with an @ must have today, tomorrow, evening or a YYYY-MM-DD date before it and a time of day such as 18:00 or 6pm after it"},
+	kindSchedule:  {"invalid-date", "Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A misspelt keyword, or a keyword as a deadline, is refused. A when or deadline that starts with a digit must be a date as YYYY-MM-DD, and a deadline has no time. A when with an @ must have today, tomorrow, evening, a weekday name such as friday or a YYYY-MM-DD date before it and a time of day such as 18:00 or 6pm after it"},
 	kindFuture:    {"future-date", "Things saves a creation-date or completion-date in the future as now, so the item would not get the date the payload gives. Give a date in the past, or leave the attribute out"},
 	kindType:      {"invalid-type", "Things rejects the whole payload over an attribute of the wrong JSON type. title, notes, when, deadline, list, list-id, heading, heading-id, area and area-id must be strings, tags an array of strings, completed and canceled true or false, items and checklist-items arrays (each may be null), and attributes an object"},
 	kindShape:     {"invalid-item", "Things rejects the whole payload over an item it does not take: one that is not an object, has no attributes, or whose type or operation it does not know or does not allow there, written exactly (to-do or project at the top level, to-do or heading in a project's items, checklist-item in a to-do's checklist-items; operation create or update)"},
