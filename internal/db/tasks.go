@@ -1216,14 +1216,14 @@ func literalLike(value string) string {
 // value is trimmed first, the way FoldTag trims it for `open`, so the two
 // paths agree on a value with a stray space (issue #289).
 func nameLike(value string) string {
-	return literalLike(strings.TrimSpace(value))
+	return likeEscaper.Replace(FoldTag(value))
 }
 
 // listNameLike is nameLike for --area and --project, folded with FoldName to
 // match a column folded with fold_name(). It escapes after folding, since a
 // compatibility form such as fullwidth "％" folds to a wildcard.
 func listNameLike(value string) string {
-	return likeEscaper.Replace(FoldName(strings.TrimSpace(value)))
+	return likeEscaper.Replace(foldAreaRef(value))
 }
 
 // foldsIntoTaggedProject reports whether a --tag listing has to match a
@@ -1658,7 +1658,7 @@ func splitOpen(rows []model.Task) (open, closed []model.Task) {
 // contains the folded key; the comparison itself is made in Go, so space
 // trims the same way on both sides.
 func (d *DB) findTasksByFoldedTitle(title string) ([]model.Task, error) {
-	key := FoldCase(strings.TrimSpace(title))
+	key := FoldTag(title)
 	if key == "" {
 		return nil, nil
 	}
@@ -1670,7 +1670,7 @@ func (d *DB) findTasksByFoldedTitle(title string) ([]model.Task, error) {
 	}
 	var out []model.Task
 	for _, r := range rows {
-		if FoldCase(strings.TrimSpace(r.Title)) == key {
+		if FoldTag(r.Title) == key {
 			out = append(out, r)
 		}
 	}
