@@ -456,21 +456,19 @@ func (f *File) Settings() []Setting {
 // JSON reports the json default the file establishes. It exists for the one
 // decision that has to be made before kong parses: whether a failure is
 // rendered as JSON or as a plain line.
-func (f *File) JSON() bool {
-	if f == nil {
-		return false
-	}
-	v, _ := f.values["json"].(bool)
-	return v
-}
+func (f *File) JSON() bool { return f.boolValue("json") }
 
 // OpenOnly reports whether the file sets open_only, which a listing's
 // recorded command line has to override when the flag turned it off.
-func (f *File) OpenOnly() bool {
+func (f *File) OpenOnly() bool { return f.boolValue("open_only") }
+
+// boolValue reports whether the file sets the named key to true. A nil file,
+// or a key it leaves out, sets nothing.
+func (f *File) boolValue(name string) bool {
 	if f == nil {
 		return false
 	}
-	v, _ := f.values["open_only"].(bool)
+	v, _ := f.values[name].(bool)
 	return v
 }
 
