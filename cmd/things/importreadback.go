@@ -54,8 +54,21 @@ func (c importCreated) fails() bool {
 // enough new items for every claimant is there, though which of them it is
 // cannot be told, so it does not fail the import.
 func (c importCreated) mayBeMissing() bool {
-	return c.Reason == "not-found" || (c.Reason == "shares-dated-title" && (c.Present == nil || !*c.Present))
+	return c.Reason == reasonNotFound || (c.Reason == reasonSharesDatedTitle && (c.Present == nil || !*c.Present))
 }
+
+// The reasons a created item is not confirmed, as an unconfirmed add gives
+// them; unconfirmedMsg has the line each prints.
+const (
+	reasonNoVerify   = "no-verify"  // the read-back was skipped
+	reasonUnreadable = "unreadable" // the database could not be read
+	reasonAmbiguous  = "ambiguous"  // more than one new item has its title
+	reasonNotFound   = "not-found"  // no new item has its title
+	// Import only: an item the payload dates back is not checked.
+	reasonCreationDate = "creation-date"
+	// Import only: a dated item's row could pass for the item.
+	reasonSharesDatedTitle = "shares-dated-title"
+)
 
 // dateDropped is the verdict on a created item saved without the
 // completion-date the payload gives it. The item is there, so the import
@@ -122,7 +135,7 @@ func (e *importVerifyError) Error() string {
 		lines := detailLines(missing)
 		cause := "The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save."
 		if len(e.items) == e.total && !slices.ContainsFunc(e.created, func(c importCreated) bool {
-			return c.Reason != "creation-date" && (c.Reason != "not-found" || len(c.Candidates) > 0)
+			return c.Reason != reasonCreationDate && (c.Reason != reasonNotFound || len(c.Candidates) > 0)
 		}) {
 			// Nothing the payload creates appeared (an item given a
 			// creation-date is not looked for, so it says nothing either
@@ -203,7 +216,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 		}
 		created := make([]importCreated, len(plan.creates))
 		for i, c := range plan.creates {
-			created[i] = importCreated{Path: c.path, Kind: c.typ.String(), Title: c.shownTitle(), Reason: "no-verify"}
+			created[i] = importCreated{Path: c.path, Kind: c.typ.String(), Title: c.shownTitle(), Reason: reasonNoVerify}
 		}
 		return printImportCreated(d, created)
 	}
@@ -303,16 +316,16 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		})
 		switch n := want[w]; {
 		case c.dated:
-			out[i].Reason = "creation-date"
+			out[i].Reason = reasonCreationDate
 		case err != nil && len(dated[c.key()]) > 0:
 			// With no rows to see where the dated item went, it may be
 			// any new item with the title.
-			out[i].Reason, out[i].Present = "shares-dated-title", new(bool)
+			out[i].Reason, out[i].Present = reasonSharesDatedTitle, new(bool)
 			out[i].detail = fmt.Sprintf("an item the payload gives a creation-date is also a %s titled %q, and the database could not be read to count the new items with that title, so the item may exist but cannot be confirmed", c.typ, c.title)
 		case err != nil:
-			out[i].Reason = "unreadable"
+			out[i].Reason = reasonUnreadable
 		case sharesDated:
-			out[i].Reason, out[i].Candidates = "shares-dated-title", uuids
+			out[i].Reason, out[i].Candidates = reasonSharesDatedTitle, uuids
 			// Each item without a creation-date whose new items overlap
 			// these, and each dated item that fits one of them, may hold
 			// one of the new items they share. When there are enough for
@@ -334,18 +347,18 @@ func readBackCreates(d *Deps, database *db.DB, creates []importCreate, snap crea
 		case len(matches) == n && n > 1 && !distinctCreationDates(matches):
 			// Two saved at the same instant cannot be paired with the
 			// payload's items by order, so neither is confirmed.
-			out[i].Reason, out[i].Candidates = "ambiguous", uuids
+			out[i].Reason, out[i].Candidates = reasonAmbiguous, uuids
 		case len(matches) == n:
 			out[i].Confirmed = true
 			out[i].UUID = uuids[paired[w]]
 			paired[w]++
 		case len(matches) > n:
-			out[i].Reason, out[i].Candidates = "ambiguous", uuids
+			out[i].Reason, out[i].Candidates = reasonAmbiguous, uuids
 		case len(matches) == 0:
-			out[i].Reason = "not-found"
+			out[i].Reason = reasonNotFound
 			out[i].detail = fmt.Sprintf("no new %s titled %q appeared within %s", c.typ, c.title, budget)
 		default:
-			out[i].Reason, out[i].Candidates = "not-found", uuids
+			out[i].Reason, out[i].Candidates = reasonNotFound, uuids
 			out[i].detail = fmt.Sprintf("only %d of %d new %ss titled %q appeared within %s (%s)", len(matches), n, c.typ, c.title, budget, strings.Join(uuids, ", "))
 		}
 	}
@@ -459,9 +472,9 @@ func unconfirmShared(out []importCreated, creates []importCreate, found map[crea
 				claimants++
 			}
 		}
-		v := importCreated{Path: c.Path, Kind: c.Kind, Title: c.Title, Reason: "ambiguous", Candidates: candidates}
+		v := importCreated{Path: c.Path, Kind: c.Kind, Title: c.Title, Reason: reasonAmbiguous, Candidates: candidates}
 		if len(rows) < claimants {
-			v.Reason = "not-found"
+			v.Reason = reasonNotFound
 			v.detail = fmt.Sprintf("only %d new %ss titled %q appeared for the %d created items that could be filed there (%s)", len(rows), c.Kind, c.Title, claimants, strings.Join(candidates, ", "))
 		}
 		verdicts[i] = v

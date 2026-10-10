@@ -561,24 +561,24 @@ func findCreated(database *db.DB, snap createdSnapshot, want map[createdWant]int
 // unconfirmedMsg is the line an add or an import prints for an item it sent
 // but could not confirm, by reason.
 var unconfirmedMsg = map[string]string{
-	"no-verify":  "Sent to Things, not confirmed (--no-verify)",
-	"unreadable": "Sent to Things, not confirmed (database unreadable)",
-	"ambiguous":  "Sent to Things, not confirmed (more than one new item has this title)",
+	reasonNoVerify:   "Sent to Things, not confirmed (--no-verify)",
+	reasonUnreadable: "Sent to Things, not confirmed (database unreadable)",
+	reasonAmbiguous:  "Sent to Things, not confirmed (more than one new item has this title)",
 	// Import only: an item the payload dates back cannot be found by when
 	// it was created.
-	"creation-date": "Sent to Things, not checked (creation-date set)",
+	reasonCreationDate: "Sent to Things, not checked (creation-date set)",
 	// Import only: an item that shares its kind and title with one the
 	// payload dates back could be confused with that item's row.
-	"shares-dated-title": "Sent to Things, not confirmed (a dated item has the same title)",
+	reasonSharesDatedTitle: "Sent to Things, not confirmed (a dated item has the same title)",
 	// Import only: the item was saved, but not with the completion-date the
 	// payload gives it.
-	"completion-date-dropped": "Created without its completion-date",
+	dateDropped: "Created without its completion-date",
 	// Import only: the item was created, but its when did not file it
 	// where it says.
-	"misfiled": "Created, not where its when puts it",
+	whenMisfiled: "Created, not where its when puts it",
 	// Import only: the item was created, but Things did not understand
 	// its when, a free phrase.
-	"when": "Created, but Things did not understand its when",
+	whenIgnored: "Created, but Things did not understand its when",
 }
 
 // applyAdd sends write, which creates an item of typ titled title, then finds
