@@ -179,20 +179,13 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		} else {
 			list = *c.List
 		}
-		var t db.Target
-		var f bool
-		var err error
-		if byID {
-			t, f, err = database.AddTarget(list, heading)
-		} else {
-			// A title goes as given or trimmed, whichever Things matches
-			// (addTargetName).
-			var sentList, sentHeading string
-			t, f, sentList, sentHeading, err = addTargetName(database, list, heading)
-			if err == nil && t.UUID != "" {
-				c.setMoveNames(sentList, sentHeading)
-				list, heading = sentList, sentHeading
-			}
+		// A title goes as given or trimmed, whichever Things matches
+		// (addTargetName). A list-id matches only as a uuid, but a heading
+		// sent with it is a title all the same.
+		t, f, sentList, sentHeading, err := addTargetName(database, list, heading)
+		if err == nil && t.UUID != "" && (t.ByUUID || !byID) {
+			c.setMoveNames(sentList, sentHeading)
+			list, heading = sentList, sentHeading
 		}
 		switch {
 		case err != nil:
