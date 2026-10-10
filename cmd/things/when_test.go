@@ -47,7 +47,12 @@ func TestPlaceWhen(t *testing.T) {
 		{"2026-10-09T10:00:00+01:00", whenPlace{day: day(9), bucket: -1, reminder: 10 * 60}, true},
 		{"next friday", whenPlace{}, false},
 		{"friday", whenPlace{}, false},
-		{"6pm", whenPlace{}, false},
+		// A bare 12-hour time is sent as HH:MM, so it is placed like one.
+		{"6pm", whenPlace{day: day(7), bucket: 0, reminder: 18 * 60}, true},
+		{"6:30pm", whenPlace{day: day(7), bucket: 0, reminder: 18*60 + 30}, true},
+		{"12am", whenPlace{day: day(8), bucket: -1, reminder: 0}, true},
+		{"12pm", whenPlace{day: day(8), bucket: -1, reminder: 12 * 60}, true},
+		{"6  pm", whenPlace{}, false},
 	}
 	for _, tc := range cases {
 		got, ok := placeWhen(tc.value, now)
