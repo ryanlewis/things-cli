@@ -196,10 +196,13 @@ func (s *Start) UnmarshalJSON(data []byte) error { return startCodec.unmarshal(s
 // ThingsDate is a bit-encoded date: year<<16 | month<<12 | day<<7.
 type ThingsDate int64
 
+// Date returns the year, month and day that d encodes.
+func (d ThingsDate) Date() (year int, month time.Month, day int) {
+	return int(d >> 16), time.Month((int(d) >> 12) & 0xF), (int(d) >> 7) & 0x1F
+}
+
 func (d ThingsDate) ToTime() time.Time {
-	year := int(d >> 16)
-	month := time.Month((int(d) >> 12) & 0xF)
-	day := (int(d) >> 7) & 0x1F
+	year, month, day := d.Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.Local)
 }
 
