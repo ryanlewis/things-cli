@@ -509,6 +509,10 @@ instead of assuming:
   for the title before retrying, so a retry does not make a duplicate.
   Exit 0 with `"confirmed": false` (two new items with the title in the same place,
   `--no-verify`, or an unreadable database) is not a confirmation either.
+  Nor is `"confirmed": false` with reason `when` and the item's `uuid`:
+  the item was created, but the CLI cannot check where a `--when` of a
+  weekday name, a weekday or `evening` with a time, or an English phrase
+  filed it, so `things show` it.
   `import` does the same for every to-do and project it creates, and
   prints one verdict per item, with its `path` in the payload. It exits
   non-zero with `import partially applied` if any of them never appeared.
@@ -545,7 +549,10 @@ instead of assuming:
   re-running a plan does not fail on work already done. With `--when`, the
   item must also land where the value puts it; `add` checks the same and,
   when it does not, names the item it found (`"error": "misfiled"` under
-  `--json`) so the agent can search before adding it again. With
+  `--json`) so the agent can search before adding it again. A `--when`
+  the CLI cannot place (a weekday name, a weekday or `evening` with a
+  time, an English phrase) is applied but reported `"confirmed": false`
+  with reason `when`, as for `add`. With
   `--no-verify` or `--duplicate` nothing is read back and the output says
   the edit is unconfirmed.
 - **Tags must already exist.** Things silently drops tags it does not know.

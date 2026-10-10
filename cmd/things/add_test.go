@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/url"
 	"os/exec"
@@ -1120,7 +1121,8 @@ func TestAddInvalidRefusedBeforeTagsCreated(t *testing.T) {
 // A free phrase Things ignores leaves the new item with no start date. The
 // add exits 0 and prints the item, since it exists and was found, and warns
 // on stderr in both output modes that the --when did not take. A phrase
-// Things understood gives the item a date, and nothing is said.
+// Things understood gives the item a date, which the read-back cannot
+// check, so the add is reported not confirmed (whenPlaced).
 func TestAddWhenPhraseIgnored(t *testing.T) {
 	dated := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3))))
 	cases := []struct {
@@ -1150,11 +1152,77 @@ func TestAddWhenPhraseIgnored(t *testing.T) {
 				if got := strings.Contains(stderr, warning); got != tc.warn {
 					t.Errorf("stderr = %q, want the warning %v", stderr, tc.warn)
 				}
+				if !tc.warn {
+					checkWhenUnchecked(t, stdout, stderr, "new-1", "Buy oat milk", "blorp", asJSON)
+					return
+				}
 				if want, _ := runOut(t, database, show...); stdout != want {
 					t.Errorf("stdout = %q, want the show output %q", stdout, want)
 				}
 			})
 		}
+	}
+}
+
+// checkWhenUnchecked checks an add or edit of the item uuid, titled title,
+// with --when value was reported not confirmed because the read-back cannot
+// check value, in the output mode asJSON says.
+func checkWhenUnchecked(t *testing.T, stdout, stderr, uuid, title, value string, asJSON bool) {
+	t.Helper()
+	if want := fmt.Sprintf("cannot check where --when %q files an item", value); !strings.Contains(stderr, want) {
+		t.Errorf("stderr = %q, want %q", stderr, want)
+	}
+	if !asJSON {
+		if !strings.Contains(stdout, fmt.Sprintf("not confirmed (--when not checked): %q (%s)", title, uuid)) {
+			t.Errorf("stdout = %q, want the unconfirmed line", stdout)
+		}
+		return
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("decode %s: %v", stdout, err)
+	}
+	if out["confirmed"] != false || out["reason"] != "when" || out["uuid"] != uuid || out["title"] != title {
+		t.Errorf("stdout = %s, want confirmed false, reason when, uuid %s", stdout, uuid)
+	}
+}
+
+// A --when the read-back cannot place, a weekday name, a weekday or evening
+// with a time, is reported not confirmed for add and project add, whatever
+// date Things gave the item. A value it can place is judged as before.
+func TestAddWhenUnplaced(t *testing.T) {
+	dated := "start = 2, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3))))
+	for _, value := range []string{"friday", "friday@18:00", "evening@6pm"} {
+		for _, typ := range []model.TaskType{model.TypeTask, model.TypeProject} {
+			for _, asJSON := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/json=%v", value, typ, asJSON), func(t *testing.T) {
+					fastVerify(t)
+					database, sqlDB := seedWritable(t)
+					stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: typ, extra: dated})
+					args := []string{"add", "Buy oat milk", "--when", value}
+					if typ == model.TypeProject {
+						args = append([]string{"project"}, args...)
+					}
+					if asJSON {
+						args = append([]string{"--json"}, args...)
+					}
+					stdout, stderr, err := runStreams(t, database, args...)
+					if err != nil {
+						t.Fatalf("add: %v", err)
+					}
+					checkWhenUnchecked(t, stdout, stderr, "new-1", "Buy oat milk", value, asJSON)
+				})
+			}
+		}
+	}
+	// A date with a time is placed: filed on its day, it is confirmed.
+	fastVerify(t)
+	database, sqlDB := seedWritable(t)
+	stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", extra: dated})
+	day := testNow.AddDate(0, 0, 3).Format("2006-01-02")
+	stdout, stderr, err := runStreams(t, database, "--json", "add", "Buy oat milk", "--when", day+"@18:00")
+	if err != nil || strings.Contains(stderr, "cannot check") || strings.Contains(stdout, `"confirmed"`) {
+		t.Errorf("add --when %s@18:00 = %v, stdout %s, stderr %q; want the item printed", day, err, stdout, stderr)
 	}
 }
 
@@ -1195,6 +1263,52 @@ func TestEditWhenPhrase(t *testing.T) {
 	_, _, err = runStreams(t, database, "edit", "one-1", "--when", "blorp", "--notes", "x")
 	if err == nil || !strings.Contains(err.Error(), `Things most likely did not understand --when "blorp"`) {
 		t.Fatalf("edit with notes = %v, want an error naming the phrase", err)
+	}
+}
+
+// An edit with a --when the read-back cannot place, which Things applied, is
+// reported not confirmed, with where the item is. One it can place prints the
+// item as before. --notes keeps a weekday with a time, which an edit of
+// --when alone treats as a phrase (TestEditWhenPhrase), read back.
+func TestEditWhenUnplaced(t *testing.T) {
+	friday := strconv.Itoa(int(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3))))
+	for _, tc := range []struct {
+		value  string
+		placed bool
+	}{
+		{"friday", false},
+		{"friday@18:00", false},
+		{"evening@6pm", false},
+		{testNow.AddDate(0, 0, 3).Format("2006-01-02"), true},
+	} {
+		for _, asJSON := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/json=%v", tc.value, asJSON), func(t *testing.T) {
+				fastVerify(t)
+				database, sqlDB := seedWritable(t)
+				prev := things.SetExecCommandForTest(func(string, ...string) *exec.Cmd {
+					if _, err := sqlDB.Exec(`UPDATE TMTask SET start = 2, startDate = ` + friday + `, userModificationDate = COALESCE(userModificationDate, 0) + 1 WHERE uuid = 'one-1'`); err != nil {
+						t.Errorf("simulating Things write: %v", err)
+					}
+					return exec.Command("true")
+				})
+				t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+				args := []string{"edit", "one-1", "--when", tc.value, "--notes", "x"}
+				if asJSON {
+					args = append([]string{"--json"}, args...)
+				}
+				stdout, stderr, err := runStreams(t, database, args...)
+				if err != nil {
+					t.Fatalf("edit: %v", err)
+				}
+				if tc.placed {
+					if strings.Contains(stderr, "cannot check") || strings.Contains(stdout, "not confirmed") {
+						t.Errorf("stdout %q, stderr %q; want the item printed", stdout, stderr)
+					}
+					return
+				}
+				checkWhenUnchecked(t, stdout, stderr, "one-1", "Post letter", tc.value, asJSON)
+			})
+		}
 	}
 }
 

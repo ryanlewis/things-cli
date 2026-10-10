@@ -339,7 +339,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 		return printUnconfirmedEdit(d, task, reasonNoVerify, unconfirmedMsg[reasonNoVerify])
 	case when != nil && when.phraseOnly && want == task.Status:
 		fmt.Fprintf(d.errOut(), "warning: Things may not understand --when %q, and records nothing when it ignores one, so the edit is not read back; run `things show %s` to check\n", when.value, task.UUID)
-		return printUnconfirmedEdit(d, task, "when", "Sent to Things, not confirmed (--when phrase)")
+		return printUnconfirmedEdit(d, task, whenUnchecked, "Sent to Things, not confirmed (--when phrase)")
 	}
 
 	current := task
@@ -352,6 +352,10 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 			return res.err
 		}
 		current = res.task
+	}
+	if when != nil && !whenPlaced(when.judged()) {
+		fmt.Fprintf(d.errOut(), "warning: Things applied the edit, but the CLI cannot check where --when %q files an item, so it is not confirmed; it is %s. Run `%s` to check\n", when.value, describeStart(current), strings.Join(thingsCmd(d, "show", current.UUID), " "))
+		return printUnconfirmedEdit(d, current, whenUnchecked, "Applied, not confirmed (--when not checked)")
 	}
 	return printItem(d, database, current)
 }
@@ -669,6 +673,11 @@ func applyAdd(d *Deps, typ model.TaskType, title string, dest createdDest, when,
 		// failure, but the --when was not applied and the caller has to
 		// know.
 		fmt.Fprintf(d.errOut(), "warning: Things did not understand --when %q; the %s was created %s\n", when, kindNoun(typ), describeStart(item))
+	default:
+		if whenSent != nil && !whenPlaced(whenSent.judged()) {
+			fmt.Fprintf(d.errOut(), "warning: the CLI cannot check where --when %q files an item, so the %s is not confirmed; it was created %s. Run `%s` to check\n", when, kindNoun(typ), describeStart(item), strings.Join(thingsCmd(d, "show", item.UUID), " "))
+			return printUnconfirmedEdit(d, item, whenUnchecked, "Created, not confirmed (--when not checked)")
+		}
 	}
 	return printItem(d, database, item)
 }
