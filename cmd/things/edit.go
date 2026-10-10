@@ -316,8 +316,8 @@ var (
 // checklist says whether the command set a checklist flag, which only `edit`
 // has. params builds the update from the shared params with the item's id
 // and the auth token filled in, and write sends it. The update is validated
-// before the tag check, and so is the auth token when the edit will be sent,
-// so an edit that fails creates no tag.
+// before the tag check, and so is the auth token when the edit will be sent
+// (sendsEdit), so an edit that fails creates no tag.
 func runEdit[P interface {
 	Validate() error
 	ValidateSend() error
@@ -398,9 +398,9 @@ func runEdit[P interface {
 	if err := params(common).Validate(); err != nil {
 		return err
 	}
-	// Only an already-closed item with no change goes unsent (see below),
-	// and a tag --create-tags makes is a change.
-	if !already || s.Reveal || createsTags(database, s.TagFlags, f.Tags, f.AddTags) {
+	// The tag check below can create a tag, which is a change the edit has
+	// to send, so the token is checked before it whenever that happens.
+	if sendsEdit(already, s.Reveal, createsTags(database, s.TagFlags, f.Tags, f.AddTags)) {
 		if err := params(common).ValidateSend(); err != nil {
 			return err
 		}
@@ -448,14 +448,26 @@ func runEdit[P interface {
 			}
 		}
 	}
+	if !sendsEdit(already, s.Reveal, changed) {
+		noteAlreadyClosed(d, task)
+		return printItem(d, database, task)
+	}
 	if already {
-		if !changed && !s.Reveal {
-			noteAlreadyClosed(d, task)
-			return printItem(d, database, task)
-		}
 		fmt.Fprintf(d.errOut(), "note: %q is already %s; the status is left out of the edit\n", task.Title, task.Status)
 	}
 	return applyEdit(d, database, task, changed, checklist, want, s.Duplicate, when, update)
+}
+
+// sendsEdit reports whether runEdit sends the edit to Things: only an item
+// already in the closed status asked for, with no --reveal and nothing else
+// to change, goes unsent, since Things records no change for it. runEdit
+// asks twice. Before the tag check, the one change it can know of is a tag
+// --create-tags will make, so the auth token is checked then and a failing
+// edit creates no tag. After the no-op check, changed is the whole answer.
+// An edit sent for a change the first ask could not see is refused for a
+// missing token by the write itself, before anything is opened.
+func sendsEdit(already, reveal, changed bool) bool {
+	return !already || reveal || changed
 }
 
 // createsTags reports whether the tag check will create a tag: --create-tags

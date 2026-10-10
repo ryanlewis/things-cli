@@ -955,6 +955,46 @@ func TestEditAlreadyClosedExistingCreateTagsNeedsNoAuthToken(t *testing.T) {
 	}
 }
 
+// An already-closed item with a field to change is sent, so with no auth
+// token it is refused by the write, after the no-op check, and nothing runs.
+// --reveal sends it too.
+func TestEditAlreadyClosedWithChangeNeedsAuthToken(t *testing.T) {
+	for _, args := range [][]string{
+		{"edit", "done-1", "--complete", "--title", "Renamed"},
+		{"edit", "done-1", "--complete", "--reveal"},
+	} {
+		fastVerify(t)
+		database, sqlDB := seedWritable(t)
+		if _, err := sqlDB.Exec(`DELETE FROM TMSettings`); err != nil {
+			t.Fatalf("clear settings: %v", err)
+		}
+		dbtest.NewFixture(t, sqlDB).Todo("done-1", "Filed", 1, dbtest.Status(model.StatusCompleted), dbtest.Anytime())
+		calls := stubExecDropping(t)
+		_, _, err := runStreams(t, database, args...)
+		if err == nil || !strings.HasPrefix(err.Error(), "update: auth token is required") {
+			t.Errorf("%v = %v, want the auth token refusal", args, err)
+		}
+		if *calls != 0 {
+			t.Errorf("%v issued %d commands, want none", args, *calls)
+		}
+	}
+}
+
+func TestSendsEdit(t *testing.T) {
+	for _, tc := range []struct {
+		already, reveal, changed, want bool
+	}{
+		{false, false, false, true},
+		{true, false, false, false},
+		{true, true, false, true},
+		{true, false, true, true},
+	} {
+		if got := sendsEdit(tc.already, tc.reveal, tc.changed); got != tc.want {
+			t.Errorf("sendsEdit(%v, %v, %v) = %v, want %v", tc.already, tc.reveal, tc.changed, got, tc.want)
+		}
+	}
+}
+
 // An edit that will be sent with no auth token to send is refused before
 // --create-tags creates the unknown tag over AppleScript, with the error the
 // write gives: no command runs at all. An already-closed item counts, since a
