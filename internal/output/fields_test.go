@@ -296,3 +296,30 @@ func mustTime(t *testing.T, s string) time.Time {
 	}
 	return v
 }
+
+// Every key a row can carry is either a default or one of the keys the docs
+// list as left out, so a field added to the model is a decision about the
+// default listing rather than a key that silently never appears in one.
+func TestDefaultFieldsAccountForEveryKey(t *testing.T) {
+	for _, c := range []struct {
+		kind                     string
+		defaults, omitted, valid []string
+	}{
+		{"task", TaskDefaultFields, []string{
+			"notes", "startBucket", "creationDate", "trashed", "projectUUID",
+			"areaUUID", "headingUUID", "index", "todayIndex",
+		}, TaskFields},
+		{"project", ProjectDefaultFields, []string{"startBucket", "areaUUID"}, ProjectFields},
+	} {
+		for _, k := range c.valid {
+			if slices.Contains(c.defaults, k) == slices.Contains(c.omitted, k) {
+				t.Errorf("%s key %q must be in exactly one of the defaults and the left-out keys", c.kind, k)
+			}
+		}
+		for _, k := range c.omitted {
+			if !slices.Contains(c.valid, k) {
+				t.Errorf("%s left-out key %q is not a valid key", c.kind, k)
+			}
+		}
+	}
+}

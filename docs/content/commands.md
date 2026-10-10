@@ -39,7 +39,8 @@ with.
 In v0.7.0 and earlier `type` and `start` were both integers, so a caller
 matching on `.type==1` has to become `.type=="project"`, and one matching
 on `.start==2` has to become `.start=="someday"`. `startBucket` alongside
-them (in `show`, and in a listing under `--fields all`) is still an integer: `1` is the app's This Evening section and `0` is
+them (in `show`, and in a listing whose `--fields` is `all` or names it) is
+still an integer: `1` is the app's This Evening section and `0` is
 everything else. Only the first of those has a name in Things' own
 vocabulary, so naming the pair would have meant inventing a word for `0`.
 
@@ -70,8 +71,8 @@ record, and `areas` and `tags` rows are short enough not to need it.
 
 - Without `--fields`, a task row carries these keys: `uuid`, `title`,
   `type`, `status`, `start`, `startDate`, `reminderTime`, `deadline`,
-  `stopDate`, `projectTitle`, `areaTitle`, `headingTitle`, `tags`,
-  `repeating`, `checklistProgress`. A project row from `things projects`
+  `stopDate`, `projectTitle`, `projectTrashed`, `areaTitle`,
+  `headingTitle`, `tags`, `repeating`, `checklistProgress`. A project row from `things projects`
   carries these keys: `uuid`, `title`, `status`, `start`, `startDate`,
   `deadline`, `areaTitle`, `tags`, `taskCount`, `openCount`.
 - `--fields all` prints the full record. `all` takes no other names:
@@ -98,8 +99,8 @@ record, and `areas` and `tags` rows are short enough not to need it.
   ignore the flag. Plain output is unchanged.
 - In v0.10.0 and earlier, `--json` printed the full record, as
   `--fields all` does now. A script that reads `notes`,
-  a parent uuid, `index`, `todayIndex`, `startBucket`, `trashed`,
-  `projectTrashed` or `creationDate` off a listing needs `--fields all`, or
+  a parent uuid, `index`, `todayIndex`, `startBucket`, `trashed`
+  or `creationDate` off a listing needs `--fields all`, or
   `--fields` naming those keys.
 
 ## Listing
@@ -144,8 +145,9 @@ was last placed in Today, most recent first, so items placed today come above
 those carried over from an earlier day, and then by the position Things keeps
 for the day. An item closed today stays where it was rather than moving to the
 end. Items scheduled for this evening (`--when evening`, `"startBucket": 1` in
-`show --json` or a `--fields all` listing) come after every other item, arranged the same way among themselves,
-and plain output prints a `This Evening` header above them, as the app does.
+`show --json` or a `--fields all` listing) come after every other item,
+arranged the same way among themselves, and plain output prints a
+`This Evening` header above them, as the app does.
 `upcoming` reads by date instead, the way the app's own Upcoming does.
 Like the app, it also lists an undated Anytime or Someday task or project
 whose deadline is still to come, under the deadline's day, and
@@ -373,8 +375,9 @@ cut down to 10. Piped output keeps every column whole.
 
 Projects are scheduled the same way tasks are, and `things projects -j`
 reports that with the same field names and encodings: `start`,
-`startDate`, `deadline`, and `startBucket` under `--fields all`. A caller can tell a scheduled
-project from an anytime one without a `things show` per project.
+`startDate`, `deadline`, and `startBucket` when `--fields` is `all` or
+names it. A caller can tell a scheduled project from an anytime one without
+a `things show` per project.
 
 `things projects -j` also reports two counts per project. `taskCount` is
 every untrashed task in the project; `openCount` is the ones still open.
