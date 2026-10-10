@@ -301,25 +301,21 @@ func importCreates(payload []any) []importCreate {
 		attrs, _ := v["attributes"].(map[string]any)
 		itemType, _ := v["type"].(string)
 		itemType = strings.TrimSpace(itemType)
+		shown, _ := attrs["title"].(string)
+		title := strings.TrimSpace(shown)
 		switch itemType {
 		case "project":
-			if title, _ := attrs["title"].(string); strings.TrimSpace(title) != "" {
-				projects[db.FoldName(strings.TrimSpace(title))] = true
+			if title != "" {
+				projects[db.FoldName(title)] = true
 				if id, _ := v["id"].(string); op == "update" && id != "" {
 					renamed = append(renamed, strings.TrimSpace(id))
 				}
 			}
-		case "heading":
-			if title, _ := attrs["title"].(string); op != "update" && strings.TrimSpace(title) != "" {
-				headings[db.FoldCase(strings.TrimSpace(title))] = true
-			}
-		}
-		if itemType == "project" {
 			parent := importTo{nested: true}
 			if op == "update" {
 				parent.parentID, _ = v["id"].(string)
 			} else {
-				parent.parentTitle, _ = attrs["title"].(string)
+				parent.parentTitle = shown
 			}
 			completed, _ := attrs["completed"].(bool)
 			canceled, _ := attrs["canceled"].(bool)
@@ -327,6 +323,10 @@ func importCreates(payload []any) []importCreate {
 			items, _ := attrs["items"].([]any)
 			for i := range items {
 				parents[fmt.Sprintf("%s.attributes.items[%d]", path, i)] = parent
+			}
+		case "heading":
+			if op != "update" && title != "" {
+				headings[db.FoldCase(title)] = true
 			}
 		}
 		if op != "" && op != "create" {
@@ -336,8 +336,6 @@ func importCreates(payload []any) []importCreate {
 		if !ok {
 			return
 		}
-		shown, _ := attrs["title"].(string)
-		title := strings.TrimSpace(shown)
 		if title == "" {
 			return
 		}
