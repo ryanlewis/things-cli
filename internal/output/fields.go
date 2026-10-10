@@ -83,7 +83,9 @@ func ParseFields(raw, kind string, valid []string) ([]string, error) {
 		fields = append(fields, name)
 	}
 	if len(unknown) > 0 {
-		return nil, &UnknownFieldError{Kind: kind, Unknown: unknown, Valid: valid}
+		// A copy, so a caller holding the error cannot rewrite the shared
+		// TaskFields or ProjectFields it was given.
+		return nil, &UnknownFieldError{Kind: kind, Unknown: unknown, Valid: slices.Clone(valid)}
 	}
 	if len(fields) == 0 {
 		return nil, fmt.Errorf("--fields names no fields; valid fields: %s", strings.Join(valid, ", "))
@@ -106,21 +108,21 @@ func PrintProjectFields(w io.Writer, projects []model.Project, fields []string) 
 // printFields projects each row's marshalled form rather than the struct, so
 // the values are encoded exactly as the full record encodes them.
 func printFields[T any](w io.Writer, rows []T, fields []string) error {
-	out := make([]fieldRow, len(rows))
-	for i := range rows {
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		// As in PrintJSON: the values are read as text, so "R&D" stays as
-		// written. The outer encoder keeps that setting when it re-indents.
-		enc.SetEscapeHTML(false)
-		if err := enc.Encode(&rows[i]); err != nil {
-			return err
-		}
-		var full map[string]json.RawMessage
-		if err := json.Unmarshal(buf.Bytes(), &full); err != nil {
-			return err
-		}
-		out[i] = fieldRow{keys: fields, values: full}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	// As in PrintJSON: the values are read as text, so "R&D" stays as
+	// written. The outer encoder keeps that setting when it re-indents.
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(rows); err != nil {
+		return err
+	}
+	var full []map[string]json.RawMessage
+	if err := json.Unmarshal(buf.Bytes(), &full); err != nil {
+		return err
+	}
+	out := make([]fieldRow, len(full))
+	for i, values := range full {
+		out[i] = fieldRow{keys: fields, values: values}
 	}
 	return PrintJSON(w, out)
 }
