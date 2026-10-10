@@ -9,6 +9,9 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"github.com/ryanlewis/things-cli/internal/db"
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
+	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
 )
 
@@ -203,6 +206,37 @@ func TestRunListingDefaultFields(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// today -j tells the app's This Evening rows apart without --fields, as the
+// app's own Today does.
+func TestRunTodayDefaultCarriesStartBucket(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	today := int64(model.ThingsDateFromTime(testNow))
+	fx.Todo("day", "Day task", 0, dbtest.AnytimeOn(today))
+	fx.Todo("eve", "Evening task", 1, dbtest.Evening(today))
+	stdout, _, err := runStreams(t, db.NewFromSQL(sqlDB), "-j", "today")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var rows []struct {
+		UUID        string `json:"uuid"`
+		StartBucket *int   `json:"startBucket"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &rows); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	got := map[string]int{}
+	for _, r := range rows {
+		if r.StartBucket == nil {
+			t.Fatalf("row %s has no startBucket:\n%s", r.UUID, stdout)
+		}
+		got[r.UUID] = *r.StartBucket
+	}
+	if len(got) != 2 || got["day"] != 0 || got["eve"] != 1 {
+		t.Errorf("startBucket by uuid = %v, want day 0 and eve 1", got)
 	}
 }
 
