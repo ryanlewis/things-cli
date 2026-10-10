@@ -185,6 +185,10 @@ func TestRunListingDefaultFields(t *testing.T) {
 				if !isSubsequence(keys, c.defaults) {
 					t.Errorf("row %d keys = %v, want a cut of %v", i, keys, c.defaults)
 				}
+				// Every row has these, so a default set cut to nothing fails.
+				if !slices.Contains(keys, "uuid") || !slices.Contains(keys, "title") || !slices.Contains(keys, "status") {
+					t.Errorf("row %d keys = %v, want uuid, title and status", i, keys)
+				}
 			}
 
 			stdout, _, err = runStreams(t, seedFullDB(t), append(c.args, "--fields", "all")...)

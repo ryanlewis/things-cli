@@ -261,15 +261,15 @@ nothing on success. Their errors are still JSON.
   shape is in Today (and out of Someday), unless it was taken out of Today
   for that deadline. In v0.7.0 and earlier this field was the
   integer `0`, `1` or `2`, so a filter matching on `.start==2` has to
-  become `.start=="someday"`. `startBucket` beside it
-  (in `show`, and in a listing under `--fields all`) is still an integer — `1` is the app's This Evening section, `0` is
-  everything else. `today` lists the evening items after all the others,
-  as the app does.
+  become `.start=="someday"`. `startBucket` beside it (in `show`, and in
+  a listing whose `--fields` is `all` or names it) is still an integer —
+  `1` is the app's This Evening section, `0` is everything else. `today`
+  lists the evening items after all the others, as the app does.
 - **Projects carry scheduling too.** `things projects` reports `start`,
-  `startDate` and `deadline` (and `startBucket` under `--fields all`)
-  under the same names and encodings a task uses, so a scheduled project reads the same way
-  without a per-project `show`. `startDate` and `deadline` are omitted
-  when unset.
+  `startDate` and `deadline` (and `startBucket` when `--fields` is `all`
+  or names it) under the same names and encodings a task uses, so a
+  scheduled project reads the same way without a per-project `show`.
+  `startDate` and `deadline` are omitted when unset.
 - **Projects carry their progress too.** `things projects` reports
   `taskCount`, every untrashed task in the project, and `openCount`, the
   ones still open. The difference is the ones no longer open, which means
@@ -288,9 +288,8 @@ nothing on success. Their errors are still JSON.
   listing, `search` and `things projects` print the keys needed to pick an
   item and act on it, and leave out `notes`, the parent uuids
   (`projectUUID`, `areaUUID`, `headingUUID`), `creationDate` and Things'
-  bookkeeping (`index`, `todayIndex`, `startBucket`, `trashed`,
-  `projectTrashed`). Read an item's notes with `things show <uuid> --json`,
-  or pass `--fields all` for every key of every row. `--fields` also names
+  bookkeeping (`index`, `todayIndex`, `startBucket`, `trashed`). Read an
+  item's notes with `things show <uuid> --json`, or pass `--fields all` for every key of every row. `--fields` also names
   the keys you want, in order. **This changed:** in v0.10.0 and earlier
   `--json` printed every key, so a script reading one of those keys off a
   listing needs `--fields all`. The

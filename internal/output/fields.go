@@ -29,7 +29,8 @@ var (
 var (
 	TaskDefaultFields = []string{
 		"uuid", "title", "type", "status", "start", "startDate", "reminderTime",
-		"deadline", "stopDate", "projectTitle", "areaTitle", "headingTitle",
+		"deadline", "stopDate", "projectTitle", "projectTrashed", "areaTitle",
+		"headingTitle",
 		"tags", "repeating", "checklistProgress",
 	}
 	ProjectDefaultFields = []string{
@@ -73,7 +74,8 @@ type UnknownFieldError struct {
 
 func (e *UnknownFieldError) Error() string {
 	if len(e.Unknown) == 0 {
-		return fmt.Sprintf("--fields names no fields; valid fields: %s", strings.Join(e.Valid, ", "))
+		return fmt.Sprintf("--fields names no fields; valid fields: %s, or %s for the full record",
+			strings.Join(e.Valid, ", "), AllFields)
 	}
 	quoted := make([]string, len(e.Unknown))
 	for i, u := range e.Unknown {
@@ -83,8 +85,8 @@ func (e *UnknownFieldError) Error() string {
 	if len(e.Unknown) > 1 {
 		noun = "fields"
 	}
-	return fmt.Sprintf("--fields: unknown %s %s for a %s listing; valid fields: %s",
-		noun, strings.Join(quoted, ", "), e.Kind, strings.Join(e.Valid, ", "))
+	return fmt.Sprintf("--fields: unknown %s %s for a %s listing; valid fields: %s, or %s for the full record",
+		noun, strings.Join(quoted, ", "), e.Kind, strings.Join(e.Valid, ", "), AllFields)
 }
 
 // ParseFields reads a --fields value: a comma-separated list of keys from
