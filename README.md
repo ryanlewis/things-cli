@@ -49,6 +49,64 @@ things show 3 --agent | claude -p "action this"
 Full documentation lives at [things.rlew.io](https://things.rlew.io); this
 README is the short version.
 
+## Install
+
+With Homebrew:
+
+```sh
+brew install ryanlewis/tap/things
+```
+
+Or one-line install (downloads the latest release, verifies checksums,
+installs to `/usr/local/bin`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
+```
+
+Override the destination with `INSTALL_DIR` or pin a version with `VERSION`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh \
+  | INSTALL_DIR="$HOME/bin" VERSION=v0.1.0 sh
+```
+
+When the [GitHub CLI](https://cli.github.com) is installed and logged in, the
+installer also verifies [build provenance](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) —
+cryptographic proof that the tarball was built by this repository's release
+workflow. You can check any release artifact yourself:
+
+```sh
+gh attestation verify things_<version>_darwin_arm64.tar.gz -R ryanlewis/things-cli
+```
+
+Or download a prebuilt binary manually from the
+[latest release](https://github.com/ryanlewis/things-cli/releases/latest)
+(`darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel):
+
+```sh
+tar -xzf things_*_darwin_arm64.tar.gz
+mv things /usr/local/bin/   # or ~/bin, etc.
+things version
+```
+
+Or install with `go install`:
+
+```sh
+go install github.com/ryanlewis/things-cli/cmd/things@latest
+```
+
+Or build from source:
+
+```sh
+make build          # produces ./things
+# or
+go build -o things ./cmd/things
+```
+
+Requires macOS with Things3 installed. Go 1.26 or later when building from
+source.
+
 ## CLI
 
 By default output is plain text formatted for humans. Pass `-j` / `--json`
@@ -749,6 +807,10 @@ The refusal is all-or-nothing because the URL scheme takes one payload and gives
 
 Update items whose `id` is not in the database get a stderr warning; Things reports those itself, and the import still goes ahead.
 
+#### Reading back created items
+
+After the payload is sent, every to-do and project it creates is read back, the way `add` finds its item: a new item with that title, filed where the payload puts it. `import` prints one line per item (under `--json`, one object with `confirmed` and, when unconfirmed, a `reason`). If a created item never appears, it exits non-zero with `import partially applied` and lists the missing items; search for them before re-running, or a retry may create duplicates. `--no-verify` skips the read-back. See [Logbook and import](https://things.rlew.io/commands/#logbook-and-import) for the full rules.
+
 #### Reading back an import's status changes
 
 After the payload is sent, every update item that set `completed` or `canceled` is re-read from the database, for the same reason `complete` and `cancel` are (below). That includes setting either to `false`, which asks Things to mark the item incomplete — a reopen it drops is as invisible as a completion it drops. `canceled` takes priority over `completed` when a payload sets both, so the read-back expects what Things actually applies. Every item is checked before anything is reported, and the whole batch shares one timeout budget rather than one per item:
@@ -863,64 +925,6 @@ Things database, so project, area, and tag *names* are not (yet) completed.
 - **Task resolution** accepts a UUID, a title (with interactive
   disambiguation when multiple tasks match) or a numeric index into the last
   listing.
-
-## Install
-
-With Homebrew:
-
-```sh
-brew install ryanlewis/tap/things
-```
-
-Or one-line install (downloads the latest release, verifies checksums,
-installs to `/usr/local/bin`):
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh | sh
-```
-
-Override the destination with `INSTALL_DIR` or pin a version with `VERSION`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/ryanlewis/things-cli/main/install.sh \
-  | INSTALL_DIR="$HOME/bin" VERSION=v0.1.0 sh
-```
-
-When the [GitHub CLI](https://cli.github.com) is installed and logged in, the
-installer also verifies [build provenance](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) —
-cryptographic proof that the tarball was built by this repository's release
-workflow. You can check any release artifact yourself:
-
-```sh
-gh attestation verify things_<version>_darwin_arm64.tar.gz -R ryanlewis/things-cli
-```
-
-Or download a prebuilt binary manually from the
-[latest release](https://github.com/ryanlewis/things-cli/releases/latest)
-(`darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel):
-
-```sh
-tar -xzf things_*_darwin_arm64.tar.gz
-mv things /usr/local/bin/   # or ~/bin, etc.
-things version
-```
-
-Or install with `go install`:
-
-```sh
-go install github.com/ryanlewis/things-cli/cmd/things@latest
-```
-
-Or build from source:
-
-```sh
-make build          # produces ./things
-# or
-go build -o things ./cmd/things
-```
-
-Requires macOS with Things3 installed. Go 1.26 or later when building from
-source.
 
 ## Project structure
 
