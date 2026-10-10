@@ -19,7 +19,7 @@ import (
 // Help for --when and --deadline, which add, project add, edit and project
 // edit share. parserOptions hands them to kong as helpVars.
 const (
-	whenValues        = "today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or H:MMam|pm, YYYY-MM-DD@HH:MM"
+	whenValues        = "today|tomorrow|evening|anytime|someday, YYYY-MM-DD, HH:MM or a 12-hour time such as 6pm or 9:30PM (sent as HH:MM), YYYY-MM-DD@HH:MM"
 	deadlineNoKeyword = "Keywords such as today and tomorrow are rejected."
 )
 
