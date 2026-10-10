@@ -145,11 +145,11 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 	}
 	if c.HeadingID != nil {
 		id := strings.TrimSpace(*c.HeadingID)
-		_, _, found, trashed, err := database.HeadingProject(id)
+		known, err := knownHeadingID(database, id)
 		switch {
 		case err != nil:
 			return true
-		case found && !trashed:
+		case known:
 			// Checked in Things 3: a known heading-id wins over a list or
 			// heading title sent with it.
 			return task.HeadingUUID != id
@@ -239,7 +239,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 // wins over the list, so no note is given then.
 func (c *EditCmd) noteListID(d *Deps, database *db.DB, task *model.Task) {
 	if c.HeadingID != nil {
-		if _, _, found, trashed, err := database.HeadingProject(strings.TrimSpace(*c.HeadingID)); err != nil || found && !trashed {
+		if known, err := knownHeadingID(database, strings.TrimSpace(*c.HeadingID)); err != nil || known {
 			return
 		}
 	}
@@ -251,6 +251,13 @@ func (c *EditCmd) noteListID(d *Deps, database *db.DB, task *model.Task) {
 		return
 	}
 	noteTarget(d, *c.ListID, "lists", t)
+}
+
+// knownHeadingID reports whether id names a heading Things can find for
+// --heading-id: one that exists and is not in the Trash.
+func knownHeadingID(database *db.DB, id string) (bool, error) {
+	_, _, found, trashed, err := database.HeadingProject(id)
+	return found && !trashed, err
 }
 
 // filedIn reports whether task is filed in the project or area list already,
