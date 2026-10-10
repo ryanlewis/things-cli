@@ -40,8 +40,8 @@ type whenPlace struct {
 	reminder int // minutes after midnight, reminderNone or reminderKept
 }
 
-// parseClock reads the HH:MM (or H:MM) time --when sends verbatim, in
-// minutes after midnight.
+// parseClock reads the HH:MM (or H:MM) time --when sends, a 12-hour time
+// rewritten to one by things.NormalizeWhen, in minutes after midnight.
 func parseClock(s string) (int, bool) {
 	t, err := time.Parse("15:04", s)
 	if err != nil {

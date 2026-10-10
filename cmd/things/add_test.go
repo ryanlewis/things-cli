@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
+	"net/url"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -1194,5 +1195,38 @@ func TestEditWhenPhrase(t *testing.T) {
 	_, _, err = runStreams(t, database, "edit", "one-1", "--when", "blorp", "--notes", "x")
 	if err == nil || !strings.Contains(err.Error(), `Things most likely did not understand --when "blorp"`) {
 		t.Fatalf("edit with notes = %v, want an error naming the phrase", err)
+	}
+}
+
+// A bare 12-hour time is a time, not a phrase: it is sent as the HH:MM
+// Things was measured with, and read back like one. An edit Things drops
+// waits for the modification date instead of returning unconfirmed, and an
+// add that lands with no start date is misfiled rather than a phrase Things
+// did not understand.
+func TestWhen12HourReadBack(t *testing.T) {
+	for in, sent := range map[string]string{"6pm": "18:00", "6:30pm": "18:30", "12am": "00:00", "12pm": "12:00"} {
+		t.Run(in, func(t *testing.T) {
+			fastVerify(t)
+			database, sqlDB := seedWritable(t)
+			var urls []string
+			prev := things.SetExecCommandForTest(func(_ string, args ...string) *exec.Cmd {
+				urls = append(urls, strings.Join(args, " "))
+				return exec.Command("true")
+			})
+			t.Cleanup(func() { things.SetExecCommandForTest(prev) })
+			_, stderr, err := runStreams(t, database, "--json", "edit", "one-1", "--when", in)
+			if err == nil || !strings.Contains(err.Error(), "was not modified") || strings.Contains(err.Error(), "did not understand") || strings.Contains(stderr, "may not understand") {
+				t.Errorf("edit --when %s = %v, stderr %q; want it read back like any edit", in, err, stderr)
+			}
+			if want := "when=" + url.QueryEscape(sent); len(urls) != 1 || !strings.Contains(urls[0], want) {
+				t.Errorf("edit --when %s sent %q, want %s", in, urls, want)
+			}
+
+			stubExecAdding(t, sqlDB, createdRow{uuid: "new-1", title: "Buy oat milk", typ: model.TypeTask})
+			_, stderr, err = runStreams(t, database, "add", "Buy oat milk", "--when", in)
+			if err == nil || !strings.Contains(err.Error(), "add did not apply as sent") || strings.Contains(stderr, "did not understand") {
+				t.Errorf("add --when %s = %v, stderr %q; want it misfiled", in, err, stderr)
+			}
+		})
 	}
 }

@@ -33,7 +33,7 @@ func isWeekdayWord(s string) bool {
 // Accepted forms:
 //   - keyword: today, tomorrow, evening, anytime, someday (case-insensitive)
 //   - date: YYYY-MM-DD
-//   - time: HH:MM or H:MM[am|pm]
+//   - time: HH:MM, or H[:MM]am|pm rewritten to HH:MM (6pm becomes 18:00)
 //   - date+time: YYYY-MM-DD@HH:MM
 //   - RFC3339: rewritten to YYYY-MM-DD@HH:MM (offset preserved as wall-clock)
 //   - English natural-language phrases: passed through verbatim
@@ -62,6 +62,9 @@ func NormalizeWhen(s string) (string, error) {
 	}
 	if err := checkWhenShape(v); err != nil {
 		return "", err
+	}
+	if clock, ok := clock24(v); ok {
+		return clock, nil
 	}
 	if k, ok := nearKeyword(v); ok {
 		return "", fmt.Errorf("unrecognised --when value %q (did you mean %q? valid keywords: %s)", v, k, strings.Join(whenKeywords, ", "))
@@ -127,6 +130,34 @@ func clockShape(v string) (shaped, real bool) {
 		return true, hour >= 1 && hour <= 12 && len(m[2]) <= 1
 	}
 	return false, false
+}
+
+// clock24 rewrites v, a 12-hour time of day clockShape accepts (6pm,
+// 9:30 PM, 12am), as HH:MM. Things was measured with HH:MM times only, so
+// that is the form sent and read back; how it reads 6pm was not measured.
+func clock24(v string) (string, bool) {
+	if _, real := clockShape(v); !real {
+		return "", false
+	}
+	var hour, minute int
+	var half string
+	if m := whenClockShape.FindStringSubmatch(v); m != nil {
+		hour, _ = strconv.Atoi(m[1])
+		minute, _ = strconv.Atoi(m[2])
+		half = m[4]
+	} else {
+		m := whenClock12Shape.FindStringSubmatch(v)
+		hour, _ = strconv.Atoi(m[1])
+		half = m[3]
+	}
+	if half == "" {
+		return "", false
+	}
+	hour %= 12
+	if strings.EqualFold(half, "pm") {
+		hour += 12
+	}
+	return fmt.Sprintf("%02d:%02d", hour, minute), true
 }
 
 // WhenDateOrTime reports whether v, a value NormalizeWhen returned, is a
