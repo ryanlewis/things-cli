@@ -399,8 +399,9 @@ func runEdit[P interface {
 		return err
 	}
 	// The tag check below can create a tag, which is a change the edit has
-	// to send, so the token is checked before it whenever that happens.
-	if sendsEdit(already, s.Reveal, createsTags(database, s.TagFlags, f.Tags, f.AddTags)) {
+	// to send, so the token is checked before it whenever that happens. The
+	// tag lookup runs only when the edit would otherwise go unsent.
+	if sendsEdit(already, s.Reveal, false) || createsTags(database, s.TagFlags, f.Tags, f.AddTags) {
 		if err := params(common).ValidateSend(); err != nil {
 			return err
 		}
