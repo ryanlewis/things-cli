@@ -24,7 +24,7 @@ type ListCmd struct {
 	From             string `help:"Only tasks scheduled on or after YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
 	To               string `help:"Only tasks scheduled on or before YYYY-MM-DD (or RFC3339). On 'deadlines', filters by deadline; on 'upcoming', an undated task is matched by its deadline."`
 
-	Fields *string `help:"${fields_help}" placeholder:"KEYS"`
+	Fields *string `short:"f" help:"${fields_help}" placeholder:"KEYS"`
 }
 
 func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
@@ -249,7 +249,7 @@ type ProjectsCmd struct {
 	Completed bool   `help:"Include completed projects." default:"false"`
 	OpenOnly  bool   `help:"Leave out the projects closed but not yet logged, which are listed by default as Things still shows them: under the app's default Daily logging, the ones closed today. Ignored with --completed. --open-only=false overrides open_only in the config file."`
 
-	Fields *string `help:"${fields_help}" placeholder:"KEYS"`
+	Fields *string `short:"f" help:"${fields_help}" placeholder:"KEYS"`
 }
 
 func (c *ProjectsCmd) Run(d *Deps) error {
@@ -343,7 +343,7 @@ func printItem(d *Deps, database *db.DB, task *model.Task) error {
 type SearchCmd struct {
 	Query string `arg:"" required:"" help:"Search query."`
 
-	Fields *string `help:"${fields_help}" placeholder:"KEYS"`
+	Fields *string `short:"f" help:"${fields_help}" placeholder:"KEYS"`
 }
 
 func (c *SearchCmd) Run(d *Deps) error {

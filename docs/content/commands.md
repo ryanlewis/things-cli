@@ -55,11 +55,13 @@ A JSON listing prints a default set of keys for each row: the ones needed
 to pick an item and act on it. Notes, the parent uuids and Things' own
 bookkeeping are left out, since notes alone can be half of a full listing.
 `--fields` names the keys you want instead, in the order you want them, and
-`--fields all` prints every key:
+`--fields all` prints every key. `-f` is the short form of `--fields` on
+the task listings, `search` and `projects`:
 
 ```sh
 things anytime -a "Personal Projects" -j --fields uuid,title,projectTitle,deadline,tags
 things projects -j --fields uuid,title,openCount
+things today -j -f uuid,title
 things anytime -j --fields all
 things show <uuid> -j    # one item's full record, notes and checklist included
 ```

@@ -54,6 +54,13 @@ func TestRunListingFields(t *testing.T) {
 		"list with filter":  {[]string{"-j", "list", "--project", "Chores", "--fields", "title"}, []string{"title"}},
 		"search":            {[]string{"-j", "search", "milk", "--fields", "uuid, title,uuid"}, []string{"uuid", "title"}},
 		"projects":          {[]string{"-j", "projects", "--fields", "openCount,title"}, []string{"openCount", "title"}},
+
+		"short, bare view":    {[]string{"today", "-j", "-f", "uuid,title"}, []string{"uuid", "title"}},
+		"short, named view":   {[]string{"-j", "anytime", "-f", "uuid,projectTitle"}, []string{"uuid", "projectTitle"}},
+		"short, list":         {[]string{"list", "anytime", "-a", "Home", "-j", "-f", "uuid"}, []string{"uuid"}},
+		"short, search":       {[]string{"-j", "search", "milk", "-f", "uuid, title,uuid"}, []string{"uuid", "title"}},
+		"short, projects":     {[]string{"-j", "projects", "-f", "openCount,title"}, []string{"openCount", "title"}},
+		"short, joined value": {[]string{"-j", "projects", "-fopenCount,title"}, []string{"openCount", "title"}},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
