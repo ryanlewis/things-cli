@@ -640,7 +640,8 @@ read-back (five seconds by default; see `--verify-timeout` under Editing).
 Under `--json` the unconfirmed cases print `{"title": …, "confirmed":
 false, "reason": "no-verify"|"unreadable"|"ambiguous"}`, with
 `"candidates": [uuids]` for `ambiguous`. There is no `uuid`, because the
-add did not return one. An add that `--when` did not file where it said
+add did not return one. A `--when` the read-back cannot check is reported
+with reason `when` and the new item's `uuid` (below). An add that `--when` did not file where it said
 (below) is an error instead: under `--json` its one object has `"error":
 "misfiled"`, the item's `"uuid"` and where it `"landed"`.
 
@@ -773,8 +774,14 @@ add` check the same, and exit non-zero with `add did not apply as sent: …`
 naming the item they found; search for the title before adding it again,
 since another add of the same title at the same moment can be the one
 found. Under `--json` either error is one object with `"error":
-"misfiled"`, the item's `"uuid"` and where it `"landed"`. An English phrase is
-not checked against a place. A value shaped like a date or time that names
+"misfiled"`, the item's `"uuid"` and where it `"landed"`. A value the CLI
+cannot place, a weekday name (`friday`), a weekday or `evening` with a time
+(`friday@18:00`, `evening@6pm`) or an English phrase, is not checked
+against a place. Once Things has applied the write, `add`, `project add`
+and `edit` warn on stderr with where the item is, print `Created, not
+confirmed (--when not checked): "…" (uuid)` (`Applied, not confirmed …`
+for an edit) and exit 0; under `--json`, `{"uuid", "title", "confirmed":
+false, "reason": "when"}`. Check the item with `things show`. A value shaped like a date or time that names
 none, such as `2026-13-01`, `25:00`, `tomorrow@25:00` or
 `2026-10-09T25:00:00Z`, or a time after `anytime@` or `someday@`, is refused
 before anything is sent; a date and time with no offset, such as

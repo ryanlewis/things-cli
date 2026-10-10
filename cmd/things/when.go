@@ -115,6 +115,40 @@ func placeWhen(value string, now time.Time) (place whenPlace, ok bool) {
 	return whenPlace{day: day, bucket: -1, reminder: reminderKept}, true
 }
 
+// whenPlaced reports whether value, as sent, is one placeWhen works out where
+// it files an item: anytime, someday, today, evening, tomorrow, an empty
+// value, an HH:MM time, a date, or a date and time. The read-back checks only
+// these; for any other value, a weekday name, a word other than a date with
+// a time after the @ (evening@18:00, friday@18:00) or an English phrase, it
+// confirms only that Things applied the write, so the item is reported not
+// confirmed (whenUnchecked).
+func whenPlaced(value string) bool {
+	v, err := things.NormalizeWhen(value)
+	if err != nil {
+		return false
+	}
+	switch v {
+	case "", "anytime", "someday", "today", "evening", "tomorrow":
+		return true
+	}
+	if _, ok := parseClock(v); ok {
+		return true
+	}
+	if len(v) == len("2006-01-02@15:04") && v[10] == '@' {
+		if _, ok := parseClock(v[11:]); !ok {
+			return false
+		}
+		v = v[:10]
+	}
+	_, err = time.ParseInLocation("2006-01-02", v, time.Local)
+	return err == nil
+}
+
+// whenUnchecked is the reason an add or edit gives for an item reported not
+// confirmed because the read-back cannot check its --when (whenPlaced), as
+// for an edit whose only change is a free phrase.
+const whenUnchecked = "when"
+
 // whenPhrase reports whether value goes to Things as a free phrase: one that
 // is none of the keywords or weekday names, a time, a date or a date and
 // time (things.KnownWhenWord, things.WhenDateOrTime), so
