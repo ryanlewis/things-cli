@@ -50,11 +50,11 @@ func NormalizeWhen(s string) (string, error) {
 		return low, nil
 	}
 	if t, ok := parseISO8601(v); ok {
-		return t.Format("2006-01-02") + "@" + t.Format("15:04"), nil
+		return t.Format(whenDateTimeLayout), nil
 	}
 	for _, layout := range whenLocalLayouts {
 		if t, err := time.ParseInLocation(layout, v, time.Local); err == nil {
-			return t.Format("2006-01-02") + "@" + t.Format("15:04"), nil
+			return t.Format(whenDateTimeLayout), nil
 		}
 	}
 	if isWeekdayWord(strings.ToLower(v)) {
@@ -80,6 +80,10 @@ var (
 	// form the Things documentation uses after an @ (evening@6pm).
 	whenClock12Shape = regexp.MustCompile(`(?i)^(\d{1,2})(\s*)(am|pm)$`)
 )
+
+// whenDateTimeLayout is the date+time form NormalizeWhen rewrites a
+// timestamp to: YYYY-MM-DD@HH:MM.
+const whenDateTimeLayout = "2006-01-02@15:04"
 
 // whenLocalLayouts are ISO 8601 date-times with no offset. They are read as
 // the wall-clock time they name, as an RFC3339 timestamp's offset is
