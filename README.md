@@ -774,7 +774,7 @@ batch of `to-do`, `project`, `heading`, and `checklist-item` items, each
 with `operation` and `attributes`. That format spells a task `"to-do"`: it is
 Things' own word, and the payload is the one place these docs use it, because
 it is passed through untouched. Everywhere else the CLI says `task`. The CLI
-validates the payload is syntactically valid JSON, then forwards it verbatim.
+validates the payload is syntactically valid JSON, then forwards it as given, except that a `when` with a time goes as `YYYY-MM-DD@HH:MM`.
 The auth token is attached automatically (required for `operation: update`
 items, harmless for create-only payloads).
 
@@ -853,7 +853,8 @@ and `--todos` (newline-separated initial tasks).
 [Things JSON URL scheme payload](https://culturedcode.com/things/support/articles/2803573/)
 — a batch of `to-do`, `project`, `heading`, and `checklist-item` items, each
 with `operation` and `attributes`. The CLI validates the payload is
-syntactically valid JSON, then forwards it verbatim. The auth token is
+syntactically valid JSON, then forwards it as given, except that a `when`
+with a time goes as `YYYY-MM-DD@HH:MM`. The auth token is
 attached automatically (required for `operation: update` items, harmless for
 create-only payloads). Pass `--reveal` to jump to the first created item.
 Note: macOS `open` has a URL length limit; split very large payloads.
