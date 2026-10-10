@@ -59,176 +59,212 @@ type importTo struct {
 // id, so one with surrounding space matches nothing. A list that cannot be
 // read is left unchecked.
 func resolveImportDests(d *Deps, database *db.DB, creates []importCreate) {
-	warn := func(c importCreate, format string, args ...any) {
-		fmt.Fprintf(d.errOut(), "warning: %s: "+format+"\n", append([]any{c.path}, args...)...)
+	r := &destResolver{
+		d: d, database: database,
+		noted: map[string]bool{}, areas: map[string]areaRes{}, targets: map[targetKey]targetRes{}, headings: map[string]headingRes{},
 	}
-	// note gives add's notes about where Things files an item, once per
-	// list or area the payload names however many items go there.
-	noted := map[string]bool{}
-	note := func(c importCreate, ref, kind string, t db.Target) {
-		// Measured in Things 3: a to-do the payload itself completes,
-		// filed into a closed project, leaves the project closed.
-		for _, n := range targetNotes(ref, kind, t, !c.closed) {
-			if !noted[n] {
-				noted[n] = true
-				fmt.Fprintf(d.errOut(), "note: %s: %s\n", c.path, n)
-			}
-		}
-	}
-	// Many items in a payload share a list, area or heading; each is looked
-	// up once.
-	type areaRes struct {
-		target db.Target
-		err    error
-	}
-	areaTargets := map[string]areaRes{}
-	areaLookup := func(area string) (db.Target, error) {
-		res, ok := areaTargets[area]
-		if !ok {
-			res.target, res.err = database.AreaTarget(area)
-			areaTargets[area] = res
-		}
-		return res.target, res.err
-	}
-	type targetKey struct{ list, heading string }
-	type targetRes struct {
-		target       db.Target
-		headingFound bool
-		err          error
-	}
-	targets := map[targetKey]targetRes{}
-	lookup := func(list, heading string) targetRes {
-		tk := targetKey{list, heading}
-		res, ok := targets[tk]
-		if !ok {
-			res.target, res.headingFound, res.err = database.AddTarget(list, heading)
-			targets[tk] = res
-		}
-		return res
-	}
-	type headingRes struct {
-		project, title string
-		found          bool
-		err            error
-	}
-	headings := map[string]headingRes{}
 	for i := range creates {
 		c := &creates[i]
-		to := c.to
 		if c.typ == model.TypeProject {
-			c.dest = projectImportDest(*c, warn, note, areaLookup)
-			continue
-		}
-		switch {
-		case to.parentID != "":
-			c.dest = createdDest{checked: true, list: strings.TrimSpace(to.parentID), anyHeading: true}
-			continue
-		case to.nested:
-			// The project is not there before the import, so it can only
-			// be matched by title, trimmed as created titles are. Measured
-			// in Things 3: the to-do goes in that project, under the heading
-			// before it in the items if any, whatever list, list-id,
-			// heading-id or heading it gives.
-			if len(to.ignored) > 0 {
-				warn(*c, "Things files a to-do in a project's items in that project and ignores its %s", strings.Join(to.ignored, ", "))
-			}
-			c.dest = createdDest{checked: true, list: db.FoldName(strings.TrimSpace(to.parentTitle)), byTitle: true, anyHeading: true}
-			continue
-		}
-		heading := to.heading
-		if to.hasHeadingID {
-			if id := to.headingID; id != "" {
-				h, ok := headings[id]
-				if !ok {
-					h.project, h.title, h.found, _, h.err = database.HeadingProject(id)
-					headings[id] = h
-				}
-				switch {
-				case h.err != nil:
-					c.dest = createdDest{}
-					continue
-				case h.found:
-					c.dest = createdDest{checked: true, list: h.project, heading: id}
-					if res := lookup(h.project, ""); res.err == nil && res.target.ByUUID {
-						note(*c, h.project, "lists", res.target)
-					}
-					// The heading wins over the list and heading title the
-					// payload names, and over any list-id it can find.
-					switch {
-					case to.hasListID:
-						if res := lookup(to.listID, ""); res.err == nil && targetMatches(res.target, to.listID, true) && res.target.UUID != h.project {
-							warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list-id", id)
-						}
-					case to.listInPayload:
-						warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list %q", id, to.list)
-					case to.list != "":
-						if res := lookup(to.list, ""); res.err == nil && targetMatches(res.target, to.list, false) && res.target.UUID != h.project {
-							warn(*c, "heading-id %q is in another project; Things will file the to-do there and ignore list %q", id, to.list)
-						}
-					}
-					if heading != "" && db.FoldCase(heading) != db.FoldCase(h.title) {
-						warn(*c, "Things will file the to-do under the heading heading-id %q names and ignore heading %q", id, heading)
-					}
-					continue
-				}
-				warn(*c, "%s", noHeadingID(id, "it will ignore heading-id and heading"))
-			} else if heading != "" {
-				warn(*c, "heading-id is empty; Things will ignore heading %q", heading)
-			}
-			heading = ""
-		}
-		list, byID := to.list, to.hasListID
-		if byID {
-			list = to.listID
-		}
-		switch {
-		case byID && list == "":
-			warn(*c, "list-id is empty; Things will put the to-do in the Inbox")
-			c.dest = createdDest{checked: true}
-			continue
-		case list == "":
-			if heading != "" {
-				warn(*c, "heading %q needs a list; Things will ignore it and put the to-do in the Inbox", heading)
-			}
-			c.dest = createdDest{checked: true}
-			continue
-		case !byID && to.listInPayload:
-			// Things may file it in the project the payload created or
-			// renamed, or in a list it already had with that title. It does
-			// not trim a list title, so one with surrounding space matches
-			// neither.
-			c.dest = createdDest{checked: true, list: db.FoldName(list), byTitle: true, anyHeading: heading != ""}
-			continue
-		}
-		res := lookup(list, heading)
-		if res.err != nil {
-			c.dest = createdDest{}
-			continue
-		}
-		if !targetMatches(res.target, list, byID) {
-			warn(*c, "%s", missedTarget("list", "project or area", list, byID, res.target, "put the to-do in the Inbox"))
-			c.dest = createdDest{checked: true}
-			continue
-		}
-		if !byID && !res.target.Area && slices.Contains(to.renamed, res.target.UUID) {
-			// The title is the project's old one, which an earlier update
-			// item renames. Things may no longer find it by that title, so
-			// where the to-do goes was not measured (updates need the
-			// token) and is left unchecked.
-			c.dest = createdDest{}
-			continue
-		}
-		note(*c, list, "lists", res.target)
-		c.dest = addDest(res.target)
-		switch {
-		case to.headingInPayload:
-			// It may be the heading the payload creates, which can be the
-			// lowest-uuid twin of one the list already has.
-			c.dest.anyHeading = true
-		case heading != "" && !res.headingFound:
-			warn(*c, "%s", noHeading(list, heading, "add the to-do there without a heading"))
+			c.dest = r.projectDest(*c)
+		} else {
+			c.dest = r.taskDest(*c)
 		}
 	}
+}
+
+// destResolver is the state resolveImportDests keeps across a payload: the
+// notes it has given, and the lists, areas and headings it has looked up.
+// Many items in a payload share a list, area or heading; each is looked up
+// once.
+type destResolver struct {
+	d        *Deps
+	database *db.DB
+	noted    map[string]bool
+	areas    map[string]areaRes
+	targets  map[targetKey]targetRes
+	headings map[string]headingRes
+}
+
+type areaRes struct {
+	target db.Target
+	err    error
+}
+
+type targetKey struct{ list, heading string }
+
+type targetRes struct {
+	target       db.Target
+	headingFound bool
+	err          error
+}
+
+type headingRes struct {
+	project, title string
+	found          bool
+	err            error
+}
+
+// warn prints a warning about the item c.
+func (r *destResolver) warn(c importCreate, format string, args ...any) {
+	fmt.Fprintf(r.d.errOut(), "warning: %s: "+format+"\n", append([]any{c.path}, args...)...)
+}
+
+// note gives add's notes about where Things files an item, once per list or
+// area the payload names however many items go there.
+func (r *destResolver) note(c importCreate, ref, kind string, t db.Target) {
+	// Measured in Things 3: a to-do the payload itself completes, filed
+	// into a closed project, leaves the project closed.
+	for _, n := range targetNotes(ref, kind, t, !c.closed) {
+		if !r.noted[n] {
+			r.noted[n] = true
+			fmt.Fprintf(r.d.errOut(), "note: %s: %s\n", c.path, n)
+		}
+	}
+}
+
+// area is db.AreaTarget for area, looked up once.
+func (r *destResolver) area(area string) (db.Target, error) {
+	res, ok := r.areas[area]
+	if !ok {
+		res.target, res.err = r.database.AreaTarget(area)
+		r.areas[area] = res
+	}
+	return res.target, res.err
+}
+
+// target is db.AddTarget for list and heading, looked up once.
+func (r *destResolver) target(list, heading string) targetRes {
+	tk := targetKey{list, heading}
+	res, ok := r.targets[tk]
+	if !ok {
+		res.target, res.headingFound, res.err = r.database.AddTarget(list, heading)
+		r.targets[tk] = res
+	}
+	return res
+}
+
+// heading is db.HeadingProject for the heading id, looked up once.
+func (r *destResolver) heading(id string) headingRes {
+	h, ok := r.headings[id]
+	if !ok {
+		h.project, h.title, h.found, _, h.err = r.database.HeadingProject(id)
+		r.headings[id] = h
+	}
+	return h
+}
+
+// taskDest is resolveImportDests for a to-do the payload creates.
+func (r *destResolver) taskDest(c importCreate) createdDest {
+	to := c.to
+	switch {
+	case to.parentID != "":
+		return createdDest{checked: true, list: strings.TrimSpace(to.parentID), anyHeading: true}
+	case to.nested:
+		// The project is not there before the import, so it can only
+		// be matched by title, trimmed as created titles are. Measured
+		// in Things 3: the to-do goes in that project, under the heading
+		// before it in the items if any, whatever list, list-id,
+		// heading-id or heading it gives.
+		if len(to.ignored) > 0 {
+			r.warn(c, "Things files a to-do in a project's items in that project and ignores its %s", strings.Join(to.ignored, ", "))
+		}
+		return createdDest{checked: true, list: db.FoldName(strings.TrimSpace(to.parentTitle)), byTitle: true, anyHeading: true}
+	}
+	heading := to.heading
+	if to.hasHeadingID {
+		if to.headingID != "" {
+			if dest, ok := r.headingIDDest(c); ok {
+				return dest
+			}
+		} else if heading != "" {
+			r.warn(c, "heading-id is empty; Things will ignore heading %q", heading)
+		}
+		heading = ""
+	}
+	list, byID := to.list, to.hasListID
+	if byID {
+		list = to.listID
+	}
+	switch {
+	case byID && list == "":
+		r.warn(c, "list-id is empty; Things will put the to-do in the Inbox")
+		return createdDest{checked: true}
+	case list == "":
+		if heading != "" {
+			r.warn(c, "heading %q needs a list; Things will ignore it and put the to-do in the Inbox", heading)
+		}
+		return createdDest{checked: true}
+	case !byID && to.listInPayload:
+		// Things may file it in the project the payload created or
+		// renamed, or in a list it already had with that title. It does
+		// not trim a list title, so one with surrounding space matches
+		// neither.
+		return createdDest{checked: true, list: db.FoldName(list), byTitle: true, anyHeading: heading != ""}
+	}
+	res := r.target(list, heading)
+	if res.err != nil {
+		return createdDest{}
+	}
+	if !targetMatches(res.target, list, byID) {
+		r.warn(c, "%s", missedTarget("list", "project or area", list, byID, res.target, "put the to-do in the Inbox"))
+		return createdDest{checked: true}
+	}
+	if !byID && !res.target.Area && slices.Contains(to.renamed, res.target.UUID) {
+		// The title is the project's old one, which an earlier update
+		// item renames. Things may no longer find it by that title, so
+		// where the to-do goes was not measured (updates need the
+		// token) and is left unchecked.
+		return createdDest{}
+	}
+	r.note(c, list, "lists", res.target)
+	dest := addDest(res.target)
+	switch {
+	case to.headingInPayload:
+		// It may be the heading the payload creates, which can be the
+		// lowest-uuid twin of one the list already has.
+		dest.anyHeading = true
+	case heading != "" && !res.headingFound:
+		r.warn(c, "%s", noHeading(list, heading, "add the to-do there without a heading"))
+	}
+	return dest
+}
+
+// headingIDDest is taskDest for a to-do with a non-empty heading-id. It
+// reports false, having warned, when the heading is not in the database:
+// Things then ignores heading-id and heading and files the to-do by its
+// list.
+func (r *destResolver) headingIDDest(c importCreate) (createdDest, bool) {
+	to, id := c.to, c.to.headingID
+	h := r.heading(id)
+	switch {
+	case h.err != nil:
+		return createdDest{}, true
+	case !h.found:
+		r.warn(c, "%s", noHeadingID(id, "it will ignore heading-id and heading"))
+		return createdDest{}, false
+	}
+	if res := r.target(h.project, ""); res.err == nil && res.target.ByUUID {
+		r.note(c, h.project, "lists", res.target)
+	}
+	// The heading wins over the list and heading title the payload names,
+	// and over any list-id it can find.
+	switch {
+	case to.hasListID:
+		if res := r.target(to.listID, ""); res.err == nil && targetMatches(res.target, to.listID, true) && res.target.UUID != h.project {
+			r.warn(c, "heading-id %q is in another project; Things will file the to-do there and ignore list-id", id)
+		}
+	case to.listInPayload:
+		r.warn(c, "heading-id %q is in another project; Things will file the to-do there and ignore list %q", id, to.list)
+	case to.list != "":
+		if res := r.target(to.list, ""); res.err == nil && targetMatches(res.target, to.list, false) && res.target.UUID != h.project {
+			r.warn(c, "heading-id %q is in another project; Things will file the to-do there and ignore list %q", id, to.list)
+		}
+	}
+	if to.heading != "" && db.FoldCase(to.heading) != db.FoldCase(h.title) {
+		r.warn(c, "Things will file the to-do under the heading heading-id %q names and ignore heading %q", id, to.heading)
+	}
+	return createdDest{checked: true, list: h.project, heading: id}, true
 }
 
 // targetMatches reports whether Things files an item sent ref into target,
@@ -249,9 +285,9 @@ func missedTarget(attr, noun, ref string, byID bool, target db.Target, fallback 
 	return noTarget(noun, ref, byID, "it will "+fallback)
 }
 
-// projectImportDest is resolveImportDests for a project the payload creates:
-// the area its area-id or area names (see db.AreaTarget), or none.
-func projectImportDest(c importCreate, warn func(importCreate, string, ...any), note func(importCreate, string, string, db.Target), areaLookup func(string) (db.Target, error)) createdDest {
+// projectDest is resolveImportDests for a project the payload creates: the
+// area its area-id or area names (see db.AreaTarget), or none.
+func (r *destResolver) projectDest(c importCreate) createdDest {
 	to := c.to
 	area, byID := to.area, to.hasAreaID
 	if byID {
@@ -260,21 +296,21 @@ func projectImportDest(c importCreate, warn func(importCreate, string, ...any), 
 	switch {
 	case byID && area == "":
 		if to.area != "" {
-			warn(c, "area-id is empty; Things will ignore area %q and create the project in no area", to.area)
+			r.warn(c, "area-id is empty; Things will ignore area %q and create the project in no area", to.area)
 		}
 		return createdDest{checked: true}
 	case area == "":
 		return createdDest{checked: true}
 	}
-	target, err := areaLookup(area)
+	target, err := r.area(area)
 	if err != nil {
 		return createdDest{}
 	}
 	if !targetMatches(target, area, byID) {
-		warn(c, "%s", missedTarget("area", "area", area, byID, target, "create the project in no area"))
+		r.warn(c, "%s", missedTarget("area", "area", area, byID, target, "create the project in no area"))
 		return createdDest{checked: true}
 	}
-	note(c, area, "areas", target)
+	r.note(c, area, "areas", target)
 	return createdDest{checked: true, list: target.UUID}
 }
 
