@@ -205,7 +205,13 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		return !inList || task.HeadingUUID != target.Heading
 	case target.UUID != "":
 		if heading != "" {
-			fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(list, heading, "move the to-do there without a heading"))
+			// Name the list as the user knows it, not by a uuid given to
+			// --list-id or --list.
+			name := list
+			if target.ByUUID && target.Title != "" {
+				name = target.Title
+			}
+			fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(name, heading, "move the to-do there without a heading"))
 		}
 		return task.HeadingUUID != "" || !inList
 	case c.Heading == nil:
@@ -219,7 +225,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		// The unknown list's warning has said the to-do stays put.
 		return false
 	case task.ProjectUUID == "":
-		fmt.Fprintf(d.errOut(), "warning: --heading %q needs --list: the to-do is not in a project, so Things will leave it where it is\n", heading)
+		fmt.Fprintf(d.errOut(), "warning: %s\n", headingNeedsList("--heading", heading, "--list, as the to-do is not in a project", "leave the to-do where it is"))
 		return false
 	}
 	t, f, err := database.AddTarget(task.ProjectUUID, heading)

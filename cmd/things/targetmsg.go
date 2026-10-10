@@ -4,13 +4,15 @@ import "fmt"
 
 // The warnings add, edit, project and import give when Things cannot find
 // the list, area or heading an item was sent to. Agents read this wording,
-// so each command builds it here rather than by hand. (The "--heading needs
-// --list" warnings differ per command and stay with add and edit.) Where the
-// rules differ between commands, the caller decides; these only say it.
+// so each command builds it here rather than by hand. Where the rules differ
+// between commands, the caller decides; these only say it.
 
 // noTarget is the warning for ref, sent by uuid when byID and by title
 // otherwise, when Things finds no noun ("project or area", or "area") for
-// it. next says what Things does instead.
+// it. next says what Things does instead. It says "finds no" rather than
+// "has no": the check is of how Things matches the name, and an item can
+// exist that Things will still not match, such as one by its uuid sent as a
+// title.
 func noTarget(noun, ref string, byID bool, next string) string {
 	if byID {
 		return fmt.Sprintf("Things finds no %s with id %q; %s", noun, ref, next)
@@ -18,13 +20,11 @@ func noTarget(noun, ref string, byID bool, next string) string {
 	return fmt.Sprintf("Things finds no %s called %q; %s", noun, ref, next)
 }
 
-// noArea is project's warning for an area Things cannot find, as noTarget.
-// It says "has no area" where import's says "finds no area".
-func noArea(ref string, byID bool, next string) string {
-	if byID {
-		return fmt.Sprintf("Things has no area with id %q; %s", ref, next)
-	}
-	return fmt.Sprintf("Things has no area called %q; %s", ref, next)
+// headingNeedsList is the warning for a heading sent with no list to file it
+// in. name is the flag or field ("--heading", "heading"), needs what would
+// give it a list, and next what Things does with the to-do instead.
+func headingNeedsList(name, heading, needs, next string) string {
+	return fmt.Sprintf("%s %q needs %s; Things will ignore it and %s", name, heading, needs, next)
 }
 
 // noHeading is the warning for a heading title list does not have. next is

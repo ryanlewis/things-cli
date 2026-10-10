@@ -87,7 +87,7 @@ func projectArea(d *Deps, area, fallback string) (target db.Target, read bool) {
 	case err != nil:
 		return db.Target{}, false
 	case t.UUID == "":
-		fmt.Fprintf(d.errOut(), "warning: %s\n", noArea(area, false, fallback))
+		fmt.Fprintf(d.errOut(), "warning: %s\n", noTarget("area", area, false, fallback))
 	}
 	return t, true
 }
@@ -166,6 +166,6 @@ func (c *ProjectEditCmd) checkAreaID(d *Deps, database *db.DB, task *model.Task)
 	case t.ByUUID:
 		return true
 	}
-	fmt.Fprintf(d.errOut(), "warning: %s\n", noArea(*c.AreaID, true, "the project will stay where it is"))
+	fmt.Fprintf(d.errOut(), "warning: %s\n", noTarget("area", *c.AreaID, true, "the project will stay where it is"))
 	return false
 }

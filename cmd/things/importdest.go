@@ -192,7 +192,7 @@ func (r *destResolver) taskDest(c importCreate) createdDest {
 		return createdDest{checked: true}
 	case list == "":
 		if heading != "" {
-			r.warn(c, "heading %q needs a list; Things will ignore it and put the to-do in the Inbox", heading)
+			r.warn(c, "%s", headingNeedsList("heading", heading, "list or list-id", "put the to-do in the Inbox"))
 		}
 		return createdDest{checked: true}
 	case !byID && to.listInPayload:
