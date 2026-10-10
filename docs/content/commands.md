@@ -49,6 +49,41 @@ takes: that payload is Things' own JSON URL scheme, which spells a task
 than the CLI's, because it is passed through untouched. Do not copy `.type`
 from a listing into an import item.
 
+### Choosing fields with `--fields`
+
+A JSON listing prints every field of every row, and notes alone can be
+half of it. `--fields` cuts each row down to the keys you name, in the
+order you name them:
+
+```sh
+things anytime -a "Personal Projects" -j --fields uuid,title,projectTitle,deadline,tags
+things projects -j --fields uuid,title,openCount
+```
+
+It works on every task listing (the views, `list` with filters, and
+`search`) and on `things projects`. `things show` always prints the full
+record, and `areas` and `tags` rows are short enough not to need it.
+
+- The names are the JSON keys exactly as the full output prints them, case
+  included: `projectTitle`, not `project`. There are no aliases.
+- A task listing takes the task keys: `uuid`, `title`, `notes`, `type`,
+  `status`, `start`, `startBucket`, `startDate`, `reminderTime`,
+  `deadline`, `stopDate`, `creationDate`, `trashed`, `projectUUID`,
+  `projectTitle`, `projectTrashed`, `areaUUID`, `areaTitle`, `headingUUID`,
+  `headingTitle`, `tags`, `index`, `todayIndex`, `repeating`,
+  `checklistProgress`. `things projects` takes the project keys: `uuid`,
+  `title`, `status`, `start`, `startBucket`, `startDate`, `deadline`,
+  `areaUUID`, `areaTitle`, `tags`, `taskCount`, `openCount`.
+- A key a row would leave out of the full record, such as `deadline` on a
+  task with none, is left out here too. The values are unchanged.
+- Spaces around names are ignored, and a name given twice is printed once,
+  where it first appears.
+- An unknown name fails the whole command before anything is read, with
+  the `unknown field` error: `unknown` lists the names it did not know and
+  `valid` lists every name it takes.
+- `--fields` needs `--json`; without it the command fails rather than
+  ignore the flag. Plain output is unchanged.
+
 ## Listing
 
 ```sh
@@ -480,6 +515,7 @@ with the commands that act on the item. See
 ```sh
 things search "milk"
 things search "release" --json
+things search "release" --json --fields uuid,title
 ```
 
 The query matches titles and notes literally and case-insensitively, so

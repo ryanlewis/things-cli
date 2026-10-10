@@ -56,6 +56,13 @@ for structured JSON suitable for piping into `jq` or another tool. List
 commands assign each result a stable index (`1`, `2`, `3`, …) you can use
 in follow-up commands like `show`, `edit`, `complete`, and `cancel`.
 
+`--fields` limits a JSON listing to the keys you name, in that order, which
+keeps output small enough for an agent to read whole:
+`things anytime -j --fields uuid,title,projectTitle,deadline`. It works on
+the task listings, `search` and `projects`, and needs `--json`. An unknown
+name fails with the list of valid ones. See the
+[command reference](https://things.rlew.io/commands/).
+
 `--json` also implies non-interactive: the CLI never prompts, so a reference
 matching several tasks returns an error listing the candidates instead of
 opening the picker, and `complete`/`cancel` on a project declines instead of
@@ -67,7 +74,7 @@ how a project completes under `--json`.
 A failing command prints a single JSON object to stdout and exits non-zero, so
 a consumer parsing stdout gets a structured failure either way. `error` is a
 stable token — `ambiguous task`, `not found`, `not a task`, `not a project`, `trashed`,
-`stale list cache`, `already closed`, `misfiled`, `import refused`,
+`stale list cache`, `already closed`, `misfiled`, `unknown field`, `import refused`,
 `import partially applied`, or `error` for anything else —
 and `message` carries the same text plain-text mode prints.
 
