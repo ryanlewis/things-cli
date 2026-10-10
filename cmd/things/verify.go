@@ -336,7 +336,7 @@ func applyEdit(d *Deps, database *db.DB, task *model.Task, changed, checklist bo
 	case duplicate:
 		return printUnconfirmedEdit(d, task, "duplicate", "Sent to Things as a duplicate; the copy is not read back")
 	case d.NoVerify:
-		return printUnconfirmedEdit(d, task, "no-verify", "Sent to Things, not confirmed (--no-verify)")
+		return printUnconfirmedEdit(d, task, "no-verify", unconfirmedMsg["no-verify"])
 	case when != nil && when.phraseOnly && want == task.Status:
 		fmt.Fprintf(d.errOut(), "warning: Things may not understand --when %q, and records nothing when it ignores one, so the edit is not read back; run `things show %s` to check\n", when.value, task.UUID)
 		return printUnconfirmedEdit(d, task, "when", "Sent to Things, not confirmed (--when phrase)")
