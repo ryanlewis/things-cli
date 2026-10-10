@@ -177,7 +177,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	d, fx := newFixture(t)
 	seedTasks(t, d)
 
-	// AddDate keeps the ThingsDate valid across month boundaries; raw bit
+	// AddDays keeps the ThingsDate valid across month boundaries; raw bit
 	// subtraction would underflow the day field to 0 on the 1st.
 	today := int64(model.ThingsDateFromTime(testNow))
 	yesterday := int64(model.ThingsDateFromTime(testNow).AddDays(-1))
