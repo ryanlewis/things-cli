@@ -18,9 +18,9 @@
 #   go build -o /tmp/things-new ./cmd/things
 #   OLD=/tmp/things-old NEW=/tmp/things-new tools/compare/run.sh show-1 - show TODO1
 #
-# Prints "SAME NAME (exit N, shim N)" or "DIFF NAME" and the first lines of
-# the diff. Set SHIMAPPLY=1 for the osascript shim to apply complete and
-# cancel to the database copy, so a read-back can see them. The database is
+# Prints "SAME NAME (exit N, shim N)", or "DIFF NAME" and the first lines of
+# the diff and exits 1. Set SHIMAPPLY=1 for the osascript shim to apply
+# complete and cancel to the database copy, so a read-back can see them. The database is
 # built from internal/db/dbtest/schema.sql and tools/compare/seed.sql. OUT
 # defaults to a fresh temporary directory.
 #
@@ -36,10 +36,23 @@ mkdir -p "$OUT"
 [ $# -ge 2 ] || { echo "usage: OLD=... NEW=... $0 NAME STDIN|- ARGS..." >&2; exit 2; }
 name=$1; shift; in=$1; shift
 
+# Resolve both binaries now: under env -i PATH is the shim directory, so a
+# bare name would not be found and both runs would fail alike as "SAME".
+OLD=$(command -v "$OLD") || { echo "OLD not found" >&2; exit 2; }
+NEW=$(command -v "$NEW") || { echo "NEW not found" >&2; exit 2; }
+case $OLD in /*) ;; *) OLD=$PWD/$OLD;; esac
+case $NEW in /*) ;; *) NEW=$PWD/$NEW;; esac
+
+# Built under a temporary name and moved into place, so a failed seed never
+# leaves a half-built base for the next case to reuse.
 base=$OUT/base.sqlite
 if [ ! -f "$base" ]; then
-  /usr/bin/sqlite3 "$base" < "$root/internal/db/dbtest/schema.sql" &&
-    /usr/bin/sqlite3 "$base" < "$here/seed.sql" || exit 1
+  rm -f "$base.tmp"
+  if ! /usr/bin/sqlite3 "$base.tmp" < "$root/internal/db/dbtest/schema.sql" ||
+    ! /usr/bin/sqlite3 "$base.tmp" < "$here/seed.sql"; then
+    rm -f "$base.tmp"; exit 1
+  fi
+  mv "$base.tmp" "$base"
 fi
 
 for v in old new; do
@@ -59,4 +72,5 @@ if diff -r -x db.sqlite -x home "$OUT/$name.old" "$OUT/$name.new" >/dev/null; th
   echo "SAME $name (exit $(cat "$OUT/$name.new/exit"), shim $(wc -l < "$OUT/$name.new/shim.log" | tr -d ' '))"
 else
   echo "DIFF $name"; diff -r -x db.sqlite -x home "$OUT/$name.old" "$OUT/$name.new" | head -30
+  exit 1
 fi
