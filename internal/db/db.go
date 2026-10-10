@@ -38,7 +38,6 @@ const thingsGroupContainer = "JLMPQHK86H.com.culturedcode.ThingsMac"
 // listed, the pattern it matched against, and the databases it found. It
 // holds paths only, never database contents.
 type PathDiagnosis struct {
-	Home      string
 	Container string
 	Pattern   string
 	Matches   []string
@@ -97,7 +96,6 @@ type (
 func findDBPath(home string, readDir readDirFunc, stat statFunc) (PathDiagnosis, error) {
 	container := filepath.Join(home, "Library", "Group Containers", thingsGroupContainer)
 	diagnosis := PathDiagnosis{
-		Home:      home,
 		Container: container,
 		Pattern:   filepath.Join(container, "ThingsData-*", "Things Database.thingsdatabase", "main.sqlite"),
 	}
@@ -182,6 +180,17 @@ func probeReadable(path string, open openFileFunc) error {
 	var b [1]byte
 	if _, err := f.Read(b[:]); err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("reading database: %w", err)
+	}
+	return nil
+}
+
+// CheckHeader reads the database header without touching any table, so a
+// file that is not an SQLite database fails here rather than on the first
+// query. An empty file passes: SQLite treats it as an empty database.
+func (d *DB) CheckHeader() error {
+	var version int
+	if err := d.db.QueryRow("PRAGMA schema_version").Scan(&version); err != nil {
+		return fmt.Errorf("reading database header: %w", err)
 	}
 	return nil
 }

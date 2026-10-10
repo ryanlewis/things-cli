@@ -66,7 +66,11 @@ func diagnose(d *Deps) doctorReport {
 		path = diagnosis.Database
 	}
 	report.Database = path
-	if _, err := d.openPath(path); err != nil {
+	database, err := d.openPath(path)
+	if err == nil {
+		err = database.CheckHeader()
+	}
+	if err != nil {
 		return report.fail(err)
 	}
 	report.OK = true
