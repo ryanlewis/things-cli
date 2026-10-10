@@ -85,22 +85,25 @@ func resolveProjectRef(d *Deps, ref string, database *db.DB, write bool) (*model
 }
 
 func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*model.Task, error) {
+	// noun names what was looked up in an error, so `open --project 99`
+	// reports a project not found, as a title miss already does.
+	noun := "task"
+	lookup, exact := database.GetTask, database.GetTaskExact
+	if projects {
+		noun = "project"
+		lookup, exact = database.GetProject, database.GetProjectExact
+	}
+
 	// A blank ref is a title fragment of every task, and an exact title of
 	// every untitled one: `show ''` must not pick one of those.
 	if strings.TrimSpace(ref) == "" {
-		return nil, &emptyRefError{Query: ref}
+		return nil, &emptyRefError{Kind: noun, Query: ref}
 	}
 
 	// Try numeric index from last list. Surrounding space does not stop a
 	// number from being one: ` 12` is row 12, or refused as not a row, and
 	// never a title fragment.
 	kind, digits := classifyRef(ref)
-	// noun names what was looked up in a not-found error, so `open --project
-	// 99` reports a project not found, as a title miss already does.
-	noun := "task"
-	if projects {
-		noun = "project"
-	}
 	var last cache.LastList
 	var cacheErr error
 	if kind != refPlain {
@@ -110,7 +113,7 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 	// listing: the user may well have meant a row of it, so a bare number
 	// is refused rather than tried as a title.
 	if kind == refRow && errors.Is(cacheErr, cache.ErrUnreadable) {
-		return nil, &unreadableCacheError{cacheRef: cacheRef{Query: ref}, Err: cacheErr}
+		return nil, &unreadableCacheError{cacheRef: cacheRef{Kind: noun, Query: ref}, Err: cacheErr}
 	}
 	if n, err := strconv.Atoi(digits); kind == refRow && err == nil && n >= 1 {
 		if cacheErr == nil && n <= len(last.UUIDs) {
@@ -118,12 +121,12 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 			// and nothing else. Refuse it when the listing behind it is old
 			// enough that the rows have probably moved (issue #265).
 			if last.Stale(time.Now()) {
-				return nil, &staleCacheError{cacheRef: cacheRef{Query: ref}, Row: n, Last: last}
+				return nil, &staleCacheError{cacheRef: cacheRef{Kind: noun, Query: ref}, Row: n, Last: last}
 			}
 			// Nor is a listing of another database a guide to this one
 			// (issue #274).
 			if !cacheFromThisDB(d, last) {
-				return nil, &otherDBCacheError{cacheRef: cacheRef{Query: ref}, Row: n, Last: last, Current: d.dbIdentity()}
+				return nil, &otherDBCacheError{cacheRef: cacheRef{Kind: noun, Query: ref}, Row: n, Last: last, Current: d.dbIdentity()}
 			}
 			t, err := database.GetTaskByUUID(last.UUIDs[n-1])
 			if err != nil {
@@ -152,10 +155,6 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 	// in the wrong case would otherwise reach a task whose title merely
 	// contains it.
 	uuidShaped := kind == refPlain && looksLikeUUID(strings.TrimSpace(ref))
-	lookup, exact := database.GetTask, database.GetTaskExact
-	if projects {
-		lookup, exact = database.GetProject, database.GetProjectExact
-	}
 	if kind != refPlain || uuidShaped {
 		lookup = exact
 	}
@@ -202,7 +201,7 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 
 	if !d.interactive() {
 		var b strings.Builder
-		fmt.Fprintf(&b, "ambiguous task %q — matches %d tasks:\n", ambig.Query, len(ambig.Matches))
+		fmt.Fprintf(&b, "ambiguous %s %q — matches %s:\n", noun, ambig.Query, plural(len(ambig.Matches), noun))
 		for i, m := range ambig.Matches {
 			fmt.Fprintf(&b, "  %d. %s  [%s]  (%s)\n", i+1, output.OneLine(m.Title), m.Type, m.UUID)
 		}
@@ -210,11 +209,11 @@ func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*mo
 		// Wrap rather than replace: the plain-text reader gets the rendered
 		// list, while --json still reaches the candidates behind it
 		// (issue #152).
-		return nil, &ambiguousRefError{msg: b.String(), inner: ambig}
+		return nil, &ambiguousRefError{msg: b.String(), kind: noun, inner: ambig}
 	}
 
 	// Interactive: prompt user to pick
-	fmt.Fprintf(d.errOut(), "Multiple tasks match %q:\n", ambig.Query)
+	fmt.Fprintf(d.errOut(), "Multiple %ss match %q:\n", noun, ambig.Query)
 	for i, m := range ambig.Matches {
 		project := ""
 		if m.ProjectTitle != "" {
