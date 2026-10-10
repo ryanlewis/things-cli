@@ -189,15 +189,9 @@ func Show(params ShowParams) error {
 		return fmt.Errorf("show: id or query is required")
 	}
 	v := url.Values{}
-	if params.ID != "" {
-		v.Set("id", params.ID)
-	}
-	if params.Query != "" {
-		v.Set("query", params.Query)
-	}
-	if params.Filter != "" {
-		v.Set("filter", params.Filter)
-	}
+	setNonEmpty(v, "id", params.ID)
+	setNonEmpty(v, "query", params.Query)
+	setNonEmpty(v, "filter", params.Filter)
 	u := buildThingsURL("show", v)
 	if params.Background {
 		return runOpen("-g", u)
@@ -354,12 +348,8 @@ func UpdateTask(params UpdateParams) error {
 func ImportJSON(data, authToken string, reveal bool) error {
 	v := url.Values{}
 	v.Set("data", data)
-	if authToken != "" {
-		v.Set("auth-token", authToken)
-	}
-	if reveal {
-		v.Set("reveal", "true")
-	}
+	setNonEmpty(v, "auth-token", authToken)
+	setBool(v, "reveal", reveal)
 	if err := openThingsURL("json", v); err != nil {
 		// Things reports payload-level errors via an in-app notification, not
 		// via the URL handler exit code, so callers see only `exit status 1`
