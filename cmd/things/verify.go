@@ -298,34 +298,6 @@ func verifyStatusesWithin(database *db.DB, wants []statusWant, wait, budget time
 	return results
 }
 
-// verifyStatus re-reads a single item until its status matches want, and
-// returns the item as last read, or an error if it never does.
-func verifyStatus(database *db.DB, task *model.Task, want model.Status, budget time.Duration) (*model.Task, error) {
-	res := verifyStatuses(database, []statusWant{{uuid: task.UUID, title: task.Title, want: want}}, budget)[0]
-	return res.task, res.err
-}
-
-// applyStatusWrite runs a status-changing write, confirms it landed, and
-// prints the item as Things now holds it, as `edit --complete` does, so exit
-// 0 with nothing printed is never the answer. Under --no-verify nothing is
-// read back and the output says the change is unconfirmed.
-func applyStatusWrite(d *Deps, database *db.DB, task *model.Task, want model.Status, write func() error) error {
-	if err := write(); err != nil {
-		return err
-	}
-	if d.NoVerify {
-		return printUnconfirmedEdit(d, task, "no-verify", "Sent to Things, not confirmed (--no-verify)")
-	}
-	current, err := verifyStatus(database, task, want, d.readBackTimeout())
-	if err != nil {
-		return err
-	}
-	if current == nil {
-		current = task
-	}
-	return printItem(d, database, current)
-}
-
 // applyEdit runs an `edit` / `project edit` update, waits for it to land, and
 // prints the item as Things now holds it — the same output `things show`
 // gives, so a caller has its confirmation without a second command. changed
