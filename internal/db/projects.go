@@ -9,7 +9,7 @@ import (
 // ListProjects lists the projects, in area order. includeCompleted lists the
 // closed ones too, logged or not. Without it the listing is the open projects
 // and, unless openOnly is set, the ones closed and not yet logged
-// (closedTodayUnlogged), which the app's own project list still holds: on 9
+// (closedUnlogged), which the app's own project list still holds: on 9
 // Oct 2026 AppleScript's `projects` returned a project completed that day
 // that `things projects` left out. That is the rule the task lists follow.
 func (d *DB) ListProjects(areaFilter string, includeCompleted, openOnly bool) ([]model.Project, error) {

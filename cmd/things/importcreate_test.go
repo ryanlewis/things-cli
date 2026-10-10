@@ -1238,7 +1238,7 @@ func TestImportNestedInUpdateNotWarned(t *testing.T) {
 func TestImportChecksWhen(t *testing.T) {
 	past := time.Now().AddDate(0, 0, -4).Format("2006-01-02")
 	today := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow)))
-	tomorrow := "start = 2, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow.AddDate(0, 0, 1))))
+	tomorrow := "start = 2, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow).AddDays(1)))
 	for _, tc := range []struct {
 		name    string
 		attrs   string

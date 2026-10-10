@@ -180,7 +180,7 @@ func TestListTasksTodayCompletedItemFiltering(t *testing.T) {
 	// AddDate keeps the ThingsDate valid across month boundaries; raw bit
 	// subtraction would underflow the day field to 0 on the 1st.
 	today := int64(model.ThingsDateFromTime(testNow))
-	yesterday := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -1)))
+	yesterday := int64(model.ThingsDateFromTime(testNow).AddDays(-1))
 	// Now, not "a minute ago": the calendar day decides membership since issue
 	// #230, and a minute before midnight falls on the previous day. 25 hours
 	// back is safely not today whatever the hour.
@@ -343,7 +343,7 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 	now := testNow
 	stop := model.TimeToUnix(now)
 	today := int64(model.ThingsDateFromTime(now))
-	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 4)))
+	later := int64(model.ThingsDateFromTime(now).AddDays(4))
 
 	cases := []struct {
 		name   string
@@ -444,7 +444,7 @@ func TestLogbookWithholdsEveryRowClosedToday(t *testing.T) {
 // the Logbook or in those lists, never both and never neither.
 func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 	today := int64(model.ThingsDateFromTime(testNow))
-	future := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
+	future := int64(model.ThingsDateFromTime(testNow).AddDays(3))
 	stopNow := model.TimeToUnix(testNow)
 
 	cases := []struct {
@@ -508,7 +508,7 @@ func TestClosedTodayOutsideTodayLandsInOneList(t *testing.T) {
 // of the day, not under Today and not in the Logbook.
 func TestClosedSuppressedInboxToDoStaysInInbox(t *testing.T) {
 	d, fx := newFixture(t)
-	earlier := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -2)))
+	earlier := int64(model.ThingsDateFromTime(testNow).AddDays(-2))
 	fx.Todo("t-closed", "Closed", 1, inbox(), deadline(earlier), suppressed(earlier), completed(model.TimeToUnix(testNow)))
 
 	logged := mustList(t, d, "logbook", TaskFilter{})
@@ -598,9 +598,9 @@ func TestListTasksDateFilters(t *testing.T) {
 	// Upcoming holds only the days after today (issue #363), so the dates
 	// are days to come rather than fixed ones.
 	now := testNow
-	d1 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 9)))
-	d2 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 10)))
-	d3 := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 11)))
+	d1 := int64(model.ThingsDateFromTime(now).AddDays(9))
+	d2 := int64(model.ThingsDateFromTime(now).AddDays(10))
+	d3 := int64(model.ThingsDateFromTime(now).AddDays(11))
 
 	fx.Todo("u-09", "Day 9", 1, somedayOn(d1), inArea("a"))
 	fx.Todo("u-10", "Day 10", 2, somedayOn(d2), inArea("a"))
@@ -1400,7 +1400,7 @@ func TestProjectFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 
 	stopToday := model.TimeToUnix(testNow)
 	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 2)))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(2))
 	fx.Project("proj-open", "Live", 1)
 	fx.Heading("head", "Phase 1", 2, inProject("proj-open"))
 
@@ -1441,7 +1441,7 @@ func TestAreaFilterIncludeCompletedKeepsClosedToday(t *testing.T) {
 
 	stopToday := model.TimeToUnix(testNow)
 	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 2)))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(2))
 	fx.Area("ar", "Work", 1)
 	fx.Project("proj-open", "Live", 1, inArea("ar"))
 	fx.Project("proj-done", "Shipped", 2, inArea("ar"), completed(stopToday))
@@ -1535,8 +1535,8 @@ func TestListTasksProjectOrderMatchesProjectPage(t *testing.T) {
 	d, fx := newFixture(t)
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	sooner := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
-	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 17)))
+	sooner := int64(model.ThingsDateFromTime(now).AddDays(7))
+	later := int64(model.ThingsDateFromTime(now).AddDays(17))
 
 	fx.Project("proj", "Ship v2", 1)
 	fx.Heading("head-1", "Phase one", -357, inProject("proj"))
@@ -2221,7 +2221,7 @@ func TestAnytimeLeavesOutToDosInDeferredProjects(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
+	later := int64(model.ThingsDateFromTime(now).AddDays(7))
 
 	fx.Project("proj-someday", "Someday project", 1, someday())
 	fx.Project("proj-scheduled", "Scheduled project", 2, somedayOn(later))
@@ -2258,7 +2258,7 @@ func TestAnytimeLeavesOutToDosInDeferredProjects(t *testing.T) {
 // day (issue #238).
 func TestClosedTodayInDeferredProjectLandsInOneList(t *testing.T) {
 	now := testNow
-	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 7)))
+	later := int64(model.ThingsDateFromTime(now).AddDays(7))
 	stop := model.TimeToUnix(now)
 
 	cases := []struct {
@@ -2405,9 +2405,9 @@ func TestUpcomingListsAnytimeToDosDueLater(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
-	later := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 3)))
-	yesterday := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1)))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
+	later := int64(model.ThingsDateFromTime(now).AddDays(3))
+	yesterday := int64(model.ThingsDateFromTime(now).AddDays(-1))
 
 	fx.Todo("sched-tomorrow", "Scheduled tomorrow", 1, somedayOn(tomorrow), todayIndex(-100))
 	fx.Todo("due-tomorrow", "Due tomorrow", 2, anytime(), deadline(tomorrow), todayIndex(-500))
@@ -2441,8 +2441,8 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
-	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
+	earlier := int64(model.ThingsDateFromTime(now).AddDays(-2))
 
 	fx.Todo("sched-today", "Scheduled today", 1, anytimeOn(today))
 	fx.Todo("anytime-due-today", "Anytime due today", 2, anytime(), deadline(today))
@@ -2468,7 +2468,7 @@ func TestTodayListsUndatedToDosDueOrOverdue(t *testing.T) {
 	on := model.ThingsDate(today)
 	got = mustList(t, d, "today", TaskFilter{On: &on})
 	assertSet(t, got, want, "today --on today")
-	from := model.ThingsDate(int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1))))
+	from := model.ThingsDate(int64(model.ThingsDateFromTime(now).AddDays(-1)))
 	got = mustList(t, d, "today", TaskFilter{From: &from})
 	assertSet(t, got, want, "today --from yesterday")
 }
@@ -2484,8 +2484,8 @@ func TestScheduledRowNotYetMovedIsToday(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	yesterday := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -1)))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	yesterday := int64(model.ThingsDateFromTime(now).AddDays(-1))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
 
 	fx.Todo("stuck-today", "Scheduled today, not yet moved", 1, somedayOn(today))
 	fx.Todo("stuck-yesterday", "Scheduled yesterday, not yet moved", 2, somedayOn(yesterday))
@@ -2529,7 +2529,7 @@ func TestScheduledRowNotYetMovedReportsAnytime(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
 	done := float64(now.Unix())
 
 	fx.Todo("stuck-today", "Scheduled today, not yet moved", 1, somedayOn(today))
@@ -2593,7 +2593,7 @@ func TestAnytimeKeepsToDosOfProjectNotYetMoved(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
 
 	fx.Project("proj-stuck", "Project scheduled today, not yet moved", 1, somedayOn(today))
 	fx.Project("proj-tomorrow", "Project scheduled tomorrow", 2, somedayOn(tomorrow))
@@ -2614,7 +2614,7 @@ func TestProjectPageOrdersNotYetMovedRowAsToday(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
 
 	fx.Project("proj", "Project", 1, anytime())
 	fx.Todo("sched-tomorrow", "Scheduled tomorrow", 1, somedayOn(tomorrow), inProject("proj"))
@@ -2635,8 +2635,8 @@ func TestInboxLeavesOutToDosTodayHolds(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
-	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
+	earlier := int64(model.ThingsDateFromTime(now).AddDays(-2))
 
 	fx.Todo("inbox-plain", "Inbox plain", 1, inbox())
 	fx.Todo("inbox-due-today", "Inbox due today", 2, inbox(), deadline(today))
@@ -2665,8 +2665,8 @@ func TestAnytimeListsInboxToDosTodayHolds(t *testing.T) {
 
 	now := testNow
 	today := int64(model.ThingsDateFromTime(now))
-	tomorrow := int64(model.ThingsDateFromTime(now.AddDate(0, 0, 1)))
-	earlier := int64(model.ThingsDateFromTime(now.AddDate(0, 0, -2)))
+	tomorrow := int64(model.ThingsDateFromTime(now).AddDays(1))
+	earlier := int64(model.ThingsDateFromTime(now).AddDays(-2))
 
 	fx.Todo("inbox-plain", "Inbox plain", 1, inbox())
 	fx.Todo("inbox-due-today", "Inbox due today", 2, inbox(), deadline(today))
@@ -2874,8 +2874,8 @@ func TestTodayOrdersByReferenceDateThenTodayIndex(t *testing.T) {
 	d, fx := newFixture(t)
 
 	today := int64(model.ThingsDateFromTime(testNow))
-	yesterday := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -1)))
-	earlier := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -3)))
+	yesterday := int64(model.ThingsDateFromTime(testNow).AddDays(-1))
+	earlier := int64(model.ThingsDateFromTime(testNow).AddDays(-3))
 	stop := model.TimeToUnix(testNow)
 	fx.Todo("old-first", "One", 1, anytimeOn(today), todayIndex(-900), todayIndexRef(earlier))
 	fx.Todo("new-second", "Two", 2, anytimeOn(today), todayIndex(-100), todayIndexRef(today))
@@ -2928,7 +2928,7 @@ func TestUpcomingIncludeCompleted(t *testing.T) {
 
 	stopToday := model.TimeToUnix(testNow)
 	stopYesterday := model.TimeToUnix(testNow.Add(-25 * time.Hour))
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 2)))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(2))
 
 	fx.Todo("open-later", "Open", 1, somedayOn(later))
 	fx.Todo("done-ahead", "Done ahead", 2, somedayOn(later), completed(stopToday))
