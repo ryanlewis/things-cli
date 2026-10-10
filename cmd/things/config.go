@@ -28,6 +28,7 @@ var helpVars = kong.Vars{
 	"add_deadline_help":  `Deadline: a YYYY-MM-DD date or an English phrase such as "next friday". ` + deadlineNoKeyword,
 	"edit_when_help":     "Schedule: " + whenValues + ", RFC3339, or empty to clear.",
 	"edit_deadline_help": `Deadline: a YYYY-MM-DD date, an English phrase such as "next friday", or empty to clear. ` + deadlineNoKeyword,
+	"fields_help":        fieldsHelp,
 }
 
 // parserOptions is the one place the kong parser is configured. main and the

@@ -23,10 +23,10 @@ import (
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
 // "not a project", "trashed", "stale list cache", "already closed",
-// "empty reference", "misfiled", "blank-title", "import refused", "import
-// partially applied", or "error" for a failure with no structure worth
-// naming. "blank-title" is spelt as the import reason for the same
-// refusal, so a caller matches one string for both.
+// "empty reference", "misfiled", "blank-title", "unknown field", "import
+// refused", "import partially applied", or "error" for a failure with no
+// structure worth naming. "blank-title" is spelt as the import reason for
+// the same refusal, so a caller matches one string for both.
 // Message is the same text the plain-text path prints, for a human reading
 // the JSON.
 type jsonErrorPayload struct {
@@ -57,6 +57,10 @@ type jsonErrorPayload struct {
 	// in Items: "too-many-items" for a payload over the size Things takes
 	// without asking.
 	Reason string `json:"reason,omitempty"`
+	// Unknown and Valid are given on an "unknown field" error: the --fields
+	// names the rows do not have, and every name they do, in record order.
+	Unknown []string `json:"unknown,omitempty"`
+	Valid   []string `json:"valid,omitempty"`
 }
 
 // jsonErrorItem is one item of a batch failure. An import acts on many items
@@ -497,8 +501,9 @@ type payloader interface {
 func errorPayload(err error) jsonErrorPayload {
 	payload := jsonErrorPayload{Error: "error", Message: err.Error()}
 
-	// internal/db knows nothing of the wire format, so its errors are
-	// mapped here rather than by a method of theirs.
+	// internal/db and internal/output know nothing of the error wire
+	// format, so their errors are mapped here rather than by a method of
+	// theirs.
 	var ambig *db.AmbiguousTaskError
 	if errors.As(err, &ambig) {
 		payload.Error = "ambiguous task"
@@ -516,6 +521,15 @@ func errorPayload(err error) jsonErrorPayload {
 		payload.Error = "not found"
 		payload.Kind = "task"
 		payload.Query = notFoundTask.Query
+		return payload
+	}
+
+	var unknownField *output.UnknownFieldError
+	if errors.As(err, &unknownField) {
+		payload.Error = "unknown field"
+		payload.Kind = unknownField.Kind
+		payload.Unknown = unknownField.Unknown
+		payload.Valid = unknownField.Valid
 		return payload
 	}
 
