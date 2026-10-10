@@ -649,7 +649,7 @@ warning: Things has no heading with id "abc123"; the to-do will stay where it is
 warning: Things has no heading with id "abc123"; it will ignore --heading-id
 warning: "Tools" has no heading "Later"; Things will move the to-do there without a heading
 warning: "Tools" has no heading "Later"; Things will leave the to-do where it is
-warning: --heading "Later" needs --list, as the to-do is not in a project; Things will ignore it and leave the to-do where it is
+warning: --heading "Later" needs --list or --list-id, as the to-do is not in a project; Things will ignore it and leave the to-do where it is
 ```
 
 When the move files the to-do somewhere new, `edit` notes the same things

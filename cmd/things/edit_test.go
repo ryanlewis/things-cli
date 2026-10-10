@@ -645,7 +645,7 @@ func TestEditWarnsOnUnresolvedMove(t *testing.T) {
 		{"caseTwinHeading", []string{"edit", "twin-todo", "--heading", "SETUP"}, "", false},
 		{"caseTwinListAndHeading", []string{"edit", "twin-todo", "--list", "Tools", "--heading", "SETUP"}, "", false},
 		{"headingOnlyUnknown", []string{"edit", "tool-1", "--heading", "Later"}, `"Tools" has no heading "Later"; Things will leave the to-do where it is`, true},
-		{"headingOnlyNoProject", []string{"edit", "one-1", "--heading", "Setup"}, `--heading "Setup" needs --list, as the to-do is not in a project; Things will ignore it and leave the to-do where it is`, true},
+		{"headingOnlyNoProject", []string{"edit", "one-1", "--heading", "Setup"}, `--heading "Setup" needs --list or --list-id, as the to-do is not in a project; Things will ignore it and leave the to-do where it is`, true},
 		{"headingID", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "head-1"}, "", false},
 		// Measured in Things 3: an empty heading alone clears the heading,
 		// and an empty list unfiles the to-do into Anytime. Both are sent

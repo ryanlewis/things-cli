@@ -147,7 +147,7 @@ func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bo
 	return moves
 }
 
-// checkAreaID warns when Things has no area with the uuid --area-id gives,
+// checkAreaID warns when Things finds no area with the uuid --area-id gives,
 // and reports whether the project may move. Checked in Things 3: an unknown
 // area-id leaves the project where it is.
 func (c *ProjectEditCmd) checkAreaID(d *Deps, database *db.DB, task *model.Task) bool {
