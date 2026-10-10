@@ -145,8 +145,7 @@ func importShapes(payload []any) (map[string]importShape, int) {
 				count++
 			}
 			if !ok {
-				shown, _ := json.Marshal(raw)
-				shapes[path] = importShape{items: []string{fmt.Sprintf("not an object: %s", shown)}}
+				shapes[path] = importShape{items: []string{fmt.Sprintf("not an object: %s", jsonText(raw))}}
 				continue
 			}
 			if s := checkImportItem(item, slot); !s.empty() {
@@ -184,10 +183,6 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 		s.items = append(s.items, name+": "+fmt.Sprintf(format, args...))
 		s.itemNames = append(s.itemNames, name)
 	}
-	shown := func(v any) string {
-		b, _ := json.Marshal(v)
-		return string(b)
-	}
 
 	create := true
 	switch op := item["operation"].(type) {
@@ -197,10 +192,10 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 		case "update":
 			create = false
 		default:
-			bad("operation", "%s is not create or update", shown(op))
+			bad("operation", "%s is not create or update", jsonText(op))
 		}
 	default:
-		bad("operation", "%s is not create or update", shown(op))
+		bad("operation", "%s is not create or update", jsonText(op))
 	}
 
 	itemType, _ := item["type"].(string)
@@ -210,9 +205,9 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 		if !create {
 			allowed = importItemTypeNames
 		}
-		bad("type", "%s is not %s", shown(item["type"]), strings.Join(allowed, " or "))
+		bad("type", "%s is not %s", jsonText(item["type"]), strings.Join(allowed, " or "))
 	case create && !slices.Contains(importSlotTypes[slot], itemType):
-		bad("type", "%s is not allowed %s, only %s", shown(itemType), importSlotNames[slot], strings.Join(importSlotTypes[slot], " or "))
+		bad("type", "%s is not allowed %s, only %s", jsonText(itemType), importSlotNames[slot], strings.Join(importSlotTypes[slot], " or "))
 	}
 
 	rawAttrs := item["attributes"]
@@ -224,7 +219,7 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 	case rawAttrs == nil:
 		return s
 	case !isObject:
-		s.types = append(s.types, "attributes: "+shown(rawAttrs))
+		s.types = append(s.types, "attributes: "+jsonText(rawAttrs))
 		s.typeNames = append(s.typeNames, "attributes")
 		return s
 	case !create:
@@ -241,7 +236,7 @@ func checkImportItem(item map[string]any, slot importSlot) importShape {
 		if raw == nil || hasKind(raw, a.kind) || (hasIgnored && a.name == ignored.name) {
 			continue
 		}
-		s.types = append(s.types, fmt.Sprintf("%s: %s", a.name, shown(raw)))
+		s.types = append(s.types, fmt.Sprintf("%s: %s", a.name, jsonText(raw)))
 		s.typeNames = append(s.typeNames, a.name)
 	}
 	for _, l := range importLengthLimits {
