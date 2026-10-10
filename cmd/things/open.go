@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 
 	"github.com/ryanlewis/things-cli/internal/model"
@@ -64,23 +65,16 @@ func (c *OpenCmd) Run(d *Deps) error {
 			return err
 		}
 		params.ID = uuid
-	case c.Project != "":
-		task, err := resolveTask(d, c.Project, database)
-		if err != nil {
-			return err
-		}
-		if err := refuseHiddenInTrash(c.Project, task); err != nil {
-			return err
-		}
-		params.ID = task.UUID
-	case things.IsBuiltinList(c.Ref):
+	case c.Project == "" && things.IsBuiltinList(c.Ref):
 		params.ID = c.Ref
 	default:
-		task, err := resolveTask(d, c.Ref, database)
+		// --project, else the positional ref, names an item.
+		ref := cmp.Or(c.Project, c.Ref)
+		task, err := resolveTask(d, ref, database)
 		if err != nil {
 			return err
 		}
-		if err := refuseHiddenInTrash(c.Ref, task); err != nil {
+		if err := refuseHiddenInTrash(ref, task); err != nil {
 			return err
 		}
 		params.ID = task.UUID
