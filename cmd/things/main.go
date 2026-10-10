@@ -109,16 +109,21 @@ func (d *Deps) dbIdentity() string {
 	if d.dbIdent != "" {
 		return d.dbIdent
 	}
-	path := d.DBPath
-	if path == "" {
-		p, err := db.FindDBPath()
-		if err != nil {
-			return ""
-		}
-		path = p
+	path, err := d.dbPath()
+	if err != nil {
+		return ""
 	}
 	d.dbIdent = resolvePath(path)
 	return d.dbIdent
+}
+
+// dbPath is the database this command reads: the --db path, or the
+// discovered one when --db is not given.
+func (d *Deps) dbPath() (string, error) {
+	if d.DBPath != "" {
+		return d.DBPath, nil
+	}
+	return db.FindDBPath()
 }
 
 // resolvePath makes path absolute and clean and follows its symlinks, so
@@ -197,13 +202,9 @@ func (d *Deps) Database() (*db.DB, error) {
 	if d.DB != nil {
 		return d.DB, nil
 	}
-	path := d.DBPath
-	if path == "" {
-		p, err := db.FindDBPath()
-		if err != nil {
-			return nil, err
-		}
-		path = p
+	path, err := d.dbPath()
+	if err != nil {
+		return nil, err
 	}
 	// SQLite creates a missing file rather than refusing to open it, so a path
 	// that is not there would otherwise surface as "no such table" much later.
