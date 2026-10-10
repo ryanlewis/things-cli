@@ -516,8 +516,15 @@ time, not the local time of 09:00 at +05:00. `--deadline` accepts a
 `YYYY-MM-DD` date or an English phrase such as `next friday`; the `--when`
 keywords, such as `today`, are rejected. A 12-hour time on its own is
 sent to Things as `HH:MM` (`6pm` as `18:00`, `9:30PM` as `21:30`), the
-form Things was measured with, and is read back like one; after an `@` it
-is sent as typed.
+form Things was measured with, and is read back like one. A date, `today`
+or `tomorrow` with a time after the `@` is sent as the measured
+`YYYY-MM-DD@HH:MM`: `today@6pm` goes as today's date at `18:00`,
+`tomorrow@9:30` as tomorrow's date at `09:30`, and `2026-10-12@9pm` as
+`2026-10-12@21:00`, and each is read back like a date and time. Today and
+tomorrow are the dates when the command runs, so `tomorrow@6pm` sent just
+before midnight is the next day, even if Things reads it after midnight.
+`evening@6pm` and anything else with an `@` are sent as typed and not
+checked.
 
 Things files the to-do by matching `--list` (or `--project`) against the
 titles of the projects and areas it shows, and `--heading` against the

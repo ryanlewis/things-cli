@@ -428,10 +428,14 @@ func runEdit[P interface {
 	// (coveredFields.unchanged).
 	cf := f.covered()
 	changed := uncovered || cf.set() && !cf.unchanged(task, foldTags(unknown), reads, now)
+	if f.When != nil {
+		sent := things.ResolveWhen(*f.When, now)
+		common.When = &sent
+	}
 	var when *whenCheck
 	if f.When != nil && changed {
 		whenOnly := !uncovered && f.onlyWhen()
-		when = &whenCheck{value: *f.When, phraseOnly: whenOnly && whenPhrase(*f.When)}
+		when = &whenCheck{value: *f.When, sentAs: *common.When, phraseOnly: whenOnly && whenPhrase(*f.When)}
 		if !s.Duplicate && !d.NoVerify {
 			if h := heldIn(task, now, reads.stored); h == heldUnmoved || h == heldCarried {
 				when.before = task

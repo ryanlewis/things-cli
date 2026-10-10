@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
@@ -27,11 +28,12 @@ type ProjectAddCmd struct {
 }
 
 func (c *ProjectAddCmd) Run(d *Deps) error {
+	when := things.ResolveWhen(c.When, clock.Now())
 	params := things.AddProjectParams{
 		AddCommon: things.AddCommon{
 			Title:    c.Title,
 			Notes:    c.Notes,
-			When:     c.When,
+			When:     when,
 			Deadline: c.Deadline,
 			Tags:     c.Tags,
 		},
@@ -55,7 +57,7 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 	if target.UUID != "" {
 		noteTarget(d, params.Area, "areas", target)
 	}
-	return applyAdd(d, model.TypeProject, c.Title, dest, c.When, func() error {
+	return applyAdd(d, model.TypeProject, c.Title, dest, c.When, when, func() error {
 		return things.AddProject(params)
 	})
 }
