@@ -135,3 +135,19 @@ func TestDoctorPlainReport(t *testing.T) {
 		t.Errorf("output = %q, want %q", stdout.String(), want)
 	}
 }
+
+// A file that is not an SQLite database opens lazily without complaint, so
+// doctor has to read the header to catch it.
+func TestDoctorJSONNotADatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "main.sqlite")
+	if err := os.WriteFile(path, []byte(strings.Repeat("not a database ", 20)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := runDoctor(t, &Deps{DBPath: path})
+	if !errors.Is(err, errReported) {
+		t.Fatalf("err = %v, want errReported", err)
+	}
+	if report.OK || report.Status != "error" {
+		t.Errorf("report = %+v, want a failed check", report)
+	}
+}
