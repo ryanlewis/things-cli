@@ -89,8 +89,8 @@ func (c *EditCmd) params(u things.UpdateCommon) things.UpdateParams {
 // checkOwn reports whether any of this command's own field flags may change
 // the task. None of them is in coveredFields; runEdit adds the shared ones.
 // Every field flag belongs either here or in commonEditFlags.covered, so a
-// new one cannot be missed by changesFields and still pass certainNoOp. A
-// move Things will drop (checkMove) does not count.
+// new one cannot be missed by runEdit's changed check and still pass
+// coveredFields.unchanged. A move Things will drop (checkMove) does not count.
 func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 	return c.checkMove(d, database, task) || c.checklistSet()
 }
@@ -408,15 +408,21 @@ func runEdit[P interface {
 	// One instant for the no-op check and the read-back's row check, so they
 	// judge the item on the same day.
 	now := clock.Now()
-	changed := f.changesFields(uncovered) && !f.certainNoOp(task, uncovered, foldTags(unknown), reads, now)
+	// changed says whether the edit sets any attribute besides the status
+	// that may differ from the item: any field flag outside coveredFields,
+	// or a covered one whose value the item does not provably have already
+	// (coveredFields.unchanged).
+	cf := f.covered()
+	changed := uncovered || cf.set() && !cf.unchanged(task, foldTags(unknown), reads, now)
 	var when *whenCheck
 	if f.When != nil && changed {
-		when = &whenCheck{value: *f.When, phraseOnly: !uncovered && f.onlyWhen() && whenPhrase(*f.When)}
+		whenOnly := !uncovered && f.onlyWhen()
+		when = &whenCheck{value: *f.When, phraseOnly: whenOnly && whenPhrase(*f.When)}
 		if !s.Duplicate && !d.NoVerify {
 			if h := heldIn(task, now, reads.stored); h == heldUnmoved || h == heldCarried {
 				when.before = task
 				when.carried = h == heldCarried
-				when.whenOnly = !uncovered && f.onlyWhen()
+				when.whenOnly = whenOnly
 			}
 		}
 	}
@@ -445,16 +451,6 @@ func createsTags(database *db.DB, flags TagFlags, tags, addTags *string) bool {
 	return err == nil && len(unknown) > 0
 }
 
-// certainNoOp reports whether every field flag set on the edit provably
-// leaves the item as it is, so there is no modification to wait for.
-// uncovered says whether any field flag outside coveredFields is set,
-// dropped holds the folded tag names Things will drop (foldTags), and
-// reads reads the item's reminder and stored start (whenUnchanged). now is
-// the instant --when is judged at.
-func (f *commonEditFlags) certainNoOp(task *model.Task, uncovered bool, dropped map[string]struct{}, reads whenReads, now time.Time) bool {
-	return !uncovered && f.covered().unchanged(task, dropped, reads, now)
-}
-
 // foldTags folds the names verifyTags says Things will drop, so the no-op
 // check can leave them out. --create-tags has made them by then, so none is
 // dropped; --strict-tags has already refused the edit. A failed lookup
@@ -466,12 +462,6 @@ func foldTags(unknown []string) map[string]struct{} {
 		dropped[db.FoldTag(t)] = struct{}{}
 	}
 	return dropped
-}
-
-// changesFields reports whether the edit sets any attribute besides the
-// status. uncovered says whether any field flag outside coveredFields is set.
-func (f *commonEditFlags) changesFields(uncovered bool) bool {
-	return f.covered().set() || uncovered
 }
 
 func (f *commonEditFlags) covered() coveredFields {
