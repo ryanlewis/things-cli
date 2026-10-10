@@ -1156,7 +1156,7 @@ func ValidView(name string) bool {
 // named, so the closed-parent fold does not apply.
 func closedProjectContents(includeCompleted bool) string {
 	status := openOrJustClosed(whereOpts{includeCompleted: includeCompleted, projectNamed: true}, false)
-	return "(" + parentClosedOrTrashed + " OR " + status + ") AND t.trashed = 0 AND " + todoOrProject
+	return "(" + parentClosedOrTrashed + " OR " + status + ") AND " + untrashedRows + " AND " + todoOrProject
 }
 
 // parentClosedOrTrashed is true for a row whose parent project has been closed
@@ -1779,7 +1779,7 @@ func (e *AmbiguousTaskError) Error() string {
 // search did not list one and the CLI's did, under the trashed project.
 func (d *DB) SearchTasks(query string) ([]model.Task, error) {
 	pattern := containsLike(query)
-	q := d.taskQuery() + " WHERE t.trashed = 0 AND " + untrashedParent + " AND " + notHeading + " AND (fold(t.title) LIKE ?" + escapeClause + " OR fold(t.notes) LIKE ?" + escapeClause + ") GROUP BY t.uuid " + indexOrderBy
+	q := d.taskQuery() + " WHERE " + untrashedRows + " AND " + untrashedParent + " AND " + notHeading + " AND (fold(t.title) LIKE ?" + escapeClause + " OR fold(t.notes) LIKE ?" + escapeClause + ") GROUP BY t.uuid " + indexOrderBy
 	return d.collectTasks(q, pattern, pattern)
 }
 
