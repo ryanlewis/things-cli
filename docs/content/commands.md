@@ -1166,6 +1166,37 @@ things completions zsh > ~/.things-completions.zsh   # then source it from ~/.zs
 
 Homebrew-cask installs wire these up automatically.
 
+## Doctor
+
+```sh
+things doctor
+things --json doctor
+```
+
+Checks that the Things database can be found and opened read-only. It
+reads no task data. Run it when another command says the database is
+missing or cannot be opened.
+
+The report gives:
+
+- `status`: `ok`, `not_found`, `permission_denied`, `multiple` (more than
+  one `ThingsData-*` folder holds a database) or `error`.
+- `source`: where the path came from, `automatic`, `flag` (`--db`) or
+  `config` (the `db` key).
+- `container`, `pattern` and `matches`: what automatic discovery looked
+  at. Left out when the path came from `--db` or the config file.
+- `database`: the path it opened, and `error`: why it failed.
+
+`permission_denied` means macOS refused access: the database may well be
+there. This happens when `things` runs under an app that has not been
+given access to other apps' data, such as some desktop agents. Giving
+that app Full Disk Access in System Settings › Privacy & Security, or
+running `things` from a terminal that has it, usually fixes it.
+
+The whole report goes to stdout either way. When `status` is not `ok`,
+`doctor` exits 1, so `things doctor && ...` works as expected. Under
+`--json` stdout holds the report only, never a second error object.
+
 ## Version
 
 ```sh

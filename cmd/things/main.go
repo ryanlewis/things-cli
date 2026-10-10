@@ -55,6 +55,7 @@ type CLI struct {
 	Import   ImportCmd   `cmd:"" help:"Batch create/update via the Things JSON URL scheme. Reads JSON from stdin or --file."`
 	Skill    SkillCmd    `cmd:"" help:"Manage the bundled agent skill (Claude Code, etc.)."`
 	Conf     ConfigCmd   `cmd:"" name:"config" help:"Inspect and create the config file that supplies flag defaults."`
+	Doctor   DoctorCmd   `cmd:"" help:"Check the Things database can be found and opened, without reading task data."`
 	Ver      VersionCmd  `cmd:"" name:"version" help:"Print version and exit."`
 	Update   UpdateCmd   `cmd:"" help:"Update things to the latest release, the same way it was installed."`
 
@@ -206,6 +207,12 @@ func (d *Deps) Database() (*db.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	return d.openPath(path)
+}
+
+// openPath opens the database at path and keeps the handle, reporting a
+// failure against the config file when that is where the path came from.
+func (d *Deps) openPath(path string) (*db.DB, error) {
 	// SQLite creates a missing file rather than refusing to open it, so a path
 	// that is not there would otherwise surface as "no such table" much later.
 	// The check lives here rather than on the --db flag so that a stale path in
@@ -220,9 +227,9 @@ func (d *Deps) Database() (*db.DB, error) {
 	}
 	if err != nil {
 		if cfg := d.config(); cfg.SetsDB(path) {
-			return nil, &config.Error{Path: cfg.Path, Err: fmt.Errorf("db: %s", err)}
+			return nil, &config.Error{Path: cfg.Path, Err: fmt.Errorf("db: %w", err)}
 		}
-		return nil, fmt.Errorf("cannot open the Things database: %s", err)
+		return nil, fmt.Errorf("cannot open the Things database: %w", err)
 	}
 	database, err := db.Open(path)
 	if err != nil {
@@ -303,6 +310,9 @@ func main() {
 	defer deps.Close()
 
 	if err := ctx.Run(deps); err != nil {
+		if errors.Is(err, errReported) {
+			os.Exit(1)
+		}
 		renderError(os.Stdout, os.Stderr, cli.JSON, err)
 		var runCfgErr *config.Error
 		if errors.As(err, &runCfgErr) {
