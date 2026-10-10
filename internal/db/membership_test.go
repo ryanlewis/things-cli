@@ -23,8 +23,8 @@ func listSet(t *testing.T, d *DB, view string, opts TaskFilter) []string {
 func TestDeadlineProjectInTodayAndUpcoming(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(testNow))
-	earlier := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, -2)))
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
+	earlier := int64(model.ThingsDateFromTime(testNow).AddDays(-2))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(3))
 
 	fx.Project("p-due-today", "Due today", 1, anytime(), deadline(today))
 	fx.Project("p-overdue", "Overdue", 2, anytime(), deadline(earlier))
@@ -54,7 +54,7 @@ func TestDeadlineProjectInTodayAndUpcoming(t *testing.T) {
 func TestSomedayDeadlineInUpcomingAndToday(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(testNow))
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(3))
 
 	fx.Todo("t-someday-later", "Someday to-do due later", 1, someday(), deadline(later))
 	fx.Project("p-someday-later", "Someday project due later", 2, someday(), deadline(later))
@@ -199,7 +199,7 @@ func TestSearchSkipsTrashedProjectChildren(t *testing.T) {
 // untrashedParent. Pinned here so search and the lists cannot drift apart.
 func TestListViewsSkipTrashedProjectChildren(t *testing.T) {
 	d, fx := newFixture(t)
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(3))
 
 	fx.Area("area-work", "Work", 1)
 	fx.Tag("tg-urgent", "urgent", 1)

@@ -216,9 +216,11 @@ func scanTask(row rowScanner) (model.Task, error) {
 // project, never rows in a list, so they stay out.
 const todoOrProject = "t.type IN (0, 1)"
 
-// closedTodayUnlogged is the app's rule for a closed item Things has not yet filed
-// into the Logbook. Two conditions hold at once, and measuring against the app
-// on 10 Sep 2026 is what established the pair (issue #230).
+// closedUnlogged is the app's rule for a closed item Things has not yet filed
+// into the Logbook, for each choice of its "Move completed items to Logbook"
+// setting (see the end of this comment). Under "daily", two conditions hold
+// at once, and measuring against the app on 10 Sep 2026 is what established
+// the pair (issue #230).
 //
 // The calendar day is the boundary Things actually keeps: the app's Today held
 // six closed items, all closed that day, while its Logbook held forty items
@@ -246,9 +248,9 @@ const todoOrProject = "t.type IN (0, 1)"
 // Now", whatever day it closed. Any other value, or no setting row, keeps the
 // daily rule. The other two were read from the app's preferences, not measured
 // in the live app, as that would mean changing the user's setting.
-var closedTodayUnlogged = closedUnloggedOf("t")
+var closedUnlogged = closedUnloggedOf("t")
 
-// closedUnloggedOf is closedTodayUnlogged asked of the TMTask row aliased
+// closedUnloggedOf is closedUnlogged asked of the TMTask row aliased
 // alias.
 func closedUnloggedOf(alias string) string {
 	stopDate := "COALESCE(" + alias + ".stopDate, 0)"
@@ -336,7 +338,7 @@ const todayDate = "COALESCE(t.startDate, " + thingsToday + ")"
 
 // thingsToday is today's local date in the ThingsDate encoding
 // (year<<16 | month<<12 | day<<7), so it compares directly with startDate and
-// deadline. It comes from today_clock, as closedTodayUnlogged's day does.
+// deadline. It comes from today_clock, as closedUnlogged's daily rule does.
 const thingsToday = `(SELECT day FROM ` + todayClock + `)`
 
 // heldInPlace is the set the Logbook withholds: every closed row Things has
@@ -356,7 +358,7 @@ const thingsToday = `(SELECT day FROM ` + todayClock + `)`
 // withholding such a row would take it out of every list. The Logbook keeps
 // them (includesTemplates) at once. Both halves of notATemplate are "IS NULL"
 // tests, which are never NULL themselves.
-var heldInPlace = "(" + closedTodayUnlogged + " AND " + notATemplate + ")"
+var heldInPlace = "(" + closedUnlogged + " AND " + notATemplate + ")"
 
 // notATemplate excludes the rows those views never carry: the template
 // row itself, and a to-do inside a repeating project template, which carries
@@ -382,7 +384,7 @@ const parentClosed = "COALESCE(p.status, 0) IN (2, 3)"
 // table gives.
 const parentNotClosed = "NOT (" + parentClosed + ")"
 
-// parentCloseUnlogged is closedTodayUnlogged asked of the parent project.
+// parentCloseUnlogged is closedUnlogged asked of the parent project.
 var parentCloseUnlogged = closedUnloggedOf("p")
 
 // parentNotClosedOrUnlogged is the fold the views that show unlogged rows apply:
@@ -444,7 +446,7 @@ func openOrJustClosed(o whereOpts, foldsUnlogged bool) string {
 // projects` and AddTarget all take. fold, when not empty, is a further test
 // on the closed rows alone.
 func openOrUnlogged(fold string) string {
-	closed := closedRows + " AND " + closedTodayUnlogged
+	closed := closedRows + " AND " + closedUnlogged
 	if fold != "" {
 		closed += " AND " + fold
 	}

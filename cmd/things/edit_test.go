@@ -331,7 +331,7 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 	deadline := int(model.ThingsDateFromTime(time.Date(2026, 10, 15, 0, 0, 0, 0, time.Local)))
 	day := func(offset int) string { return now.AddDate(0, 0, offset).Format("2006-01-02") }
 	dayInt := func(offset int) string {
-		return strconv.Itoa(int(model.ThingsDateFromTime(now.AddDate(0, 0, offset))))
+		return strconv.Itoa(int(model.ThingsDateFromTime(now).AddDays(offset)))
 	}
 
 	cases := []struct {
@@ -572,6 +572,9 @@ func TestEditReadsTagListOnce(t *testing.T) {
 		if _, err := sqlDB.Exec(stmt); err != nil {
 			t.Fatalf("apply %q: %v", stmt, err)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read schema: %v", err)
 	}
 	_ = rows.Close()
 	fx := dbtest.NewFixture(t, sqlDB)

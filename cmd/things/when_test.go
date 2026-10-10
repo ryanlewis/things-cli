@@ -68,7 +68,7 @@ func TestPlaceWhen(t *testing.T) {
 func TestWhenUnchangedTime(t *testing.T) {
 	now := time.Date(2026, 10, 7, 15, 0, 0, 0, time.Local)
 	today := model.ThingsDateFromTime(now)
-	tomorrow := model.ThingsDateFromTime(now.AddDate(0, 0, 1))
+	tomorrow := model.ThingsDateFromTime(now).AddDays(1)
 	reminder := func(min int, err error) func() (int, error) { return func() (int, error) { return min, err } }
 	cases := []struct {
 		name     string
@@ -298,7 +298,7 @@ func TestPlaceWhenNearOffsetChange(t *testing.T) {
 func TestEditUnmovedRowAcceptsEitherOutcome(t *testing.T) {
 	now := testNow
 	today := int(model.ThingsDateFromTime(now))
-	old := int(model.ThingsDateFromTime(now.AddDate(0, 0, -3)))
+	old := int(model.ThingsDateFromTime(now).AddDays(-3))
 	past := now.AddDate(0, 0, -1).Format("2006-01-02")
 	type row struct {
 		typ      model.TaskType
@@ -376,7 +376,7 @@ func TestEditUnmovedRowAcceptsEitherOutcome(t *testing.T) {
 func TestEditUnmovedRowWithOtherFieldsNeedsAChange(t *testing.T) {
 	fastVerify(t)
 	database, sqlDB := seedWritable(t)
-	old := int(model.ThingsDateFromTime(testNow.AddDate(0, 0, -3)))
+	old := int(model.ThingsDateFromTime(testNow).AddDays(-3))
 	if _, err := sqlDB.Exec(`UPDATE TMTask SET start = 2, startDate = ?, startBucket = 0 WHERE uuid = 'one-1'`, old); err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +399,7 @@ func TestEditUnmovedRowWithOtherFieldsNeedsAChange(t *testing.T) {
 // the dropping stub fails it unless the edit skips the read-back wait.
 func TestEditCarriedOverRow(t *testing.T) {
 	today := int(model.ThingsDateFromTime(testNow))
-	yesterday := int(model.ThingsDateFromTime(testNow.AddDate(0, 0, -1)))
+	yesterday := int(model.ThingsDateFromTime(testNow).AddDays(-1))
 	todayDate := testNow.Format("2006-01-02")
 	const reminder = 1207959552
 	seed := func(t *testing.T, sqlDB *sql.DB, start, date, bucket int, reminder any) {
@@ -614,8 +614,8 @@ func TestEditCarriedOverRow(t *testing.T) {
 // part of the day, only for a place that is today.
 func TestWhenPlaceHoldsCarriedOver(t *testing.T) {
 	today := model.ThingsDateFromTime(testNow)
-	yesterday := model.ThingsDateFromTime(testNow.AddDate(0, 0, -1))
-	tomorrow := model.ThingsDateFromTime(testNow.AddDate(0, 0, 1))
+	yesterday := model.ThingsDateFromTime(testNow).AddDays(-1)
+	tomorrow := model.ThingsDateFromTime(testNow).AddDays(1)
 	for _, tc := range []struct {
 		name   string
 		place  whenPlace
@@ -653,7 +653,7 @@ func TestWhenPlaceHoldsCarriedOver(t *testing.T) {
 // certain no-op: --when today on a to-do in the day part with no reminder.
 // The rest are sent and read back.
 func TestWhenUnchangedCarriedOver(t *testing.T) {
-	yesterday := model.ThingsDateFromTime(testNow.AddDate(0, 0, -1))
+	yesterday := model.ThingsDateFromTime(testNow).AddDays(-1)
 	noReminder := func() (int, error) { return reminderNone, nil }
 	at := func(min int) func() (int, error) { return func() (int, error) { return min, nil } }
 	later := testNow.Add(2 * time.Hour)

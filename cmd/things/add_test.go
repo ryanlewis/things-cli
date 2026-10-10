@@ -1124,7 +1124,7 @@ func TestAddInvalidRefusedBeforeTagsCreated(t *testing.T) {
 // Things understood gives the item a date, which the read-back cannot
 // check, so the add is reported not confirmed (whenPlaced).
 func TestAddWhenPhraseIgnored(t *testing.T) {
-	dated := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(time.Now().AddDate(0, 0, 3))))
+	dated := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(time.Now()).AddDays(3)))
 	cases := []struct {
 		name  string
 		extra string

@@ -35,8 +35,8 @@ func TestTodayListsEveningRowsLast(t *testing.T) {
 func TestTodayOrdersProjectGroupsBySchedule(t *testing.T) {
 	d, fx := newFixture(t)
 	today := int64(model.ThingsDateFromTime(testNow))
-	soon := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 6)))
+	soon := int64(model.ThingsDateFromTime(testNow).AddDays(3))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(6))
 
 	fx.Project("p-someday-b", "Someday B", 0, someday())
 	fx.Project("p-later", "Later", 0, somedayOn(later))
@@ -103,8 +103,8 @@ func TestSomedayListsProjectRowsFirst(t *testing.T) {
 // CLI keeps them after the loose ones, the order Anytime uses.
 func TestAreaListingOrdersProjectsThenLooseThenChildren(t *testing.T) {
 	d, fx := newFixture(t)
-	soon := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 3)))
-	later := int64(model.ThingsDateFromTime(testNow.AddDate(0, 0, 6)))
+	soon := int64(model.ThingsDateFromTime(testNow).AddDays(3))
+	later := int64(model.ThingsDateFromTime(testNow).AddDays(6))
 	fx.Area("ar", "Personal", -3070)
 
 	fx.Project("p1", "P1", -4767, anytime(), inArea("ar"))

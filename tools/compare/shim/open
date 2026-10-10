@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "open $*" >> "$SHIMLOG"
+exit 0
