@@ -262,12 +262,12 @@ nothing on success. Their errors are still JSON.
   for that deadline. In v0.7.0 and earlier this field was the
   integer `0`, `1` or `2`, so a filter matching on `.start==2` has to
   become `.start=="someday"`. `startBucket` beside it
-  is still an integer — `1` is the app's This Evening section, `0` is
+  (in `show`, and in a listing under `--fields all`) is still an integer — `1` is the app's This Evening section, `0` is
   everything else. `today` lists the evening items after all the others,
   as the app does.
 - **Projects carry scheduling too.** `things projects` reports `start`,
-  `startBucket`, `startDate` and `deadline` under the same names and
-  encodings a task uses, so a scheduled project reads the same way
+  `startDate` and `deadline` (and `startBucket` under `--fields all`)
+  under the same names and encodings a task uses, so a scheduled project reads the same way
   without a per-project `show`. `startDate` and `deadline` are omitted
   when unset.
 - **Projects carry their progress too.** `things projects` reports
