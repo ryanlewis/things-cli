@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 
 	"github.com/ryanlewis/things-cli/internal/model"
 )
@@ -17,21 +16,13 @@ func (d *DB) GetChecklistItems(taskUUID string) ([]model.ChecklistItem, error) {
 		-- would otherwise come back in an order SQLite does not define.
 		ORDER BY "index" ASC, uuid ASC
 	`
-	rows, err := d.query(query, taskUUID)
-	if err != nil {
-		return nil, fmt.Errorf("querying checklist items: %w", err)
-	}
-	defer rows.Close()
+	return queryAll(d, "checklist item", scanChecklistItem, query, taskUUID)
+}
 
-	var items []model.ChecklistItem
-	for rows.Next() {
-		var item model.ChecklistItem
-		var stopDate sql.NullFloat64
-		if err := rows.Scan(&item.UUID, &item.Title, &item.Status, &stopDate, &item.Index); err != nil {
-			return nil, fmt.Errorf("scanning checklist item: %w", err)
-		}
-		item.StopDate = unixTime(stopDate)
-		items = append(items, item)
-	}
-	return items, rows.Err()
+func scanChecklistItem(row rowScanner) (model.ChecklistItem, error) {
+	var item model.ChecklistItem
+	var stopDate sql.NullFloat64
+	err := row.Scan(&item.UUID, &item.Title, &item.Status, &stopDate, &item.Index)
+	item.StopDate = unixTime(stopDate)
+	return item, err
 }
