@@ -236,25 +236,73 @@ type importRefusalItem struct {
 	// payload's own spelling of a task is "to-do", the format's word, not the
 	// CLI's.
 	Kind string
-	// Blocked is every attribute refused on the item: the ones Things does
-	// not allow on a repeating item, then the dates it rejects, then the
-	// when and deadline it would misread, then the dates in the future, then
-	// the attributes of the wrong JSON kind, then the type, operation or
-	// attributes that make it an item Things does not take, then the
-	// attributes Things ignores on it, then the keys given twice, then the
-	// title or notes that are too long, then the title when it is blank.
+	// Blocked is every attribute refused on the item, in the order of
+	// refusalKinds.
 	Blocked []string
 
-	restricted []string // the attributes a repeating item does not allow
-	dates      []string // each date Things rejects, as `name: value`
-	schedule   []string // each when or deadline Things would misread, as `name: value (why)`
-	future     []string // each date in the future, as `name: value (instant)`
-	types      []string // each attribute of the wrong JSON kind, as `name: value`
-	shape      []string // each way it is not an item Things takes, as `name: why`
-	ignored    []string // each attribute Things ignores on it, as `name: why`
-	dups       []string // each key the item gives twice
-	long       []string // each title or notes too long, as `name: N characters, over M`
-	blank      bool     // a to-do or project created with a blank title
+	// lines is what is wrong with the item, by kind: for kindRepeating the
+	// attributes a repeating item does not allow, and for every other kind
+	// but kindBlank a line per problem, such as `name: value`.
+	lines [numRefusalKinds][]string
+	blank bool // a to-do or project created with a blank title
+}
+
+// refusalKind is one reason an item is refused. The order is the order
+// Error() gives its paragraphs and reason() its words.
+type refusalKind int
+
+const (
+	kindRepeating refusalKind = iota // an attribute a repeating item does not allow
+	kindDate                         // a date Things rejects, as `name: value`
+	kindSchedule                     // a when or deadline Things would misread, as `name: value (why)`
+	kindFuture                       // a date in the future, as `name: value (instant)`
+	kindType                         // an attribute of the wrong JSON kind, as `name: value`
+	kindShape                        // a way it is not an item Things takes, as `name: why`
+	kindIgnored                      // an attribute Things ignores on it, as `name: why`
+	kindDup                          // a key the item gives twice
+	kindLong                         // a title or notes too long, as `name: N characters, over M`
+	kindBlank                        // a to-do or project created with a blank title
+	numRefusalKinds
+)
+
+// refusalKinds gives each kind its word in the --json reason and the
+// paragraph of the message that lists the items. The repeating paragraph
+// counts the items, so Error() writes it.
+var refusalKinds = [numRefusalKinds]struct{ reason, header string }{
+	kindRepeating: {"repeating", ""},
+	kindDate:      {"invalid-date", "Things rejects the whole payload over a creation-date or completion-date that is not a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00"},
+	kindSchedule:  {"invalid-date", "Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A misspelt keyword, or a keyword as a deadline, is refused. A when or deadline that starts with a digit must be a date as YYYY-MM-DD, and a deadline has no time. A when with an @ must have today, tomorrow, evening or a YYYY-MM-DD date before it and a time of day such as 18:00 or 6pm after it"},
+	kindFuture:    {"future-date", "Things saves a creation-date or completion-date in the future as now, so the item would not get the date the payload gives. Give a date in the past, or leave the attribute out"},
+	kindType:      {"invalid-type", "Things rejects the whole payload over an attribute of the wrong JSON type. title, notes, when, deadline, list, list-id, heading, heading-id, area and area-id must be strings, tags an array of strings, completed and canceled true or false, items and checklist-items arrays (each may be null), and attributes an object"},
+	kindShape:     {"invalid-item", "Things rejects the whole payload over an item it does not take: one that is not an object, has no attributes, or whose type or operation it does not know or does not allow there, written exactly (to-do or project at the top level, to-do or heading in a project's items, checklist-item in a to-do's checklist-items; operation create or update)"},
+	kindIgnored:   {"invalid-item", "Things ignores these attributes on this type of item and creates it without them, which the payload almost never means"},
+	kindDup:       {"duplicate-key", "These items give an attribute twice. Things keeps the first value and the CLI would check the last, so give each attribute once"},
+	kindLong:      {"too-long", fmt.Sprintf("Things cuts a title to %d characters, and notes are held to the %d characters add allows, so these would not be saved as given", things.MaxStringLen, things.MaxNotesLen)},
+	kindBlank:     {"blank-title", "Things creates a to-do or project with no title, or only whitespace, as an untitled item, so these are refused; give each a title"},
+}
+
+// has reports whether the item is refused for kind.
+func (it importRefusalItem) has(kind refusalKind) bool {
+	if kind == kindBlank {
+		return it.blank
+	}
+	return len(it.lines[kind]) > 0
+}
+
+// line is the line of the message that names the item under kind.
+func (it importRefusalItem) line(kind refusalKind) string {
+	switch kind {
+	case kindRepeating:
+		return fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
+			it.Path, it.ID, it.Title, it.Kind, strings.Join(it.lines[kind], ", "))
+	case kindBlank:
+		return "  " + it.Path
+	}
+	id := ""
+	if it.ID != "" {
+		id = " (id " + it.ID + ")"
+	}
+	return fmt.Sprintf("  %s%s %s", it.Path, id, strings.Join(it.lines[kind], ", "))
 }
 
 // reason is why the item is refused: "repeating", "invalid-date",
@@ -262,29 +310,10 @@ type importRefusalItem struct {
 // "too-long", "blank-title", or several of them, space-separated.
 func (it importRefusalItem) reason() string {
 	var reasons []string
-	if len(it.restricted) > 0 {
-		reasons = append(reasons, "repeating")
-	}
-	if len(it.dates) > 0 || len(it.schedule) > 0 {
-		reasons = append(reasons, "invalid-date")
-	}
-	if len(it.future) > 0 {
-		reasons = append(reasons, "future-date")
-	}
-	if len(it.types) > 0 {
-		reasons = append(reasons, "invalid-type")
-	}
-	if len(it.shape) > 0 || len(it.ignored) > 0 {
-		reasons = append(reasons, "invalid-item")
-	}
-	if len(it.dups) > 0 {
-		reasons = append(reasons, "duplicate-key")
-	}
-	if len(it.long) > 0 {
-		reasons = append(reasons, "too-long")
-	}
-	if it.blank {
-		reasons = append(reasons, "blank-title")
+	for kind, k := range refusalKinds {
+		if it.has(refusalKind(kind)) && !slices.Contains(reasons, k.reason) {
+			reasons = append(reasons, k.reason)
+		}
 	}
 	return strings.Join(reasons, " ")
 }
@@ -318,36 +347,13 @@ func uniqueInOrder(names []string) []string {
 	return out
 }
 
-// appendItemLine adds the line naming an item at path, with id, and what is
-// wrong with it, to lines, or returns lines as they are when nothing is.
-func appendItemLine(lines []string, path, id string, what []string) []string {
-	if len(what) == 0 {
-		return lines
-	}
-	return append(lines, fmt.Sprintf("  %s%s %s", path, id, strings.Join(what, ", ")))
-}
-
 func (e *importRefusalError) Error() string {
-	var repeating, dates, schedule, future, types, shapes, ignored, dups, long, blanks []string
+	var lines [numRefusalKinds][]string
 	for _, it := range e.items {
-		id := ""
-		if it.ID != "" {
-			id = " (id " + it.ID + ")"
-		}
-		if len(it.restricted) > 0 {
-			repeating = append(repeating, fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
-				it.Path, it.ID, it.Title, it.Kind, strings.Join(it.restricted, ", ")))
-		}
-		dates = appendItemLine(dates, it.Path, id, it.dates)
-		schedule = appendItemLine(schedule, it.Path, id, it.schedule)
-		future = appendItemLine(future, it.Path, id, it.future)
-		types = appendItemLine(types, it.Path, id, it.types)
-		shapes = appendItemLine(shapes, it.Path, id, it.shape)
-		ignored = appendItemLine(ignored, it.Path, id, it.ignored)
-		dups = appendItemLine(dups, it.Path, id, it.dups)
-		long = appendItemLine(long, it.Path, id, it.long)
-		if it.blank {
-			blanks = append(blanks, "  "+it.Path)
+		for kind := range lines {
+			if it.has(refusalKind(kind)) {
+				lines[kind] = append(lines[kind], it.line(refusalKind(kind)))
+			}
 		}
 	}
 	var parts []string
@@ -355,45 +361,16 @@ func (e *importRefusalError) Error() string {
 		parts = append(parts, fmt.Sprintf("The payload creates %d items (update items and checklist items not counted). Above %d, Things stops to ask \"Is this what you intended?\" and creates nothing until someone answers, so the import cannot be read back. Split it into imports of at most %d items each.",
 			e.size, maxImportItems, maxImportItems))
 	}
-	if len(repeating) > 0 {
-		parts = append(parts, fmt.Sprintf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s):\n%s",
-			len(repeating), e.total, repeatingDocsURL, strings.Join(repeating, "\n")))
-	}
-	if len(dates) > 0 {
-		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over a creation-date or completion-date that is not a date and time with seconds and a UTC offset, such as 2026-10-05T10:30:00Z or 2026-10-05T10:30:00+02:00:\n%s",
-			strings.Join(dates, "\n")))
-	}
-	if len(schedule) > 0 {
-		parts = append(parts, fmt.Sprintf("Things saves a when or deadline it cannot read as something else, with no warning (a when of 2026-13-01 or 18:00 lands in Today, a deadline of 2026-13-01 on 1 Jan 2026). A misspelt keyword, or a keyword as a deadline, is refused. A when or deadline that starts with a digit must be a date as YYYY-MM-DD, and a deadline has no time. A when with an @ must have today, tomorrow, evening or a YYYY-MM-DD date before it and a time of day such as 18:00 or 6pm after it:\n%s",
-			strings.Join(schedule, "\n")))
-	}
-	if len(future) > 0 {
-		parts = append(parts, fmt.Sprintf("Things saves a creation-date or completion-date in the future as now, so the item would not get the date the payload gives. Give a date in the past, or leave the attribute out:\n%s",
-			strings.Join(future, "\n")))
-	}
-	if len(types) > 0 {
-		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over an attribute of the wrong JSON type. title, notes, when, deadline, list, list-id, heading, heading-id, area and area-id must be strings, tags an array of strings, completed and canceled true or false, items and checklist-items arrays (each may be null), and attributes an object:\n%s",
-			strings.Join(types, "\n")))
-	}
-	if len(shapes) > 0 {
-		parts = append(parts, fmt.Sprintf("Things rejects the whole payload over an item it does not take: one that is not an object, has no attributes, or whose type or operation it does not know or does not allow there, written exactly (to-do or project at the top level, to-do or heading in a project's items, checklist-item in a to-do's checklist-items; operation create or update):\n%s",
-			strings.Join(shapes, "\n")))
-	}
-	if len(ignored) > 0 {
-		parts = append(parts, fmt.Sprintf("Things ignores these attributes on this type of item and creates it without them, which the payload almost never means:\n%s",
-			strings.Join(ignored, "\n")))
-	}
-	if len(dups) > 0 {
-		parts = append(parts, fmt.Sprintf("These items give an attribute twice. Things keeps the first value and the CLI would check the last, so give each attribute once:\n%s",
-			strings.Join(dups, "\n")))
-	}
-	if len(long) > 0 {
-		parts = append(parts, fmt.Sprintf("Things cuts a title to %d characters, and notes are held to the %d characters add allows, so these would not be saved as given:\n%s",
-			things.MaxStringLen, things.MaxNotesLen, strings.Join(long, "\n")))
-	}
-	if len(blanks) > 0 {
-		parts = append(parts, fmt.Sprintf("Things creates a to-do or project with no title, or only whitespace, as an untitled item, so these are refused; give each a title:\n%s",
-			strings.Join(blanks, "\n")))
+	for kind, k := range refusalKinds {
+		if len(lines[kind]) == 0 {
+			continue
+		}
+		header := k.header
+		if refusalKind(kind) == kindRepeating {
+			header = fmt.Sprintf("%d of %d update items change attributes Things does not allow on repeating items, and drops the request silently (%s)",
+				len(lines[kind]), e.total, repeatingDocsURL)
+		}
+		parts = append(parts, header+":\n"+strings.Join(lines[kind], "\n"))
 	}
 	parts = append(parts, "Nothing was sent to Things — fix these and run the import again, or make the changes in the Things app.")
 	return strings.Join(parts, "\n")
@@ -450,9 +427,9 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 		if len(blocked) == 0 || !task.Repeating {
 			continue
 		}
-		repeating[u.path] = importRefusalItem{
-			Path: u.path, ID: u.id, Title: task.Title, Kind: task.Type.String(), Blocked: blocked, restricted: blocked,
-		}
+		it := importRefusalItem{Path: u.path, ID: u.id, Title: task.Title, Kind: task.Type.String(), Blocked: blocked}
+		it.lines[kindRepeating] = blocked
+		repeating[u.path] = it
 	}
 	shapes, size := importShapes(payload)
 	now := clock.Now()
@@ -462,13 +439,23 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 		shape := shapes[path]
 		dupKeys := dups[path]
 		v, _ := raw.(map[string]any)
-		var dates, schedule, future, types problems
+		var found [numRefusalKinds]problems
 		if v != nil {
-			dates, future = importDates(v, now)
-			schedule = badImportSchedule(v)
-			types = badImportTypes(v)
+			found[kindDate], found[kindFuture] = importDates(v, now)
+			found[kindSchedule] = badImportSchedule(v)
+			found[kindType] = badImportTypes(v)
 		}
-		if len(dates.lines) > 0 || len(schedule.lines) > 0 || len(future.lines) > 0 || len(types.lines) > 0 || len(dupKeys) > 0 || !shape.empty() {
+		found[kindType].lines = append(found[kindType].lines, shape.types.lines...)
+		found[kindType].names = append(found[kindType].names, shape.types.names...)
+		found[kindShape], found[kindIgnored], found[kindLong] = shape.items, shape.ignored, shape.long
+		for _, key := range dupKeys {
+			found[kindDup].add(key, key+": given twice")
+		}
+		if shape.blank {
+			// The message names only the path; see importRefusalItem.line.
+			found[kindBlank].add("title", "")
+		}
+		if slices.ContainsFunc(found[:], func(p problems) bool { return len(p.lines) > 0 }) {
 			if !refused {
 				// Any type but project is reported as a task.
 				typ, _ := payloadType(v)
@@ -485,19 +472,14 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 					}
 				}
 			}
-			it.Blocked = slices.Concat(it.Blocked, dates.names, schedule.names, future.names, types.names, shape.types.names, shape.items.names, shape.ignored.names, dupKeys, shape.long.names)
-			if shape.blank {
-				it.Blocked = append(it.Blocked, "title")
+			for kind := kindRepeating + 1; kind < numRefusalKinds; kind++ {
+				it.Blocked = append(it.Blocked, found[kind].names...)
+				it.lines[kind] = found[kind].lines
 			}
+			it.blank = shape.blank
 			// An attribute refused for two reasons, such as a title given
 			// twice and too long, is named once.
 			it.Blocked = uniqueInOrder(it.Blocked)
-			it.dates, it.schedule, it.future, it.types = dates.lines, schedule.lines, future.lines, append(types.lines, shape.types.lines...)
-			it.shape, it.ignored, it.blank = shape.items.lines, shape.ignored.lines, shape.blank
-			it.long = shape.long.lines
-			for _, key := range dupKeys {
-				it.dups = append(it.dups, fmt.Sprintf("%s: given twice", key))
-			}
 			refused = true
 		}
 		if refused {
