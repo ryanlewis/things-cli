@@ -1129,7 +1129,7 @@ things open today              # built-in views
 things open inbox
 things open <uuid>             # specific task or project
 things open "Weekly Review"    # task or project by title
-things open --project "Launch"     # a project only: a to-do it names is refused ("not a project")
+things open --project "Launch"     # a project by title, UUID or index; titles match projects only, and a to-do is refused ("not a project")
 things open --area "Side projects"   # an area (bare titles never resolve areas; names match case-insensitively)
 things open --tag urgent             # a tag (names match case-insensitively)
 ```

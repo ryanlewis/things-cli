@@ -1010,6 +1010,9 @@ var projectPageOrder = `CASE WHEN t.heading IS NULL THEN 0 ELSE 1 END, COALESCE(
 // SQL in place of `2` (issue #224).
 var notHeading = fmt.Sprintf("COALESCE(t.type, 0) != %d", int(model.TypeHeading))
 
+// projectRows keeps the title lookups to projects, for GetProject.
+var projectRows = fmt.Sprintf("t.type = %d", int(model.TypeProject))
+
 // uuidTiebreak is the last key of every ordering in this package. It makes the
 // order total: rows that tie on every other key still come back in one fixed
 // sequence. Numbered listings are the reason — cacheTaskUUIDs numbers rows by
@@ -1519,7 +1522,24 @@ func (d *DB) GetTasksByUUIDs(uuids []string) (map[string]*model.Task, error) {
 // `complete "zz base"` with "zz base" completed must not close the open
 // "zz base extra" instead.
 func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
-	t, err := d.GetTaskExact(uuidOrTitle)
+	return d.getTask(uuidOrTitle, notHeading)
+}
+
+// GetProject is GetTask with only projects matched by title, so a to-do
+// cannot shadow a project or make it ambiguous. A uuid still resolves any
+// item, and the caller refuses one that is not a project.
+func (d *DB) GetProject(uuidOrTitle string) (*model.Task, error) {
+	return d.getTask(uuidOrTitle, projectRows)
+}
+
+// GetProjectExact is GetProject without the substring fallback.
+func (d *DB) GetProjectExact(uuidOrTitle string) (*model.Task, error) {
+	return d.getTaskExact(uuidOrTitle, projectRows)
+}
+
+// getTask is GetTask over the rows kinds selects.
+func (d *DB) getTask(uuidOrTitle, kinds string) (*model.Task, error) {
+	t, err := d.getTaskExact(uuidOrTitle, kinds)
 	var notFound *TaskNotFoundError
 	if !errors.As(err, &notFound) {
 		return t, err
@@ -1532,7 +1552,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	// have found it; failing that, a closed or trashed row stops the lookup:
 	// `complete "pay rent"` with "Pay rent" completed must not close the
 	// open "Re: Pay rent deposit".
-	folded, err := d.findTasksByFoldedTitle(uuidOrTitle)
+	folded, err := d.findTasksByFoldedTitle(uuidOrTitle, kinds)
 	if err != nil {
 		return nil, err
 	}
@@ -1541,7 +1561,7 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 	}
 
 	// Try LIKE match — return all matches for disambiguation
-	matches, err := d.FindTasksByTitle(uuidOrTitle)
+	matches, err := d.findTasksByTitle(uuidOrTitle, kinds)
 	if err != nil {
 		return nil, err
 	}
@@ -1567,6 +1587,10 @@ func (d *DB) GetTask(uuidOrTitle string) (*model.Task, error) {
 // rather than the lookup falling through to a substring match on some other,
 // open, task.
 func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
+	return d.getTaskExact(uuidOrTitle, notHeading)
+}
+
+func (d *DB) getTaskExact(uuidOrTitle, kinds string) (*model.Task, error) {
 	t, err := d.GetTaskByUUID(uuidOrTitle)
 	if err != nil {
 		return nil, err
@@ -1575,7 +1599,7 @@ func (d *DB) GetTaskExact(uuidOrTitle string) (*model.Task, error) {
 		return t, nil
 	}
 
-	all, err := d.findTasksByExactTitle(uuidOrTitle)
+	all, err := d.findTasksByExactTitle(uuidOrTitle, kinds)
 	if err != nil {
 		return nil, err
 	}
@@ -1632,8 +1656,8 @@ func (e *ClosedTitleError) Error() string {
 // to-do (issue #194). The ordering is still templatesLastOrder so callers that
 // do take the first row read the rows in the order the rest of the package
 // uses.
-func (d *DB) findTasksByExactTitle(title string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND " + notHeading +
+func (d *DB) findTasksByExactTitle(title, kinds string) ([]model.Task, error) {
+	query := d.taskQuery() + " WHERE nfc(t.title) = ? AND " + kinds +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, normName(title))
 }
@@ -1657,12 +1681,12 @@ func splitOpen(rows []model.Task) (open, closed []model.Task) {
 // trimmed from both. The SQL narrows the rows to those whose folded title
 // contains the folded key; the comparison itself is made in Go, so space
 // trims the same way on both sides.
-func (d *DB) findTasksByFoldedTitle(title string) ([]model.Task, error) {
+func (d *DB) findTasksByFoldedTitle(title, kinds string) ([]model.Task, error) {
 	key := FoldTag(title)
 	if key == "" {
 		return nil, nil
 	}
-	query := d.taskQuery() + " WHERE " + notHeading +
+	query := d.taskQuery() + " WHERE " + kinds +
 		" AND fold(t.title) LIKE ?" + escapeClause + " GROUP BY t.uuid " + d.templatesLastOrder()
 	rows, err := d.collectTasks(query, containsLike(strings.TrimSpace(title)))
 	if err != nil {
@@ -1723,7 +1747,11 @@ func preferInstances(matches []model.Task) []model.Task {
 // write on the wrong task. Matching ignores case, beyond ASCII too (see
 // literalLike); nothing documented offered wildcards.
 func (d *DB) FindTasksByTitle(substr string) ([]model.Task, error) {
-	query := d.taskQuery() + " WHERE " + untrashedRows + " AND " + untrashedParent + " AND " + openRows + " AND " + notHeading + " AND fold(t.title) LIKE ?" + escapeClause +
+	return d.findTasksByTitle(substr, notHeading)
+}
+
+func (d *DB) findTasksByTitle(substr, kinds string) ([]model.Task, error) {
+	query := d.taskQuery() + " WHERE " + untrashedRows + " AND " + untrashedParent + " AND " + openRows + " AND " + kinds + " AND fold(t.title) LIKE ?" + escapeClause +
 		" GROUP BY t.uuid " + d.templatesLastOrder()
 	return d.collectTasks(query, containsLike(substr))
 }
