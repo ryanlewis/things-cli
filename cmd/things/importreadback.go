@@ -86,24 +86,12 @@ const whenMisfiled = "misfiled"
 // such a --when, the item is there and the import does not fail over it.
 const whenIgnored = "when"
 
-// missing is the created items that are not known to be there: the ones to
-// search for and re-run.
-func (e *importVerifyError) missing() []importCreated {
+// createdWhere is each created item whose verdict meets keep, in payload
+// order.
+func (e *importVerifyError) createdWhere(keep func(importCreated) bool) []importCreated {
 	var out []importCreated
 	for _, c := range e.created {
-		if c.mayBeMissing() {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// withReason is each created item whose verdict is one of reasons, in
-// payload order.
-func (e *importVerifyError) withReason(reasons ...string) []importCreated {
-	var out []importCreated
-	for _, c := range e.created {
-		if slices.Contains(reasons, c.Reason) {
+		if keep(c) {
 			out = append(out, c)
 		}
 	}
@@ -130,7 +118,9 @@ func (e *importVerifyError) Error() string {
 		parts = append(parts, fmt.Sprintf("%d of %d requested status changes did not apply. The rest of the import was still applied; re-run the import with only the failed items, or make the changes in the Things app:\n%s",
 			len(e.items), e.total, strings.Join(lines, "\n")))
 	}
-	missing := e.missing()
+	// The created items that are not known to be there: the ones to search
+	// for and re-run.
+	missing := e.createdWhere(importCreated.mayBeMissing)
 	if len(missing) > 0 {
 		lines := detailLines(missing)
 		cause := "The rest of the import was still applied. Things may have dropped an item that did not appear (check that Things3 is running), or may be slow to save."
@@ -146,17 +136,17 @@ func (e *importVerifyError) Error() string {
 		parts = append(parts, fmt.Sprintf("%d of %d created items did not appear or cannot be confirmed (each line says why). %s Run `%s <title>` for each before re-running the import with only these items; do not retry blindly:\n%s",
 			len(missing), len(e.created), cause, e.search, strings.Join(lines, "\n")))
 	}
-	dropped := detailLines(e.withReason(dateDropped))
+	dropped := detailLines(e.createdWhere(func(c importCreated) bool { return c.Reason == dateDropped }))
 	if len(dropped) > 0 {
 		parts = append(parts, fmt.Sprintf("%d created items were saved without the completion-date the payload gives. They are there, so do not import them again; set the date in the Things app:\n%s",
 			len(dropped), strings.Join(dropped, "\n")))
 	}
-	misfiled := detailLines(e.withReason(whenMisfiled))
+	misfiled := detailLines(e.createdWhere(func(c importCreated) bool { return c.Reason == whenMisfiled }))
 	if len(misfiled) > 0 {
 		parts = append(parts, fmt.Sprintf("%d created items were not filed where their when puts them. They are there, so do not import them again; move each with `%s edit <uuid> --when ...` (`%s project edit` for a project) if it matters:\n%s",
 			len(misfiled), e.things, e.things, strings.Join(misfiled, "\n")))
 	}
-	if len(e.created) > len(missing)+len(dropped)+len(misfiled) {
+	if slices.ContainsFunc(e.created, func(c importCreated) bool { return !c.fails() }) {
 		lines := []string{"The other created items:"}
 		for _, it := range e.created {
 			if !it.fails() {
@@ -660,7 +650,9 @@ func verifyImportStatuses(database *db.DB, plan *importPlan, wait, budget time.D
 // jsonItems renders the unapplied status changes, then the created items
 // that never appeared, for the --json error payload.
 func (e *importVerifyError) jsonItems() []jsonErrorItem {
-	missing := append(e.missing(), e.withReason(dateDropped, whenMisfiled)...)
+	missing := append(e.createdWhere(importCreated.mayBeMissing), e.createdWhere(func(c importCreated) bool {
+		return c.Reason == dateDropped || c.Reason == whenMisfiled
+	})...)
 	out := make([]jsonErrorItem, len(e.items), len(e.items)+len(missing))
 	for i, it := range e.items {
 		out[i] = jsonErrorItem{
