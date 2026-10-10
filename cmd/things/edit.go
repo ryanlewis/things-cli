@@ -338,7 +338,11 @@ func runEdit[P interface {
 	if err != nil {
 		return err
 	}
-	task, err := resolveTaskForWrite(d, ref, database)
+	resolve := resolveTaskForWrite
+	if kind.project {
+		resolve = resolveProjectForWrite
+	}
+	task, err := resolve(d, ref, database)
 	if err != nil {
 		return err
 	}

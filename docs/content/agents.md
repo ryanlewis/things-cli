@@ -303,6 +303,8 @@ exit=1
 Each candidate carries its `type`, so a title a project and a to-do share
 reads as an ambiguity rather than resolving to one of them, and the `type` of
 the uuid you pick tells you whether to retry with `edit` or `project edit`.
+`project edit` and `open --project` match titles against projects only, so
+for them a to-do sharing the title does not get in the way.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
 `trashed`, `stale list cache`, `already closed`, `empty reference`, `misfiled`,

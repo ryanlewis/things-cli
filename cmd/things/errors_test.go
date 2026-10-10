@@ -451,14 +451,14 @@ func TestCommandsEmitJSONErrors(t *testing.T) {
 	}
 }
 
-// The title a project and a to-do share reaches the caller as an ambiguity
-// from both commands, rather than resolving to one row and advising a retry
-// that acts on the other (issue #194). The kind rides along on each candidate
-// so the caller knows which command the uuid it picks belongs to.
-func TestSharedTitleIsAmbiguousForBothCommands(t *testing.T) {
+// The title a project and a to-do share reaches `edit` as an ambiguity,
+// rather than resolving to one row and advising a retry that acts on the
+// other (issue #194). The kind rides along on each candidate so the caller
+// knows which command the uuid it picks belongs to. `project edit` matches
+// projects alone by title, so it takes the project instead.
+func TestSharedTitleIsAmbiguousForEdit(t *testing.T) {
 	for _, args := range [][]string{
 		{"--json", "edit", "Chores", "--title", "New"},
-		{"--json", "project", "edit", "Chores", "--title", "New"},
 	} {
 		t.Run(args[1], func(t *testing.T) {
 			stubTTY(t, true)

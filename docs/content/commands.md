@@ -412,7 +412,8 @@ A title matching more than one item is reported rather than guessed at: an
 interactive run prints the candidates and asks which one, and a non-TTY run
 returns them as an error. That holds for an exact title too — a project and a
 to-do that share one are both offered, instead of the lookup picking whichever
-sorts first.
+sorts first. `project edit` and `open --project` match titles against projects
+only, so a to-do sharing the title is not offered.
 
 After any plain list or `search`, numeric indices stay valid until the
 next one. A listing's order is fixed, so the same list run twice numbers
@@ -771,7 +772,10 @@ unconfirmed edit from a confirmed one.
 `edit` is for tasks only. A reference that resolves to a project is refused
 before anything is written, because `things:///update` cannot address one —
 use `things project edit` instead. `project edit` refuses a task the same
-way, pointing back at `things edit`.
+way, pointing back at `things edit`. Its titles match projects only, so a to-do
+sharing a project's title, or the part of it typed, does not make the lookup
+ambiguous. When no project matches, a title that only one to-do has is refused
+as `not a project`; several to-dos, or none, are a project not found.
 
 `things project edit` takes most of the same flags (`--title`, `--notes`,
 `--prepend-notes`/`--append-notes`, `--when`, `--deadline`, `--tags`,
