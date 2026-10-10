@@ -138,8 +138,7 @@ func WhenDateOrTime(v string) bool {
 	if m := whenDateShape.FindStringSubmatch(v); m != nil {
 		return m[4] == ""
 	}
-	shaped, _ := clockShape(v)
-	return shaped && whenClockShape.MatchString(v)
+	return whenClockShape.MatchString(v)
 }
 
 // ImpossibleWhenError is the error NormalizeWhen returns for a value shaped
