@@ -73,18 +73,14 @@ func (d *DB) ListProjects(areaFilter string, includeCompleted, openOnly bool) ([
 func scanProject(row rowScanner) (model.Project, error) {
 	var p model.Project
 	var tagsStr string
-	var status sql.NullInt64
 	var startDate, deadline sql.NullFloat64
 	if err := row.Scan(
-		&p.UUID, &p.Title, &status,
+		&p.UUID, &p.Title, &p.Status,
 		&p.Start, &p.StartBucket, &startDate, &deadline,
 		&p.AreaUUID, &p.AreaTitle, &tagsStr,
 		&p.TaskCount, &p.OpenCount,
 	); err != nil {
 		return p, err
-	}
-	if status.Valid {
-		p.Status = model.Status(status.Int64)
 	}
 	p.StartDate = thingsDate(startDate)
 	p.Deadline = thingsDate(deadline)
