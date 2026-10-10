@@ -550,8 +550,9 @@ func TestAddWarnsOnUnresolvedListOrHeading(t *testing.T) {
 		{"unknownHeading", []string{"--list", "Tools", "--heading", "Later"}, `"Tools" has no heading "Later"`, inProj1},
 		{"headingInArea", []string{"--list", "Personal", "--heading", "Setup"}, `"Personal" has no heading "Setup"`, inArea1},
 		{"headingWithoutList", []string{"--heading", "Setup"}, `--heading "Setup" needs --list or --project`, ""},
-		{"paddedList", []string{"--list", " Tools "}, `no project or area called " Tools "`, ""},
-		{"paddedHeading", []string{"--list", "Tools", "--heading", " Setup "}, `"Tools" has no heading " Setup "`, inProj1},
+		// Sent trimmed, as only that form matches (addTargetName).
+		{"paddedList", []string{"--list", " Tools "}, "", inProj1},
+		{"paddedHeading", []string{"--list", "Tools", "--heading", " Setup "}, "", underHead1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -674,7 +675,7 @@ func TestProjectAddWarnsOnUnknownArea(t *testing.T) {
 		{"uuid", "area-1", "", inArea1},
 		{"paddedUUID", " area-1 ", "", inArea1},
 		{"unknown", "Nowhere", `no area called "Nowhere"`, ""},
-		{"padded", " Personal ", `no area called " Personal "`, ""},
+		{"padded", " Personal ", "", inArea1},
 		{"paddedTitle", "Errands ", "", `area = 'area-2'`},
 		{"paddedTitleUnpadded", "Errands", `no area called "Errands"`, ""},
 		{"fullwidth", "Ｐersonal", "", inArea1},

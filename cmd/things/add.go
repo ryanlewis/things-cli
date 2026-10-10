@@ -45,7 +45,7 @@ func (c *AddCmd) Run(d *Deps) error {
 		return err
 	}
 	// Things matches list by title only; a uuid has to go as list-id.
-	target, dest := resolveAddTarget(d, list, c.Heading)
+	target, dest := resolveAddTarget(d, &params.List, &params.Heading)
 	if target.ByUUID {
 		params.List, params.ListID = "", target.UUID
 	}
@@ -82,8 +82,11 @@ func preAdd(d *Deps, kind string, p addParams, flags TagFlags) error {
 // the Inbox or leaves out the heading without reporting it. The add still
 // goes ahead. dest is where Things will file it, for the read-back; it checks
 // nothing when the database cannot be read. A database that cannot be read
-// gives no warning here: the tag check or the read-back reports that.
-func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
+// gives no warning here: the tag check or the read-back reports that. It
+// sets list and heading to the names to send, trimmed when only that form
+// matches (addTargetName).
+func resolveAddTarget(d *Deps, listp, headingp *string) (db.Target, createdDest) {
+	list, heading := *listp, *headingp
 	if list == "" {
 		if heading != "" {
 			fmt.Fprintf(d.errOut(), "warning: %s\n", headingNeedsList("--heading", heading, "--list or --project", "put the to-do in the Inbox"))
@@ -94,7 +97,7 @@ func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 	if err != nil {
 		return db.Target{}, createdDest{}
 	}
-	target, headingFound, err := database.AddTarget(list, heading)
+	target, headingFound, list, heading, err := addTargetName(database, list, heading)
 	switch {
 	case err != nil:
 		return db.Target{}, createdDest{}
@@ -104,6 +107,7 @@ func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 	case heading != "" && !headingFound:
 		fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(listName(list, target), heading, "add the to-do there without a heading"))
 	}
+	*listp, *headingp = list, heading
 	noteTarget(d, list, "lists", target)
 	return target, addDest(target)
 }

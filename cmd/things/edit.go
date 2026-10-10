@@ -98,7 +98,8 @@ func (c *EditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bool {
 // checkMove warns when Things will not move the task where the move flags
 // say, sends a uuid given to --list as list-id, and reports whether the move
 // flags may change the task. Checked in Things 3 with things:///update: a list
-// or heading title is matched ignoring case but not surrounding space, and a
+// or heading title is matched ignoring case but not surrounding space, so a
+// padded title goes trimmed when only that form matches (addTargetName), and a
 // uuid only as list-id. A list Things cannot find is ignored: the to-do stays
 // where it is, or with a heading the heading is looked up as if it came
 // alone. An unknown heading in a known list moves the to-do to the list with
@@ -178,7 +179,21 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		} else {
 			list = *c.List
 		}
-		t, f, err := database.AddTarget(list, heading)
+		var t db.Target
+		var f bool
+		var err error
+		if byID {
+			t, f, err = database.AddTarget(list, heading)
+		} else {
+			// A title goes as given or trimmed, whichever Things matches
+			// (addTargetName).
+			var sentList, sentHeading string
+			t, f, sentList, sentHeading, err = addTargetName(database, list, heading)
+			if err == nil && t.UUID != "" {
+				c.setMoveNames(sentList, sentHeading)
+				list, heading = sentList, sentHeading
+			}
+		}
 		switch {
 		case err != nil:
 			return true
@@ -222,7 +237,7 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		fmt.Fprintf(d.errOut(), "warning: %s\n", headingNeedsList("--heading", heading, "--list or --list-id, as the to-do is not in a project", "leave the to-do where it is"))
 		return false
 	}
-	t, f, err := database.AddTarget(task.ProjectUUID, heading)
+	t, f, _, sentHeading, err := addTargetName(database, task.ProjectUUID, heading)
 	switch {
 	case err != nil || t.UUID == "":
 		return true
@@ -230,7 +245,20 @@ func (c *EditCmd) checkMove(d *Deps, database *db.DB, task *model.Task) bool {
 		fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(task.ProjectTitle, heading, "leave the to-do where it is"))
 		return false
 	}
+	c.setMoveNames("", sentHeading)
 	return task.HeadingUUID != t.Heading
+}
+
+// setMoveNames sends list and heading, the names checkMove found Things
+// matches, in place of --list and --heading as given. An empty one, or a
+// flag not given, is left alone.
+func (c *EditCmd) setMoveNames(list, heading string) {
+	if c.List != nil && list != "" {
+		c.List = &list
+	}
+	if c.Heading != nil && heading != "" {
+		c.Heading = &heading
+	}
 }
 
 // noteListID gives the notes for a move into the list --list-id names
