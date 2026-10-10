@@ -28,7 +28,7 @@ type ListCmd struct {
 }
 
 func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
-	fields, err := listingFields(d, c.Fields, "task", output.TaskFields)
+	fields, err := listingFields(d, c.Fields, "task", output.TaskFields, output.TaskDefaultFields)
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ type ProjectsCmd struct {
 }
 
 func (c *ProjectsCmd) Run(d *Deps) error {
-	fields, err := listingFields(d, c.Fields, "project", output.ProjectFields)
+	fields, err := listingFields(d, c.Fields, "project", output.ProjectFields, output.ProjectDefaultFields)
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ type SearchCmd struct {
 }
 
 func (c *SearchCmd) Run(d *Deps) error {
-	fields, err := listingFields(d, c.Fields, "task", output.TaskFields)
+	fields, err := listingFields(d, c.Fields, "task", output.TaskFields, output.TaskDefaultFields)
 	if err != nil {
 		return err
 	}

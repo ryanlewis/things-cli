@@ -284,6 +284,18 @@ nothing on success. Their errors are still JSON.
   `--when 2026-10-09@09:00` sets one, reports `reminderTime` as a local
   `"HH:MM"` clock time on its `startDate`. A task without one leaves the
   field out.
+- **A listing prints a default set of keys.** Without `--fields`, a task
+  listing, `search` and `things projects` print the keys needed to pick an
+  item and act on it, and leave out `notes`, the parent uuids
+  (`projectUUID`, `areaUUID`, `headingUUID`), `creationDate` and Things'
+  bookkeeping (`index`, `todayIndex`, `startBucket`, `trashed`,
+  `projectTrashed`). Read an item's notes with `things show <uuid> --json`,
+  or pass `--fields all` for every key of every row. `--fields` also names
+  the keys you want, in order. **This changed:** in v0.10.0 and earlier
+  `--json` printed every key, so a script reading one of those keys off a
+  listing needs `--fields all`. The
+  [command reference](/commands/#choosing-fields-with---fields) lists the
+  default keys.
 
 ```console
 $ things show milk --json; echo "exit=$?"
@@ -313,7 +325,8 @@ and `error` for everything else. `empty reference` is an empty or all-space
 `<task>` argument, refused before any lookup. `unknown field` is a `--fields`
 list naming a key the listing's rows do not have, refused before anything is
 read: `unknown` lists the names it did not know and `valid` every name it
-takes, so read `valid` and retry. `blank-title` is an `add`, `project
+takes, so read `valid` and retry. An empty `--fields` gets the same token,
+with `valid` and no `unknown`. `blank-title` is an `add`, `project
 add`, or an `edit` or `project edit` `--title`, whose title is empty or only
 whitespace: nothing is sent, as `import` refuses the same title with reason
 `blank-title`.

@@ -51,19 +51,31 @@ from a listing into an import item.
 
 ### Choosing fields with `--fields`
 
-A JSON listing prints every field of every row, and notes alone can be
-half of it. `--fields` cuts each row down to the keys you name, in the
-order you name them:
+A JSON listing prints a default set of keys for each row: the ones needed
+to pick an item and act on it. Notes, the parent uuids and Things' own
+bookkeeping are left out, since notes alone can be half of a full listing.
+`--fields` names the keys you want instead, in the order you want them, and
+`--fields all` prints every key:
 
 ```sh
 things anytime -a "Personal Projects" -j --fields uuid,title,projectTitle,deadline,tags
 things projects -j --fields uuid,title,openCount
+things anytime -j --fields all
+things show <uuid> -j    # one item's full record, notes and checklist included
 ```
 
 It works on every task listing (the views, `list` with filters, and
 `search`) and on `things projects`. `things show` always prints the full
 record, and `areas` and `tags` rows are short enough not to need it.
 
+- Without `--fields`, a task row carries these keys: `uuid`, `title`,
+  `type`, `status`, `start`, `startDate`, `reminderTime`, `deadline`,
+  `stopDate`, `projectTitle`, `areaTitle`, `headingTitle`, `tags`,
+  `repeating`, `checklistProgress`. A project row from `things projects`
+  carries these keys: `uuid`, `title`, `status`, `start`, `startDate`,
+  `deadline`, `areaTitle`, `tags`, `taskCount`, `openCount`.
+- `--fields all` prints the full record. `all` takes no other names:
+  `all,notes` fails.
 - The names are the JSON keys exactly as the full output prints them, case
   included: `projectTitle`, not `project`. There are no aliases.
 - A task listing takes the task keys: `uuid`, `title`, `notes`, `type`,
@@ -80,9 +92,15 @@ record, and `areas` and `tags` rows are short enough not to need it.
   where it first appears.
 - An unknown name fails the whole command before anything is read, with
   the `unknown field` error: `unknown` lists the names it did not know and
-  `valid` lists every name it takes.
+  `valid` lists every name it takes. An empty `--fields ""` fails the same
+  way, with `valid` and no `unknown`.
 - `--fields` needs `--json`; without it the command fails rather than
   ignore the flag. Plain output is unchanged.
+- In v0.10.0 and earlier, `--json` printed the full record, as
+  `--fields all` does now. A script that reads `notes`,
+  a parent uuid, `index`, `todayIndex`, `startBucket`, `trashed`,
+  `projectTrashed` or `creationDate` off a listing needs `--fields all`, or
+  `--fields` naming those keys.
 
 ## Listing
 

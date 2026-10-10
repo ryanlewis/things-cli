@@ -56,11 +56,14 @@ for structured JSON suitable for piping into `jq` or another tool. List
 commands assign each result a stable index (`1`, `2`, `3`, …) you can use
 in follow-up commands like `show`, `edit`, `complete`, and `cancel`.
 
-`--fields` limits a JSON listing to the keys you name, in that order, which
-keeps output small enough for an agent to read whole:
-`things anytime -j --fields uuid,title,projectTitle,deadline`. It works on
-the task listings, `search` and `projects`, and needs `--json`. An unknown
-name fails with the list of valid ones. See the
+A JSON listing prints a default set of keys per row, enough to pick an
+item and act on its `uuid`; notes, the parent uuids and Things' own
+bookkeeping are left out. `--fields` names the keys you want instead, in
+that order: `things anytime -j --fields uuid,title,projectTitle,deadline`.
+`--fields all` prints every key, as `--json` did by default in v0.10.0 and
+earlier, and `things show <uuid> -j` prints one item's full record. It
+works on the task listings, `search` and `projects`, and needs `--json`. An
+unknown name fails with the list of valid ones. See the
 [command reference](https://things.rlew.io/commands/).
 
 `--json` also implies non-interactive: the CLI never prompts, so a reference

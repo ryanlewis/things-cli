@@ -157,6 +157,71 @@ func TestRunFieldsCheckedBeforeDatabase(t *testing.T) {
 	}
 }
 
+// Without --fields a JSON listing prints its kind's default set, and
+// --fields all the full record.
+func TestRunListingDefaultFields(t *testing.T) {
+	cases := map[string]struct {
+		args     []string
+		defaults []string
+		full     []string
+	}{
+		"bare default view": {[]string{"--json"}, output.TaskDefaultFields, []string{"index", "todayIndex", "trashed", "startBucket"}},
+		"named view":        {[]string{"--json", "anytime"}, output.TaskDefaultFields, []string{"index", "todayIndex", "trashed", "startBucket"}},
+		"list with filter":  {[]string{"-j", "list", "--project", "Chores"}, output.TaskDefaultFields, []string{"index", "todayIndex", "trashed", "startBucket"}},
+		"search":            {[]string{"-j", "search", "milk"}, output.TaskDefaultFields, []string{"index", "todayIndex", "trashed", "startBucket"}},
+		"projects":          {[]string{"-j", "projects"}, output.ProjectDefaultFields, []string{"startBucket"}},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			stdout, _, err := runStreams(t, seedFullDB(t), c.args...)
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			rows := fieldKeys(t, stdout)
+			if len(rows) == 0 {
+				t.Fatalf("no rows listed:\n%s", stdout)
+			}
+			for i, keys := range rows {
+				if !isSubsequence(keys, c.defaults) {
+					t.Errorf("row %d keys = %v, want a cut of %v", i, keys, c.defaults)
+				}
+			}
+
+			stdout, _, err = runStreams(t, seedFullDB(t), append(c.args, "--fields", "all")...)
+			if err != nil {
+				t.Fatalf("run --fields all: %v", err)
+			}
+			for i, keys := range fieldKeys(t, stdout) {
+				for _, k := range c.full {
+					if !slices.Contains(keys, k) {
+						t.Errorf("--fields all row %d lacks %q: %v", i, k, keys)
+					}
+				}
+			}
+		})
+	}
+}
+
+// An empty list gets the unknown-field payload, with the valid names and none
+// unknown, so an agent can read the names off it either way.
+func TestRunFieldsEmptyListsValidNames(t *testing.T) {
+	_, _, err := runStreams(t, seedFullDB(t), "-j", "anytime", "--fields", " , ")
+	p := errorPayload(err)
+	if p.Error != "unknown field" || p.Kind != "task" || len(p.Unknown) != 0 || !slices.Equal(p.Valid, output.TaskFields) {
+		t.Errorf("payload = %+v", p)
+	}
+}
+
+func TestRunFieldsAllTakesNoOtherNames(t *testing.T) {
+	stdout, _, err := runStreams(t, seedFullDB(t), "-j", "projects", "--fields", "all,uuid")
+	if err == nil || !strings.Contains(err.Error(), "full record") {
+		t.Errorf("err = %v, want all-with-names refusal", err)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want nothing", stdout)
+	}
+}
+
 // show prints the full record; --fields is a listing flag only.
 func TestShowTakesNoFields(t *testing.T) {
 	var cli CLI
