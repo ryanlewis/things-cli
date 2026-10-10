@@ -1238,6 +1238,7 @@ func TestImportNestedInUpdateNotWarned(t *testing.T) {
 func TestImportChecksWhen(t *testing.T) {
 	past := time.Now().AddDate(0, 0, -4).Format("2006-01-02")
 	today := "start = 1, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow)))
+	tomorrow := "start = 2, startDate = " + strconv.Itoa(int(model.ThingsDateFromTime(testNow.AddDate(0, 0, 1))))
 	for _, tc := range []struct {
 		name    string
 		attrs   string
@@ -1252,6 +1253,11 @@ func TestImportChecksWhen(t *testing.T) {
 		{name: "phraseIgnored", attrs: `"when":"blorp"`, reason: "when", landed: "in inbox with no start date",
 			message: `Created, but Things did not understand its when: [0] "Pay rent" (new-1), in inbox with no start date`},
 		{name: "todayLanded", attrs: `"when":"today","deadline":"` + past + `"`, extra: today},
+		// A date or keyword with a time is judged as sent, as a date and
+		// time (resolveImportWhens), so one that did not land is caught.
+		{name: "timedMisfiled", attrs: `"when":"tomorrow@9am"`, fail: true, reason: "misfiled", landed: "in inbox with no start date",
+			message: `[0]: task "Pay rent" (new-1) was created, but its when "tomorrow@9am" did not file it there: it is in inbox with no start date`},
+		{name: "timedLanded", attrs: `"when":"tomorrow@9am"`, extra: tomorrow},
 		{name: "noWhen", attrs: `"deadline":"` + past + `"`},
 		{name: "closedNotChecked", attrs: `"when":"today","completed":true`, extra: "status = 3"},
 	} {

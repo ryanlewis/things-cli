@@ -10,6 +10,7 @@ import (
 	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/output"
+	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 // importVerifyItem is one status change that never landed. wanted and got name
@@ -192,16 +193,16 @@ type importCreated struct {
 	detail string // why a failing item is missing or unconfirmed, for the plain-text error
 }
 
-// applyImport sends write, the import, then reads it back: the items it
-// created (readBackCreates) and the status changes it asked for
-// (verifyImportStatuses). The whole import shares one timeout budget. Every
-// created item is reported on stdout, confirmed or not; a created item that
-// never appeared, or a status change that did not apply, makes the import
-// fail with all of them named. Under --no-verify nothing is read back and
-// every created item is reported unconfirmed.
-func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error) error {
+// applyImport sends write, the import, passing it the time it is sent, then
+// reads it back: the items it created (readBackCreates) and the status
+// changes it asked for (verifyImportStatuses). The whole import shares one
+// timeout budget. Every created item is reported on stdout, confirmed or not;
+// a created item that never appeared, or a status change that did not apply,
+// makes the import fail with all of them named. Under --no-verify nothing is
+// read back and every created item is reported unconfirmed.
+func applyImport(d *Deps, database *db.DB, plan *importPlan, write func(sent time.Time) error) error {
 	if d.NoVerify {
-		if err := write(); err != nil {
+		if err := write(clock.Now()); err != nil {
 			return err
 		}
 		created := make([]importCreated, len(plan.creates))
@@ -223,7 +224,7 @@ func applyImport(d *Deps, database *db.DB, plan *importPlan, write func() error)
 		snap, snapErr = snapshotCreated(database, types)
 	}
 	sent := clock.Now()
-	if err := write(); err != nil {
+	if err := write(sent); err != nil {
 		return err
 	}
 	budget := d.readBackTimeout()
@@ -534,7 +535,8 @@ func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate,
 }
 
 // checkWhens turns back each confirmation of an item whose `when` did not
-// file it, sent at sent, keeping its uuid, as applyAdd does for --when: a
+// file it, sent at sent, keeping its uuid, as applyAdd does for --when. It
+// judges the when as sent (things.ResolveWhen, resolveImportWhens): a
 // keyword or date that did not land is "misfiled", and a free phrase that
 // left the item with no start date is "when". Things files a to-do whose
 // `when` it applies with a deadline already past in the Inbox, measured on
@@ -552,7 +554,7 @@ func checkWhens(out []importCreated, creates []importCreate, found map[createdWa
 		if row == nil {
 			continue
 		}
-		check := &whenCheck{value: c.when, sent: sent}
+		check := &whenCheck{value: c.when, sentAs: things.ResolveWhen(c.when, sent), sent: sent}
 		switch check.verdict(row, now) {
 		case whenNotFiled:
 			out[i].Confirmed, out[i].Reason = false, whenMisfiled

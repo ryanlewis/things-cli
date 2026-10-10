@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/ryanlewis/things-cli/internal/things"
 )
@@ -59,8 +60,8 @@ func (c *ImportCmd) Run(d *Deps) error {
 	resolveImportDests(d, database, plan.creates)
 	// A token read error is only a warning: the payload may be create-only.
 	token := authToken(d, database)
-	return applyImport(d, database, plan, func() error {
-		return things.ImportJSON(string(data), token, c.Reveal)
+	return applyImport(d, database, plan, func(sent time.Time) error {
+		return things.ImportJSON(string(resolveImportWhens(data, sent)), token, c.Reveal)
 	})
 }
 
@@ -89,6 +90,67 @@ func decodeImportJSON(data []byte) ([]any, error) {
 		return nil, fmt.Errorf("payload array is empty")
 	}
 	return items, nil
+}
+
+// resolveImportWhens returns data, a payload decodeImportJSON accepted, with
+// each when in an item's attributes rewritten as things.ResolveWhen sends it
+// at now, as add, project add and edit send --when: today@6pm becomes today's
+// date at 18:00. The rest of the payload goes byte for byte as given. It
+// walks the tokens as importDuplicateKeys does.
+func resolveImportWhens(data []byte, now time.Time) []byte {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	var out []byte
+	copied := 0
+	// walk reads one value: the value of key in an object that is itself
+	// the value of in ("" for both in an array or at the top level).
+	var walk func(in, key string) error
+	walk = func(in, key string) error {
+		start := dec.InputOffset()
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		switch v := tok.(type) {
+		case string:
+			if key != "when" || in != "attributes" {
+				return nil
+			}
+			sent := things.ResolveWhen(v, now)
+			if sent == v {
+				return nil
+			}
+			// start is the end of the key; the value follows its colon.
+			for start < int64(len(data)) && data[start] != '"' {
+				start++
+			}
+			quoted, _ := json.Marshal(sent)
+			out = append(append(out, data[copied:start]...), quoted...)
+			copied = int(dec.InputOffset())
+		case json.Delim:
+			for dec.More() {
+				in, name := "", ""
+				if v == '{' {
+					k, err := dec.Token()
+					if err != nil {
+						return err
+					}
+					in, name = key, k.(string)
+				}
+				if err := walk(in, name); err != nil {
+					return err
+				}
+			}
+			_, err = dec.Token() // the closing delimiter
+			return err
+		}
+		return nil
+	}
+	// The payload has decoded, so the walk does not fail.
+	_ = walk("", "")
+	if out == nil {
+		return data
+	}
+	return append(out, data[copied:]...)
 }
 
 func offsetToLineCol(data []byte, offset int64) (int, int) {

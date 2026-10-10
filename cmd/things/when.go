@@ -331,8 +331,7 @@ func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
 type whenCheck struct {
 	value string
 	// sentAs is the value as sent (things.ResolveWhen), "" when it went as
-	// value, as an import's when does. It is what the read-back judges;
-	// messages name value, as typed.
+	// value. It is what the read-back judges; messages name value, as typed.
 	sentAs   string
 	sent     time.Time
 	before   *model.Task
