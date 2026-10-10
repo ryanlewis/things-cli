@@ -659,7 +659,7 @@ result. Pass exactly one of:
 | Flag / Argument | Description |
 | --- | --- |
 | `<ref>` | Built-in list name (`today`, `inbox`, …), task UUID, numeric list index, or title |
-| `-p, --project NAME` | Open a project by name or UUID |
+| `-p, --project NAME` | Open a project by title, UUID or index; titles match projects only |
 | `-a, --area NAME` | Open an area by name or UUID |
 | `-t, --tag NAME` | Open a tag by name or UUID |
 | `-q, --query TEXT` | App-side quick find |

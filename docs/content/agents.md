@@ -320,8 +320,8 @@ is already closed is not an error; it exits 0 with a note. It is also the
 token for a write whose exact title only closed items carry, which is refused
 whatever the write was.
 `not a task` is a project handed to `edit`, and `not a project` a task handed
-to `project edit`; both refuse before anything is written and name the command
-to retry with. `trashed` is a row number, uuid or exact title that named an
+to `project edit` or `open --project`; both refuse before anything is written
+or opened and name the command to retry with. `trashed` is a row number, uuid or exact title that named an
 item in the Trash, or a task whose project is in the Trash (Things shows it
 only in the Trash); the write is refused before anything is sent. The two import failures carry an `items` array naming which
 payload items were blocked or did not land; the [Commands](/commands/) page

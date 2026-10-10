@@ -99,18 +99,30 @@ func (c *OpenCmd) Run(d *Deps) error {
 }
 
 // resolve finds the item ref names. --project matches projects alone by
-// title; when no project has the title, the ref is tried as any item, so a
-// to-do it names is refused as the wrong kind rather than as not found.
+// title; when no project has the title, a to-do that alone carries it is
+// returned so the caller refuses it as the wrong kind. Anything else is a
+// project not found: no project matched, so neither a list of to-dos nor a
+// prompt to pick one of them would help.
 func (c *OpenCmd) resolve(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	if c.Project == "" {
 		return resolveTask(d, ref, database)
 	}
 	task, err := resolveProject(d, ref, database)
 	var notFound *db.TaskNotFoundError
-	if errors.As(err, &notFound) {
-		return resolveTask(d, ref, database)
+	if !errors.As(err, &notFound) {
+		return task, err
 	}
-	return task, err
+	other, err := database.GetTask(ref)
+	var closedTitle *db.ClosedTitleError
+	switch {
+	case err == nil:
+		return other, nil
+	case errors.As(err, &closedTitle) && len(closedTitle.Matches) == 1:
+		return &closedTitle.Matches[0], nil
+	case errors.As(err, &notFound), errors.As(err, new(*db.AmbiguousTaskError)), errors.As(err, &closedTitle):
+		return nil, &notFoundError{Kind: "project", Query: ref}
+	}
+	return nil, err
 }
 
 // refuseHiddenInTrash refuses to open a to-do whose project is in the Trash.
