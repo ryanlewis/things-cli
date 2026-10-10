@@ -2,7 +2,6 @@ package main
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -98,31 +97,13 @@ func (c *OpenCmd) Run(d *Deps) error {
 	return things.Show(params)
 }
 
-// resolve finds the item ref names. --project matches projects alone by
-// title; when no project has the title, a to-do that alone carries it is
-// returned so the caller refuses it as the wrong kind. Anything else is a
-// project not found: no project matched, so neither a list of to-dos nor a
-// prompt to pick one of them would help.
+// resolve finds the item ref names: by resolveProject for --project, else
+// by resolveTask.
 func (c *OpenCmd) resolve(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 	if c.Project == "" {
 		return resolveTask(d, ref, database)
 	}
-	task, err := resolveProject(d, ref, database)
-	var notFound *db.TaskNotFoundError
-	if !errors.As(err, &notFound) {
-		return task, err
-	}
-	other, err := database.GetTask(ref)
-	var closedTitle *db.ClosedTitleError
-	switch {
-	case err == nil:
-		return other, nil
-	case errors.As(err, &closedTitle) && len(closedTitle.Matches) == 1:
-		return &closedTitle.Matches[0], nil
-	case errors.As(err, &notFound), errors.As(err, new(*db.AmbiguousTaskError)), errors.As(err, &closedTitle):
-		return nil, &notFoundError{Kind: "project", Query: ref}
-	}
-	return nil, err
+	return resolveProject(d, ref, database)
 }
 
 // refuseHiddenInTrash refuses to open a to-do whose project is in the Trash.

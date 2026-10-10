@@ -49,8 +49,39 @@ func resolveTaskForWrite(d *Deps, ref string, database *db.DB) (*model.Task, err
 // to-do sharing a project's title or a fragment of it does not stand in the
 // way. A row number or a uuid still names any item, and the caller refuses
 // one that is not a project.
+//
+// When no project has the title, a to-do that alone carries it is returned so
+// the caller refuses it as the wrong kind. Anything else is a project not
+// found: no project matched, so neither a list of to-dos nor a prompt to pick
+// one of them would help.
 func resolveProject(d *Deps, ref string, database *db.DB) (*model.Task, error) {
-	return resolveRef(d, ref, database, false, true)
+	return resolveProjectRef(d, ref, database, false)
+}
+
+// resolveProjectForWrite is resolveProject for a command that changes the
+// item, refusing a title only closed or trashed projects carry as
+// resolveTaskForWrite does.
+func resolveProjectForWrite(d *Deps, ref string, database *db.DB) (*model.Task, error) {
+	return resolveProjectRef(d, ref, database, true)
+}
+
+func resolveProjectRef(d *Deps, ref string, database *db.DB, write bool) (*model.Task, error) {
+	task, err := resolveRef(d, ref, database, write, true)
+	var notFound *db.TaskNotFoundError
+	if !errors.As(err, &notFound) {
+		return task, err
+	}
+	other, err := database.GetTask(ref)
+	var closedTitle *db.ClosedTitleError
+	switch {
+	case err == nil:
+		return other, nil
+	case errors.As(err, &closedTitle) && len(closedTitle.Matches) == 1:
+		return &closedTitle.Matches[0], nil
+	case errors.As(err, &notFound), errors.As(err, new(*db.AmbiguousTaskError)), errors.As(err, &closedTitle):
+		return nil, &notFoundError{Kind: "project", Query: ref}
+	}
+	return nil, err
 }
 
 func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*model.Task, error) {

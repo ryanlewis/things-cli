@@ -381,7 +381,8 @@ substring. The substring is matched literally and case-insensitively — `%` and
 tasks, an interactive prompt picks between them; non-TTY callers get the match
 list as an error. An exact title counts the same way: a project and a to-do
 that share one are reported as candidates rather than resolved to whichever
-sorts first.
+sorts first. `project edit` and `open --project` match titles against projects
+only, so a to-do sharing the title is not a candidate.
 
 The numeric index is for interactive use: it comes from the last plain-text
 listing, the only kind that prints numbers, and it is good for four hours after

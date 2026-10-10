@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -852,6 +854,145 @@ func TestRunProjectEditRefusesTodoReference(t *testing.T) {
 	}
 	if payload.Title != "Post letter" {
 		t.Errorf("title = %q, want %q", payload.Title, "Post letter")
+	}
+}
+
+// seedLaunch is a writable database where a project and to-dos share a
+// title or a fragment of one.
+func seedLaunch(t *testing.T) (*db.DB, *sql.DB) {
+	t.Helper()
+	sqlDB := dbtest.NewSQL(t)
+	if _, err := sqlDB.Exec(`INSERT INTO TMSettings (uuid, uriSchemeAuthenticationToken) VALUES ('s1', 'tok')`); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-v2", "Launch v2", 0)
+	fx.Todo("todo-blog", "Launch blog", 1, dbtest.Anytime())
+	fx.Todo("todo-v2", "Launch v2", 2, dbtest.Anytime())
+	return db.NewFromSQL(sqlDB), sqlDB
+}
+
+// `project edit` matches projects alone by title, as `open --project` does,
+// so a to-do sharing the project's title, or the fragment typed, does not
+// make the lookup ambiguous. This reverses issue #194, where the shared
+// title was reported as ambiguous on purpose.
+func TestRunProjectEditIgnoresTodoTitles(t *testing.T) {
+	for _, ref := range []string{"Launch v2", "Launch"} {
+		for _, mode := range []string{"plain", "json"} {
+			t.Run(ref+" "+mode, func(t *testing.T) {
+				fastVerify(t)
+				// A terminal, so an ambiguity would prompt rather than fail.
+				stubTTY(t, true)
+				database, sqlDB := seedLaunch(t)
+				calls := stubExecEditing(t, sqlDB, `UPDATE TMTask SET notes = 'x' WHERE uuid = 'proj-v2'`)
+
+				args := []string{"project", "edit", ref, "--notes", "x"}
+				show := []string{"show", "proj-v2"}
+				if mode == "json" {
+					args = append([]string{"--json"}, args...)
+					show = append([]string{"--json"}, show...)
+				}
+				got, err := runOut(t, database, args...)
+				if err != nil {
+					t.Fatalf("project edit %q: %v", ref, err)
+				}
+				if *calls != 1 {
+					t.Errorf("write calls = %d, want 1", *calls)
+				}
+				want, err := runOut(t, database, show...)
+				if err != nil {
+					t.Fatalf("show: %v", err)
+				}
+				if got != want {
+					t.Errorf("output = %q, want the edited project %q", got, want)
+				}
+			})
+		}
+	}
+}
+
+// A uuid or a title that names a to-do and no project is refused as not a
+// project, naming the to-do and the command to retry with.
+func TestRunProjectEditRefusesTodoAmongProjects(t *testing.T) {
+	for _, ref := range []string{"todo-v2", "Launch blog", "blog"} {
+		for _, mode := range []string{"plain", "json"} {
+			t.Run(ref+" "+mode, func(t *testing.T) {
+				database, _ := seedLaunch(t)
+				captured := stubExec(t)
+				args := []string{"project", "edit", ref, "--notes", "x"}
+				if mode == "json" {
+					args = append([]string{"--json"}, args...)
+				}
+				err := runWith(t, database, args...)
+				if err == nil {
+					t.Fatal("expected project edit to refuse a to-do")
+				}
+				if len(*captured) != 0 {
+					t.Errorf("nothing should be sent, got %v", *captured)
+				}
+				uuid, title := "todo-blog", "Launch blog"
+				if ref == "todo-v2" {
+					uuid, title = "todo-v2", "Launch v2"
+				}
+				if want := fmt.Sprintf("%q is a task; use things edit", title); err.Error() != want {
+					t.Errorf("message = %q, want %q", err.Error(), want)
+				}
+				payload, raw := decodePayload(t, err)
+				if payload.Error != "not a project" || payload.Kind != "task" || payload.Query != ref || payload.UUID != uuid {
+					t.Errorf("payload = %s, want not a project naming %s", raw, uuid)
+				}
+			})
+		}
+	}
+}
+
+// When no project matches, several to-dos that do, or none, are a project
+// not found: no to-do is offered to pick, even on a terminal.
+func TestRunProjectEditNoProjectAmongTodos(t *testing.T) {
+	for _, ref := range []string{"Launch", "Nothing like it"} {
+		for _, mode := range []string{"plain", "json"} {
+			t.Run(ref+" "+mode, func(t *testing.T) {
+				stubTTY(t, true)
+				sqlDB := dbtest.NewSQL(t)
+				fx := dbtest.NewFixture(t, sqlDB)
+				fx.Todo("todo-blog", "Launch blog", 1, dbtest.Anytime())
+				fx.Todo("todo-site", "Launch site", 2, dbtest.Anytime())
+				captured := stubExec(t)
+				args := []string{"project", "edit", ref, "--notes", "x"}
+				if mode == "json" {
+					args = append([]string{"--json"}, args...)
+				}
+				err := runWith(t, db.NewFromSQL(sqlDB), args...)
+				if len(*captured) != 0 {
+					t.Errorf("nothing should be sent, got %v", *captured)
+				}
+				if err == nil || !strings.Contains(err.Error(), "project not found") {
+					t.Errorf("err = %v, want a project not found", err)
+				}
+				payload, raw := decodePayload(t, err)
+				if payload.Error != "not found" || payload.Kind != "project" || payload.Query != ref {
+					t.Errorf("payload = %s, want a project not found", raw)
+				}
+			})
+		}
+	}
+}
+
+// The write rules still hold for a title only a closed project carries: the
+// edit is refused, not sent to it.
+func TestRunProjectEditRefusesClosedProjectTitle(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-old", "Launch v1", 0, dbtest.Completed(1790000000))
+	fx.Todo("todo-v1", "Launch v1", 1, dbtest.Anytime())
+	captured := stubExec(t)
+	err := runWith(t, db.NewFromSQL(sqlDB), "--json", "project", "edit", "Launch v1", "--notes", "x")
+	if len(*captured) != 0 {
+		t.Errorf("nothing should be sent, got %v", *captured)
+	}
+	payload, raw := decodePayload(t, err)
+	if payload.Error != "already closed" || payload.UUID != "proj-old" {
+		t.Errorf("payload = %s, want already closed naming proj-old", raw)
 	}
 }
 
