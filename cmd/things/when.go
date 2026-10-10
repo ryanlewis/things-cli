@@ -322,16 +322,17 @@ func unmovedKeeps(p whenPlace, now time.Time, task *model.Task) bool {
 }
 
 // whenCheck is the --when part of a read-back: the value, as typed and as
-// sent, and when it was sent. before is the item as read before the write when it was a row Things
-// had not moved into today yet or one in Today from an earlier day (heldIn),
-// nil otherwise; carried says it was the second. whenOnly says the edit
-// changes nothing but --when, so such a row Things left as it was, with
-// nothing recorded, is the edit applied (unmovedKeeps).
+// sent, and when it was sent. before is the item as read before the write
+// when it was a row Things had not moved into today yet or one in Today
+// from an earlier day (heldIn), nil otherwise; carried says it was the
+// second. whenOnly says the edit changes nothing but --when, so such a row
+// Things left as it was, with nothing recorded, is the edit applied
+// (unmovedKeeps).
 type whenCheck struct {
 	value string
-	// sentAs is the value as sent when things.ResolveWhen rewrote it, ""
-	// when it went as value. It is what the read-back judges; messages
-	// name value, as typed.
+	// sentAs is the value as sent (things.ResolveWhen), "" when it went as
+	// value, as an import's when does. It is what the read-back judges;
+	// messages name value, as typed.
 	sentAs   string
 	sent     time.Time
 	before   *model.Task

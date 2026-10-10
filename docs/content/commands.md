@@ -696,7 +696,8 @@ it already has is detected before the wait when every flag is `--title`,
 `--notes`, `--tags`, `--add-tags` (tags compared case-insensitively), a
 `--deadline` date, an empty `--append-notes` or `--prepend-notes`, or a
 `--when` of `anytime`, `someday`, `today`, `evening`, `tomorrow`, empty,
-a date, an `HH:MM` time or a `YYYY-MM-DD@HH:MM` date and time. A past date
+a date, an `HH:MM` time or a `YYYY-MM-DD@HH:MM` date and time (`today@6pm`
+and `tomorrow@18:00` included, judged as the date and time sent). A past date
 files the item under today. `--when today`, `evening`, today's date or a
 past date clears a reminder, so on an item with one it counts as a change
 and waits; a later day keeps the reminder. A time sets the reminder, for

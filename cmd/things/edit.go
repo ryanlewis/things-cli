@@ -419,12 +419,16 @@ func runEdit[P interface {
 	// that may differ from the item: any field flag outside coveredFields,
 	// or a covered one whose value the item does not provably have already
 	// (coveredFields.unchanged).
-	cf := f.covered()
-	changed := uncovered || cf.set() && !cf.unchanged(task, foldTags(unknown), reads, now)
+	// The no-op check judges --when as sent (things.ResolveWhen), as the
+	// read-back does, so tomorrow@8am on an item already filed there is
+	// caught here rather than waited on.
 	if f.When != nil {
 		sent := things.ResolveWhen(*f.When, now)
 		common.When = &sent
 	}
+	cf := f.covered()
+	cf.when = common.When
+	changed := uncovered || cf.set() && !cf.unchanged(task, foldTags(unknown), reads, now)
 	var when *whenCheck
 	if f.When != nil && changed {
 		whenOnly := !uncovered && f.onlyWhen()
