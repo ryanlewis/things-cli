@@ -35,8 +35,7 @@ func badImportDates(item map[string]any) (lines, names []string) {
 		if _, ok := parseThingsDate(raw); ok || raw == nil {
 			continue
 		}
-		shown, _ := json.Marshal(raw)
-		lines = append(lines, fmt.Sprintf("%s: %s", name, shown))
+		lines = append(lines, fmt.Sprintf("%s: %s", name, jsonText(raw)))
 		names = append(names, name)
 	}
 	return lines, names
@@ -59,11 +58,18 @@ func futureImportDates(item map[string]any, now time.Time) (lines, names []strin
 		if !ok || !at.After(now.Add(datedSlack)) {
 			continue
 		}
-		shown, _ := json.Marshal(attrs[name])
-		lines = append(lines, fmt.Sprintf("%s: %s (%s)", name, shown, at.UTC().Format(time.RFC3339)))
+		lines = append(lines, fmt.Sprintf("%s: %s (%s)", name, jsonText(attrs[name]), at.UTC().Format(time.RFC3339)))
 		names = append(names, name)
 	}
 	return lines, names
+}
+
+// jsonText is v as JSON, the form the refusal messages quote a payload value
+// in. A value decoded from the payload always encodes, so the error is
+// dropped.
+func jsonText(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 // importScheduleDate is a date as the Things JSON format writes when and
@@ -172,8 +178,7 @@ func badImportSchedule(item map[string]any) (lines, names []string) {
 			continue
 		}
 		if why := checkScheduleValue(name, v); why != "" {
-			shown, _ := json.Marshal(v)
-			lines = append(lines, fmt.Sprintf("%s: %s (%s)", name, shown, why))
+			lines = append(lines, fmt.Sprintf("%s: %s (%s)", name, jsonText(v), why))
 			names = append(names, name)
 		}
 	}
@@ -198,8 +203,7 @@ func badImportTypes(item map[string]any) (lines, names []string) {
 		switch raw := attrs[name]; raw.(type) {
 		case nil, string:
 		default:
-			shown, _ := json.Marshal(raw)
-			lines = append(lines, fmt.Sprintf("%s: %s", name, shown))
+			lines = append(lines, fmt.Sprintf("%s: %s", name, jsonText(raw)))
 			names = append(names, name)
 		}
 	}
