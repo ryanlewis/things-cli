@@ -225,7 +225,7 @@ func (r *destResolver) taskDest(c importCreate) createdDest {
 		// lowest-uuid twin of one the list already has.
 		dest.anyHeading = true
 	case heading != "" && !res.headingFound:
-		r.warn(c, "%s", noHeading(list, heading, "add the to-do there without a heading"))
+		r.warn(c, "%s", noHeading(listName(list, res.target), heading, "add the to-do there without a heading"))
 	}
 	return dest
 }

@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ryanlewis/things-cli/internal/db"
+)
 
 // The warnings add, edit, project and import give when Things cannot find
 // the list, area or heading an item was sent to. Agents read this wording,
@@ -25,6 +29,16 @@ func noTarget(noun, ref string, byID bool, next string) string {
 // give it a list, and next what Things does with the to-do instead.
 func headingNeedsList(name, heading, needs, next string) string {
 	return fmt.Sprintf("%s %q needs %s; Things will ignore it and %s", name, heading, needs, next)
+}
+
+// listName is how a warning names the list ref led to: by its title when
+// ref was the list's uuid, since that is the name the user knows it by, and
+// as given otherwise.
+func listName(ref string, t db.Target) string {
+	if t.ByUUID && t.Title != "" {
+		return t.Title
+	}
+	return ref
 }
 
 // noHeading is the warning for a heading title list does not have. next is

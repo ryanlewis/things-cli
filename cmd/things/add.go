@@ -102,7 +102,7 @@ func resolveAddTarget(d *Deps, list, heading string) (db.Target, createdDest) {
 		fmt.Fprintf(d.errOut(), "warning: %s\n", noTarget("project or area", list, false, "it will put the to-do in the Inbox"))
 		return target, createdDest{checked: true}
 	case heading != "" && !headingFound:
-		fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(list, heading, "add the to-do there without a heading"))
+		fmt.Fprintf(d.errOut(), "warning: %s\n", noHeading(listName(list, target), heading, "add the to-do there without a heading"))
 	}
 	noteTarget(d, list, "lists", target)
 	return target, addDest(target)

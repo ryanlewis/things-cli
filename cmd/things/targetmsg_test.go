@@ -19,6 +19,8 @@ func TestTargetWarningsExact(t *testing.T) {
 			`Things finds no project or area called "Nowhere"; it will put the to-do in the Inbox`},
 		{"addUnknownHeading", []string{"add", "Buy oat milk", "--list", "Tools", "--heading", "Later"},
 			`"Tools" has no heading "Later"; Things will add the to-do there without a heading`},
+		{"addUnknownHeadingInListUUID", []string{"add", "Buy oat milk", "--list", "proj-1", "--heading", "Later"},
+			`"Tools" has no heading "Later"; Things will add the to-do there without a heading`},
 		{"addHeadingWithoutList", []string{"add", "Buy oat milk", "--heading", "Setup"},
 			`--heading "Setup" needs --list or --project; Things will ignore it and put the to-do in the Inbox`},
 		{"editUnknownList", []string{"edit", "one-1", "--list", "Nowhere"},
@@ -38,7 +40,7 @@ func TestTargetWarningsExact(t *testing.T) {
 		{"editUnknownOwnHeading", []string{"edit", "tool-1", "--heading", "Later"},
 			`"Tools" has no heading "Later"; Things will leave the to-do where it is`},
 		{"editHeadingNoProject", []string{"edit", "one-1", "--heading", "Setup"},
-			`--heading "Setup" needs --list, as the to-do is not in a project; Things will ignore it and leave the to-do where it is`},
+			`--heading "Setup" needs --list or --list-id, as the to-do is not in a project; Things will ignore it and leave the to-do where it is`},
 		{"editUnknownHeadingID", []string{"edit", "tool-1", "--heading-id", "nope"},
 			`Things has no heading with id "nope"; the to-do will stay where it is`},
 		{"editUnknownHeadingIDWithList", []string{"edit", "one-1", "--list", "Tools", "--heading-id", "nope"},
@@ -87,6 +89,7 @@ func TestImportTargetWarningsExact(t *testing.T) {
 	  {"type":"to-do","attributes":{"title":"d","list":"Tools","heading":"Setup"}},
 	  {"type":"to-do","attributes":{"title":"e","list":"Tools","heading-id":"nope"}},
 	  {"type":"to-do","attributes":{"title":"f","heading":"Setup"}},
+	  {"type":"to-do","attributes":{"title":"g","list-id":"proj-1","heading":"Later"}},
 	  {"type":"project","attributes":{"title":"Shed","area":"Nowhere"}},
 	  {"type":"project","attributes":{"title":"Barn","area-id":"nope"}}
 	]`
@@ -101,8 +104,9 @@ func TestImportTargetWarningsExact(t *testing.T) {
 		`[3]: "Tools" has no heading "Setup"; Things will add the to-do there without a heading`,
 		`[4]: Things has no heading with id "nope"; it will ignore heading-id and heading`,
 		`[5]: heading "Setup" needs list or list-id; Things will ignore it and put the to-do in the Inbox`,
-		`[6]: Things finds no area called "Nowhere"; it will create the project in no area`,
-		`[7]: Things finds no area with id "nope"; it will create the project in no area`,
+		`[6]: "Tools" has no heading "Later"; Things will add the to-do there without a heading`,
+		`[7]: Things finds no area called "Nowhere"; it will create the project in no area`,
+		`[8]: Things finds no area with id "nope"; it will create the project in no area`,
 	} {
 		if !strings.Contains(stderr, "warning: "+want+"\n") {
 			t.Errorf("stderr = %q, want the line %q", stderr, "warning: "+want)
