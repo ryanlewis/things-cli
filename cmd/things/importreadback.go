@@ -474,6 +474,16 @@ func unconfirmShared(out []importCreated, creates []importCreate, found map[crea
 	}
 }
 
+// confirmedRow is the row c was confirmed under, uuid, among the new items
+// found for it, or nil when it is not among them.
+func confirmedRow(found map[createdWant][]model.Task, c importCreate, uuid string) *model.Task {
+	rows := found[c.want()]
+	if i := slices.IndexFunc(rows, func(t model.Task) bool { return t.UUID == uuid }); i >= 0 {
+		return &rows[i]
+	}
+	return nil
+}
+
 // checkClosedAt turns back each confirmation of an item the payload closes
 // with a completion-date whose row was saved with another stopDate, keeping
 // its uuid: the item is there, without its date. A row with no stopDate yet
@@ -487,11 +497,11 @@ func checkClosedAt(database *db.DB, out []importCreated, creates []importCreate,
 		if !out[i].Confirmed || c.closedAt.IsZero() {
 			continue
 		}
-		idx := slices.IndexFunc(found[c.want()], func(t model.Task) bool { return t.UUID == out[i].UUID })
-		if idx < 0 {
+		row := confirmedRow(found, c, out[i].UUID)
+		if row == nil {
 			continue
 		}
-		stops[out[i].UUID] = found[c.want()][idx].StopDate
+		stops[out[i].UUID] = row.StopDate
 		if stops[out[i].UUID] == nil {
 			pending = append(pending, out[i].UUID)
 		}
@@ -538,11 +548,10 @@ func checkWhens(out []importCreated, creates []importCreate, found map[createdWa
 		if !out[i].Confirmed || c.closed || c.to.parentClosed || strings.TrimSpace(c.when) == "" {
 			continue
 		}
-		idx := slices.IndexFunc(found[c.want()], func(t model.Task) bool { return t.UUID == out[i].UUID })
-		if idx < 0 {
+		row := confirmedRow(found, c, out[i].UUID)
+		if row == nil {
 			continue
 		}
-		row := &found[c.want()][idx]
 		check := &whenCheck{value: c.when, sent: sent}
 		switch check.verdict(row, now) {
 		case whenNotFiled:
