@@ -308,9 +308,12 @@ for them a to-do sharing the title does not get in the way.
 
 The tokens are `ambiguous task`, `not found`, `not a task`, `not a project`,
 `trashed`, `stale list cache`, `already closed`, `empty reference`, `misfiled`,
-`blank-title`, `import refused`, `import partially applied`, and `error` for
-everything else. `empty reference` is an empty or all-space `<task>`
-argument, refused before any lookup. `blank-title` is an `add`, `project
+`blank-title`, `unknown field`, `import refused`, `import partially applied`,
+and `error` for everything else. `empty reference` is an empty or all-space
+`<task>` argument, refused before any lookup. `unknown field` is a `--fields`
+list naming a key the listing's rows do not have, refused before anything is
+read: `unknown` lists the names it did not know and `valid` every name it
+takes, so read `valid` and retry. `blank-title` is an `add`, `project
 add`, or an `edit` or `project edit` `--title`, whose title is empty or only
 whitespace: nothing is sent, as `import` refuses the same title with reason
 `blank-title`.
