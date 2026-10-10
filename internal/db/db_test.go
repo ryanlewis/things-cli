@@ -1,6 +1,9 @@
 package db
 
 import (
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -51,6 +54,159 @@ func TestFindDBPathMultipleMatches(t *testing.T) {
 	_, err := FindDBPath()
 	if err == nil || !strings.Contains(err.Error(), "multiple") {
 		t.Fatalf("expected multiple error, got %v", err)
+	}
+}
+
+// denyStat wraps os.Stat, refusing the database path under each named
+// ThingsData folder the way macOS refuses an app-group container.
+func denyStat(t *testing.T, container string, folders ...string) statFunc {
+	t.Helper()
+	denied := map[string]bool{}
+	for _, f := range folders {
+		denied[filepath.Join(container, f, "Things Database.thingsdatabase", "main.sqlite")] = true
+	}
+	return func(path string) (os.FileInfo, error) {
+		if denied[path] {
+			return nil, &os.PathError{Op: "stat", Path: path, Err: fs.ErrPermission}
+		}
+		return os.Stat(path)
+	}
+}
+
+func makeThingsData(t *testing.T, container, folder string) string {
+	t.Helper()
+	dir := filepath.Join(container, folder, "Things Database.thingsdatabase")
+	mustMkdirAll(t, dir)
+	path := filepath.Join(dir, "main.sqlite")
+	mustCreate(t, path)
+	return path
+}
+
+func thingsContainer(home string) string {
+	return filepath.Join(home, "Library", "Group Containers", thingsGroupContainer)
+}
+
+func TestFindDBPathContainerPermissionDenied(t *testing.T) {
+	home := t.TempDir()
+	container := thingsContainer(home)
+	diagnosis, err := findDBPath(home, func(path string) ([]os.DirEntry, error) {
+		if path != container {
+			t.Fatalf("ReadDir(%q), want %q", path, container)
+		}
+		return nil, &os.PathError{Op: "open", Path: path, Err: fs.ErrPermission}
+	}, os.Stat)
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("err = %v, want one wrapping fs.ErrPermission", err)
+	}
+	if errors.Is(err, fs.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		t.Errorf("a refusal reads as a missing database: %v", err)
+	}
+	if diagnosis.Container != container || diagnosis.Pattern == "" {
+		t.Errorf("diagnosis = %+v, want the container and pattern filled in", diagnosis)
+	}
+}
+
+func TestFindDBPathDatabasePermissionDenied(t *testing.T) {
+	home := t.TempDir()
+	container := thingsContainer(home)
+	makeThingsData(t, container, "ThingsData-ABC")
+	_, err := findDBPath(home, os.ReadDir, denyStat(t, container, "ThingsData-ABC"))
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("err = %v, want one wrapping fs.ErrPermission", err)
+	}
+}
+
+// An unreadable ThingsData folder must not hide a readable one holding the
+// database: Glob skipped the unreadable one, and so does the walk.
+func TestFindDBPathPermissionDeniedBesideMatch(t *testing.T) {
+	home := t.TempDir()
+	container := thingsContainer(home)
+	mustMkdirAll(t, filepath.Join(container, "ThingsData-OLD"))
+	want := makeThingsData(t, container, "ThingsData-NEW")
+	diagnosis, err := findDBPath(home, os.ReadDir, denyStat(t, container, "ThingsData-OLD"))
+	if err != nil {
+		t.Fatalf("findDBPath: %v", err)
+	}
+	if diagnosis.Database != want {
+		t.Errorf("Database = %q, want %q", diagnosis.Database, want)
+	}
+}
+
+// A file named like a ThingsData folder fails stat with ENOTDIR. Glob skipped
+// it, so the walk must too.
+func TestFindDBPathSkipsStrayFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	container := thingsContainer(home)
+	mustMkdirAll(t, container)
+	mustCreate(t, filepath.Join(container, "ThingsData-stray"))
+	want := makeThingsData(t, container, "ThingsData-ABC")
+	got, err := FindDBPath()
+	if err != nil {
+		t.Fatalf("FindDBPath: %v", err)
+	}
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestFindDBPathStrayFileOnlyIsNotFound(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	container := thingsContainer(home)
+	mustMkdirAll(t, container)
+	mustCreate(t, filepath.Join(container, "ThingsData-stray"))
+	_, err := FindDBPath()
+	var notFound *NotFoundError
+	if !errors.As(err, &notFound) || !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("err = %v, want a NotFoundError", err)
+	}
+}
+
+func TestFindDBPathMultipleIsTyped(t *testing.T) {
+	home := t.TempDir()
+	container := thingsContainer(home)
+	makeThingsData(t, container, "ThingsData-A")
+	makeThingsData(t, container, "ThingsData-B")
+	diagnosis, err := findDBPath(home, os.ReadDir, os.Stat)
+	var multiple *MultipleError
+	if !errors.As(err, &multiple) || len(multiple.Matches) != 2 {
+		t.Fatalf("err = %v, want a MultipleError with two matches", err)
+	}
+	if diagnosis.Database != "" || len(diagnosis.Matches) != 2 {
+		t.Errorf("diagnosis = %+v, want two matches and no database", diagnosis)
+	}
+}
+
+func TestProbeReadablePreservesPermissionError(t *testing.T) {
+	err := probeReadable("/protected/main.sqlite", func(path string) (*os.File, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: fs.ErrPermission}
+	})
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("err = %v, want one wrapping fs.ErrPermission", err)
+	}
+}
+
+func TestProbeReadableAllowsEmptyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty.sqlite")
+	mustCreate(t, path)
+	if err := probeReadable(path, os.Open); err != nil {
+		t.Fatalf("probeReadable: %v", err)
+	}
+}
+
+func TestOpenReportsPermissionDenied(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-000 file")
+	}
+	path := filepath.Join(t.TempDir(), "locked.sqlite")
+	mustCreate(t, path)
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Open(path)
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("Open err = %v, want one wrapping fs.ErrPermission", err)
 	}
 }
 
