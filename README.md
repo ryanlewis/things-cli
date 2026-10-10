@@ -234,6 +234,23 @@ Note for scripts and agents: `json = true` changes the output of every
 command. Pass `--json` (or `--json=false`) explicitly rather than relying
 on whatever the config file happens to say.
 
+### Database diagnostics
+
+`things doctor` checks that the Things database can be found and opened
+read-only, without reading task data. Run it when another command says
+the database is missing or cannot be opened:
+
+```sh
+things doctor
+things --json doctor
+```
+
+It tells a missing database (`not_found`) apart from macOS refusing
+access (`permission_denied`), and says whether the path came from
+automatic discovery, `--db` or the config file. The full report goes to
+stdout, and the command exits 1 when the check fails. See
+[`things doctor`](https://things.rlew.io/commands/#doctor).
+
 ### Listing tasks
 
 `things <view>` prints a built-in list. With no arguments, `things` prints
