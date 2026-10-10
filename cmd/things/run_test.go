@@ -711,6 +711,29 @@ func TestRunOpenProjectOpensProject(t *testing.T) {
 	}
 }
 
+// --project matches projects alone by title, so a to-do sharing the
+// project's title, or the fragment typed, does not shadow it or make it
+// ambiguous.
+func TestRunOpenProjectIgnoresTodoTitles(t *testing.T) {
+	sqlDB := dbtest.NewSQL(t)
+	fx := dbtest.NewFixture(t, sqlDB)
+	fx.Project("proj-v2", "Launch v2", 0)
+	fx.Todo("todo-blog", "Launch blog", 1, dbtest.Anytime())
+	fx.Todo("todo-v2", "Launch v2", 2, dbtest.Anytime())
+	database := db.NewFromSQL(sqlDB)
+	for _, ref := range []string{"Launch", "Launch v2", "launch v2"} {
+		t.Run(ref, func(t *testing.T) {
+			captured := stubExec(t)
+			if err := runWith(t, database, "open", "--project", ref); err != nil {
+				t.Fatalf("open --project %q: %v", ref, err)
+			}
+			if !strings.Contains(strings.Join(*captured, " "), "proj-v2") {
+				t.Errorf("opened %v, want proj-v2", *captured)
+			}
+		})
+	}
+}
+
 func TestConfirmActionNonInteractive(t *testing.T) {
 	if confirmAction(&Deps{}, "Really?") {
 		t.Error("expected false in non-interactive test run")

@@ -32,7 +32,7 @@ import (
 //     when no open row has it, so the write refuses them), then a fragment
 //     of an open task's title.
 func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
-	return resolveRef(d, ref, database, false)
+	return resolveRef(d, ref, database, false, false)
 }
 
 // resolveTaskForWrite is resolveTask for a command that changes the item. An
@@ -42,10 +42,18 @@ func resolveTask(d *Deps, ref string, database *db.DB) (*model.Task, error) {
 // would read as success to a script. A uuid or a row number that names a
 // closed item still resolves, and the write decides what to do with it.
 func resolveTaskForWrite(d *Deps, ref string, database *db.DB) (*model.Task, error) {
-	return resolveRef(d, ref, database, true)
+	return resolveRef(d, ref, database, true, false)
 }
 
-func resolveRef(d *Deps, ref string, database *db.DB, write bool) (*model.Task, error) {
+// resolveProject is resolveTask with only projects matched by title, so a
+// to-do sharing a project's title or a fragment of it does not stand in the
+// way. A row number or a uuid still names any item, and the caller refuses
+// one that is not a project.
+func resolveProject(d *Deps, ref string, database *db.DB) (*model.Task, error) {
+	return resolveRef(d, ref, database, false, true)
+}
+
+func resolveRef(d *Deps, ref string, database *db.DB, write, projects bool) (*model.Task, error) {
 	// A blank ref is a title fragment of every task, and an exact title of
 	// every untitled one: `show ''` must not pick one of those.
 	if strings.TrimSpace(ref) == "" {
@@ -107,9 +115,12 @@ func resolveRef(d *Deps, ref string, database *db.DB, write bool) (*model.Task, 
 	// in the wrong case would otherwise reach a task whose title merely
 	// contains it.
 	uuidShaped := kind == refPlain && looksLikeUUID(strings.TrimSpace(ref))
-	lookup := database.GetTask
+	lookup, exact := database.GetTask, database.GetTaskExact
+	if projects {
+		lookup, exact = database.GetProject, database.GetProjectExact
+	}
 	if kind != refPlain || uuidShaped {
-		lookup = database.GetTaskExact
+		lookup = exact
 	}
 	task, err := lookup(ref)
 	var notFound *db.TaskNotFoundError

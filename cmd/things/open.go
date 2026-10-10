@@ -2,15 +2,17 @@ package main
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 
+	"github.com/ryanlewis/things-cli/internal/db"
 	"github.com/ryanlewis/things-cli/internal/model"
 	"github.com/ryanlewis/things-cli/internal/things"
 )
 
 type OpenCmd struct {
 	Ref        string `arg:"" optional:"" help:"Task/project UUID, numeric list index, title, or built-in list name (${builtin_lists})."`
-	Project    string `help:"Open project by name or UUID." short:"p"`
+	Project    string `help:"Open project by title, UUID or list index; titles match projects only, and a to-do is refused." short:"p"`
 	Area       string `help:"Open area by name or UUID." short:"a"`
 	Tag        string `help:"Open tag by name or UUID." short:"t"`
 	Query      string `help:"App-side quick find." short:"q"`
@@ -70,7 +72,7 @@ func (c *OpenCmd) Run(d *Deps) error {
 	default:
 		// --project, else the positional ref, names an item.
 		ref := cmp.Or(c.Project, c.Ref)
-		task, err := resolveTask(d, ref, database)
+		task, err := c.resolve(d, ref, database)
 		if err != nil {
 			return err
 		}
@@ -94,6 +96,21 @@ func (c *OpenCmd) Run(d *Deps) error {
 	}
 
 	return things.Show(params)
+}
+
+// resolve finds the item ref names. --project matches projects alone by
+// title; when no project has the title, the ref is tried as any item, so a
+// to-do it names is refused as the wrong kind rather than as not found.
+func (c *OpenCmd) resolve(d *Deps, ref string, database *db.DB) (*model.Task, error) {
+	if c.Project == "" {
+		return resolveTask(d, ref, database)
+	}
+	task, err := resolveProject(d, ref, database)
+	var notFound *db.TaskNotFoundError
+	if errors.As(err, &notFound) {
+		return resolveTask(d, ref, database)
+	}
+	return task, err
 }
 
 // refuseHiddenInTrash refuses to open a to-do whose project is in the Trash.
