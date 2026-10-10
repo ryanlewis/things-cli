@@ -945,7 +945,9 @@ have `today`, `tomorrow`, `evening` or a real `YYYY-MM-DD` before it and a
 real time of day, such as `18:00`, `9:30PM` or `6pm`, after it: Things
 files `tomorrow@25:00` tomorrow with no reminder, and ignores the time in
 `someday@18:00` and `anytime@…`, so these are refused, as is a phrase
-with a time such as `next friday@18:00`. A bare time and an RFC 3339
+with a time such as `next friday@18:00`. A date, `today` or `tomorrow`
+with a time is sent as `add` sends it, as `YYYY-MM-DD@HH:MM`: `today@6pm`
+goes as today's date at `18:00`. A bare time and an RFC 3339
 timestamp are refused. The keywords, weekday names
 and English phrases such as `next week` are sent as they are, as `add`
 sends them; how Things reads a phrase in a payload was not measured. Update
@@ -1110,7 +1112,8 @@ an unconfirmed `add` does, and no `uuid` unless the reason is
   item is in `items` with its `id`; set the date in the Things app rather
   than importing the item again. A `completion-date` on an item the payload
   does not complete or cancel is ignored by Things and not checked.
-- `misfiled`: the item's `when` is a keyword or a date, and Things filed
+- `misfiled`: the item's `when` is a keyword, a date, or a date and time
+  (judged as sent, so `today@6pm` as today's date at `18:00`), and Things filed
   the new item somewhere else, as `add` reports a `--when` that did not
   land. A to-do sent with `when` `today` and a deadline already past is one
   case: Things files it in the Inbox with no start date. It carries its
