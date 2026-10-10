@@ -389,6 +389,12 @@ func TestEditCertainNoOpSkipsTheWait(t *testing.T) {
 		{"whenTimeOtherClock", []string{"edit", "rem-1", "--when", "18:30"}, false},
 		// Things records no change for the reminder an item already has.
 		{"whenSameDateTime", []string{"edit", "tom-1", "--when", day(1) + "@08:00"}, true},
+		// A dated time or tomorrow with a time is judged as sent
+		// (YYYY-MM-DD@HH:MM), so the same reminder is no change.
+		{"whenTomorrowAtSameClock", []string{"edit", "tom-1", "--when", "tomorrow@8am"}, true},
+		{"whenTomorrowAtSameClock24", []string{"edit", "tom-1", "--when", "Tomorrow@08:00"}, true},
+		{"whenSameDate12Hour", []string{"edit", "tom-1", "--when", day(1) + "@8am"}, true},
+		{"whenTomorrowAtOtherClock", []string{"edit", "tom-1", "--when", "tomorrow@9am"}, false},
 		{"whenDateTimeOtherClock", []string{"edit", "tom-1", "--when", day(1) + "@09:00"}, false},
 		{"whenPastDateTimeOnReminder", []string{"edit", "rem-1", "--when", day(-2) + "@18:00"}, true},
 		{"whenTomorrowKeepsReminder", []string{"edit", "tom-1", "--when", "tomorrow"}, true},
