@@ -39,7 +39,7 @@ with.
 In v0.7.0 and earlier `type` and `start` were both integers, so a caller
 matching on `.type==1` has to become `.type=="project"`, and one matching
 on `.start==2` has to become `.start=="someday"`. `startBucket` alongside
-them is still an integer: `1` is the app's This Evening section and `0` is
+them (in `show`, and in a listing under `--fields all`) is still an integer: `1` is the app's This Evening section and `0` is
 everything else. Only the first of those has a name in Things' own
 vocabulary, so naming the pair would have meant inventing a word for `0`.
 
@@ -144,7 +144,7 @@ was last placed in Today, most recent first, so items placed today come above
 those carried over from an earlier day, and then by the position Things keeps
 for the day. An item closed today stays where it was rather than moving to the
 end. Items scheduled for this evening (`--when evening`, `"startBucket": 1` in
-JSON) come after every other item, arranged the same way among themselves,
+`show --json` or a `--fields all` listing) come after every other item, arranged the same way among themselves,
 and plain output prints a `This Evening` header above them, as the app does.
 `upcoming` reads by date instead, the way the app's own Upcoming does.
 Like the app, it also lists an undated Anytime or Someday task or project
@@ -373,7 +373,7 @@ cut down to 10. Piped output keeps every column whole.
 
 Projects are scheduled the same way tasks are, and `things projects -j`
 reports that with the same field names and encodings: `start`,
-`startBucket`, `startDate` and `deadline`. A caller can tell a scheduled
+`startDate`, `deadline`, and `startBucket` under `--fields all`. A caller can tell a scheduled
 project from an anytime one without a `things show` per project.
 
 `things projects -j` also reports two counts per project. `taskCount` is
