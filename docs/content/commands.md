@@ -565,7 +565,10 @@ checked.
 Things files the to-do by matching `--list` (or `--project`) against the
 titles of the projects and areas it shows, and `--heading` against the
 headings of that project. Both ignore case but not surrounding space, so
-`" Tools "` does not match a project called Tools. When nothing matches it
+the CLI sends a name as you typed it when Things matches it that way, and
+trimmed when only the trimmed name matches: `" Tools "` goes as `Tools`,
+while `"Errands "` still reaches an area whose title really is `Errands `.
+A name neither form matches goes as typed, with the warning below. When nothing matches it
 does not complain: it puts the to-do in the Inbox, or adds it to the list
 without the heading. A trashed project does not match by title, nor does a
 closed one Things has moved to the Logbook; one closed but not yet logged
@@ -596,7 +599,8 @@ note: "Tools" is in the Trash; Things will file into it there
 takes an area name or UUID; a UUID goes to Things as `area-id`, since
 Things matches `area` by title only. It matches the title ignoring case and
 compatibility forms (fullwidth letters, superscript digits) but not
-surrounding space; when several areas match, Things takes the one whose
+surrounding space, so the CLI sends a padded name trimmed when only the
+trimmed name matches, as for `add --list`; when several areas match, Things takes the one whose
 UUID sorts first, as for `add --list`, and the CLI notes which. When
 nothing matches it creates the project with no area. `project add` warns on
 stderr when that will happen, then sends the project anyway:
@@ -661,7 +665,8 @@ things edit 3 --list Tools --heading Setup
 
 `--list` and `--heading` move the to-do. Things matches them the way it
 does for `add`: ignoring case and compatibility forms but not surrounding
-space, and only against
+space (the CLI sends a padded name trimmed when only that form matches, as
+`add` does, and `project edit --area` does the same), and only against
 the projects (including one closed but not yet logged) and areas `add`
 matches; when several share the title, the one whose UUID sorts first is
 the one the to-do moves to. `--list` also takes a UUID of a project or
@@ -1067,7 +1072,9 @@ it, padding included:
   trashed one takes the to-do into the Trash.
 - A `list` title goes to the list Things picks for that title, as for
   `add`, under its `heading` when it has one. Things does not trim it, so
-  `"Work "` does not match `Work`. A title that matches nothing, or a uuid
+  `"Work "` does not match `Work`. Unlike `add` and `edit`, `import` does
+  not trim `list`, `area` or `heading`: the payload is Things' own format
+  and goes as given, so fix the name in the payload when the CLI warns. A title that matches nothing, or a uuid
   given as `list`, puts the to-do in the Inbox. When a project created
   earlier in the same payload, or renamed to that title by an earlier
   update item, has that title, the to-do may go to either, so any list with

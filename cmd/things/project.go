@@ -44,7 +44,7 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 		return err
 	}
 	// Things matches area by title only; a uuid has to go as area-id.
-	target, read := projectArea(d, c.Area, "it will create the project with no area")
+	target, read := projectArea(d, &params.Area, "it will create the project with no area")
 	// Where Things will file the project, for the read-back: the area the
 	// title or uuid leads to, or none when it leads nowhere.
 	dest := createdDest{checked: true, list: target.UUID}
@@ -70,8 +70,11 @@ func (c *ProjectAddCmd) Run(d *Deps) error {
 // the area and without reporting it: add creates the project with no area,
 // and update leaves it where it is. fallback says which, for the warning. It
 // read is false when the database cannot be read, which gives no warning
-// here: the read-back reports that. An empty area matches nothing.
-func projectArea(d *Deps, area, fallback string) (target db.Target, read bool) {
+// here: the read-back reports that. An empty area matches nothing. It sets
+// area to the name to send, trimmed when only that form matches
+// (areaTargetName).
+func projectArea(d *Deps, areap *string, fallback string) (target db.Target, read bool) {
+	area := *areap
 	if area == "" {
 		return db.Target{}, true
 	}
@@ -81,14 +84,17 @@ func projectArea(d *Deps, area, fallback string) (target db.Target, read bool) {
 	}
 	// Not FindAreaUUID: it ignores surrounding space, and Things does not.
 	// Checked in Things 3 with " Personal " against an area called Personal,
-	// for project add's area and add's list alike: neither matched.
-	t, err := database.AreaTarget(area)
+	// for project add's area and add's list alike: neither matched. So the
+	// trimmed name is tried, and sent, only when the name as given matches
+	// nothing.
+	t, sent, err := areaTargetName(database, area)
 	switch {
 	case err != nil:
 		return db.Target{}, false
 	case t.UUID == "":
 		fmt.Fprintf(d.errOut(), "warning: %s\n", noTarget("area", area, false, fallback))
 	}
+	*areap = sent
 	return t, true
 }
 
@@ -132,7 +138,7 @@ func (c *ProjectEditCmd) checkOwn(d *Deps, database *db.DB, task *model.Task) bo
 		// What Things does with an empty area was not checked.
 		return true
 	}
-	target, read := projectArea(d, *c.Area, "the project will stay where it is")
+	target, read := projectArea(d, c.Area, "the project will stay where it is")
 	if !read {
 		return true
 	}
