@@ -978,6 +978,51 @@ func TestRunProjectEditNoProjectAmongTodos(t *testing.T) {
 	}
 }
 
+// A row number, a row-like ref or a uuid-shaped ref that names no project is
+// a project not found, as a title miss is: `open --project 99` must not say
+// task not found.
+func TestRunProjectRefNotFoundKind(t *testing.T) {
+	refs := []struct{ name, ref, want string }{
+		{"row past the list", "99", `"99" is not a row in the last list`},
+		{"stale row", "2", "project #2 no longer exists"},
+		{"row-like", "#12", "no project has exactly that title"},
+		{"uuid-shaped", "Abcdefghijklmnopqrstu", "no project has exactly that title"},
+	}
+	cmds := map[string][]string{
+		"open":         {"open", "--project"},
+		"project edit": {"project", "edit"},
+	}
+	for _, r := range refs {
+		for name, cmd := range cmds {
+			t.Run(r.name+" "+name, func(t *testing.T) {
+				isolateHome(t)
+				seedCache(t, time.Minute, "things projects", "proj-v2", "gone")
+				sqlDB := dbtest.NewSQL(t)
+				dbtest.NewFixture(t, sqlDB).Project("proj-v2", "Launch v2", 0)
+				captured := stubExec(t)
+				args := append(append([]string{}, cmd...), r.ref)
+				if name == "project edit" {
+					args = append(args, "--notes", "x")
+				}
+				err := runWith(t, db.NewFromSQL(sqlDB), args...)
+				if len(*captured) != 0 {
+					t.Errorf("nothing should be sent, got %v", *captured)
+				}
+				if err == nil || !strings.Contains(err.Error(), r.want) {
+					t.Errorf("err = %v, want it to contain %q", err, r.want)
+				}
+				if err != nil && strings.Contains(err.Error(), "task") {
+					t.Errorf("err = %q, says task for a project lookup", err)
+				}
+				payload, raw := decodePayload(t, err)
+				if payload.Error != "not found" || payload.Kind != "project" || payload.Query != r.ref {
+					t.Errorf("payload = %s, want a project not found", raw)
+				}
+			})
+		}
+	}
+}
+
 // The write rules still hold for a title only a closed project carries: the
 // edit is refused, not sent to it.
 func TestRunProjectEditRefusesClosedProjectTitle(t *testing.T) {
