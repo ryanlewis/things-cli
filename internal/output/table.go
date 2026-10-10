@@ -133,11 +133,16 @@ func dropEmptySpans(s string) string {
 func (t *table) lines() []string {
 	cols := t.fit()
 
+	// Every cell is a single line (callers fold breaks with oneLine, and no
+	// cell is wider than its padded column), so a row is its padded cells
+	// joined by the gap.
 	lines := make([]string, len(t.rows))
+	cells := make([]string, len(cols))
+	var b strings.Builder
 	for i, row := range t.rows {
-		cells := make([]string, len(cols))
 		end := -1
 		for c, k := range cols {
+			cells[c] = ""
 			if !k.keep || c >= len(row) {
 				continue
 			}
@@ -150,18 +155,23 @@ func (t *table) lines() []string {
 				end = c
 			}
 		}
-		parts := make([]string, 0, end+1)
+		b.Reset()
+		first := true
 		for c, k := range cols[:end+1] {
 			if !k.keep {
 				continue
 			}
+			if !first {
+				b.WriteString(t.gap)
+			}
+			first = false
 			if c == end {
-				parts = append(parts, cells[c])
+				b.WriteString(cells[c])
 				continue
 			}
-			parts = append(parts, padCol(k.width, cells[c]))
+			b.WriteString(padCol(k.width, cells[c]))
 		}
-		lines[i] = joinWithGap(parts, t.gap)
+		lines[i] = b.String()
 	}
 	return lines
 }
@@ -371,18 +381,4 @@ func (t *table) width(cols []col) int {
 
 func padCol(width int, s string) string {
 	return lipgloss.NewStyle().Width(width).Render(s)
-}
-
-func joinWithGap(cols []string, gap string) string {
-	if len(cols) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(cols)*2-1)
-	for i, c := range cols {
-		if i > 0 {
-			parts = append(parts, gap)
-		}
-		parts = append(parts, c)
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }
