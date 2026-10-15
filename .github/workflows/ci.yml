@@ -70,6 +70,15 @@ jobs:
       - name: govulncheck (SARIF)
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" -format sarif ./... > govulncheck.sarif
 
+      # govulncheck can give one result the same call stack twice, and the
+      # upload rejects the whole file over it ("stacks contains duplicate
+      # item", issue #409). Drop the repeats; the order of stacks carries no
+      # meaning.
+      - name: De-duplicate SARIF stacks
+        run: |
+          jq '.runs[].results[]? |= if .stacks then .stacks |= unique else . end' govulncheck.sarif > govulncheck.dedup.sarif
+          mv govulncheck.dedup.sarif govulncheck.sarif
+
       - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
           sarif_file: govulncheck.sarif
