@@ -57,16 +57,16 @@ func validateTags(field, v string) error {
 func validateEach(field, noun string, values []string) error {
 	for _, v := range values {
 		if c := utf8.RuneCountInString(v); c > MaxStringLen {
-			return fmt.Errorf("%s: %s %q (%d characters) exceeds the %d-character limit", field, noun, truncate(v), c, MaxStringLen)
+			return fmt.Errorf("%s: %s %q (%d characters) exceeds the %d-character limit", field, noun, Truncate(v), c, MaxStringLen)
 		}
 	}
 	return nil
 }
 
-// truncate returns s capped at 40 runes, with an ellipsis appended when
+// Truncate returns s capped at 40 runes, with an ellipsis appended when
 // truncation occurred. Slicing by rune (not byte) keeps multi-byte
 // characters intact so the truncated value is always valid UTF-8.
-func truncate(s string) string {
+func Truncate(s string) string {
 	const max = 40
 	i := 0
 	for idx := range s {

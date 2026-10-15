@@ -244,6 +244,34 @@ func TestImportShapeRefusalsCombine(t *testing.T) {
 	}
 }
 
+// A title over the limit is named in the --json refusal by a short prefix and
+// its length, not echoed whole (issue #424). A title within the limit is
+// echoed as given.
+func TestImportTooLongTitleIsCutInRefusal(t *testing.T) {
+	database, _ := seedWritable(t)
+	stubExecDropping(t)
+
+	long := strings.Repeat("é", 6000)
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"` + long + `"}},
+	  {"type":"to-do","attributes":{"title":"short","notes":"` + strings.Repeat("a", 10001) + `"}}
+	]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	p, raw := decodePayload(t, err)
+	if len(p.Items) != 2 {
+		t.Fatalf("got %s, want 2 items", raw)
+	}
+	if want := strings.Repeat("é", 40) + "… (6000 characters)"; p.Items[0].Title != want {
+		t.Errorf("title = %q, want %q", p.Items[0].Title, want)
+	}
+	if p.Items[1].Title != "short" {
+		t.Errorf("title = %q, want %q", p.Items[1].Title, "short")
+	}
+	if len(raw) > 2000 {
+		t.Errorf("error object is %d bytes, want it short", len(raw))
+	}
+}
+
 // Shapes Things takes are not refused, and every to-do and project the
 // payload creates gets a read-back record: none is dropped silently.
 func TestImportAcceptedShapesAreAllReadBack(t *testing.T) {

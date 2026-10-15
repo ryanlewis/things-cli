@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -463,7 +464,7 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 				it = importRefusalItem{Path: path, Kind: typ.String()}
 				attrs, _ := v["attributes"].(map[string]any)
 				title, _ := attrs["title"].(string)
-				it.Title = strings.TrimSpace(title)
+				it.Title = refusedTitle(strings.TrimSpace(title))
 				// An update item names its row by id, and the database
 				// has its title.
 				if u, ok := updates[path]; ok && u.id != "" {
@@ -491,6 +492,16 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 		return nil, &importRefusalError{items: refusals, total: len(plan.updates), size: size}
 	}
 	return plan, nil
+}
+
+// refusedTitle is the title a refusal names an item by. One over the limit is
+// cut to a short prefix with its length, so a 6 KB title does not make a 6 KB
+// error (issue #424); the too-long line already gives the count.
+func refusedTitle(title string) string {
+	if n := utf8.RuneCountInString(title); n > things.MaxStringLen {
+		return fmt.Sprintf("%s (%d characters)", things.Truncate(title), n)
+	}
+	return title
 }
 
 // jsonItems renders the refused items for the --json error payload. Blocked is
