@@ -158,7 +158,11 @@ type wrongKindError struct {
 }
 
 func (e *wrongKindError) Error() string {
-	return fmt.Sprintf("%q is a %s; use %s", e.Title, e.Kind, e.Retry)
+	article := "a"
+	if strings.HasPrefix(e.Kind, "a") {
+		article = "an"
+	}
+	return fmt.Sprintf("%q is %s %s; use %s", e.Title, article, e.Kind, e.Retry)
 }
 
 func (e *wrongKindError) fillPayload(p *jsonErrorPayload) {

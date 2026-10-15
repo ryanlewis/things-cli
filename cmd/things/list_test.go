@@ -155,3 +155,53 @@ func TestStuckRowPlainTextIsToday(t *testing.T) {
 		t.Errorf("today = %q, want no Someday row", stdout)
 	}
 }
+
+// A --project value that is the uuid of a to-do, a heading or an area is
+// refused as not a project rather than listing nothing with exit 0 (issue
+// #419). A project's uuid and a title no project carries still list.
+func TestListProjectRefusesNonProjectUUID(t *testing.T) {
+	seed := func(t *testing.T) *db.DB {
+		sqlDB := dbtest.NewSQL(t)
+		fx := dbtest.NewFixture(t, sqlDB)
+		fx.Area("area-1", "Home", 1)
+		fx.Project("p-1", "Ship it", 1)
+		fx.Heading("h-1", "Setup", 1, dbtest.InProject("p-1"))
+		fx.Todo("t-1", "Child", 1, dbtest.Anytime(), dbtest.InProject("p-1"))
+		return db.NewFromSQL(sqlDB)
+	}
+	cases := []struct {
+		ref, kind, message string
+	}{
+		{"t-1", "task", `"Child" is a task; use things show`},
+		{"h-1", "heading", `"Setup" is a heading; use things --project p-1`},
+		{"area-1", "area", `"Home" is an area; use things --area`},
+	}
+	for _, tc := range cases {
+		for _, view := range []string{"", "anytime"} {
+			t.Run(tc.ref+" "+view, func(t *testing.T) {
+				args := []string{"--json", "--project", tc.ref}
+				if view != "" {
+					args = append([]string{"--json", view}, args[1:]...)
+				}
+				stdout, _, err := runStreams(t, seed(t), args...)
+				if err == nil {
+					t.Fatalf("expected a refusal, got stdout %q", stdout)
+				}
+				if err.Error() != tc.message {
+					t.Errorf("message = %q, want %q", err.Error(), tc.message)
+				}
+				payload, raw := decodePayload(t, err)
+				if payload.Error != "not a project" || payload.Kind != tc.kind || payload.Query != tc.ref || payload.UUID != tc.ref {
+					t.Errorf("payload = %s, want not a project naming %s as a %s", raw, tc.ref, tc.kind)
+				}
+			})
+		}
+	}
+	for _, ref := range []string{"p-1", "Ship it", "No such thing"} {
+		t.Run("lists "+ref, func(t *testing.T) {
+			if _, _, err := runStreams(t, seed(t), "--json", "--project", ref); err != nil {
+				t.Errorf("run: %v", err)
+			}
+		})
+	}
+}

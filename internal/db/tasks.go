@@ -1398,6 +1398,31 @@ func (d *DB) buildListQuery(view string, opts TaskFilter) (string, []any, error)
 	return query, args, nil
 }
 
+// ItemRef is the kind, title and parent project of a TMTask row, for a
+// caller that only needs to know what a uuid names.
+type ItemRef struct {
+	Type    model.TaskType
+	Title   string
+	Project string
+}
+
+// ItemByUUID reports what the TMTask row with this uuid is, headings
+// included, or nil when no row has it. Titles are never matched.
+func (d *DB) ItemByUUID(uuid string) (*ItemRef, error) {
+	var ref ItemRef
+	var typ int
+	err := d.queryRow(`SELECT COALESCE(type, 0), COALESCE(title, ''), COALESCE(project, '') FROM TMTask WHERE uuid = ?`, uuid).
+		Scan(&typ, &ref.Title, &ref.Project)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying item by uuid: %w", err)
+	}
+	ref.Type = model.TaskType(typ)
+	return &ref, nil
+}
+
 func (d *DB) GetTaskByUUID(uuid string) (*model.Task, error) {
 	query := d.taskQuery() + " WHERE t.uuid = ? AND " + notHeading + " GROUP BY t.uuid"
 	row := d.queryRow(query, uuid)

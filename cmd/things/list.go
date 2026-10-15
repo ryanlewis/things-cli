@@ -92,6 +92,12 @@ func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
 		return fmt.Errorf("--project is not supported on the %q view: it lists only items with no parent project; use `things --project %q` for a project's own tasks", view, project)
 	}
 
+	if project != "" {
+		if err := refuseNonProjectUUID(database, project); err != nil {
+			return err
+		}
+	}
+
 	filter := db.TaskFilter{
 		Project:  project,
 		Area:     c.Area,
@@ -175,6 +181,53 @@ func flagResolved(kctx *kong.Context, name string) bool {
 		}
 	}
 	return false
+}
+
+// refuseNonProjectUUID refuses a --project value that is the uuid of a to-do,
+// a heading or an area. The list query matches only projects, so such a uuid
+// would list nothing and exit 0, which reads as an empty project (issue
+// #419). It is refused as `open --project` refuses it, naming the command
+// that does take it. A title is left to the query: one no project carries is
+// an empty listing, as before.
+func refuseNonProjectUUID(database *db.DB, ref string) error {
+	item, err := database.ItemByUUID(ref)
+	if err != nil {
+		return err
+	}
+	if item != nil {
+		if item.Type == model.TypeProject {
+			return nil
+		}
+		retry := "things show"
+		if item.Type == model.TypeHeading {
+			retry = "things --project " + item.Project
+		}
+		return &wrongKindError{
+			Token: "not a project",
+			Kind:  item.Type.String(),
+			Query: ref,
+			UUID:  ref,
+			Title: item.Title,
+			Retry: retry,
+		}
+	}
+	areas, err := database.ListAreas()
+	if err != nil {
+		return err
+	}
+	for _, a := range areas {
+		if a.UUID == ref {
+			return &wrongKindError{
+				Token: "not a project",
+				Kind:  "area",
+				Query: ref,
+				UUID:  ref,
+				Title: a.Title,
+				Retry: "things --area",
+			}
+		}
+	}
+	return nil
 }
 
 // noteEmptyRepeatingProject explains an empty listing whose --project named a

@@ -180,6 +180,7 @@ Global flags, valid on every command: `-j/--json`, `--color=auto|always|never`, 
 ```
 things list [view] [--project P] [--area A] [--tag T] [--on D | --from D --to D] [--open-only] [-f|--fields KEYS]
     # views: today, inbox, upcoming, anytime, someday, repeating, logbook, trash, deadlines
+    # --project given the uuid of a to-do, heading or area is refused ("not a project"), naming the command that takes it
     # shortcut: `things today`, `things inbox`, etc.
     # bare `things` is today — but --project/--area/--tag alone list every open
     # task in that project/area/tag (--project/--area also those closed today
