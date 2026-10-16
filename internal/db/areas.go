@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -20,6 +21,20 @@ func (d *DB) FindAreaUUID(ref string) (string, error) {
 		rows[i] = uuidTitle{a.UUID, a.Title}
 	}
 	return matchRef(rows, ref, foldAreaRef), nil
+}
+
+// AreaTitleByUUID returns the title of the area with this uuid, and false
+// when no area has it. Titles are never matched.
+func (d *DB) AreaTitleByUUID(uuid string) (string, bool, error) {
+	var title string
+	err := d.queryRow(`SELECT COALESCE(title, '') FROM TMArea WHERE uuid = ?`, uuid).Scan(&title)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("querying area by uuid: %w", err)
+	}
+	return title, true, nil
 }
 
 // foldAreaRef is FoldTag's trimming with FoldName's folding: the key `open

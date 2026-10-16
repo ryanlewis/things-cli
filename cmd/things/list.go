@@ -92,15 +92,21 @@ func (c *ListCmd) Run(kctx *kong.Context, d *Deps) error {
 		return fmt.Errorf("--project is not supported on the %q view: it lists only items with no parent project; use `things --project %q` for a project's own tasks", view, project)
 	}
 
+	area := c.Area
 	if project != "" {
-		if err := refuseNonProjectUUID(database, project); err != nil {
+		if project, err = checkFilterUUID(database, project, "project"); err != nil {
+			return err
+		}
+	}
+	if area != "" {
+		if area, err = checkFilterUUID(database, area, "area"); err != nil {
 			return err
 		}
 	}
 
 	filter := db.TaskFilter{
 		Project:  project,
-		Area:     c.Area,
+		Area:     area,
 		Tag:      c.Tag,
 		OpenOnly: c.OpenOnly,
 	}
@@ -183,51 +189,61 @@ func flagResolved(kctx *kong.Context, name string) bool {
 	return false
 }
 
-// refuseNonProjectUUID refuses a --project value that is the uuid of a to-do,
-// a heading or an area. The list query matches only projects, so such a uuid
-// would list nothing and exit 0, which reads as an empty project (issue
-// #419). It is refused as `open --project` refuses it, naming the command
-// that does take it. A title is left to the query: one no project carries is
-// an empty listing, as before.
-func refuseNonProjectUUID(database *db.DB, ref string) error {
-	item, err := database.ItemByUUID(ref)
-	if err != nil {
-		return err
-	}
-	if item != nil {
-		if item.Type == model.TypeProject {
-			return nil
-		}
-		retry := "things show"
-		if item.Type == model.TypeHeading {
-			retry = "things --project " + item.Project
+// checkFilterUUID checks a --project or --area value (want names which) that
+// is the uuid of an item. The list query matches a uuid only against the kind
+// the flag names, so the uuid of a to-do, heading, project or area in the
+// wrong flag would list nothing and exit 0, which reads as an empty list
+// (issue #419). It is refused as `open --project` refuses a to-do, naming the
+// command that does take it. Surrounding space is not part of a uuid: a
+// padded one is looked up, and filtered by, trimmed.
+//
+// A value that is no uuid is returned as given, for the query to match as a
+// title: one nothing carries is an empty listing, as before.
+func checkFilterUUID(database *db.DB, ref, want string) (string, error) {
+	uuid := strings.TrimSpace(ref)
+	refuse := func(kind, title, retry string) error {
+		article := "a"
+		if startsWithVowel(want) {
+			article = "an"
 		}
 		return &wrongKindError{
-			Token: "not a project",
-			Kind:  item.Type.String(),
+			Token: "not " + article + " " + want,
+			Kind:  kind,
 			Query: ref,
-			UUID:  ref,
-			Title: item.Title,
+			UUID:  uuid,
+			Title: title,
 			Retry: retry,
 		}
 	}
-	areas, err := database.ListAreas()
+	item, err := database.ItemByUUID(uuid)
 	if err != nil {
-		return err
+		return "", err
 	}
-	for _, a := range areas {
-		if a.UUID == ref {
-			return &wrongKindError{
-				Token: "not a project",
-				Kind:  "area",
-				Query: ref,
-				UUID:  ref,
-				Title: a.Title,
-				Retry: "things --area",
-			}
+	if item != nil {
+		switch {
+		case item.Type == model.TypeProject && want == "project":
+			return uuid, nil
+		case item.Type == model.TypeProject:
+			return "", refuse(item.Type.String(), item.Title, "things --project")
+		case item.Type == model.TypeHeading && item.Project != "":
+			return "", refuse(item.Type.String(), item.Title, "things --project "+item.Project)
+		case item.Type == model.TypeHeading:
+			// A heading left behind by a deleted project has nothing to list.
+			return "", refuse(item.Type.String(), item.Title, "things projects")
 		}
+		return "", refuse(item.Type.String(), item.Title, "things show")
 	}
-	return nil
+	title, ok, err := database.AreaTitleByUUID(uuid)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		if want == "area" {
+			return uuid, nil
+		}
+		return "", refuse("area", title, "things --area")
+	}
+	return ref, nil
 }
 
 // noteEmptyRepeatingProject explains an empty listing whose --project named a
@@ -314,7 +330,13 @@ func (c *ProjectsCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	projects, err := database.ListProjects(c.Area, c.Completed, c.OpenOnly)
+	area := c.Area
+	if area != "" {
+		if area, err = checkFilterUUID(database, area, "area"); err != nil {
+			return err
+		}
+	}
+	projects, err := database.ListProjects(area, c.Completed, c.OpenOnly)
 	if err != nil {
 		return err
 	}

@@ -316,8 +316,9 @@ what a project or area closed today and Things still shows there — so
 `-p` still returns a project's contents rather than the project row. Add a
 view and the filter applies within it, with the view named in the output.
 `--project` given the UUID of a to-do, a heading or an area is refused as
-`not a project`, naming the command that takes it, rather than listing
-nothing:
+`not a project`, and `--area` (on `things projects` too) given the UUID of a
+project, a to-do or a heading as `not an area`, naming the command that takes
+it, rather than listing nothing. Space around a UUID is ignored:
 
 ```sh
 things -p "Launch v2"                # every open task in the project, plus those closed today

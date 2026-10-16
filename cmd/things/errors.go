@@ -22,7 +22,7 @@ import (
 // created, and import a verdict per item it created.
 //
 // Error is a stable token: "ambiguous task", "not found", "not a task",
-// "not a project", "trashed", "stale list cache", "already closed",
+// "not a project", "not an area", "trashed", "stale list cache", "already closed",
 // "empty reference", "misfiled", "blank-title", "unknown field", "import
 // refused", "import partially applied", or "error" for a failure with no
 // structure worth naming. "blank-title" is spelt as the import reason for
@@ -159,10 +159,17 @@ type wrongKindError struct {
 
 func (e *wrongKindError) Error() string {
 	article := "a"
-	if strings.HasPrefix(e.Kind, "a") {
+	if startsWithVowel(e.Kind) {
 		article = "an"
 	}
 	return fmt.Sprintf("%q is %s %s; use %s", e.Title, article, e.Kind, e.Retry)
+}
+
+// startsWithVowel reports whether s takes "an" rather than "a": it is
+// enough for the CLI's own nouns, which never start with a silent h or a
+// "you" sound.
+func startsWithVowel(s string) bool {
+	return s != "" && strings.ContainsRune("aeiouAEIOU", rune(s[0]))
 }
 
 func (e *wrongKindError) fillPayload(p *jsonErrorPayload) {

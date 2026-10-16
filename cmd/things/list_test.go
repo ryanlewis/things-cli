@@ -156,33 +156,40 @@ func TestStuckRowPlainTextIsToday(t *testing.T) {
 	}
 }
 
-// A --project value that is the uuid of a to-do, a heading or an area is
-// refused as not a project rather than listing nothing with exit 0 (issue
-// #419). A project's uuid and a title no project carries still list.
-func TestListProjectRefusesNonProjectUUID(t *testing.T) {
+// A --project or --area value that is the uuid of the wrong kind of item is
+// refused rather than listing nothing with exit 0 (issue #419), naming the
+// command that takes it. A uuid of the right kind, padded or not, and a title
+// nothing carries still list.
+func TestListFilterRefusesWrongKindUUID(t *testing.T) {
 	seed := func(t *testing.T) *db.DB {
 		sqlDB := dbtest.NewSQL(t)
 		fx := dbtest.NewFixture(t, sqlDB)
 		fx.Area("area-1", "Home", 1)
 		fx.Project("p-1", "Ship it", 1)
 		fx.Heading("h-1", "Setup", 1, dbtest.InProject("p-1"))
+		fx.Heading("h-orphan", "Left behind", 2)
 		fx.Todo("t-1", "Child", 1, dbtest.Anytime(), dbtest.InProject("p-1"))
 		return db.NewFromSQL(sqlDB)
 	}
 	cases := []struct {
-		ref, kind, message string
+		flag, ref, token, kind, message string
 	}{
-		{"t-1", "task", `"Child" is a task; use things show`},
-		{"h-1", "heading", `"Setup" is a heading; use things --project p-1`},
-		{"area-1", "area", `"Home" is an area; use things --area`},
+		{"--project", "t-1", "not a project", "task", `"Child" is a task; use things show`},
+		{"--project", " t-1 ", "not a project", "task", `"Child" is a task; use things show`},
+		{"--project", "h-1", "not a project", "heading", `"Setup" is a heading; use things --project p-1`},
+		{"--project", "h-orphan", "not a project", "heading", `"Left behind" is a heading; use things projects`},
+		{"--project", "area-1", "not a project", "area", `"Home" is an area; use things --area`},
+		{"--area", "p-1", "not an area", "project", `"Ship it" is a project; use things --project`},
+		{"--area", "t-1", "not an area", "task", `"Child" is a task; use things show`},
+		{"--area", "h-1", "not an area", "heading", `"Setup" is a heading; use things --project p-1`},
 	}
 	for _, tc := range cases {
-		for _, view := range []string{"", "anytime"} {
-			t.Run(tc.ref+" "+view, func(t *testing.T) {
-				args := []string{"--json", "--project", tc.ref}
-				if view != "" {
-					args = append([]string{"--json", view}, args[1:]...)
-				}
+		for _, cmd := range [][]string{nil, {"anytime"}, {"projects"}} {
+			if len(cmd) > 0 && cmd[0] == "projects" && tc.flag != "--area" {
+				continue
+			}
+			t.Run(strings.Join(append(cmd, tc.flag, tc.ref), " "), func(t *testing.T) {
+				args := append(append([]string{"--json"}, cmd...), tc.flag, tc.ref)
 				stdout, _, err := runStreams(t, seed(t), args...)
 				if err == nil {
 					t.Fatalf("expected a refusal, got stdout %q", stdout)
@@ -191,16 +198,31 @@ func TestListProjectRefusesNonProjectUUID(t *testing.T) {
 					t.Errorf("message = %q, want %q", err.Error(), tc.message)
 				}
 				payload, raw := decodePayload(t, err)
-				if payload.Error != "not a project" || payload.Kind != tc.kind || payload.Query != tc.ref || payload.UUID != tc.ref {
-					t.Errorf("payload = %s, want not a project naming %s as a %s", raw, tc.ref, tc.kind)
+				if payload.Error != tc.token || payload.Kind != tc.kind || payload.Query != tc.ref || payload.UUID != strings.TrimSpace(tc.ref) {
+					t.Errorf("payload = %s, want %s naming %s as a %s", raw, tc.token, tc.ref, tc.kind)
 				}
 			})
 		}
 	}
-	for _, ref := range []string{"p-1", "Ship it", "No such thing"} {
-		t.Run("lists "+ref, func(t *testing.T) {
-			if _, _, err := runStreams(t, seed(t), "--json", "--project", ref); err != nil {
-				t.Errorf("run: %v", err)
+	lists := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--project", "p-1"}, "t-1"},
+		{[]string{"--project", " p-1 "}, "t-1"},
+		{[]string{"--project", "Ship it"}, "t-1"},
+		{[]string{"--project", "No such thing"}, ""},
+		{[]string{"--area", " area-1 "}, ""},
+		{[]string{"projects", "--area", " area-1 "}, ""},
+	}
+	for _, tc := range lists {
+		t.Run("lists "+strings.Join(tc.args, " "), func(t *testing.T) {
+			stdout, _, err := runStreams(t, seed(t), append([]string{"--json"}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if tc.want != "" && !strings.Contains(stdout, tc.want) {
+				t.Errorf("stdout = %q, want it to list %s", stdout, tc.want)
 			}
 		})
 	}
