@@ -70,19 +70,30 @@ jobs:
       - name: govulncheck (SARIF)
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" -format sarif ./... > govulncheck.sarif
 
-      # govulncheck can give one result the same call stack twice, and the
-      # upload rejects the whole file over it ("stacks contains duplicate
-      # item", issue #409). Drop the repeats; the order of stacks carries no
-      # meaning.
-      - name: De-duplicate SARIF stacks
+      # govulncheck can repeat an entry in an array the SARIF schema says is
+      # unique, such as one result's stacks, and the upload rejects the whole
+      # file over it (issue #409). dedup.jq keeps the first of each, in order;
+      # its fixture is checked first so a broken filter fails here, not on
+      # the day a real finding needs uploading.
+      - name: De-duplicate SARIF arrays
         run: |
-          jq '.runs[].results[]? |= if .stacks then .stacks |= unique else . end' govulncheck.sarif > govulncheck.dedup.sarif
+          diff <(jq -S -f .github/sarif/dedup.jq .github/sarif/testdata/dup.sarif) <(jq -S . .github/sarif/testdata/want.sarif)
+          jq -f .github/sarif/dedup.jq govulncheck.sarif > govulncheck.dedup.sarif
           mv govulncheck.dedup.sarif govulncheck.sarif
 
-      - uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      # The upload only feeds the Security tab; the govulncheck step in
+      # `check` is what blocks a merge. A failed upload is a warning, not a
+      # red PR.
+      - id: upload
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        continue-on-error: true
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
+
+      - name: Report a failed upload
+        if: steps.upload.outcome == 'failure'
+        run: echo "::warning title=govulncheck SARIF upload failed::The Security tab was not updated; see the upload step's log."
 
   dependency-review:
     if: github.event_name == 'pull_request'
