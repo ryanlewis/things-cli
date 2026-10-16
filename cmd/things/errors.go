@@ -82,15 +82,18 @@ type jsonErrorPayload struct {
 // without the completion-date the payload gives it sets Confirmed (false),
 // Reason ("completion-date-dropped") and ID, its uuid, since it is there.
 type jsonErrorItem struct {
-	Path       string   `json:"path"`
-	ID         string   `json:"id,omitempty"`
-	Title      string   `json:"title,omitempty"`
-	Blocked    []string `json:"blocked,omitempty"`
-	Wanted     string   `json:"wanted,omitempty"`
-	Got        string   `json:"got,omitempty"`
-	Confirmed  *bool    `json:"confirmed,omitempty"`
-	Reason     string   `json:"reason,omitempty"`
-	Candidates []string `json:"candidates,omitempty"`
+	Path  string `json:"path"`
+	ID    string `json:"id,omitempty"`
+	Title string `json:"title,omitempty"`
+	// TitleLength is the title's length in characters, given only when
+	// Title had to be cut to a prefix (see shortTitle).
+	TitleLength int      `json:"titleLength,omitempty"`
+	Blocked     []string `json:"blocked,omitempty"`
+	Wanted      string   `json:"wanted,omitempty"`
+	Got         string   `json:"got,omitempty"`
+	Confirmed   *bool    `json:"confirmed,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
+	Candidates  []string `json:"candidates,omitempty"`
 	// Present is given on a shares-dated-title item only, as on the
 	// created record (see importCreated).
 	Present *bool `json:"present,omitempty"`

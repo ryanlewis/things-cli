@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ryanlewis/things-cli/internal/clock"
 	"github.com/ryanlewis/things-cli/internal/db"
@@ -63,8 +64,14 @@ func importDates(item map[string]any, now time.Time) (bad, future problems) {
 // jsonText is v as JSON, the form the refusal messages quote a payload value
 // in. A value decoded from the payload always encodes, so the error is
 // dropped.
+// jsonText is v as JSON, for a refusal line that names the value. One over
+// refusalEchoMax characters is cut, with its length, so an oversized when or
+// a long array does not fill the message (issue #424).
 func jsonText(v any) string {
 	b, _ := json.Marshal(v)
+	if n := utf8.RuneCount(b); n > refusalEchoMax {
+		return fmt.Sprintf("%s (%d characters)", things.TruncateTo(string(b), refusalEchoMax), n)
+	}
 	return string(b)
 }
 
@@ -294,8 +301,9 @@ func (it importRefusalItem) has(kind refusalKind) bool {
 func (it importRefusalItem) line(kind refusalKind) string {
 	switch kind {
 	case kindRepeating:
+		title, _ := shortTitle(it.Title)
 		return fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
-			it.Path, it.ID, it.Title, it.Kind, strings.Join(it.lines[kind], ", "))
+			it.Path, it.ID, title, it.Kind, strings.Join(it.lines[kind], ", "))
 	case kindBlank:
 		return "  " + it.Path
 	}
@@ -493,18 +501,34 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 	return plan, nil
 }
 
+// refusalEchoMax caps, in characters, a title or payload value a refusal
+// repeats back. A refusal names what is wrong; echoing a 6 KB title or when
+// in full only makes a 6 KB error (issue #424).
+const refusalEchoMax = 200
+
+// shortTitle is the title a refusal names an item by, with its length in
+// characters when it had to be cut and 0 when it is whole.
+func shortTitle(title string) (string, int) {
+	if n := utf8.RuneCountInString(title); n > refusalEchoMax {
+		return things.TruncateTo(title, refusalEchoMax), n
+	}
+	return title, 0
+}
+
 // jsonItems renders the refused items for the --json error payload. Blocked is
 // copied rather than shared: the payload outlives the error only in tests, but
 // aliasing a slice into the wire format invites a caller to mutate it.
 func (e *importRefusalError) jsonItems() []jsonErrorItem {
 	out := make([]jsonErrorItem, len(e.items))
 	for i, it := range e.items {
+		title, length := shortTitle(it.Title)
 		out[i] = jsonErrorItem{
-			Path:    it.Path,
-			ID:      it.ID,
-			Title:   it.Title,
-			Blocked: append([]string(nil), it.Blocked...),
-			Reason:  it.reason(),
+			Path:        it.Path,
+			ID:          it.ID,
+			Title:       title,
+			TitleLength: length,
+			Blocked:     append([]string(nil), it.Blocked...),
+			Reason:      it.reason(),
 		}
 	}
 	return out

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ryanlewis/things-cli/internal/clock"
+	"github.com/ryanlewis/things-cli/internal/db/dbtest"
 	"github.com/ryanlewis/things-cli/internal/model"
 )
 
@@ -241,6 +242,77 @@ func TestImportShapeRefusalsCombine(t *testing.T) {
 		if got.Path != w.Path || got.Title != w.Title || strings.Join(got.Blocked, ",") != strings.Join(w.Blocked, ",") || got.Reason != w.Reason {
 			t.Errorf("item %d = %+v, want %+v", i, got, w)
 		}
+	}
+}
+
+// A long title is named in the --json refusal by its first 200 characters,
+// with its full length in titleLength, not echoed whole (issue #424). The
+// cut is on the title as shown, so padding does not let a long one through,
+// and an update item's title, which comes from the database, is cut the same
+// way. A short title is echoed as given, with no titleLength.
+func TestImportLongTitleIsCutInRefusal(t *testing.T) {
+	database, sqlDB := seedWritable(t)
+	stubExecDropping(t)
+	dbtest.NewFixture(t, sqlDB).Todo("long-1", strings.Repeat("b", 300), 4, dbtest.Someday())
+
+	long := strings.Repeat("é", 6000)
+	padded := " " + strings.Repeat("a", 201) + " "
+	payload := `[
+	  {"type":"to-do","attributes":{"title":"` + long + `"}},
+	  {"type":"to-do","attributes":{"title":"short","notes":"` + strings.Repeat("a", 10001) + `"}},
+	  {"type":"to-do","attributes":{"title":"` + padded + `","when":"2026-13-01"}},
+	  {"type":"to-do","operation":"update","id":"long-1","attributes":{"when":"2026-13-01"}}
+	]`
+	err := runWith(t, database, "--json", "import", "--file", importPayload(t, payload))
+	p, raw := decodePayload(t, err)
+	if len(p.Items) != 4 {
+		t.Fatalf("got %s, want 4 items", raw)
+	}
+	want := []struct {
+		title  string
+		length int
+	}{
+		{strings.Repeat("é", 200) + "…", 6000},
+		{"short", 0},
+		{strings.Repeat("a", 200) + "…", 201},
+		{strings.Repeat("b", 200) + "…", 300},
+	}
+	for i, w := range want {
+		if got := p.Items[i]; got.Title != w.title || got.TitleLength != w.length {
+			t.Errorf("item %d: title %q (length %d), want %q (length %d)", i, got.Title, got.TitleLength, w.title, w.length)
+		}
+	}
+	if len(raw) > 4000 {
+		t.Errorf("error object is %d bytes, want it short", len(raw))
+	}
+}
+
+// A long payload value named in a refusal line, such as a when Things would
+// misread, is cut with its length in plain and --json output alike, rather
+// than repeated whole (issue #424).
+func TestImportLongValueIsCutInRefusal(t *testing.T) {
+	when := "2026-" + strings.Repeat("9", 6000)
+	payload := `[{"type":"to-do","attributes":{"title":"T","when":"` + when + `"}}]`
+	for _, mode := range []string{"plain", "json"} {
+		t.Run(mode, func(t *testing.T) {
+			database, _ := seedWritable(t)
+			stubExecDropping(t)
+			args := []string{"import", "--file", importPayload(t, payload)}
+			if mode == "json" {
+				args = append([]string{"--json"}, args...)
+			}
+			err := runWith(t, database, args...)
+			if err == nil {
+				t.Fatal("expected a refusal")
+			}
+			msg := err.Error()
+			if strings.Contains(msg, strings.Repeat("9", 300)) {
+				t.Errorf("message repeats the whole when (%d bytes)", len(msg))
+			}
+			if !strings.Contains(msg, "(6007 characters)") {
+				t.Errorf("message = %.300q, want the value's length", msg)
+			}
+		})
 	}
 }
 
