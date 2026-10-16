@@ -64,8 +64,14 @@ func importDates(item map[string]any, now time.Time) (bad, future problems) {
 // jsonText is v as JSON, the form the refusal messages quote a payload value
 // in. A value decoded from the payload always encodes, so the error is
 // dropped.
+// jsonText is v as JSON, for a refusal line that names the value. One over
+// refusalEchoMax characters is cut, with its length, so an oversized when or
+// a long array does not fill the message (issue #424).
 func jsonText(v any) string {
 	b, _ := json.Marshal(v)
+	if n := utf8.RuneCount(b); n > refusalEchoMax {
+		return fmt.Sprintf("%s (%d characters)", things.TruncateTo(string(b), refusalEchoMax), n)
+	}
 	return string(b)
 }
 
@@ -295,8 +301,9 @@ func (it importRefusalItem) has(kind refusalKind) bool {
 func (it importRefusalItem) line(kind refusalKind) string {
 	switch kind {
 	case kindRepeating:
+		title, _ := shortTitle(it.Title)
 		return fmt.Sprintf("  %s (id %s): %q is a repeating %s — %s",
-			it.Path, it.ID, it.Title, it.Kind, strings.Join(it.lines[kind], ", "))
+			it.Path, it.ID, title, it.Kind, strings.Join(it.lines[kind], ", "))
 	case kindBlank:
 		return "  " + it.Path
 	}
@@ -464,7 +471,7 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 				it = importRefusalItem{Path: path, Kind: typ.String()}
 				attrs, _ := v["attributes"].(map[string]any)
 				title, _ := attrs["title"].(string)
-				it.Title = refusedTitle(strings.TrimSpace(title))
+				it.Title = strings.TrimSpace(title)
 				// An update item names its row by id, and the database
 				// has its title.
 				if u, ok := updates[path]; ok && u.id != "" {
@@ -494,14 +501,18 @@ func prepareImport(database *db.DB, payload []any, dups map[string][]string) (*i
 	return plan, nil
 }
 
-// refusedTitle is the title a refusal names an item by. One over the limit is
-// cut to a short prefix with its length, so a 6 KB title does not make a 6 KB
-// error (issue #424); the too-long line already gives the count.
-func refusedTitle(title string) string {
-	if n := utf8.RuneCountInString(title); n > things.MaxStringLen {
-		return fmt.Sprintf("%s (%d characters)", things.Truncate(title), n)
+// refusalEchoMax caps, in characters, a title or payload value a refusal
+// repeats back. A refusal names what is wrong; echoing a 6 KB title or when
+// in full only makes a 6 KB error (issue #424).
+const refusalEchoMax = 200
+
+// shortTitle is the title a refusal names an item by, with its length in
+// characters when it had to be cut and 0 when it is whole.
+func shortTitle(title string) (string, int) {
+	if n := utf8.RuneCountInString(title); n > refusalEchoMax {
+		return things.TruncateTo(title, refusalEchoMax), n
 	}
-	return title
+	return title, 0
 }
 
 // jsonItems renders the refused items for the --json error payload. Blocked is
@@ -510,12 +521,14 @@ func refusedTitle(title string) string {
 func (e *importRefusalError) jsonItems() []jsonErrorItem {
 	out := make([]jsonErrorItem, len(e.items))
 	for i, it := range e.items {
+		title, length := shortTitle(it.Title)
 		out[i] = jsonErrorItem{
-			Path:    it.Path,
-			ID:      it.ID,
-			Title:   it.Title,
-			Blocked: append([]string(nil), it.Blocked...),
-			Reason:  it.reason(),
+			Path:        it.Path,
+			ID:          it.ID,
+			Title:       title,
+			TitleLength: length,
+			Blocked:     append([]string(nil), it.Blocked...),
+			Reason:      it.reason(),
 		}
 	}
 	return out
