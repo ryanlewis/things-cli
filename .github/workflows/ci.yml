@@ -15,7 +15,7 @@ env:
   # One pin for both govulncheck runs below. Renovate bumps it through the
   # custom manager in renovate.json.
   # renovate: datasource=go depName=golang.org/x/vuln
-  GOVULNCHECK_VERSION: v1.8.0
+  GOVULNCHECK_VERSION: v1.9.0
 
 jobs:
   check:
