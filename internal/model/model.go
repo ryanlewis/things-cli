@@ -203,7 +203,19 @@ func (d ThingsDate) Date() (year int, month time.Month, day int) {
 
 func (d ThingsDate) ToTime() time.Time {
 	year, month, day := d.Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+	return DayStart(year, month, day)
+}
+
+// DayStart is the first instant of the given local day. That is midnight,
+// except where a daylight-saving change skips it (Santiago, Havana, Beirut):
+// time.Date then answers with the evening of the day before, so it steps
+// forward to the first hour that is on the day.
+func DayStart(year int, month time.Month, day int) time.Time {
+	t := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+	for h := 1; t.Day() != day && h < 24; h++ {
+		t = time.Date(year, month, day, h, 0, 0, 0, time.Local)
+	}
+	return t
 }
 
 func ThingsDateFromTime(t time.Time) ThingsDate {

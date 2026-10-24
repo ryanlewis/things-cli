@@ -300,3 +300,25 @@ func TestResolveWhen(t *testing.T) {
 		}
 	}
 }
+
+// Local midnight on 6 Sep 2026 does not exist in Santiago, so a --on date
+// built at midnight came out as the 5th and the filter matched the wrong day.
+func TestParseListDateSkippedMidnight(t *testing.T) {
+	loc, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Skipf("no tzdata: %v", err)
+	}
+	old := time.Local
+	time.Local = loc
+	t.Cleanup(func() { time.Local = old })
+
+	for _, in := range []string{"2026-09-06", "2026-09-06T10:00:00Z"} {
+		got, err := ParseListDate("on", in)
+		if err != nil {
+			t.Fatalf("ParseListDate(%q): %v", in, err)
+		}
+		if y, m, d := got.Date(); y != 2026 || m != time.September || d != 6 {
+			t.Errorf("ParseListDate(%q) = %v, want a time on 2026-09-06", in, got)
+		}
+	}
+}
