@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ryanlewis/things-cli/internal/model"
 )
 
 var whenKeywords = []string{"today", "tomorrow", "evening", "anytime", "someday"}
@@ -366,13 +368,13 @@ func ParseListDate(flag, s string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("--%s: date is empty", flag)
 	}
 	if t, ok := parseISO8601(v); ok {
-		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local), nil
+		return model.DayStart(t.Year(), t.Month(), t.Day()), nil
 	}
-	t, err := time.ParseInLocation("2006-01-02", v, time.Local)
+	t, err := time.Parse("2006-01-02", v)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("--%s: invalid date %q (expected YYYY-MM-DD)", flag, v)
 	}
-	return t, nil
+	return model.DayStart(t.Year(), t.Month(), t.Day()), nil
 }
 
 // NormalizeDeadline validates and canonicalises a --deadline value. The URL

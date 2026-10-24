@@ -571,3 +571,30 @@ func TestReminderText(t *testing.T) {
 		}
 	}
 }
+
+// Santiago's clocks go from 23:59 on 5 Sep 2026 straight to 01:00 on 6 Sep, so
+// local midnight on the 6th does not exist. time.Date then answers with the
+// evening of the 5th, and a date built from it printed a day early.
+func TestThingsDateSkippedMidnight(t *testing.T) {
+	loc, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Skipf("no tzdata: %v", err)
+	}
+	old := time.Local
+	time.Local = loc
+	t.Cleanup(func() { time.Local = old })
+
+	d := ThingsDateFromTime(time.Date(2026, 9, 6, 12, 0, 0, 0, loc))
+	if got := d.String(); got != "2026-09-06" {
+		t.Errorf("String() = %q, want 2026-09-06", got)
+	}
+	if got := d.AddDays(1).String(); got != "2026-09-07" {
+		t.Errorf("AddDays(1) = %q, want 2026-09-07", got)
+	}
+	if got := d.AddDays(-1).String(); got != "2026-09-05" {
+		t.Errorf("AddDays(-1) = %q, want 2026-09-05", got)
+	}
+	if y, m, day := d.ToTime().Date(); y != 2026 || m != time.September || day != 6 {
+		t.Errorf("ToTime() = %v, want a time on 2026-09-06", d.ToTime())
+	}
+}
