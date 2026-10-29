@@ -1063,6 +1063,12 @@ than what they say, so `import` refuses these too:
   4000, or `notes` over 10000 characters. Notes that long were not
   measured; the limit is the one `add` enforces. Reason `too-long`.
 
+A refusal names each item by a title of at most 200 characters: a longer one
+is cut to its first 200 and an ellipsis, and the item carries `titleLength`,
+the full length in characters (absent when the title is whole). A payload
+value the message repeats, such as a `when` Things would misread, is cut the
+same way, with its length in brackets.
+
 A to-do or project created with no `title`, or one that is only
 whitespace, is refused with reason `blank-title`. Things would create it
 as an untitled item, which is almost never what was meant.

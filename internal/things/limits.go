@@ -64,10 +64,13 @@ func validateEach(field, noun string, values []string) error {
 }
 
 // truncate returns s capped at 40 runes, with an ellipsis appended when
+// truncation occurred.
+func truncate(s string) string { return TruncateTo(s, 40) }
+
+// TruncateTo returns s capped at max runes, with an ellipsis appended when
 // truncation occurred. Slicing by rune (not byte) keeps multi-byte
 // characters intact so the truncated value is always valid UTF-8.
-func truncate(s string) string {
-	const max = 40
+func TruncateTo(s string, max int) string {
 	i := 0
 	for idx := range s {
 		if i == max {
