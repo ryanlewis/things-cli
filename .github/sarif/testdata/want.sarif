@@ -1,0 +1,6 @@
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"govulncheck","rules":[{"id":"GO-1"}]}},"results":[
+ {"ruleId":"GO-1","stacks":[{"frames":[{"module":"b"},{"module":"b"}]},{"frames":[{"module":"a"}]}],
+  "codeFlows":[{"message":{"text":"x"}},{"message":{"text":"x"}}],
+  "relatedLocations":[{"id":1}]},
+ {"ruleId":"GO-2"}]},
+ {"tool":{"driver":{"name":"empty"}}}]}
