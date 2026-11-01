@@ -18,7 +18,7 @@ disableKinds = ["taxonomy", "term", "RSS"]
   author = "Ryan Lewis"
   # Umami analytics. Emitted only in production builds, so `hugo server`
   # does not record visits. Clear either value to turn it off.
-  umami_script = "https://arloo-stats.exe.xyz/script.js"
+  umami_script = "https://analytics.rlew.io/script.js"
   umami_website_id = "ca6a5ba0-17fd-4ec8-94a0-67a3c71e288f"
 
 # The changelog page reads releases from the GitHub API at build time. Hugo
