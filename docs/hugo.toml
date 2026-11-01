@@ -20,6 +20,9 @@ disableKinds = ["taxonomy", "term", "RSS"]
   # does not record visits. Clear either value to turn it off.
   umami_script = "https://analytics.rlew.io/script.js"
   umami_website_id = "ca6a5ba0-17fd-4ec8-94a0-67a3c71e288f"
+  # Counterscale analytics, same rules as Umami.
+  counterscale_script = "https://stats.rlew.io/tracker.js"
+  counterscale_site_id = "things.rlew.io"
 
 # The changelog page reads releases from the GitHub API at build time. Hugo
 # only lets templates read environment variables on this list; the first two

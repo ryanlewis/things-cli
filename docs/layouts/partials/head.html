@@ -66,3 +66,10 @@
 {{- if and hugo.IsProduction $umamiScript $umamiSite }}
   <script defer src="{{ $umamiScript }}" data-website-id="{{ $umamiSite }}"></script>
 {{- end }}
+
+{{- /* Counterscale analytics, same rules as Umami above. */}}
+{{- $csScript := site.Params.counterscale_script }}
+{{- $csSite := site.Params.counterscale_site_id }}
+{{- if and hugo.IsProduction $csScript $csSite }}
+  <script id="counterscale-script" data-site-id="{{ $csSite }}" src="{{ $csScript }}" defer></script>
+{{- end }}
