@@ -68,6 +68,34 @@ func TestNormalizeWhenRejectsTypos(t *testing.T) {
 	}
 }
 
+// A keyword typo is still one with a time after it: Things knows the word
+// before the @ no better for the time, so it is refused as it is alone, and
+// the hint keeps the time.
+func TestNormalizeWhenRejectsTyposWithTime(t *testing.T) {
+	for in, hint := range map[string]string{
+		"tommorow@9am":   `did you mean "tomorrow@9am"?`,
+		"tomorow@18:00":  `did you mean "tomorrow@18:00"?`,
+		"Tody@6pm":       `did you mean "today@6pm"?`,
+		"evning@9:30 PM": `did you mean "evening@9:30 PM"?`,
+	} {
+		_, err := NormalizeWhen(in)
+		if err == nil {
+			t.Errorf("NormalizeWhen(%q) expected error, got nil", in)
+			continue
+		}
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("NormalizeWhen(%q) error = %v, want it to contain %s", in, err, hint)
+		}
+	}
+	// A word Things knows, or a phrase, before the @ is no typo. monday is
+	// two edits from today.
+	for _, in := range []string{"tomorrow@18:00", "Monday@9pm", "evening@6pm", "fri@9pm", "mon@9pm", "next friday@noon", "tonight@9pm"} {
+		if _, err := NormalizeWhen(in); err != nil {
+			t.Errorf("NormalizeWhen(%q) unexpected error: %v", in, err)
+		}
+	}
+}
+
 func TestNormalizeDeadline(t *testing.T) {
 	cases := []struct {
 		in   string

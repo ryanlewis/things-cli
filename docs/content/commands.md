@@ -819,7 +819,9 @@ for an edit) and exit 0; under `--json`, `{"uuid", "title", "confirmed":
 false, "reason": "when"}`. Check the item with `things show`. A value shaped like a date or time that names
 none, such as `2026-13-01`, `25:00`, `tomorrow@25:00` or
 `2026-10-09T25:00:00Z`, or a time after `anytime@` or `someday@`, is refused
-before anything is sent; a date and time with no offset, such as
+before anything is sent, and so is a likely typo of a keyword, alone or
+with a time after it (`tommorow`, `tommorow@9am`), with a "did you mean"
+hint; a date and time with no offset, such as
 `2026-10-09T10:00`, is read as that wall-clock time. A free phrase, anything
 but a keyword, a weekday name, a date or a time, is not read back: `add`
 warns `Things did not understand --when "…"` on stderr when the new item
