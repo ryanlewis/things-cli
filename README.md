@@ -841,7 +841,8 @@ Both the refusal and the read-back failure carry their per-item detail in the er
 | Natural language | `friday`, `next monday` (English locales only; passed through verbatim) |
 
 Inputs within edit distance 2 of a known keyword are rejected client-side
-as likely typos (e.g. `tommorrow`, `evning`) with a "did you mean" hint.
+as likely typos (e.g. `tommorrow`, `evning`) with a "did you mean" hint,
+with a time after them too (`tommorow@9am`).
 
 `--deadline` accepts a `YYYY-MM-DD` date or an English natural-language
 phrase. Keywords are not accepted.

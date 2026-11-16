@@ -40,8 +40,9 @@ func isWeekdayWord(s string) bool {
 //   - English natural-language phrases: passed through verbatim
 //
 // Inputs within edit distance 2 of a known keyword are rejected as typos
-// (e.g. "tommorrow", "evning"); anything else passes through so users can
-// keep using NL forms like "friday" or "tonight".
+// (e.g. "tommorrow", "evning"), with a time after them too
+// ("tommorow@9am"); anything else passes through so users can keep using NL
+// forms like "friday" or "tonight".
 func NormalizeWhen(s string) (string, error) {
 	v := strings.TrimSpace(s)
 	if v == "" {
@@ -67,7 +68,18 @@ func NormalizeWhen(s string) (string, error) {
 	if clock, ok := clock24(v); ok {
 		return clock, nil
 	}
-	if k, ok := nearKeyword(v); ok {
+	// The word a typo is looked for in is the whole value, or what comes
+	// before an @: tommorow@9am is the same slip as tommorow. A keyword or a
+	// weekday name there is no typo (monday is two edits from today), and
+	// checkWhenShape has already judged its time.
+	word, clock, timed := strings.Cut(v, "@")
+	if timed && KnownWhenWord(word) {
+		return v, nil
+	}
+	if k, ok := nearKeyword(strings.TrimSpace(word)); ok {
+		if timed {
+			k += "@" + clock
+		}
 		return "", fmt.Errorf("unrecognised --when value %q (did you mean %q? valid keywords: %s)", v, k, strings.Join(whenKeywords, ", "))
 	}
 	return v, nil
