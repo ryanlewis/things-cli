@@ -39,7 +39,7 @@ func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 	fmt.Fprintf(&s, "from the Things database; the commands at the end are how you change it.\n\n")
 
 	fmt.Fprintf(&s, "- UUID: `%s`\n", t.UUID)
-	fmt.Fprintf(&s, "- Status: %s\n", t.Status)
+	fmt.Fprintf(&s, "- Status: %s%s\n", t.Status, trashNote(t))
 	if t.ProjectTitle != "" {
 		fmt.Fprintf(&s, "- Project: %s\n", singleLine(t.ProjectTitle))
 	}
@@ -104,6 +104,22 @@ func PrintAgentBrief(w io.Writer, b AgentBrief) error {
 	return err
 }
 
+// inTrash reports whether Things shows t only in the Trash: it is trashed
+// itself, or its project is.
+func inTrash(t *model.Task) bool { return t.Trashed || t.ProjectTrashed }
+
+// trashNote is what the brief's status line adds for an item in the Trash,
+// matching the "(in Trash)" the plain show block puts on its status line.
+func trashNote(t *model.Task) string {
+	switch {
+	case t.Trashed:
+		return " (in Trash)"
+	case t.ProjectTrashed:
+		return " (in Trash with its project)"
+	}
+	return ""
+}
+
 // anyClosed reports whether any of todos is completed or cancelled.
 func anyClosed(todos []model.Task) bool {
 	for _, todo := range todos {
@@ -156,6 +172,30 @@ func closingOut(b AgentBrief, kind string) string {
 
 	cmds := []command{
 		{fmt.Sprintf("things show %s --json", t.UUID), "re-read the current state"},
+	}
+	// The CLI refuses edit, complete and cancel on an item in the Trash, or
+	// a task whose project is, before anything is sent. Offer only what
+	// still works, and say why the rest is gone.
+	if inTrash(t) {
+		if isProject(t) && len(b.Todos) > 0 {
+			cmds = append(cmds, command{
+				fmt.Sprintf("things show %s --agent", b.Todos[0].UUID),
+				"the same brief for one of its tasks",
+			})
+		}
+		s.WriteString(codeBlock(cmds))
+		where := "is in the Trash"
+		if !t.Trashed {
+			where = "sits in a project that is in the Trash"
+		}
+		edit := "edit"
+		if isProject(t) {
+			edit = "project edit"
+		}
+		fmt.Fprintf(&s, "\nThis %s %s, so the CLI refuses `%s`, `complete`\n", kind, where, edit)
+		s.WriteString("and `cancel` on it and sends nothing. Put it back from the Trash in\n")
+		s.WriteString("Things first if it is still wanted.\n")
+		return s.String()
 	}
 	if isProject(t) {
 		cmds = append(cmds, command{
