@@ -179,6 +179,11 @@ A few things about the brief are deliberate:
 - **A repeating item's brief omits `complete` and `cancel`.** Things refuses
   those on repeating items and drops the request silently, so the brief
   does not offer them.
+- **An item in the Trash says so, and offers no writes.** Its status line
+  reads `open (in Trash)`, or `open (in Trash with its project)` for a task
+  whose project is in the Trash, as the plain `show` block marks it. The
+  CLI refuses `edit`, `complete` and `cancel` on such an item, so the brief
+  leaves them out and says to put it back from the Trash in Things first.
 
 `--agent` and `--json` are two output formats and cannot be combined. A
 config file with `json = true` is only a default; the explicit `--agent`

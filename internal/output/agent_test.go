@@ -183,6 +183,39 @@ func TestPrintAgentBriefRepeatingProject(t *testing.T) {
 	}
 }
 
+// An item in the Trash, or a task whose project is, is refused by edit,
+// complete and cancel before anything is sent, so its brief must say where it
+// is — as the plain `show` block does — and must not hand an agent commands
+// that always exit non-zero with `trashed`.
+func TestPrintAgentBriefTrashed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		task *model.Task
+		want string
+	}{
+		{"trashed task", &model.Task{UUID: "u1", Title: "Old", Status: model.StatusOpen, Trashed: true}, "- Status: open (in Trash)\n"},
+		{"task in trashed project", &model.Task{UUID: "u1", Title: "Old", Status: model.StatusOpen, ProjectTitle: "Gone", ProjectTrashed: true}, "- Status: open (in Trash with its project)\n"},
+		{"trashed project", &model.Task{UUID: "u1", Title: "Old", Type: model.TypeProject, Status: model.StatusOpen, Trashed: true}, "- Status: open (in Trash)\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := briefText(t, AgentBrief{Task: tc.task})
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("brief does not contain %q\n%s", tc.want, got)
+			}
+			for _, unwanted := range []string{"things complete u1", "things cancel u1", "things edit u1", "things project edit u1", "a zero exit means it landed", "`--yes` answers"} {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("brief offers %q on an item the CLI refuses\n%s", unwanted, got)
+				}
+			}
+			if !strings.Contains(got, "things show u1 --json") {
+				t.Errorf("brief drops the read-back command\n%s", got)
+			}
+			if !strings.Contains(got, "Put it back from the Trash in\nThings first") {
+				t.Errorf("brief does not explain why the write commands are gone\n%s", got)
+			}
+		})
+	}
+}
 func TestPrintAgentBriefProject(t *testing.T) {
 	project := &model.Task{UUID: "proj-uuid", Title: "Launch v2", Type: model.TypeProject, Status: model.StatusOpen}
 	todos := []model.Task{
