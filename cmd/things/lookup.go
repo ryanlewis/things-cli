@@ -515,12 +515,23 @@ func globalFlags(d *Deps) []string {
 	var flags []string
 	cfg := d.config()
 	if d.DBPath != "" && !cfg.SetsDB(d.DBPath) {
-		flags = append(flags, "--db", shellQuote(d.DBPath))
+		flags = append(flags, flagArg("--db", d.DBPath)...)
 	}
 	if cfg.Source == config.SourceFlag {
-		flags = append(flags, "--config", shellQuote(cfg.Path))
+		flags = append(flags, flagArg("--config", cfg.Path)...)
 	}
 	return flags
+}
+
+// flagArg renders a flag and its value as printed command words, quoted for
+// the shell. A value that starts with a dash is joined to the flag with "=":
+// written as a separate word, things reads it as a flag of its own and
+// refuses the command (`--tag -urgent`: expected string value).
+func flagArg(flag, value string) []string {
+	if strings.HasPrefix(value, "-") {
+		return []string{flag + "=" + shellQuote(value)}
+	}
+	return []string{flag, shellQuote(value)}
 }
 
 // thingsCmd is the `things` command line, with globalFlags, that runs args
