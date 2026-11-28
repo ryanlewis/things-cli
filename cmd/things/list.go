@@ -161,7 +161,7 @@ func (c *ListCmd) commandLine(d *Deps, view, project string) string {
 		{"--to", c.To},
 	} {
 		if f.value != "" {
-			parts = append(parts, f.flag, shellQuote(f.value))
+			parts = append(parts, flagArg(f.flag, f.value)...)
 		}
 	}
 	// The re-run reads the same config file, so a --open-only=false that
@@ -434,7 +434,13 @@ func (c *SearchCmd) Run(d *Deps) error {
 	if err != nil {
 		return err
 	}
-	command := thingsCmd(d, "search", shellQuote(c.Query))
+	command := thingsCmd(d, "search")
+	// A query that starts with a dash would be read as a flag, so the re-run
+	// ends flag parsing first, as searchCommand does.
+	if strings.HasPrefix(c.Query, "-") {
+		command = append(command, "--")
+	}
+	command = append(command, shellQuote(c.Query))
 	cacheTaskUUIDs(d, strings.Join(command, " "), tasks)
 	// Search results are a listing like `list`, backed by the same cache, so
 	// they share PrintTaskList's path (and hint) rather than the bare Print
